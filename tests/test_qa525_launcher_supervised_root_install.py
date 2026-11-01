@@ -318,7 +318,7 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
     """Execute real fsync/rename/journal in a temp root, never actual QA."""
 
     def exercise(self, *, fault=None, change_approval=False, bad_manifest=False,
-                 bad_postflight=False):
+                 bad_postflight=False, expired_at_swap=False):
         old = b"#!/usr/bin/python3\nprint('old synthetic launcher')\n"
         new = b"#!/usr/bin/python3\nprint('signed synthetic launcher')\n"
         operator = b"print('synthetic signed operator, never executed')\n"
@@ -422,7 +422,14 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                 stack.enter_context(patch.object(
                     m, "verify_bootstrap_binding", return_value={
                         "manifest_sha256": ("f" * 64 if bad_manifest
-                                            else m.digest(manifest))}))
+                                            else m.digest(manifest)),
+                        "issued_at": int(__import__("time").time()) - 10,
+                        "expires_at": int(__import__("time").time()) + 800}))
+                if expired_at_swap:
+                    stack.enter_context(patch.object(
+                        m, "require_bootstrap_fresh",
+                        side_effect=m.Blocked(
+                            "ROOT_BOOTSTRAP_ADMISSION_EXPIRED_OR_INVALID")))
                 if fault in ("before_swap", "after_swap"):
                     stack.enter_context(patch.object(m.os, "replace",
                                                      side_effect=swap))
@@ -445,6 +452,10 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     with self.assertRaisesRegex(
                             m.Blocked, "ROOT_RETAINED_SOURCE_POST_SWAP_INVALID"):
                         m.replace_approved()
+                elif expired_at_swap:
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_BOOTSTRAP_ADMISSION_EXPIRED_OR_INVALID"):
+                        m.replace_approved()
                 else:
                     result = m.replace_approved()
                     self.assertEqual("QA525_LAUNCHER_REPLACED_NO_API_WEB_DEPLOY",
@@ -456,12 +467,13 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                                      result["nonce_sha256"])
                 self.assertEqual(
                     new if fault in ("after_swap", "after_receipt") or bad_postflight or
-                        (not fault and not change_approval and not bad_manifest) else old,
+                        (not fault and not change_approval and not bad_manifest
+                         and not expired_at_swap) else old,
                     launcher.read_bytes())
                 pending = state / ("intent-" + NONCE + ".json")
                 receipt = state / ("receipt-" + NONCE + ".json")
                 backup = state / ("old-" + NONCE + ".bin")
-                if fault or bad_postflight:
+                if fault or bad_postflight or expired_at_swap:
                     self.assertTrue(pending.exists())
                     self.assertTrue(backup.exists())
                     if bad_postflight:
@@ -507,6 +519,9 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
 
     def test_post_swap_retained_drift_blocks_success_and_requires_manual_reconciliation(self):
         self.exercise(bad_postflight=True)
+
+    def test_expired_external_admission_at_last_boundary_never_swaps_launcher(self):
+        self.exercise(expired_at_swap=True)
 
 
 class RealProductionContractCompatibilityTests(unittest.TestCase):
@@ -695,7 +710,8 @@ class HistoricalReceiptIntegrityTests(unittest.TestCase):
 class IndependentBootstrapAdmissionTests(unittest.TestCase):
     """Cross-check an externally provisioned receipt, never forge a signature."""
 
-    def fixture(self, *, alter=None, bad_sha=False, missing=False):
+    def fixture(self, *, alter=None, bad_sha=False, missing=False,
+                time_case=None):
         from contextlib import ExitStack
         with tempfile.TemporaryDirectory(prefix="qa525-bootstrap-read-") as td:
             base = Path(td)
@@ -706,9 +722,12 @@ class IndependentBootstrapAdmissionTests(unittest.TestCase):
             admission = base / "admission.json"
             identity = {"source_sha": SHA,
                         "release_asset_sha256": "sha256:" + "c" * 64}
+            now = int(__import__("time").time())
             packet = {
                 "status": m.BOOTSTRAP_STATUS,
                 **identity,
+                "issued_at": now - 10,
+                "expires_at": now + 800,
                 "manifest_sha256": "e" * 64,
                 "trusted_verifier_sha256": "d" * 64,
                 "files": {str(path): m.digest(path.read_bytes())
@@ -716,6 +735,16 @@ class IndependentBootstrapAdmissionTests(unittest.TestCase):
             }
             if bad_sha:
                 packet["source_sha"] = "invalid"
+            if time_case == "expired":
+                packet["expires_at"] = now - 1
+            elif time_case == "future":
+                packet["issued_at"] = now + 30
+            elif time_case == "too_long":
+                packet["expires_at"] = now + 901
+            elif time_case == "bool":
+                packet["issued_at"] = True
+            elif time_case == "missing":
+                del packet["expires_at"]
             if missing:
                 del packet["files"][str(helper)]
             if alter == "source":
@@ -732,7 +761,7 @@ class IndependentBootstrapAdmissionTests(unittest.TestCase):
                 stack.enter_context(patch.object(m, "read_bound",
                     side_effect=lambda path, maximum=4096, exact_mode=None:
                     Path(path).read_bytes()))
-                if alter or bad_sha or missing:
+                if alter or bad_sha or missing or time_case:
                     with self.assertRaises(m.Blocked):
                         m.bootstrap_trusted_sources()
                     with patch.object(m, "load") as imported:
@@ -754,6 +783,24 @@ class IndependentBootstrapAdmissionTests(unittest.TestCase):
 
     def test_valid_preimport_admission_matches_all_helper_bytes(self):
         self.fixture()
+
+    def test_expired_future_overlong_boolean_and_missing_admissions_fail_before_import(self):
+        for case in ("expired", "future", "too_long", "bool", "missing"):
+            with self.subTest(case=case):
+                self.fixture(time_case=case)
+
+    def test_bootstrap_admission_freshness_rejects_boundary_and_bad_clock(self):
+        packet = {"issued_at": 1_000, "expires_at": 1_900}
+        m.require_bootstrap_fresh(packet, 1_899)
+        for changed, now in (
+                (packet, 1_900),
+                (packet, 999),
+                ({"issued_at": 1_000, "expires_at": 1_901}, 1_500),
+                ({"issued_at": 1_000, "expires_at": True}, 1_500),
+                ({"issued_at": 1_000}, 1_500)):
+            with self.assertRaisesRegex(
+                    m.Blocked, "ROOT_BOOTSTRAP_ADMISSION_EXPIRED_OR_INVALID"):
+                m.require_bootstrap_fresh(changed, now)
 
     def test_edited_root_installer_is_rejected_before_module_import(self):
         self.fixture(alter="source")
