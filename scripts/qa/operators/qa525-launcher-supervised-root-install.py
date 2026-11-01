@@ -422,6 +422,16 @@ def inspect_pending_reconciliation():
         backup = STATE / ("old-" + nonce + ".bin")
         receipt = STATE / ("receipt-" + nonce + ".json")
         require(backup.name in names, "ROOT_RECONCILIATION_BACKUP_MISSING")
+        for other in names - {name, backup.name, receipt.name}:
+            # Historical receipts/backups may coexist with one pending cut,
+            # but unrecognized journal artifacts must never be ignored.
+            kind, sep, suffix = other.partition("-")
+            require(sep == "-" and kind in ("receipt", "old")
+                    and suffix.endswith(".json" if kind == "receipt" else ".bin")
+                    and NONCE.fullmatch(
+                        suffix[:-5] if kind == "receipt" else suffix[:-4])
+                        is not None,
+                    "ROOT_RECONCILIATION_UNKNOWN_JOURNAL_ENTRY")
         try:
             act = json.loads(read_bound(intent, exact_mode=0o600),
                              object_pairs_hook=unique_json_fields)
@@ -439,7 +449,8 @@ def inspect_pending_reconciliation():
                                  act["release_asset_sha256"]) is not None
                 and all(type(act[k]) is str
                         and NONCE.fullmatch(act[k]) is not None
-                        for k in ("old_launcher_sha256", "new_launcher_sha256")),
+                        for k in ("old_launcher_sha256", "new_launcher_sha256"))
+                and act["old_launcher_sha256"] != act["new_launcher_sha256"],
                 "ROOT_RECONCILIATION_INTENT_INVALID")
         old_bytes = read_bound(backup, exact_mode=0o700)
         require(digest(old_bytes) == act["old_launcher_sha256"],
@@ -456,7 +467,11 @@ def inspect_pending_reconciliation():
             except (ValueError, UnicodeError, TypeError):
                 raise Blocked("ROOT_RECONCILIATION_RECEIPT_JSON_INVALID") from None
             require(type(commit) is dict
+                    and set(commit) == set(act) | {"candidate_operator_sha256"}
                     and commit.get("status") == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+                    and type(commit.get("candidate_operator_sha256")) is str
+                    and NONCE.fullmatch(commit["candidate_operator_sha256"])
+                        is not None
                     and all(commit.get(k) == act[k] for k in act if k != "status")
                     and current_hash == act["new_launcher_sha256"],
                     "ROOT_RECONCILIATION_RECEIPT_MISMATCH")
@@ -642,17 +657,26 @@ def replace_approved():
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--replace-approved", action="store_true", required=True)
+    choice = parser.add_mutually_exclusive_group(required=True)
+    choice.add_argument("--replace-approved", action="store_true")
+    choice.add_argument("--inspect-pending", action="store_true")
     args = parser.parse_args(argv)
     try:
-        require(args.replace_approved, "ROOT_EXPLICIT_ACTION_REQUIRED")
-        print(json.dumps(replace_approved(), sort_keys=True))
+        if args.inspect_pending:
+            # An inspection is not permission to execute unverified Python:
+            # require the same externally provisioned source admission first.
+            bootstrap_trusted_sources()
+            print(json.dumps(inspect_pending_reconciliation(), sort_keys=True))
+        else:
+            print(json.dumps(replace_approved(), sort_keys=True))
         return 0
     except Exception as exc:
         # All failures after durable intent require manually audited
         # reconciliation; never automatically replay or alter Docker/identity.
         code = str(exc) if isinstance(exc, Blocked) else "ROOT_SIGNED_LAUNCHER_ABORTED"
-        print(json.dumps({"status": "BLOCKED_QA525_LAUNCHER_REPLACE",
+        print(json.dumps({"status": ("BLOCKED_QA525_LAUNCHER_INSPECTION"
+                                     if args.inspect_pending else
+                                     "BLOCKED_QA525_LAUNCHER_REPLACE"),
                           "code": code, "scope": SCOPE,
                           "may_install": False, "may_apply": False,
                           "requires_manual_reconciliation_if_intent_exists": True},
