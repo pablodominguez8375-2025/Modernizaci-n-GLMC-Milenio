@@ -32,6 +32,7 @@ def fixture(*, missing=None, tampered=None, unexpected=None, malicious=None,
             wrong_build=False):
     root = f"Proyecto-Centenario-QA-srv01-{SHA[:12]}"
     data = {path: ("synthetic code " + path).encode() for path in m.SOURCES}
+    data[m.BOOTSTRAP_SCRIPT] = b"synthetic independently authenticated bootstrap"
     data.update({"BUILD-INFO.txt":
                      ("SOURCE_SHA=" + ("f" * 40 if wrong_build else SHA) +
                       "\nSTORAGE=SIGNED_REBUILT_SILO_ARCHIVE_SYNTHETIC_QA\n").encode(),
@@ -74,6 +75,9 @@ class AttestedSourceAuditTests(unittest.TestCase):
         self.assertEqual("SIGNED_INSTALLER_AUDITED_UNPRIVILEGED_NO_INSTALL",
                          answer["status"])
         self.assertEqual(set(m.SOURCES), set(answer["privileged_sources_sha256"]))
+        self.assertEqual(hashlib.sha256(
+            b"synthetic independently authenticated bootstrap").hexdigest(),
+            answer["bootstrap_sha256"])
         self.assertFalse(answer["bootstrap_admission_created"])
         self.assertFalse(answer["may_apply"])
         self.assertFalse(answer["may_install"])
@@ -99,6 +103,10 @@ class AttestedSourceAuditTests(unittest.TestCase):
     def test_no_installer_in_dev_release_is_blocked_even_if_attested(self):
         with self.assertRaisesRegex(m.Blocked, "SIGNED_INSTALLER_OR_HELPERS_ABSENT"):
             self.run_audit(fixture(missing=m.SOURCES[0]))
+
+    def test_missing_root_bootstrap_source_is_blocked(self):
+        with self.assertRaisesRegex(m.Blocked, "SIGNED_INSTALLER_OR_HELPERS_ABSENT"):
+            self.run_audit(fixture(missing=m.BOOTSTRAP_SCRIPT))
 
     def test_manifest_tampering_is_blocked(self):
         with self.assertRaisesRegex(m.Blocked, "SIGNED_MEMBER_SHA256_MISMATCH"):
