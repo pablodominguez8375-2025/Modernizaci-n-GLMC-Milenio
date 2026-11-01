@@ -34,6 +34,7 @@ ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
 SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 SHA64 = re.compile(r"[a-f0-9]{64}\Z")
 MANIFEST_LINE = re.compile(r"([a-f0-9]{64})  \./([^\n]+)\Z")
+BOOTSTRAP_SCRIPT = "scripts/qa/operators/qa525-signed-root-bootstrap-prep.py"
 SOURCES = (
     "scripts/qa/operators/qa525-launcher-supervised-root-install.py",
     "scripts/qa/operators/qa525-launcher-signed-preflight.py",
@@ -239,8 +240,14 @@ def verify_zip_and_prepare(envelope_path, source_sha, envelope_digest,
                 expected[name] = hit.group(1)
             require(set(expected) == (set(files) - {"MANIFEST.sha256"}),
                     "BOOTSTRAP_MANIFEST_SET_MISMATCH")
-            require(set(SOURCES).issubset(expected),
+            require(set(SOURCES).issubset(expected) and
+                    BOOTSTRAP_SCRIPT in expected,
                     "BOOTSTRAP_SIGNED_INSTALLER_OR_HELPERS_MISSING")
+            # The bootstrap source itself MUST be one of the independently
+            # signed members, not only its eventual caller-supplied hash.
+            require(expected[BOOTSTRAP_SCRIPT] ==
+                    digest_file(Path(__file__), maximum=200_000),
+                    "BOOTSTRAP_PIN_NOT_IN_SIGNED_MANIFEST")
             target.mkdir(mode=0o700)
             for key, item in files.items():
                 if key == "MANIFEST.sha256":
