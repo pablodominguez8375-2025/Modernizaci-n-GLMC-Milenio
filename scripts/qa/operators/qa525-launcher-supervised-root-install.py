@@ -716,6 +716,15 @@ def read_reversal_approval():
         raise Blocked("ROOT_REVERSAL_APPROVAL_JSON_INVALID") from None
 
 
+
+def assess_root_reversal(contract, receipt, approval, **kwargs):
+    """Preserve a stable root CLI refusal if the pure policy rejects the act."""
+    try:
+        return contract.assess_reversal(receipt, approval, **kwargs)
+    except contract.Blocked as exc:
+        raise Blocked(str(exc)) from None
+
+
 def rollback_approved():
     """One-shot supervised reversal of a COMMITTED launcher cut, no API/WEB.
 
@@ -752,7 +761,7 @@ def rollback_approved():
                     packet["release_asset_sha256"],
                 "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT")
         approval_copy = dict(approval)
-        plan = contract.assess_reversal(
+        plan = assess_root_reversal(contract, 
             receipt, approval, current_launcher_sha256=digest(current),
             backup_sha256=digest(old), pending=False, now=int(time.time()))
         require(plan.get("status") ==
@@ -793,7 +802,7 @@ def rollback_approved():
         last_approval = read_reversal_approval()
         require(last_approval == approval_copy,
                 "ROOT_REVERSAL_APPROVAL_CHANGED_BEFORE_SWAP")
-        last = contract.assess_reversal(
+        last = assess_root_reversal(contract, 
             receipt, last_approval, current_launcher_sha256=digest(
                 read_bound(LAUNCHER, exact_mode=0o700)),
             backup_sha256=digest(read_bound(backup_path, exact_mode=0o700)),
