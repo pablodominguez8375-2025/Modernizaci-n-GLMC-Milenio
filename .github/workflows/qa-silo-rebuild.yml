@@ -179,7 +179,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: silo-rebuild-review-${{ env.QA_VALIDATED_SOURCE_SHA }}
+          name: silo-rebuild-review-${{ env.QA_VALIDATED_SOURCE_SHA }}-attempt-${{ github.run_attempt }}
           path: artifacts/silo-rebuild/
           retention-days: 7
           if-no-files-found: error
