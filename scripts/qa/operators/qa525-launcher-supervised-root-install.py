@@ -261,8 +261,18 @@ def all_five_locks():
             stack.callback(os.close, fd)
             st = os.fstat(fd)
             require(stat.S_ISREG(st.st_mode) and st.st_uid == 0
+                    and st.st_nlink == 1
                     and stat.S_IMODE(st.st_mode) == 0o600,
                     "ROOT_LOCK_FILE_UNTRUSTED")
+            # Reject inode substitution between open and the exclusive
+            # advisory lock, even in an otherwise root-owned directory.
+            named = path.lstat()
+            require(stat.S_ISREG(named.st_mode)
+                    and not stat.S_ISLNK(named.st_mode)
+                    and named.st_uid == 0 and named.st_nlink == 1
+                    and named.st_dev == st.st_dev
+                    and named.st_ino == st.st_ino,
+                    "ROOT_LOCK_PATH_CHANGED_DURING_OPEN")
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
