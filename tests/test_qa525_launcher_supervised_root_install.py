@@ -1175,5 +1175,9 @@ raise SystemExit("UNREACHABLE")
         self.check_kill("after_atomic_swap")
 
 
+# Include disposable reversal regressions in the existing QA525 root-review gate.
+from test_qa525_launcher_recovery_sandbox import RecoverySandboxTests
+
+
 if __name__ == "__main__":
     unittest.main()
