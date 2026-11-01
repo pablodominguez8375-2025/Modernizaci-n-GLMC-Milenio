@@ -58,3 +58,10 @@ A fresh review of `dev@50844752ddda37bf2ba291dd6f76e3414d3bc103` and GitHub PR #
 - `bfc2ab74d51de3965365e2680c7c09a7df63d47e`: real `fcntl.flock` contention/release tested with all five QA lock names redirected to disposable sandbox files, while only UID metadata is mocked. Latest offline review #41266938573 SUCCESS.
 
 **POST discipline:** PR834 remains DRAFT, with seven exact-head general workflows to complete. Even if all turn green, a separate authenticated signed source bootstrap, host-specific G6 and offhost restore, operator review of the physical five locks/state/journal and explicit authorization still block merge-for-use and rollout. No API/WEB, Compose, EF100, Keycloak/SMTP or glmdch physical changes; no main, srv01, second VM or PR771/737/766. Github Issues #822 and #827 remain OPEN. Mirror to Drive and verify both readbacks.
+
+
+## Security ADR and trust boundary (1 Nov 2026)
+
+A proposed ADR is now committed at `docs/adr/ADR-qa525-signed-root-bootstrap-and-recovery.md` (commit `c3ecdf7cbbf5df85126bcf73905612e7c70c817a`). It explicitly identifies the first-execution trust paradox: `bootstrap_trusted_sources()` only checks file ownership/perms before importing Python, not the authenticated signed hashes of those files. A root-owned file is not proof of signed provenance. Physical execution of the installer remains BLOCKED until an independently trusted, immutable, separately verified root bootstrap authenticates the package and every imported helper *before* running any of it. Sigstore/GitHub release metadata does not grant install permission.
+
+The ADR also contains a fail-closed threat matrix for release substitution, hardlink/path replacement, interruption before/after swap, nonces/TTL, journal/backup mismatch and G6. It states clearly that existing read-only reconciliation does not implement an independently reviewed supervised dual rollback. PR834 is DRAFT despite earlier 7/7 CI, and no host operation may be inferred. The ADR is PROPOSED, not APPROVED. The new commit triggers exact-head checks; previous green runs do not count.
