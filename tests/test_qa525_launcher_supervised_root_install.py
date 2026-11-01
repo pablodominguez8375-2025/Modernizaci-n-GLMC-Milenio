@@ -897,7 +897,8 @@ class ReadOnlyDiagnosticCliTests(unittest.TestCase):
 class ReadOnlyPendingJournalTests(unittest.TestCase):
     """Never resume or roll back based solely on an on-disk journal."""
 
-    def check(self, *, post=False, receipt=False, corrupt=None):
+    def check(self, *, post=False, receipt=False, corrupt=None,
+              historical=None):
         old = b"old signed launcher\n"
         new = b"new signed launcher\n"
         with tempfile.TemporaryDirectory(prefix="qa525-journal-inspect-") as td:
@@ -923,6 +924,29 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
                 (journal / ("receipt-" + NONCE + ".json")).write_bytes(
                     m.json_bytes(dict(act, status="LAUNCHER_ATOMIC_SWAP_COMMITTED",
                                       candidate_operator_sha256="d"*64)))
+            if historical is not None:
+                previous_nonce = "c" * 64
+                previous_old = b"previous known signed launcher\n"
+                history_old = journal / ("old-" + previous_nonce + ".bin")
+                history_old.write_bytes(previous_old)
+                history_old.chmod(0o700)
+                if historical != "missing_receipt":
+                    history_record = {
+                        "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+                        "source_sha": "d" * 40,
+                        "release_asset_sha256": "sha256:" + "e" * 64,
+                        "old_launcher_sha256": m.digest(previous_old),
+                        "new_launcher_sha256": "f" * 64,
+                        "candidate_operator_sha256": "a" * 64,
+                        "nonce": previous_nonce,
+                    }
+                    if historical == "forged_receipt":
+                        history_record["new_launcher_sha256"] = "wrong"
+                    history_receipt = journal / ("receipt-" + previous_nonce + ".json")
+                    history_receipt.write_bytes(m.json_bytes(history_record))
+                    history_receipt.chmod(0o600)
+                if historical == "forged_backup":
+                    history_old.write_bytes(b"forged previous backup\n")
             if corrupt == "backup":
                 backup.write_bytes(b"corrupt backup\n")
             if corrupt == "unknown_live":
@@ -964,7 +988,9 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
                               Path(path).read_bytes()), \
                  patch.object(m, "write_once") as writer, \
                  patch.object(m.os, "replace") as swap:
-                if corrupt:
+                if corrupt or historical in (
+                        "forged_receipt", "forged_backup",
+                        "missing_receipt"):
                     with self.assertRaises(m.Blocked):
                         m.inspect_pending_reconciliation()
                 else:
@@ -979,6 +1005,8 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
                     self.assertEqual(m.digest(NONCE.encode("ascii")),
                                      report["nonce_sha256"])
                     self.assertTrue(report["backup_hash_matches_intent"])
+                    self.assertEqual(1 if historical == "valid" else 0,
+                                     report["historical_receipts_verified"])
                     for key in ("signature_verified_by_inspection",
                                 "rollback_authorized", "may_resume", "may_apply"):
                         self.assertFalse(report[key])
@@ -990,6 +1018,15 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
 
     def test_pending_before_swap_read_only(self):
         self.check(post=False)
+
+    def test_pending_with_valid_prior_receipt_validates_history_read_only(self):
+        self.check(historical="valid")
+
+    def test_pending_with_forged_prior_receipt_or_backup_fails_closed(self):
+        for variant in ("forged_receipt", "forged_backup",
+                        "missing_receipt"):
+            with self.subTest(variant=variant):
+                self.check(historical=variant)
 
     def test_pending_after_swap_read_only(self):
         self.check(post=True)
