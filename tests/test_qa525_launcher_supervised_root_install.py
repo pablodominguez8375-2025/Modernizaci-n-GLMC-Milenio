@@ -85,6 +85,35 @@ class RootLauncherInstallerTests(unittest.TestCase):
                     self.fail("The changed lock must not be granted")
             flock.assert_not_called()
 
+    def test_shared_five_lock_contention_blocks_and_releases(self):
+        with tempfile.TemporaryDirectory(prefix="qa525-five-lock-") as td:
+            paths = tuple(Path(td) / ("lock-" + str(i)) for i in range(5))
+            for path in paths:
+                path.write_bytes(b"")
+                path.chmod(0o600)
+            original_fstat = os.fstat
+            original_lstat = Path.lstat
+            def pretend_root(st):
+                return SimpleNamespace(st_mode=st.st_mode, st_uid=0,
+                                       st_nlink=st.st_nlink, st_dev=st.st_dev,
+                                       st_ino=st.st_ino)
+            with patch.object(m, "LOCKS", paths), \
+                 patch.object(m, "require_host"), \
+                 patch.object(m, "lock_parent"), \
+                 patch.object(m.os, "fstat",
+                              side_effect=lambda fd:
+                              pretend_root(original_fstat(fd))), \
+                 patch.object(Path, "lstat",
+                              autospec=True, side_effect=lambda self:
+                              pretend_root(original_lstat(self))):
+                with m.all_five_locks():
+                    with self.assertRaisesRegex(m.Blocked,
+                                                "ANOTHER_QA_OPERATOR_RUNNING"):
+                        with m.all_five_locks():
+                            self.fail("Second operator must not obtain locks")
+                with m.all_five_locks():
+                    pass
+
     def test_wrong_host_blocks_before_import_or_filesystem(self):
         with patch.object(m.os, "geteuid", return_value=0), \
              patch.object(m.socket, "gethostname", return_value="srv01"), \
