@@ -1179,5 +1179,88 @@ raise SystemExit("UNREACHABLE")
 from test_qa525_launcher_recovery_sandbox import RecoverySandboxTests
 
 
+
+class ReversalPolicyGateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        src = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        sp = importlib.util.spec_from_file_location("qa525_reversal_policy", src)
+        cls.policy = importlib.util.module_from_spec(sp)
+        sys.modules[sp.name] = cls.policy
+        sp.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        self.receipt = {
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "source_sha": "a" * 40, "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "candidate_operator_sha256": "e" * 64,
+            "nonce": "1" * 64,
+        }
+        self.approval = {
+            "action": "rollback-root-launcher-supervised",
+            "scope": self.policy.RECOVERY_SCOPE,
+            "environment": self.policy.ENVIRONMENT,
+            "operator": "soporte@glmdch", "approved": True,
+            "cut_nonce": self.receipt["nonce"], "nonce": "2" * 64,
+            "source_sha": self.receipt["source_sha"],
+            "release_asset_sha256": self.receipt["release_asset_sha256"],
+            "old_launcher_sha256": self.receipt["old_launcher_sha256"],
+            "new_launcher_sha256": self.receipt["new_launcher_sha256"],
+            "issued_at": 100, "expires_at": 200,
+        }
+
+    def review(self, *, receipt=None, approval=None, current=None,
+               backup=None, pending=False, consumed=()):
+        return self.policy.assess_reversal(
+            self.receipt if receipt is None else receipt,
+            self.approval if approval is None else approval,
+            current_launcher_sha256=self.receipt["new_launcher_sha256"]
+                if current is None else current,
+            backup_sha256=self.receipt["old_launcher_sha256"]
+                if backup is None else backup,
+            pending=pending, now=120, consumed_nonces=consumed)
+
+    def test_distinct_approval_yields_review_only_never_rollback_permission(self):
+        outcome = self.review()
+        self.assertEqual("REVIEWED_LAUNCHER_REVERSAL_PLAN_NO_INSTALL",
+                         outcome["status"])
+        for flag in ("may_install", "may_apply", "may_recover",
+                     "rollback_complete"):
+            self.assertFalse(outcome[flag])
+        self.assertTrue(outcome["requires_independent_signed_root_executor"])
+
+    def test_nonce_replay_and_expired_forged_approvals_rejected(self):
+        for changed in ({"nonce": self.receipt["nonce"]},
+                        {"nonce": "3" * 64},
+                        {"approved": False},
+                        {"scope": "API_AND_WEB"},
+                        {"cut_nonce": "7" * 64},
+                        {"source_sha": "f" * 40},
+                        {"expires_at": 120},
+                        {"extra": True}):
+            approval = dict(self.approval, **changed)
+            with self.subTest(changed=changed):
+                if changed == {"nonce": "3" * 64}:
+                    with self.assertRaises(self.policy.Blocked):
+                        self.review(approval=approval, consumed=("3" * 64,))
+                else:
+                    with self.assertRaises(self.policy.Blocked):
+                        self.review(approval=approval)
+
+    def test_pending_unknown_live_and_bad_backup_rejected(self):
+        with self.assertRaises(self.policy.Blocked):
+            self.review(pending=True)
+        with self.assertRaises(self.policy.Blocked):
+            self.review(current="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.review(backup="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.review(receipt={**self.receipt, "status": "INCOMPLETE"})
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
