@@ -16,3 +16,6 @@ Implementar un SIMULADOR de rollback reversible sobre rutas de prueba descartabl
 - `tests/test_qa525_launcher_supervised_root_install.py`: importa clase adversarial para que el gate QA525 exact-head de CI la ejecute.
 
 **STOP operacional:** sandbox no recibe rutas glmdch, ni utiliza root; evidencia modelada NO es la reversión privilegiada real. El operador real necesitará implementación separada, revisión de cinco locks, firmar nuevo SHA, ensayos y aprobación formal. Conservar QA físico antiguo hasta entonces.
+
+## Endurecimiento de identidad de aprobación
+La aprobación de rollback se congela tras su primera validación y se vuelve a contrastar al límite exacto previo al intercambio atómico. Si su nonce, alcance u otros campos cambian durante el proceso, se bloquea y conserva journal sin mutar el lanzador. Prueba adicional de mutación entre respaldo durable y swap; la implementación sigue siendo SOLO un sandbox y NO un mecanismo de recuperación de glmdch.
