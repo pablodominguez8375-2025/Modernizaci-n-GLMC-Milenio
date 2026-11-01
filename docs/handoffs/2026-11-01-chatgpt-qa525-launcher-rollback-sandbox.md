@@ -66,3 +66,35 @@ El contrato distingue **A**, recibo original de sustitución `LAUNCHER_ATOMIC_SW
 **Bloqueos que el nuevo contrato NO resuelve:** (1) no existe aún root verifier/boundary de recuperación diferida capaz de emitir una admisión B nueva sin borrar o reusar la vieja; (2) `rollback_approved()` sigue requiriendo A==B y el bootstrap original one-shot no se modifica; (3) no hay reconciliación automatizada para sustitución original interrumpida; (4) G6 offhost/IAM/consistencia multirrecurso no acreditado. Es requisito futuro: revisión externa del diseño, prueba de seguridad/rollback en escenario aislado, manifiesto y firma exact SHA integrados, y aprobación distinta launcher-only antes de tocar glmdch. CI debe evaluarse **por HEAD exacto**; 7/8 del commit previo 432fb6be (PMGM CI falló al hacer Docker pull en test Silo), no corresponde al nuevo HEAD.
 
 La continuidad y auditoría deben reflejar únicamente este avance de ingeniería y conservar el estado físico QA anterior.
+
+## Modelo A/B de recuperación tardía con transacción duradera — incremento hermético 01-11-2026
+En rama PR #838 se añadió `simulate_delayed_dual_recovery()` a
+`scripts/qa/operators/qa525-launcher-recovery-sandbox.py` (commit `45cab925`)
+y cinco casos a `tests/test_qa525_launcher_recovery_sandbox.py`
+(commit `8e2251e6`). La función **NO verifica firmas ni admite una ruta física**:
+aplica el contrato `assess_delayed_recovery_plan()` sobre los datos NO
+autenticados de A (receipt original) y B (claim/acta reciente), junto con las
+comprobaciones del sandbox dentro del mismo lock de prueba; reutiliza su
+journal/fsync/backup/swap sobre archivos descartables bajo /tmp, con revalidación
+de A, B y consentimiento antes del swap. El resultado
+`SIMULATED_DELAYED_DUAL_PROVENANCE_NO_HOST_CHANGE` lleva
+`approved_for_host_recovery=false` y
+`recovery_claim_authenticated=false`; no crea admisión privilegiada.
+
+Pruebas: recuperación simulada cuando el recibo de A es histórico y no se
+depende de la antigua admisión de A; rechazo de origen/digest/manifiesto/ejecutor
+B adulterados y acta A/B disconforme, caducada o sin scope; modificación de B
+tras backup durable bloqueada sin swap y journal retenido; error después de swap
+retiene journal y prohíbe replay; prohibición explícita de /opt/centenario.
+El simulador anterior y la suite de root offline comparten estos tests por
+importación, para evitar falsos positivos de una prueba huérfana.
+
+**No interpretar la simulación como recuperación probada de glmdch.** No
+comprueba Sigstore, identidad del operador real, ancla de primer root, 5 locks
+del host, journals de Docker/DB, protección de fuentes root ni funcionalidad
+API/WEB. La implementación privilegiada `rollback_approved()` no consume
+este modelo A/B ni permite nueva readmisión, sigue siendo NO-GO. Antes del
+cut físico se requiere verificador de firmas exactas A/B, mecanismo seguro
+de emisión de admisión B sin borrar A, ensayo de recovery/suspensión, review
+independiente, CI exact HEAD y aprobación separada launcher-only. No se
+modificó la release root0600 antigua ni glmdch. No ejecutar scripts srv01.
