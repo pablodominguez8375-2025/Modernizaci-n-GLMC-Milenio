@@ -1177,6 +1177,7 @@ raise SystemExit("UNREACHABLE")
 
 # Include disposable reversal regressions in the existing QA525 root-review gate.
 from test_qa525_launcher_recovery_sandbox import RecoverySandboxTests
+from test_qa525_delayed_recovery_signed_evidence_audit import DelayedDualSignedEvidenceAuditTests
 
 
 
