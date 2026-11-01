@@ -74,7 +74,7 @@ def validate(approval, now):
 
 def trusted_chain(path):
     """Never follow links; require root ownership and safe ancestors."""
-    require(type(path) is Path and path.is_absolute(),
+    require(isinstance(path, Path) and path.is_absolute(),
             "LAUNCHER_APPROVAL_PATH_INVALID")
     for n, item in enumerate((path, *path.parents)):
         try:
