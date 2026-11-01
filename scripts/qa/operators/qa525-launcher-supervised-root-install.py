@@ -165,6 +165,76 @@ def json_bytes(record):
             "\n").encode("utf-8")
 
 
+def fsync_retained_package(package):
+    """Persist every attested source file before making its SHA path executable.
+
+    A directory rename alone is not sufficient durability proof for the data
+    blocks produced by the signed zip extractor. Reject links, hardlinks,
+    misplaced ownership, writable members and partial directory traversal.
+    """
+    package = Path(package)
+    uid = os.geteuid()
+    require(package.is_dir() and not package.is_symlink(),
+            "RETAINED_PACKAGE_ROOT_INVALID")
+    total_files = 0
+    total_bytes = 0
+    observed_dirs = 0
+
+    def traversal_error(error):
+        raise Blocked("RETAINED_PACKAGE_TRAVERSAL_FAILED") from None
+
+    for current, dirs, filenames in os.walk(
+            package, topdown=False, followlinks=False,
+            onerror=traversal_error):
+        current = Path(current)
+        for child_name in dirs:
+            child = current / child_name
+            st = child.lstat()
+            require(stat.S_ISDIR(st.st_mode) and st.st_uid == uid
+                    and not stat.S_ISLNK(st.st_mode)
+                    and stat.S_IMODE(st.st_mode) == 0o700,
+                    "RETAINED_PACKAGE_DIRECTORY_UNTRUSTED")
+        directory = current.lstat()
+        require(stat.S_ISDIR(directory.st_mode)
+                and directory.st_uid == uid
+                and stat.S_IMODE(directory.st_mode) == 0o700
+                and not stat.S_ISLNK(directory.st_mode),
+                "RETAINED_PACKAGE_DIRECTORY_UNTRUSTED")
+        observed_dirs += 1
+        require(observed_dirs <= 20_000,
+                "RETAINED_PACKAGE_TOO_MANY_DIRECTORIES")
+        for child_name in filenames:
+            child = current / child_name
+            before = child.lstat()
+            require(stat.S_ISREG(before.st_mode)
+                    and before.st_uid == uid and before.st_nlink == 1
+                    and not (before.st_mode & 0o022),
+                    "RETAINED_PACKAGE_FILE_UNTRUSTED")
+            total_files += 1
+            total_bytes += before.st_size
+            require(total_files <= 100_000 and total_bytes <= 2 * 1024**3,
+                    "RETAINED_PACKAGE_SIZE_LIMIT")
+            fd = os.open(child, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            try:
+                live = os.fstat(fd)
+                require(live.st_uid == uid and stat.S_ISREG(live.st_mode)
+                        and live.st_nlink == 1
+                        and live.st_dev == before.st_dev
+                        and live.st_ino == before.st_ino
+                        and live.st_size == before.st_size,
+                        "RETAINED_PACKAGE_FILE_CHANGED_DURING_FSYNC")
+                os.fsync(fd)
+                after = os.fstat(fd)
+                require(after.st_size == live.st_size and
+                        after.st_mtime_ns == live.st_mtime_ns,
+                        "RETAINED_PACKAGE_FILE_CHANGED_DURING_FSYNC")
+            finally:
+                os.close(fd)
+        sync_dir(current)
+    require(total_files > 0 and observed_dirs > 0,
+            "RETAINED_PACKAGE_EMPTY")
+
+
 def lock_parent(path):
     if path == Path("/run/lock"):
         root_chain(path.parent, directory=True)
@@ -333,6 +403,9 @@ def replace_approved():
                     "ROOT_OLD_LAUNCHER_BACKUP_UNVERIFIED")
             require(not target.exists() and not target.is_symlink(),
                     "ROOT_TARGET_STAGE_ALREADY_EXISTS")
+            # Manifest and signatures were verified before staging. Guarantee
+            # the ZIP-extracted bytes are durable before publishing the path.
+            fsync_retained_package(package)
             os.rename(package, target)
             sync_dir(STORE)
             retained_root = retained.inspect_retained(
