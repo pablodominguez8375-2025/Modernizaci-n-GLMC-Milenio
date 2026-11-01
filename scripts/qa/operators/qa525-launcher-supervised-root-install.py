@@ -73,6 +73,8 @@ def require(test, code):
 def require_host():
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
             "SIGNED_LAUNCHER_ROOT_GLMDCH_ONLY")
+    require(sys.flags.isolated == 1 and sys.flags.no_site == 1,
+            "SIGNED_LAUNCHER_ROOT_PYTHON_ISOLATION_REQUIRED")
 
 
 def root_chain(path, *, directory=False, exact_mode=None):
