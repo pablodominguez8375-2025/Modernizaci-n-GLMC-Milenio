@@ -1,5 +1,6 @@
 """QA827: required push Showcase cannot be replaced by manual dispatch."""
 from pathlib import Path
+import importlib.util
 import re
 import unittest
 
@@ -59,6 +60,40 @@ class ShowcasePushGateTests(unittest.TestCase):
         self.assertIn("    branches: [dev]",text)
         self.assertRegex(text, r"(?m)^  workflow_dispatch:\s*$")
         self.assertRegex(text,r"(?m)^  pull_request:\s*$")
+
+    def test_fresh_manual_success_cannot_replace_cancelled_push_in_real_gate(self):
+        spec = importlib.util.spec_from_file_location(
+            "qa827_existing_readiness", READINESS)
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        source_sha = "a" * 40
+        names = list(gate.REQUIRED)
+        runs = [dict(name=name, id=i+100, run_attempt=1,
+                     event="push", head_branch="dev", head_sha=source_sha,
+                     status="completed", conclusion="success")
+                for i,name in enumerate(names)]
+        showcase = next(x for x in runs if x["name"] == "PMGM Showcase Demo")
+        showcase["conclusion"] = "cancelled"
+        manual = dict(showcase, id=500, event="workflow_dispatch",
+                      conclusion="success")
+        def fetch(path):
+            if path == "/branches/dev":
+                return {"commit": {"sha": source_sha}}
+            if path == "/actions/runs?head_sha=" + source_sha + "&per_page=100":
+                return {"workflow_runs": runs + [manual]}
+            if path.endswith("/artifacts?per_page=100"):
+                return {"artifacts": [dict(name=gate.ARTIFACT_PREFIX+source_sha,
+                                            id=1, expired=False,
+                                            size_in_bytes=100,
+                                            digest="sha256:" + "b"*64)]}
+            raise AssertionError("unexpected read " + path)
+        with self.assertRaisesRegex(
+                gate.GateFailure, "REQUIRED_DEV_WORKFLOW_NOT_SUCCESS"):
+            gate.evaluate(fetch)
+        showcase["conclusion"] = "success"
+        result = gate.evaluate(fetch)
+        self.assertEqual(source_sha, result["source_sha"])
+        self.assertEqual("READY_FOR_SIGNED_STAGING_ONLY", result["status"])
 
     def test_validation_executes_before_long_frontend_matrix(self):
         text = WORKFLOW.read_text()
