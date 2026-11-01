@@ -11,6 +11,8 @@ reads secrets or grants installation approval. It only prepares root-owned,
 Sigstore-authenticated source bytes for separately supervised use.
 """
 import argparse
+from contextlib import contextmanager
+import fcntl
 import hashlib
 import json
 import os
@@ -27,6 +29,7 @@ import zipfile
 REPO = "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
 SIGNER = REPO + "/.github/workflows/qa-silo-rebuild.yml"
 STORE = Path("/opt/centenario/qa525-root-source")
+LOCK = STORE / "bootstrap.lock"
 ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
 SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 SHA64 = re.compile(r"[a-f0-9]{64}\Z")
@@ -91,6 +94,41 @@ def root_owned(path, *, directory=False, mode=None):
         if n == 0 and mode is not None:
             require(stat.S_IMODE(s.st_mode) == mode,
                     "BOOTSTRAP_ROOT_PATH_MODE_INVALID")
+
+
+def write_all(fd, data):
+    view = memoryview(data)
+    while view:
+        amount = os.write(fd, view)
+        require(type(amount) is int and 0 < amount <= len(view),
+                "BOOTSTRAP_SHORT_WRITE")
+        view = view[amount:]
+
+
+@contextmanager
+def locked_bootstrap():
+    """Bootstrap-only root lock: never create it, never bypass contention."""
+    root_owned(STORE, directory=True, mode=0o700)
+    root_owned(LOCK, mode=0o600)
+    before = LOCK.lstat()
+    fd = os.open(LOCK, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        current = os.fstat(fd)
+        require(current.st_dev == before.st_dev and current.st_ino == before.st_ino
+                and current.st_uid == 0 and current.st_nlink == 1
+                and stat.S_ISREG(current.st_mode)
+                and stat.S_IMODE(current.st_mode) == 0o600,
+                "BOOTSTRAP_LOCK_CHANGED")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Blocked("BOOTSTRAP_ALREADY_RUNNING") from None
+        require(LOCK.lstat().st_ino == current.st_ino
+                and LOCK.lstat().st_dev == current.st_dev,
+                "BOOTSTRAP_LOCK_PATH_CHANGED")
+        yield
+    finally:
+        os.close(fd)
 
 
 def zip_members(zf, *, max_total=MAX_TOTAL):
@@ -229,7 +267,7 @@ def verify_zip_and_prepare(envelope_path, source_sha, envelope_digest,
                             require(size <= MAX_FILE, "BOOTSTRAP_MEMBER_EXPANSION")
                             h.update(block)
                             if fd >= 0:
-                                os.write(fd, block)
+                                write_all(fd, block)
                     require(size == item.file_size and
                             h.hexdigest() == expected[key],
                             "BOOTSTRAP_SIGNED_MEMBER_MISMATCH")
@@ -254,8 +292,8 @@ def verify_zip_and_prepare(envelope_path, source_sha, envelope_digest,
             return hashlib.sha256(manifest).hexdigest(), expected
 
 
-def prepare(envelope, sha, expected, verifier_sha, *, now=None,
-            verify=subprocess.run):
+def _prepare_locked(envelope, sha, expected, verifier_sha, *, now=None,
+                    verify=subprocess.run):
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
             "BOOTSTRAP_ROOT_GLMDCH_ONLY")
     require(SHA40.fullmatch(sha) is not None and
@@ -311,7 +349,7 @@ def prepare(envelope, sha, expected, verifier_sha, *, now=None,
         fd = os.open(ADMISSION, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
                      os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
-            os.write(fd, raw)
+            write_all(fd, raw)
             os.fsync(fd)
         finally:
             os.close(fd)
@@ -329,6 +367,15 @@ def prepare(envelope, sha, expected, verifier_sha, *, now=None,
             "launcher_replaced": False, "api_web_changed": False,
             "may_install": False, "may_apply": False,
         }
+
+
+def prepare(envelope, sha, expected, verifier_sha, *, now=None,
+            verify=subprocess.run):
+    require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
+            "BOOTSTRAP_ROOT_GLMDCH_ONLY")
+    with locked_bootstrap():
+        return _prepare_locked(envelope, sha, expected, verifier_sha,
+                               now=now, verify=verify)
 
 
 def main(argv=None):
