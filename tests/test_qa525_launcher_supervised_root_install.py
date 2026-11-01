@@ -347,5 +347,85 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
         self.exercise(change_approval=True)
 
 
+class KilledSubprocessDurabilityTests(unittest.TestCase):
+    """Actual SIGKILL between durable root-journal and atomic swap.
+
+    A disposable child runs the real write_once/os.replace/fsync operations,
+    never the real installer entrypoint, never an external host or Docker.
+    """
+
+    CHILD = r"""
+import importlib.util
+import os
+from pathlib import Path
+import signal
+import sys
+base, source, step = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+spec = importlib.util.spec_from_file_location("qa525_kill_child_installer", source)
+mod = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = mod
+spec.loader.exec_module(mod)
+state = base / "state"
+bin_dir = base / "bin"
+live = bin_dir / "pmgm-qa-update"
+old = b"old-root-owned-synthetic-launcher\n"
+new = b"new-signed-synthetic-launcher\n"
+nonce = "b" * 64
+mod.write_once(state / ("intent-" + nonce + ".json"),
+               mod.json_bytes({"status": "SWAP_INTENT_NO_DEPLOYMENT",
+                               "nonce": nonce}), mode=0o600)
+mod.write_once(state / ("old-" + nonce + ".bin"), old, mode=0o700)
+if step == "after_atomic_swap":
+    staged = bin_dir / ".pmgm-qa-update.tmp"
+    mod.write_once(staged, new, mode=0o700)
+    os.replace(staged, live)
+    mod.sync_dir(bin_dir)
+os.kill(os.getpid(), signal.SIGKILL)
+raise SystemExit("UNREACHABLE")
+"""
+
+    def check_kill(self, phase):
+        import signal
+        import subprocess
+        with tempfile.TemporaryDirectory(prefix="qa525-sigkill-") as td:
+            base = Path(td)
+            state = base / "state"
+            bin_dir = base / "bin"
+            state.mkdir(mode=0o700)
+            bin_dir.mkdir(mode=0o700)
+            live = bin_dir / "pmgm-qa-update"
+            live.write_bytes(b"old-root-owned-synthetic-launcher\n")
+            live.chmod(0o700)
+            child = subprocess.run(
+                [sys.executable, "-B", "-c", self.CHILD,
+                 str(base), str(SOURCE), phase],
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(-signal.SIGKILL, child.returncode,
+                             msg=child.stdout + child.stderr)
+            expected = (b"new-signed-synthetic-launcher\n"
+                        if phase == "after_atomic_swap"
+                        else b"old-root-owned-synthetic-launcher\n")
+            self.assertEqual(expected, live.read_bytes())
+            nonce = "b" * 64
+            intent = state / ("intent-" + nonce + ".json")
+            backup = state / ("old-" + nonce + ".bin")
+            self.assertTrue(intent.is_file())
+            self.assertEqual(b"old-root-owned-synthetic-launcher\n",
+                             backup.read_bytes())
+            self.assertEqual(0o600, stat.S_IMODE(intent.stat().st_mode))
+            self.assertEqual(0o700, stat.S_IMODE(backup.stat().st_mode))
+            with patch.object(m, "STATE", state), \
+                 patch.object(m, "root_chain"):
+                with self.assertRaisesRegex(
+                        m.Blocked, "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION"):
+                    m.scan_history()
+
+    def test_actual_sigkill_before_swap_replays_nothing(self):
+        self.check_kill("before_atomic_swap")
+
+    def test_actual_sigkill_after_swap_leaves_intent_and_blocks_retry(self):
+        self.check_kill("after_atomic_swap")
+
+
 if __name__ == "__main__":
     unittest.main()
