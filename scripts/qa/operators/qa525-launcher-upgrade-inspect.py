@@ -122,6 +122,9 @@ def inspect():
         "current_operator": str(source),
         "current_operator_sha256": hashlib.sha256(candidate).hexdigest(),
         "old_launcher_template_verified": True,
+        # This indicates that the LEGACY launcher needs a signed upgrade.
+        # It does not claim release availability or deployment authority.
+        "launcher_transition": "INSTALLER_UPDATE_REQUIRED",
         "signed_release_verified": False,
         "rollback_validated": False,
         "may_install": False,
@@ -139,6 +142,7 @@ def main(argv=None):
         code = str(exc) if isinstance(exc, Blocked) else "LAUNCHER_INSPECTION_FAILED"
         print(json.dumps({"status": "BLOCKED_QA525_LAUNCHER_INSPECTION",
                           "scope": SCOPE, "code": code,
+                          "launcher_transition": "LAUNCHER_INSPECTION_BLOCKED",
                           "may_install": False, "may_apply": False}, sort_keys=True))
         return 2
 
