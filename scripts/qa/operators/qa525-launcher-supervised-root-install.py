@@ -305,10 +305,15 @@ def replace_approved():
             require(digest(operator) == plan["candidate_operator_sha256"],
                     "ROOT_CANDIDATE_BYTES_DRIFT")
             # Approval may expire during the download. Recheck right now.
-            contract.assess_review(
-                plan, approval_reader.read_root_approval(),
-                now=int(time.time()), pending=False,
-                consumed_nonces=tuple(sorted(scan_history())))
+            renewed_approval = approval_reader.read_root_approval()
+            require(renewed_approval == approval
+                    and renewed_approval.get("nonce") == nonce,
+                    "ROOT_APPROVAL_CHANGED_DURING_RELEASE_DOWNLOAD")
+            renewed_cut = contract.assess_review(
+                plan, renewed_approval, now=int(time.time()),
+                pending=False, consumed_nonces=tuple(sorted(scan_history())))
+            require(renewed_cut.get("nonce") == nonce,
+                    "ROOT_REVIEW_NONCE_CHANGED_DURING_DOWNLOAD")
             require(digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
                     plan["old_launcher_sha256"],
                     "ROOT_LAUNCHER_CHANGED_BEFORE_JOURNAL")
