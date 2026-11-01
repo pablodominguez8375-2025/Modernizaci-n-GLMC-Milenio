@@ -95,6 +95,15 @@ def root_chain(path, *, directory=False, exact_mode=None):
     return path
 
 
+def require_bootstrap_fresh(packet, now):
+    """External signer admission is a SHORT-LIVED binding, not deployment consent."""
+    issued = packet.get("issued_at")
+    expires = packet.get("expires_at")
+    require(type(now) is int and type(issued) is int and type(expires) is int
+            and issued <= now < expires and 0 < expires - issued <= 900,
+            "ROOT_BOOTSTRAP_ADMISSION_EXPIRED_OR_INVALID")
+
+
 def bootstrap_trusted_sources():
     """Cross-check every privileged imported byte BEFORE helper imports.
 
@@ -112,7 +121,8 @@ def bootstrap_trusted_sources():
         raise Blocked("ROOT_BOOTSTRAP_ADMISSION_JSON_INVALID") from None
     require(type(packet) is dict and set(packet) == {
                 "status", "source_sha", "release_asset_sha256",
-                "manifest_sha256", "trusted_verifier_sha256", "files"}
+                "manifest_sha256", "trusted_verifier_sha256", "files",
+                "issued_at", "expires_at"}
             and packet["status"] == BOOTSTRAP_STATUS
             and type(packet["source_sha"]) is str
             and SHA.fullmatch(packet["source_sha"]) is not None
@@ -124,6 +134,7 @@ def bootstrap_trusted_sources():
                     for k in ("manifest_sha256", "trusted_verifier_sha256"))
             and type(packet["files"]) is dict,
             "ROOT_BOOTSTRAP_ADMISSION_FIELDS_INVALID")
+    require_bootstrap_fresh(packet, int(time.time()))
     expected = {str(source) for source in SOURCES}
     require(set(packet["files"]) == expected
             and all(type(name) is str and type(value) is str
@@ -632,7 +643,9 @@ def replace_approved():
             require(digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
                     digest(old_bytes), "ROOT_LAUNCHER_DRIFT_BEFORE_SWAP")
             # The second download and on-disk fsync may take time. Reject
-            # expiry or approval substitution at the LAST pre-swap boundary.
+            # expired bootstrap admission as well as approval at the LAST
+            # pre-swap boundary; never silently extend either time window.
+            require_bootstrap_fresh(bootstrap_packet, int(time.time()))
             last_approval = approval_reader.read_root_approval()
             require(last_approval == approval
                     and last_approval.get("nonce") == nonce
