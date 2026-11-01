@@ -1262,5 +1262,150 @@ class ReversalPolicyGateTests(unittest.TestCase):
 
 
 
+
+class RootLauncherReversalTransactionTests(unittest.TestCase):
+    """Real fsync and os.replace in disposable paths, never physical host."""
+
+    def setUp(self):
+        import time
+        self.temp = tempfile.TemporaryDirectory(prefix="qa525-root-reverse-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.state = self.root / "state"
+        self.recovery = self.root / "recovery"
+        self.bin = self.root / "bin"
+        for p in (self.state, self.recovery, self.bin):
+            p.mkdir(mode=0o700)
+        self.launcher = self.bin / "pmgm-qa-update"
+        self.old = b"original launcher verified\n"
+        self.new = b"synthetic signed replacement\n"
+        self.launcher.write_bytes(self.new)
+        self.launcher.chmod(0o700)
+        self.cut = "1" * 64
+        self.nonce = "2" * 64
+        self.sha = "a" * 40
+        self.release = "sha256:" + "b" * 64
+        self.receipt = {
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "source_sha": self.sha, "release_asset_sha256": self.release,
+            "old_launcher_sha256": m.digest(self.old),
+            "new_launcher_sha256": m.digest(self.new),
+            "candidate_operator_sha256": "e" * 64,
+            "nonce": self.cut,
+        }
+        old = self.state / ("old-" + self.cut + ".bin")
+        old.write_bytes(self.old)
+        old.chmod(0o700)
+        saved = self.state / ("receipt-" + self.cut + ".json")
+        saved.write_bytes(m.json_bytes(self.receipt))
+        saved.chmod(0o600)
+        self.approval_file = self.root / "recovery-approval.json"
+        self.now = int(time.time())
+        self.approval = {
+            "action": "rollback-root-launcher-supervised",
+            "scope": "QA525_LAUNCHER_ONLY_RECOVERY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION",
+            "environment": "QA_GLMDCH_ONLY",
+            "operator": "soporte@glmdch", "approved": True,
+            "cut_nonce": self.cut, "nonce": self.nonce,
+            "source_sha": self.sha, "release_asset_sha256": self.release,
+            "old_launcher_sha256": m.digest(self.old),
+            "new_launcher_sha256": m.digest(self.new),
+            "issued_at": self.now - 5, "expires_at": self.now + 120,
+        }
+        self.save_approval()
+        self.packet = {
+            "source_sha": self.sha, "release_asset_sha256": self.release,
+            "issued_at": self.now - 5, "expires_at": self.now + 120,
+        }
+
+    def save_approval(self):
+        self.approval_file.write_bytes(m.json_bytes(self.approval))
+        self.approval_file.chmod(0o600)
+
+    def run_reversal(self):
+        with patch.object(m, "STATE", self.state), \
+             patch.object(m, "RECOVERY_STATE", self.recovery), \
+             patch.object(m, "RECOVERY_APPROVAL", self.approval_file), \
+             patch.object(m, "LAUNCHER", self.launcher), \
+             patch.object(m, "require_host"), \
+             patch.object(m, "root_chain"), \
+             patch.object(m, "all_five_locks", return_value=nullcontext()) as locks, \
+             patch.object(m, "bootstrap_trusted_sources",
+                          return_value=self.packet) as admitted, \
+             patch.object(m, "read_bound",
+                          side_effect=lambda path, maximum=4096, exact_mode=None:
+                          Path(path).read_bytes()):
+            result = m.rollback_approved()
+            admitted.assert_called_once()
+            locks.assert_called_once()
+            return result
+
+    def test_separate_approved_root_reversal_preserves_old_receipt(self):
+        result = self.run_reversal()
+        self.assertEqual("QA525_LAUNCHER_ROLLED_BACK_NO_API_WEB_DEPLOY",
+                         result["status"])
+        self.assertEqual(self.old, self.launcher.read_bytes())
+        self.assertEqual(self.new, (self.recovery /
+            ("rollback-new-" + self.nonce + ".bin")).read_bytes())
+        self.assertTrue((self.recovery /
+            ("rollback-receipt-" + self.nonce + ".json")).is_file())
+        self.assertFalse((self.recovery /
+            ("rollback-intent-" + self.nonce + ".json")).exists())
+        self.assertTrue((self.state /
+            ("receipt-" + self.cut + ".json")).is_file())
+        self.assertFalse(result["api_web_changed"])
+        self.assertFalse(result["may_apply"])
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+
+    def test_invalid_approval_or_pending_cut_never_writes(self):
+        self.approval["approved"] = False
+        self.save_approval()
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(any(self.recovery.iterdir()))
+        self.approval["approved"] = True
+        self.save_approval()
+        pending = self.state / ("intent-" + self.cut + ".json")
+        pending.write_text("uncertain")
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(any(self.recovery.iterdir()))
+
+    def test_recovery_interruption_after_durable_intent_blocks_retry(self):
+        before = m.write_once
+        def interrupt(path, content, mode=0o600):
+            if Path(path).name.startswith("rollback-new-"):
+                raise RuntimeError("synthetic crash before backup")
+            return before(path, content, mode=mode)
+        with patch.object(m, "write_once", side_effect=interrupt):
+            with self.assertRaisesRegex(RuntimeError, "synthetic crash"):
+                self.run_reversal()
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertEqual(["rollback-intent-" + self.nonce + ".json"],
+                         [x.name for x in self.recovery.iterdir()])
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+
+    def test_recovery_interruption_after_swap_blocks_retry(self):
+        original = m.sync_dir
+        def crash_on_launcher_directory(path):
+            if Path(path) == self.bin:
+                raise RuntimeError("synthetic crash after atomic swap")
+            return original(path)
+        with patch.object(m, "sync_dir", side_effect=crash_on_launcher_directory):
+            with self.assertRaisesRegex(RuntimeError, "synthetic crash"):
+                self.run_reversal()
+        self.assertEqual(self.old, self.launcher.read_bytes())
+        self.assertTrue((self.recovery /
+            ("rollback-intent-" + self.nonce + ".json")).is_file())
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
