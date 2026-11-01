@@ -184,5 +184,168 @@ class RootLauncherInstallerTests(unittest.TestCase):
             run.assert_not_called()
 
 
+class LauncherSandboxTransactionTests(unittest.TestCase):
+    """Execute real fsync/rename/journal in a temp root, never actual QA."""
+
+    def exercise(self, *, fault=None, change_approval=False):
+        old = b"#!/usr/bin/python3\nprint('old synthetic launcher')\n"
+        new = b"#!/usr/bin/python3\nprint('signed synthetic launcher')\n"
+        operator = b"print('synthetic signed operator, never executed')\n"
+        source_sha = SHA
+        release_digest = "sha256:" + "c" * 64
+        operator_hash = m.digest(operator)
+        old_hash = m.digest(old)
+        with tempfile.TemporaryDirectory(prefix="qa525-root-installer-test-") as td:
+            base = Path(td)
+            store = base / "signed"
+            state = base / "journal"
+            prepare = base / "prepare"
+            live_dir = base / "bin"
+            for item in (store, state, prepare, live_dir):
+                item.mkdir(mode=0o700)
+            launcher = live_dir / "pmgm-qa-update"
+            launcher.write_bytes(old)
+            launcher.chmod(0o700)
+            plan = {
+                "source_sha": source_sha,
+                "release_asset_sha256": release_digest,
+                "old_launcher_sha256": old_hash,
+                "candidate_operator_sha256": operator_hash,
+            }
+            act = {"nonce": NONCE, "expires_at": int(__import__("time").time())+800}
+            inspect_old = SimpleNamespace(inspect=Mock(return_value={
+                "status": "LAUNCHER_OBSERVED_UPGRADE_NOT_AUTHORIZED",
+                "current_launcher_sha256": old_hash,
+            }))
+            preflight = SimpleNamespace(
+                signed_candidate_preflight=Mock(return_value=plan),
+                stable_hash=lambda path: Path(path).read_bytes())
+            def stage(package):
+                package.mkdir(mode=0o700)
+                location = package / "scripts/qa/operators/qa525-update.py"
+                location.parent.mkdir(parents=True, exist_ok=True)
+                location.write_bytes(operator)
+                return {
+                    "status": "SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED",
+                    "source_sha": source_sha,
+                    "release_asset_sha256": release_digest,
+                }
+            signed = SimpleNamespace(
+                verify_current=Mock(side_effect=stage),
+                staging=SimpleNamespace(verify_manifest=Mock(return_value=True)))
+            calls = [dict(act)]
+            if change_approval:
+                calls.append(dict(act, nonce="e" * 64))
+            approval = SimpleNamespace(
+                read_root_approval=Mock(side_effect=(
+                    lambda: calls.pop(0) if calls else dict(act))))
+            contract = SimpleNamespace(assess_review=Mock(return_value={
+                "status": "REVIEWED_SIGNED_LAUNCHER_PLAN_NO_INSTALL",
+                "may_install": False, "nonce": NONCE,
+            }))
+            template = SimpleNamespace(
+                render=Mock(return_value=new),
+                inspect_template=Mock(return_value={
+                    "launcher_sha256": m.digest(new), "may_install": False,
+                }))
+            retained = SimpleNamespace(inspect_retained=Mock(return_value={
+                "status": "ROOT_OWNED_PINNED_SOURCE_HASH_MATCH_NOT_SIGNED",
+            }))
+            modules = (inspect_old, preflight, signed, approval,
+                       contract, template, retained)
+            real_replace = os.replace
+            real_write = m.write_once
+            def swap(old_path, new_path):
+                if fault == "before_swap":
+                    raise RuntimeError("SYNTHETIC_PROCESS_DEATH_BEFORE_SWAP")
+                real_replace(old_path, new_path)
+                if fault == "after_swap":
+                    raise RuntimeError("SYNTHETIC_PROCESS_DEATH_AFTER_SWAP")
+            def write_with_fault(path, payload, mode=0o600):
+                real_write(path, payload, mode)
+                if fault == "after_receipt" and Path(path).name.startswith("receipt-"):
+                    raise RuntimeError("SYNTHETIC_PROCESS_DEATH_AFTER_RECEIPT")
+            from contextlib import ExitStack
+            with ExitStack() as stack:
+                for key, value in (
+                    ("LAUNCHER", launcher), ("STORE", store), ("STATE", state),
+                    ("PREFLIGHT_STATE", prepare)):
+                    stack.enter_context(patch.object(m, key, value))
+                stack.enter_context(patch.object(m, "require_host"))
+                stack.enter_context(patch.object(m, "root_chain"))
+                stack.enter_context(patch.object(
+                    m, "read_bound",
+                    side_effect=lambda path, maximum=4096, exact_mode=None:
+                    Path(path).read_bytes()))
+                stack.enter_context(patch.object(
+                    m, "all_five_locks", return_value=nullcontext()))
+                stack.enter_context(patch.object(m, "verify_inputs",
+                                                 return_value=modules))
+                if fault in ("before_swap", "after_swap"):
+                    stack.enter_context(patch.object(m.os, "replace",
+                                                     side_effect=swap))
+                if fault == "after_receipt":
+                    stack.enter_context(patch.object(m, "write_once",
+                                                     side_effect=write_with_fault))
+                if fault:
+                    with self.assertRaisesRegex(RuntimeError,
+                                                "SYNTHETIC_PROCESS_DEATH"):
+                        m.replace_approved()
+                elif change_approval:
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_APPROVAL_CHANGED_DURING_RELEASE_DOWNLOAD"):
+                        m.replace_approved()
+                else:
+                    result = m.replace_approved()
+                    self.assertEqual("QA525_LAUNCHER_REPLACED_NO_API_WEB_DEPLOY",
+                                     result["status"])
+                    self.assertFalse(result["api_web_changed"])
+                    self.assertFalse(result["may_apply"])
+                self.assertEqual(
+                    new if fault in ("after_swap", "after_receipt") or
+                        (not fault and not change_approval) else old,
+                    launcher.read_bytes())
+                pending = state / ("intent-" + NONCE + ".json")
+                receipt = state / ("receipt-" + NONCE + ".json")
+                backup = state / ("old-" + NONCE + ".bin")
+                if fault:
+                    self.assertTrue(pending.exists())
+                    self.assertTrue(backup.exists())
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION"):
+                        m.scan_history()
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION"):
+                        m.replace_approved()
+                elif change_approval:
+                    self.assertFalse(pending.exists())
+                    self.assertFalse(backup.exists())
+                    self.assertFalse(receipt.exists())
+                    self.assertEqual([], list(state.iterdir()))
+                else:
+                    self.assertFalse(pending.exists())
+                    self.assertTrue(backup.exists())
+                    self.assertTrue(receipt.exists())
+                    self.assertEqual({NONCE}, m.scan_history())
+                    self.assertEqual(
+                        operator, (store / SHA /
+                            "scripts/qa/operators/qa525-update.py").read_bytes())
+
+    def test_successful_sandbox_transaction_persists_signed_operator_and_receipt(self):
+        self.exercise()
+
+    def test_crash_before_swap_never_autoretries(self):
+        self.exercise(fault="before_swap")
+
+    def test_crash_after_swap_never_autoretries(self):
+        self.exercise(fault="after_swap")
+
+    def test_crash_after_durable_receipt_still_requires_reconciliation(self):
+        self.exercise(fault="after_receipt")
+
+    def test_switched_approval_during_signed_download_aborts_before_intent(self):
+        self.exercise(change_approval=True)
+
+
 if __name__ == "__main__":
     unittest.main()
