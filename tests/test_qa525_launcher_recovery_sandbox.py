@@ -146,6 +146,19 @@ class RecoverySandboxTests(unittest.TestCase):
                     self.assertEqual(expected,
                                      (other / "live/pmgm-qa-update").read_bytes())
 
+    def test_approval_mutation_after_backup_blocks_before_swap(self):
+        def mutate(stage):
+            if stage == "after_backup":
+                self.approval["nonce"] = "f" * 64
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_APPROVAL_CHANGED_DURING_TRANSACTION"):
+            self.call(checkpoint=mutate)
+        self.assertEqual(NEW, self.live.read_bytes())
+        self.assertTrue((self.state /
+                         ("rollback-intent-" + REVERSAL + ".json")).exists())
+        with self.assertRaises(m.Blocked):
+            self.call()
+
     def test_never_accepts_host_paths_or_symlink_backups(self):
         with self.assertRaises(m.Blocked):
             m.rollback(Path("/opt/centenario"), self.approval, now=self.now)
