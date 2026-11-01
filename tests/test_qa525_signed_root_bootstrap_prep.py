@@ -79,7 +79,13 @@ class RootBootstrapTests(unittest.TestCase):
         self.lock.chmod(0o600)
         self.admission = root / "admission.json"
         self.envelope = root / "envelope.zip"
+        original_fstat = os.fstat
+        def as_root_fd(fd):
+            info = list(original_fstat(fd))
+            info[4] = 0  # st_uid on POSIX, fake root in disposable CI files
+            return os.stat_result(info)
         self.patchers = [
+            patch.object(m.os, "fstat", side_effect=as_root_fd),
             patch.object(m, "STORE", self.stage),
             patch.object(m, "LOCK", self.lock),
             patch.object(m, "ADMISSION", self.admission),
