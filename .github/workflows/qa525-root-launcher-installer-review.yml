@@ -6,16 +6,20 @@ on:
     paths:
       - "scripts/qa/operators/qa525-launcher-supervised-root-install.py"
       - "scripts/qa/operators/qa525-attested-installer-audit.py"
+      - "scripts/qa/operators/qa525-signed-root-bootstrap-prep.py"
       - "tests/test_qa525_launcher_supervised_root_install.py"
       - "tests/test_qa525_attested_installer_audit.py"
+      - "tests/test_qa525_signed_root_bootstrap_prep.py"
       - ".github/workflows/qa525-root-launcher-installer-review.yml"
   push:
     branches: [dev]
     paths:
       - "scripts/qa/operators/qa525-launcher-supervised-root-install.py"
       - "scripts/qa/operators/qa525-attested-installer-audit.py"
+      - "scripts/qa/operators/qa525-signed-root-bootstrap-prep.py"
       - "tests/test_qa525_launcher_supervised_root_install.py"
       - "tests/test_qa525_attested_installer_audit.py"
+      - "tests/test_qa525_signed_root_bootstrap_prep.py"
       - ".github/workflows/qa525-root-launcher-installer-review.yml"
   workflow_dispatch:
 
@@ -39,10 +43,13 @@ jobs:
           python -m py_compile tests/test_qa525_launcher_supervised_root_install.py
           python -m py_compile scripts/qa/operators/qa525-attested-installer-audit.py
           python -m py_compile tests/test_qa525_attested_installer_audit.py
+          python -m py_compile scripts/qa/operators/qa525-signed-root-bootstrap-prep.py
+          python -m py_compile tests/test_qa525_signed_root_bootstrap_prep.py
       - name: Hermetic root installer guards and journal tests (temporary files only)
         run: |
           python -m unittest discover -s tests -p 'test_qa525_launcher_supervised_root_install.py' -v
           python -m unittest discover -s tests -p 'test_qa525_attested_installer_audit.py' -v
+          python -m unittest discover -s tests -p 'test_qa525_signed_root_bootstrap_prep.py' -v
       - name: No hidden deployment route
         run: |
           python - <<'PY'
