@@ -27,6 +27,7 @@ MAX_ENVELOPE_BYTES = 512 * 1024 * 1024
 MAX_MEMBER_BYTES = 1024 * 1024 * 1024
 MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 5_000_000
+BOOTSTRAP_SCRIPT = "scripts/qa/operators/qa525-signed-root-bootstrap-prep.py"
 SOURCES = (
     "scripts/qa/operators/qa525-launcher-supervised-root-install.py",
     "scripts/qa/operators/qa525-launcher-signed-preflight.py",
@@ -190,7 +191,8 @@ def audit(path, sha, digest, *, runner=subprocess.run):
             require(bool(expected) and
                     set(expected) == (set(paths) - {"MANIFEST.sha256"}),
                     "SIGNED_MANIFEST_FILE_SET_MISMATCH")
-            require(set(SOURCES).issubset(expected),
+            require(set(SOURCES).issubset(expected) and
+                    BOOTSTRAP_SCRIPT in expected,
                     "SIGNED_INSTALLER_OR_HELPERS_ABSENT")
             for key, value in expected.items():
                 with inner.open(paths[key]) as stream:
@@ -204,6 +206,7 @@ def audit(path, sha, digest, *, runner=subprocess.run):
                 "release_asset_sha256": "sha256:" + digest,
                 "manifest_sha256": hashlib.sha256(manifest).hexdigest(),
                 "privileged_sources_sha256": {k: expected[k] for k in SOURCES},
+                "bootstrap_sha256": expected[BOOTSTRAP_SCRIPT],
                 "total_signed_members": len(expected),
                 "bootstrap_admission_created": False,
                 "may_install": False,
