@@ -38,7 +38,7 @@ def source_path(source_sha):
 
 def trusted_chain(path):
     """Reject links and writable ancestors before opening source."""
-    require(type(path) is Path and path.is_absolute()
+    require(isinstance(path, Path) and path.is_absolute()
             and path.name == SOURCE_REL.name, "RETAINED_SOURCE_PATH_INVALID")
     require(path == source_path(path.parents[3].name),
             "RETAINED_SOURCE_PATH_NOT_PINNED")
