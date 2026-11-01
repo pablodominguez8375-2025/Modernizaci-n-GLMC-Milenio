@@ -131,6 +131,30 @@ class RootBootstrapTests(unittest.TestCase):
         self.assertEqual(m.SIGNER, cmd[cmd.index("--signer-workflow") + 1])
         self.assertEqual(SHA, cmd[cmd.index("--source-digest") + 1])
 
+    def test_prepared_admission_is_accepted_by_real_installer_contract(self):
+        """Exercise real installer admission reader against signed synthetic bytes."""
+        self.verify(build_release())
+        installer_source = (ROOT / "scripts/qa/operators" /
+                            "qa525-launcher-supervised-root-install.py")
+        spec = importlib.util.spec_from_file_location(
+            "qa525_bootstrap_contract_consumer", installer_source)
+        consumer = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = consumer
+        spec.loader.exec_module(consumer)
+        source_paths = tuple(self.stage / SHA / key for key in m.SOURCES)
+        with patch.object(consumer, "ADMISSION", self.admission), \
+             patch.object(consumer, "SOURCES", source_paths), \
+             patch.object(consumer, "root_chain"), \
+             patch.object(consumer, "read_bound",
+                          side_effect=lambda p, maximum=4096, exact_mode=None:
+                          Path(p).read_bytes()), \
+             patch.object(consumer.time, "time",
+                          return_value=1_800_000_001):
+            packet = consumer.bootstrap_trusted_sources()
+        self.assertEqual("EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY",
+                         packet["status"])
+        self.assertEqual(12, len(packet["files"]))
+
     def test_wrong_envelope_digest_refused_without_sigstore(self):
         fake = Mock()
         with self.assertRaisesRegex(m.Blocked, "BOOTSTRAP_ENVELOPE_DIGEST_MISMATCH"):
