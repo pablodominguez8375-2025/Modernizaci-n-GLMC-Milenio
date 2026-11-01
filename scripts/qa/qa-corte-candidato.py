@@ -41,11 +41,16 @@ def body(sha, digest):
         "Publicado automáticamente tras CI exact-head y release firmada. **No es una revisión ni una autorización**: "
         "la revisión técnica del delta y la autorización del Sponsor siguen siendo pasos aparte.",
         "",
+        "> **NO EJECUTAR todavía en glmdch.** Mientras el lanzador firmado (#822/#834) y su instalación supervisada "
+        "estén pendientes, el comando de abajo es solo una plantilla de referencia, no una instrucción lista para usar.",
+        "> \"Release publicada\" significa solo que el archivo existe en GitHub; **no** significa que su firma Sigstore "
+        "haya sido verificada en el host (eso lo hace el operador al ejecutar).",
+        "",
         "- SHA: `" + sha + "`",
         "- Digest: `" + digest + "`",
         "- Release: https://github.com/" + REPO + "/releases/tag/qa-signed-" + sha,
         "",
-        "Comando del operador (tras registrar la revisión de este SHA en un comentario):",
+        "Plantilla de referencia del comando del operador (solo cuando el lanzador firmado esté instalado y exista la revisión de este SHA):",
         "```text",
         "sudo pmgm-qa-update --review-and-run --source " + sha + " --digest " + digest + " \\",
         "  --technical-review-reference <URL-comentario-de-revision> \\",
@@ -54,18 +59,40 @@ def body(sha, digest):
     ])
 
 
-def main():
-    sha = os.environ.get("GITHUB_SHA", "")
-    digest = candidate(sha, api("/releases/tags/qa-signed-" + sha))
-    marker = MARKER.format(sha=sha)
-    for page in (1, 2, 3):
-        if any(marker in (c.get("body") or "") for c in api("/issues/%d/comments?per_page=100&page=%d" % (ISSUE, page))):
-            print("QA_CANDIDATE_COMMENT_ALREADY_PRESENT")
-            return 0
-    subprocess.run(["gh", "api", "-X", "POST", "repos/%s/issues/%d/comments" % (REPO, ISSUE), "-f", "body=" + body(sha, digest)],
+MAX_PAGES = 200  # hard stop (20 000 comments); reaching it fails closed instead of risking a duplicate
+
+
+def marker_present(fetch_page, marker):
+    """Scan ALL comment pages (no fixed page cap); fail closed if the safety bound is hit."""
+    for page in range(1, MAX_PAGES + 1):
+        comments = fetch_page(page)
+        if any(marker in (c.get("body") or "") for c in comments):
+            return True
+        if len(comments) < 100:
+            return False
+    raise SystemExit("CANDIDATE_COMMENT_SCAN_BOUND_REACHED")
+
+
+def post_comment(text):
+    subprocess.run(["gh", "api", "-X", "POST", "repos/%s/issues/%d/comments" % (REPO, ISSUE), "-f", "body=" + text],
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+
+
+def run(sha, fetch_release, fetch_page, post):
+    digest = candidate(sha, fetch_release(sha))
+    if marker_present(fetch_page, MARKER.format(sha=sha)):
+        print("QA_CANDIDATE_COMMENT_ALREADY_PRESENT")
+        return 0
+    post(body(sha, digest))
     print("QA_CANDIDATE_COMMENT_POSTED " + sha)
     return 0
+
+
+def main():
+    return run(os.environ.get("GITHUB_SHA", ""),
+               lambda sha: api("/releases/tags/qa-signed-" + sha),
+               lambda page: api("/issues/%d/comments?per_page=100&page=%d" % (ISSUE, page)),
+               post_comment)
 
 
 if __name__ == "__main__":
