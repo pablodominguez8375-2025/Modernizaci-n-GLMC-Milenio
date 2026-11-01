@@ -288,7 +288,7 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
             }))
             preflight = SimpleNamespace(
                 signed_candidate_preflight=Mock(return_value=plan),
-                stable_hash=lambda path: Path(path).read_bytes())
+                stable_hash=lambda path, maximum=2_000_000: Path(path).read_bytes())
             def stage(package):
                 package.mkdir(mode=0o700)
                 folder = package
