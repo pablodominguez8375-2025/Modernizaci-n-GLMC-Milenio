@@ -17,6 +17,28 @@ DIGEST = "sha256:" + "d" * 64
 NONCE = "e" * 64
 NOW = 1793488800
 
+def signed_intent():
+    return dict(status="SWAP_INTENT_NO_DEPLOYMENT",
+                source_sha=SOURCE_SHA, release_asset_sha256=DIGEST,
+                nonce=NONCE, old_launcher_sha256=OLD,
+                new_launcher_sha256=NEW)
+
+def signed_receipt():
+    return dict(status="LAUNCHER_ATOMIC_SWAP_COMMITTED",
+                source_sha=SOURCE_SHA, release_asset_sha256=DIGEST,
+                nonce=NONCE, old_launcher_sha256=OLD,
+                new_launcher_sha256=NEW)
+
+def recovery(**overrides):
+    """Require every existing recovery test to use exact signed cut identity."""
+    values = dict(old_sha=OLD, new_sha=NEW, live_sha=OLD,
+                  backup_sha=OLD, pending=False, source_sha=SOURCE_SHA,
+                  release_asset_sha256=DIGEST, nonce=NONCE)
+    values.update(overrides)
+    if values["pending"] and "intent" not in overrides:
+        values["intent"] = signed_intent()
+    return c.assess_interrupted_swap(**values)
+
 def preflight():
     return dict(status="SIGNED_LAUNCHER_CANDIDATE_VERIFIED_NO_INSTALL",
                 source_sha=SOURCE_SHA, release_asset_sha256=DIGEST,
@@ -116,37 +138,36 @@ class LauncherReplacementPolicyTests(unittest.TestCase):
                 c.assess_review(preflight(),value,now=NOW,pending=False)
 
     def test_recovery_no_marker_old_launcher_not_authorized(self):
-        x=c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+        x=recovery(old_sha=OLD,new_sha=NEW,
                                     live_sha=OLD,backup_sha=OLD,pending=False)
         self.assertEqual("REPLACE_NOT_STARTED_NO_AUTHORIZATION",x["status"])
         self.assertFalse(x["may_install"])
 
     def test_recovery_after_marker_before_rename_blocks(self):
-        x=c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+        x=recovery(old_sha=OLD,new_sha=NEW,
                                     live_sha=OLD,backup_sha=OLD,pending=True)
         self.assertEqual("REPLACE_OLD_PRESENT_PENDING_MANUAL_RECONCILIATION",x["status"])
         self.assertTrue(x["requires_operator_reconciliation"])
         self.assertFalse(x["may_recover_automatically"])
 
     def test_recovery_after_rename_before_receipt_blocks(self):
-        x=c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+        x=recovery(old_sha=OLD,new_sha=NEW,
                                     live_sha=NEW,backup_sha=OLD,pending=True)
         self.assertEqual("REPLACE_NEW_PRESENT_PENDING_MANUAL_RECONCILIATION",x["status"])
         self.assertTrue(x["requires_operator_reconciliation"])
 
     def test_unexpected_binary_and_backup_tampering(self):
-        x=c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+        x=recovery(old_sha=OLD,new_sha=NEW,
                                     live_sha="f"*64,backup_sha=OLD,pending=True)
         self.assertEqual("REPLACE_UNKNOWN_LAUNCHER_PENDING_MANUAL_RECONCILIATION",
                          x["status"])
         with self.assertRaisesRegex(c.Blocked,"REPLACE_BACKUP_HASH_DRIFT"):
-            c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+            recovery(old_sha=OLD,new_sha=NEW,
                                        live_sha=NEW,backup_sha=NEW,pending=True)
 
     def test_committed_receipt_still_not_deployment_authorization(self):
-        receipt=dict(status="LAUNCHER_ATOMIC_SWAP_COMMITTED",
-                     old_launcher_sha256=OLD,new_launcher_sha256=NEW)
-        x=c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+        receipt=signed_receipt()
+        x=recovery(old_sha=OLD,new_sha=NEW,
                                     live_sha=NEW,backup_sha=OLD,
                                     pending=False,receipt=receipt)
         self.assertEqual("REPLACE_COMMITTED_VERIFIED_NO_DEPLOYMENT",x["status"])
@@ -154,9 +175,8 @@ class LauncherReplacementPolicyTests(unittest.TestCase):
         self.assertFalse(x["may_install"])
 
     def test_replayed_receipt_after_drift_blocks(self):
-        receipt=dict(status="LAUNCHER_ATOMIC_SWAP_COMMITTED",
-                     old_launcher_sha256=OLD,new_launcher_sha256=NEW)
-        x=c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+        receipt=signed_receipt()
+        x=recovery(old_sha=OLD,new_sha=NEW,
                                     live_sha=OLD,backup_sha=OLD,
                                     pending=False,receipt=receipt)
         self.assertEqual("REPLACE_RECEIPT_LAUNCHER_DIVERGED_MANUAL_RECONCILIATION",
@@ -165,18 +185,62 @@ class LauncherReplacementPolicyTests(unittest.TestCase):
                            ("status","FAKE_SUCCESS")):
             r=dict(receipt);r[name]=value
             with self.assertRaisesRegex(c.Blocked,"REPLACE_COMMIT_RECEIPT_NOT_THIS_CUT"):
-                c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+                recovery(old_sha=OLD,new_sha=NEW,
                                            live_sha=NEW,backup_sha=OLD,
                                            pending=False,receipt=r)
 
     def test_pending_marker_after_committed_receipt_still_blocks(self):
-        receipt=dict(status="LAUNCHER_ATOMIC_SWAP_COMMITTED",
-                     old_launcher_sha256=OLD,new_launcher_sha256=NEW)
-        x=c.assess_interrupted_swap(old_sha=OLD,new_sha=NEW,
+        receipt=signed_receipt()
+        x=recovery(old_sha=OLD,new_sha=NEW,
                                     live_sha=NEW,backup_sha=OLD,
                                     pending=True,receipt=receipt)
         self.assertTrue(x["requires_operator_reconciliation"])
         self.assertFalse(x["may_recover_automatically"])
+
+
+    def test_recovery_requires_valid_signed_identity_even_without_receipt(self):
+        for key, value in (
+            ("source_sha", "invalid"),
+            ("release_asset_sha256", "sha256:bad"),
+            ("nonce", "not-a-nonce")):
+            with self.subTest(key=key), self.assertRaisesRegex(
+                    c.Blocked, "REPLACE_RECOVERY_SIGNED_IDENTITY_INVALID"):
+                recovery(**{key: value})
+
+    def test_pending_intent_source_digest_nonce_and_hash_are_bound(self):
+        for key, value in (
+            ("source_sha", "f" * 40),
+            ("release_asset_sha256", "sha256:" + "f" * 64),
+            ("nonce", "f" * 64),
+            ("old_launcher_sha256", NEW),
+            ("new_launcher_sha256", OLD),
+            ("status", "FAKE_INTENT")):
+            marker = signed_intent()
+            marker[key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(
+                    c.Blocked, "REPLACE_PENDING_INTENT_NOT_THIS_CUT"):
+                recovery(pending=True, intent=marker)
+        with self.assertRaisesRegex(c.Blocked, "REPLACE_PENDING_INTENT_NOT_THIS_CUT"):
+            recovery(pending=True, intent=None)
+        with self.assertRaisesRegex(c.Blocked, "REPLACE_UNEXPECTED_INTENT_WITHOUT_MARKER"):
+            recovery(pending=False, intent=signed_intent())
+
+    def test_committed_receipt_bound_to_exact_signer_cut_and_nonce(self):
+        for key, value in (
+            ("source_sha", "f" * 40),
+            ("release_asset_sha256", "sha256:" + "f" * 64),
+            ("nonce", "f" * 64),
+            ("source_sha", None),
+            ("status", "NOT_COMMITTED")):
+            receipt = signed_receipt()
+            receipt[key] = value
+            with self.subTest(key=key, value=value), self.assertRaisesRegex(
+                    c.Blocked, "REPLACE_COMMIT_RECEIPT_NOT_THIS_CUT"):
+                recovery(live_sha=NEW, receipt=receipt)
+        with self.assertRaisesRegex(c.Blocked, "REPLACE_RECOVERY_RECEIPT_INVALID"):
+            recovery(live_sha=NEW, receipt="tampered")
+        with self.assertRaisesRegex(c.Blocked, "REPLACE_PENDING_INTENT_INVALID"):
+            recovery(pending=True, intent="tampered")
 
     def test_json_receipt_hash_is_deterministic_and_not_signature(self):
         one=dict(b=2,a=1)
