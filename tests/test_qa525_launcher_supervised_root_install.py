@@ -444,6 +444,9 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                                      result["status"])
                     self.assertFalse(result["api_web_changed"])
                     self.assertFalse(result["may_apply"])
+                    self.assertNotIn("nonce", result)
+                    self.assertEqual(m.digest(NONCE.encode("ascii")),
+                                     result["nonce_sha256"])
                 self.assertEqual(
                     new if fault in ("after_swap", "after_receipt") or
                         (not fault and not change_approval and not bad_manifest) else old,
@@ -777,6 +780,7 @@ class ReadOnlyDiagnosticCliTests(unittest.TestCase):
         report = {
             "status": "MANUAL_RECONCILIATION_REQUIRED_NO_AUTOREPAIR",
             "observed_phase": "POST_ATOMIC_SWAP",
+            "nonce_sha256": m.digest(NONCE.encode("ascii")),
             "may_resume": False, "may_apply": False,
             "rollback_authorized": False,
         }
@@ -898,6 +902,9 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
                                      else "PRE_ATOMIC_SWAP",
                                      report["observed_phase"])
                     self.assertEqual(receipt, report["durable_receipt_present"])
+                    self.assertNotIn("nonce", report)
+                    self.assertEqual(m.digest(NONCE.encode("ascii")),
+                                     report["nonce_sha256"])
                     self.assertTrue(report["backup_hash_matches_intent"])
                     for key in ("signature_verified_by_inspection",
                                 "rollback_authorized", "may_resume", "may_apply"):
