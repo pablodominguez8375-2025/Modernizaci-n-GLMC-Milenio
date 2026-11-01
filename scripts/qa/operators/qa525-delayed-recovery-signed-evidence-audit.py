@@ -94,6 +94,7 @@ def review_two_signed_envelopes(cut_zip, cut_source_sha, cut_zip_sha256,
     policy = load_local("qa525-launcher-replacement-contract.py")
     require(hashlib.sha256(policy_path.read_bytes()).hexdigest() == local_sha256,
             "DELAYED_LOCAL_CONTRACT_CHANGED")
+    test_override = audit_fn is not None
     if audit_fn is None:
         verifier = load_local("qa525-attested-installer-audit.py")
         audit_fn = verifier.audit
@@ -136,7 +137,9 @@ def review_two_signed_envelopes(cut_zip, cut_source_sha, cut_zip_sha256,
             plan["may_install"] is False and plan["may_apply"] is False,
             "DELAYED_EVIDENCE_AUDIT_MUST_NEVER_AUTHORIZE")
     return {
-        "status": "DUAL_SIGNED_ENVELOPES_AUDITED_UNPRIVILEGED_NO_RECOVERY",
+        "status": ("SYNTHETIC_DUAL_ENVELOPES_REVIEW_NO_AUTHENTICATION"
+                   if test_override else
+                   "DUAL_SIGNED_ENVELOPES_AUDITED_UNPRIVILEGED_NO_RECOVERY"),
         "cut_source_sha": a["source_sha"],
         "cut_release_asset_sha256": a["release_asset_sha256"],
         "recovery_source_sha": b["source_sha"],
@@ -146,7 +149,7 @@ def review_two_signed_envelopes(cut_zip, cut_source_sha, cut_zip_sha256,
         "review_status": plan["status"],
         "cut_receipt_authenticated_by_audit": False,
         "approval_authenticated_by_audit": False,
-        "release_envelopes_sigstore_checked_unprivileged": True,
+        "release_envelopes_sigstore_checked_unprivileged": not test_override,
         "bootstrap_admission_created": False,
         "may_install": False, "may_apply": False, "may_recover": False,
         "physical_host_touched": False,
