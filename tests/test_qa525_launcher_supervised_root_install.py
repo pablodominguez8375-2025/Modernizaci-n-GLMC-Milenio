@@ -133,6 +133,7 @@ class RootLauncherInstallerTests(unittest.TestCase):
         modules = fake_modules(gate_error=m.Blocked("SIGNATURE_UNAVAILABLE"))
         with patch.object(m, "require_host"), \
              patch.object(m, "verify_inputs", return_value=modules), \
+             patch.object(m, "verify_bootstrap_binding"), \
              patch.object(m, "root_chain"), \
              patch.object(m, "all_five_locks", return_value=nullcontext()), \
              patch.object(m, "scan_history", return_value=set()), \
@@ -152,6 +153,7 @@ class RootLauncherInstallerTests(unittest.TestCase):
             "source_sha": SHA}
         with patch.object(m, "require_host"), \
              patch.object(m, "verify_inputs", return_value=modules), \
+             patch.object(m, "verify_bootstrap_binding"), \
              patch.object(m, "root_chain"), \
              patch.object(m, "all_five_locks", return_value=nullcontext()), \
              patch.object(m, "scan_history", return_value=set()), \
@@ -171,6 +173,7 @@ class RootLauncherInstallerTests(unittest.TestCase):
         modules[3].read_root_approval.return_value = {"nonce": NONCE}
         with patch.object(m, "require_host"), \
              patch.object(m, "verify_inputs", return_value=modules), \
+             patch.object(m, "verify_bootstrap_binding"), \
              patch.object(m, "root_chain"), \
              patch.object(m, "all_five_locks", return_value=nullcontext()), \
              patch.object(m, "scan_history", return_value=set()), \
@@ -349,6 +352,7 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     m, "all_five_locks", return_value=nullcontext()))
                 stack.enter_context(patch.object(m, "verify_inputs",
                                                  return_value=modules))
+                stack.enter_context(patch.object(m, "verify_bootstrap_binding"))
                 if fault in ("before_swap", "after_swap"):
                     stack.enter_context(patch.object(m.os, "replace",
                                                      side_effect=swap))
@@ -413,6 +417,100 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
 
     def test_switched_approval_during_signed_download_aborts_before_intent(self):
         self.exercise(change_approval=True)
+
+
+class IndependentBootstrapAdmissionTests(unittest.TestCase):
+    """Cross-check an externally provisioned receipt, never forge a signature."""
+
+    def fixture(self, *, alter=None, bad_sha=False, missing=False):
+        from contextlib import ExitStack
+        with tempfile.TemporaryDirectory(prefix="qa525-bootstrap-read-") as td:
+            base = Path(td)
+            root_source = base / "signed-root-entry.py"
+            helper = base / "signed-helper.py"
+            root_source.write_bytes(b"print('root launcher synthetic')\n")
+            helper.write_bytes(b"print('helper synthetic')\n")
+            admission = base / "admission.json"
+            identity = {"source_sha": SHA,
+                        "release_asset_sha256": "sha256:" + "c" * 64}
+            packet = {
+                "status": m.BOOTSTRAP_STATUS,
+                **identity,
+                "manifest_sha256": "e" * 64,
+                "trusted_verifier_sha256": "d" * 64,
+                "files": {str(path): m.digest(path.read_bytes())
+                          for path in (root_source, helper)},
+            }
+            if bad_sha:
+                packet["source_sha"] = "invalid"
+            if missing:
+                del packet["files"][str(helper)]
+            if alter == "source":
+                root_source.write_bytes(b"print('unreviewed root code')\n")
+            if alter == "admission":
+                packet["status"] = "AUTHORIZE_UNCHECKED_ROOT_EXECUTION"
+            admission.write_bytes(m.json_bytes(packet))
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(m, "require_host"))
+                stack.enter_context(patch.object(m, "root_chain"))
+                stack.enter_context(patch.object(m, "SOURCES",
+                                                (root_source, helper)))
+                stack.enter_context(patch.object(m, "ADMISSION", admission))
+                stack.enter_context(patch.object(m, "read_bound",
+                    side_effect=lambda path, maximum=4096, exact_mode=None:
+                    Path(path).read_bytes()))
+                if alter or bad_sha or missing:
+                    with self.assertRaises(m.Blocked):
+                        m.bootstrap_trusted_sources()
+                    with patch.object(m, "load") as imported:
+                        with self.assertRaises(m.Blocked):
+                            m.verify_inputs()
+                        imported.assert_not_called()
+                else:
+                    self.assertEqual(packet, m.bootstrap_trusted_sources())
+                    self.assertEqual(packet, m.verify_bootstrap_binding(identity))
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_BOOTSTRAP_SIGNED_RELEASE_IDENTITY_MISMATCH"):
+                        m.verify_bootstrap_binding(
+                            {**identity, "source_sha": "f" * 40})
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_BOOTSTRAP_SIGNED_RELEASE_IDENTITY_MISMATCH"):
+                        m.verify_bootstrap_binding(
+                            {**identity,
+                             "release_asset_sha256": "sha256:" + "f" * 64})
+
+    def test_valid_preimport_admission_matches_all_helper_bytes(self):
+        self.fixture()
+
+    def test_edited_root_installer_is_rejected_before_module_import(self):
+        self.fixture(alter="source")
+
+    def test_forged_admission_status_does_not_grant_execution(self):
+        self.fixture(alter="admission")
+
+    def test_missing_signed_helper_fails_closed(self):
+        self.fixture(missing=True)
+
+    def test_invalid_source_sha_fails_closed(self):
+        self.fixture(bad_sha=True)
+
+    def test_missing_admission_never_attempts_to_import_helpers(self):
+        with patch.object(m, "require_host"), \
+             patch.object(m, "root_chain",
+                          side_effect=m.Blocked("ROOT_PATH_MISSING")), \
+             patch.object(m, "load") as imported:
+            with self.assertRaisesRegex(m.Blocked, "ROOT_PATH_MISSING"):
+                m.verify_inputs()
+            imported.assert_not_called()
+
+    def test_no_bootstrap_bypass_cli_or_receipt_creation(self):
+        code = SOURCE.read_text()
+        self.assertIn('ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")',
+                      code)
+        self.assertIn("verify_bootstrap_binding(plan)", code)
+        self.assertIn("ROOT_BOOTSTRAP_SIGNED_SOURCE_HASH_MISMATCH", code)
+        self.assertNotIn("--ignore-admission", code)
+        self.assertNotIn("write_once(ADMISSION", code)
 
 
 class ReadOnlyPendingJournalTests(unittest.TestCase):
