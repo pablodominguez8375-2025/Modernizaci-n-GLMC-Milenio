@@ -87,7 +87,8 @@ class PinnedLauncherTests(unittest.TestCase):
     def test_generated_ast_execs_only_pinned_operator(self):
         raw = t.render(SHA)
         tree = ast.parse(raw.decode())
-        self.assertEqual(3, len(tree.body))
+        # `import os,sys` is one AST Import node, followed by execv.
+        self.assertEqual(2, len(tree.body))
         self.assertIsInstance(tree.body[-1], ast.Expr)
         call = tree.body[-1].value
         self.assertIsInstance(call, ast.Call)
