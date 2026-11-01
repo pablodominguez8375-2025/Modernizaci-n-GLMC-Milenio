@@ -161,11 +161,17 @@ class RootLauncherInstallerTests(unittest.TestCase):
         self.assertIn("replace_approved", funcs)
         calls = [n for n in ast.walk(funcs["replace_approved"])
                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)]
-        needed = {"signed_candidate_preflight", "assess_review",
-                  "verify_current", "verify_manifest", "inspect_retained",
-                  "write_once", "replace", "fsync"}
-        actual = {n.func.attr for n in calls}
-        self.assertTrue(needed.difference(actual).issubset({"fsync"}))
+        needed_attributes = {"signed_candidate_preflight", "assess_review",
+                             "verify_current", "verify_manifest",
+                             "inspect_retained", "replace"}
+        actual_attributes = {n.func.attr for n in calls}
+        self.assertTrue(needed_attributes.issubset(actual_attributes))
+        actual_functions = {
+            n.func.id for n in ast.walk(funcs["replace_approved"])
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        }
+        self.assertTrue({"write_once", "sync_dir"}.issubset(actual_functions))
+        self.assertIn("os.fsync(fd)", script)
         self.assertIn("ROOT_APPROVAL_CHANGED_DURING_RELEASE_DOWNLOAD", script)
         self.assertIn("ROOT_REVIEW_NONCE_CHANGED_DURING_DOWNLOAD", script)
         self.assertIn("ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION", script)
