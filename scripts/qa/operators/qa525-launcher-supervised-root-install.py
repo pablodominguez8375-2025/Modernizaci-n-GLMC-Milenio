@@ -361,13 +361,37 @@ def scan_history():
                 ("old-" + suffix + ".bin") in names,
                 "ROOT_LAUNCHER_INCOMPLETE_JOURNAL")
         if name.startswith("receipt-"):
-            record = json.loads(
-                read_bound(entry, maximum=4096, exact_mode=0o600),
-                object_pairs_hook=unique_json_fields)
+            try:
+                record = json.loads(
+                    read_bound(entry, maximum=4096, exact_mode=0o600),
+                    object_pairs_hook=unique_json_fields)
+            except (ValueError, UnicodeError, TypeError):
+                raise Blocked("ROOT_LAUNCHER_RECEIPT_JSON_INVALID") from None
             require(type(record) is dict
-                    and record.get("status") == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
-                    and record.get("nonce") == suffix,
+                    and set(record) == {
+                        "status", "source_sha", "release_asset_sha256",
+                        "old_launcher_sha256", "new_launcher_sha256",
+                        "candidate_operator_sha256", "nonce"}
+                    and record["status"] == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+                    and record["nonce"] == suffix
+                    and type(record["source_sha"]) is str
+                    and SHA.fullmatch(record["source_sha"]) is not None
+                    and type(record["release_asset_sha256"]) is str
+                    and re.fullmatch(r"sha256:[0-9a-f]{64}",
+                                     record["release_asset_sha256"]) is not None
+                    and all(type(record[key]) is str
+                            and NONCE.fullmatch(record[key]) is not None
+                            for key in ("old_launcher_sha256",
+                                        "new_launcher_sha256",
+                                        "candidate_operator_sha256"))
+                    and record["old_launcher_sha256"] !=
+                        record["new_launcher_sha256"],
                     "ROOT_LAUNCHER_RECEIPT_UNTRUSTED")
+            old_backup = read_bound(
+                STATE / ("old-" + suffix + ".bin"),
+                maximum=4096, exact_mode=0o700)
+            require(digest(old_backup) == record["old_launcher_sha256"],
+                    "ROOT_LAUNCHER_RECEIPT_BACKUP_HASH_MISMATCH")
             consumed.add(suffix)
         else:
             read_bound(entry, maximum=4096, exact_mode=0o700)
