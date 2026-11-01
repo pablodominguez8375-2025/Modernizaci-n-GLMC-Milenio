@@ -1374,6 +1374,19 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
         self.assertEqual(self.new, self.launcher.read_bytes())
         self.assertFalse(any(self.recovery.iterdir()))
 
+    def test_cross_release_recovery_fails_closed_pending_dual_provenance(self):
+        """A later signed bootstrap cannot recover a different original cut.
+
+        Current design intentionally rejects the mismatch; a future
+        dual-provenance design needs separate adversarial tests and review.
+        """
+        self.packet["source_sha"] = "c" * 40
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT"):
+            self.run_reversal()
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(any(self.recovery.iterdir()))
+
     def test_recovery_interruption_after_durable_intent_blocks_retry(self):
         before = m.write_once
         def interrupt(path, content, mode=0o600):
