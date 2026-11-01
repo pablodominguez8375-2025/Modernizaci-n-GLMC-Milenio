@@ -1,0 +1,13 @@
+# QA525 — Continuidad de hardening root (1 noviembre 2026)
+
+Trabajo ChatGPT en PR #834 (DRAFT). Inicio: dev f457628d7ecd185bde5408f6324725ec57372bfb, main 6dfb9546a4873baff15955cf86abfd7d47e3d111. API/WEB QA físico en 41d9c490, sin despliegue.
+
+Se corrigió uso de la herramienta de atestación por búsqueda de PATH: preparador QA525 exige /usr/bin/gh root-safe y entorno mínimo (e3a0b468). Se exige Python aislado y sin carga de site para preparador e instalador (116086e2, 6090bc1e). Tests adversariales 07bd18eb, ddac1c64, 6d5b3de. CI detectó que la prueba de compatibilidad se ejecutaba en Python normal y falló; la prueba se corrigió sin relajar producción en bc497aca. Offline reviewer CI exact-head 1898aad1: SUCCESS #41337274910; readonly SUCCESS #41337275137; otros cinco gates aún activos en última revisión. Runbook actualizado 1898aad1.
+
+G6: 7 informes PASS solo restauración aislada same-host, DR-other-host PENDING, snapshot atómico NOT_PROVEN e IAM NOT_INCLUDED. Release dev f457628d autenticada SHA256 y Sigstore como usuario glmdch, no contiene todavía PR834. El instalador y bootstrap nuevos no se ejecutaron en glmdch.
+
+Siguiente IA: verificar 7/7 gates exact-head PR834, revisión independiente del primer programa privilegiado y del rollback; exigir futura release exacta firmada con instalador y verificador, G6 de corte adecuado y aprobación launcher-only con vigencia/nonce. API/WEB requiere acto separado. No tocar main, producción, migraciones, Compose, Keycloak, SMTP, srv01 ni segunda VM. Registrar resultado en GitHub y Drive.
+
+## Seguimiento — reconciliación de historial de rollback
+
+Se identificó y corrigió una brecha de validación en el diagnóstico de transacciones pendientes: los recibos y respaldos de operaciones anteriores se reconocían por nombre sin validar siempre su integridad. En commits 34b22d767ae904db51fd9455c8897366f4678644 y 36cd00dfeb7c85aaa1eb580ccd6c217323c3eef5, `scan_history(pending_nonce=...)` permite excluir un único tríptico pendiente para su inspección separada, pero valida recibos históricos, hashes de respaldos y nombres desconocidos bajo los cinco bloqueos de solo lectura. El diagnóstico expone el número de recibos históricos válidos; no ejecuta rollback. Nuevas pruebas validan un recibo histórico legítimo junto con una intención pendiente, y bloquean el respaldo adulterado, recibo adulterado y pareja incompleta. Workflow offline del commit de pruebas #41338494399 SUCCESS; readonly #41338494431 SUCCESS; otros gates en ejecución en el corte. No se modificó QA físico, dev ni main. La recuperación ejecutable sigue requiriendo aprobación separada y ensayo supervisado. Las siete restauraciones G6 previas solo demuestran recuperación aislada en el mismo host.
