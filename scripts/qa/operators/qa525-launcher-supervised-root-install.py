@@ -485,7 +485,7 @@ def inspect_pending_reconciliation():
         return {
             "status": "MANUAL_RECONCILIATION_REQUIRED_NO_AUTOREPAIR",
             "source_sha": act["source_sha"],
-            "nonce": nonce,
+            "nonce_sha256": digest(nonce.encode("ascii")),
             "observed_phase": ("POST_ATOMIC_SWAP" if current_hash ==
                                act["new_launcher_sha256"]
                                else "PRE_ATOMIC_SWAP"),
@@ -655,7 +655,7 @@ def replace_approved():
             "source_sha": sha,
             "release_asset_sha256": plan["release_asset_sha256"],
             "launcher_sha256": digest(new_bytes),
-            "nonce": nonce,
+            "nonce_sha256": digest(nonce.encode("ascii")),
             "requires_new_api_web_approval": True,
             "api_web_changed": False,
             "may_apply": False,
