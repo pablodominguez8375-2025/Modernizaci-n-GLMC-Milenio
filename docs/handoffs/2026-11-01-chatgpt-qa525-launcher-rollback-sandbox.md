@@ -22,3 +22,23 @@ La aprobación de rollback se congela tras su primera validación y se vuelve a 
 
 ## Política pura para futuro ejecutor root
 Se agregó `assess_reversal()` a `scripts/qa/operators/qa525-launcher-replacement-contract.py`: exige receipt original committed de campos exactos, backup viejo con SHA correspondiente, hash vivo del launcher instalado, cero intent pendiente, acta distinta con scope launcher-only, nonce no usado y plazo <=900 s. Devuelve siempre `may_recover=false`/`may_apply=false`; no toca host ni autentica el acta. Se añadieron tres pruebas en la suite QA525 del instalador: positivo estrictamente de revisión, autorizaciones falsificadas/replay/vencidas y drift/journal pendiente. La futura implementación root deberá comprobar firmas, custodia, cinco locks y transacciones, sin inferir permiso de este contrato. La fuente de esta política es parte de los módulos firmados de QA525, por lo que toda actualización futura requerirá nuevo paquete Sigstore del SHA de dev que la integre; NO reutilizar el corte actual de glmdch.
+
+## Ejecutor root propuesto — NO DESPLEGADO
+Además del sandbox y la política pura, PR #838 incorpora `--rollback-approved`
+a `qa525-launcher-supervised-root-install.py`. El nuevo comando ejecutará
+solo en `glmdch` con root + intérprete aislado, previo código root autenticado
+por admisión de 900 s, cinco locks, validación de todos los recibos originales
+y acta root0600 de rollback **distinta** de la aprobación de instalación.
+Exige que NO exista intent original ni journal de reversión residual; solo
+reversión de corte previamente comprometido. `RECOVERY_STATE` root0700
+preprovisionado, backup original y hash vivo verificados, intent y copia actual
+fsync, stage antiguo y swap atómico, recibo posterior. En cualquier interrupción
+queda journal protegido y STOP: no intentar otra vez sin reconciliación.
+Nuevo test con ficheros temporales para corte exitoso, consentimiento inválido,
+intent original pendiente, interrupción antes y después del swap. El rollback
+original a medias (sin receipt) sigue sin ejecutor de recuperación, y el
+procedimiento de recuperación de BD/IAM no se declara resuelto.
+No se ha proporcionado NINGÚN comando privilegiado físico. Las rutas y nueva
+opción no existen en el launcher custodiado de SHA 0d045f75. Pendientes:
+CI exact-head, revisión independiente de código root, release dev nueva, G6
+apropiado y aprobación formal independiente antes de la operación en glmdch.
