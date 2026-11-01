@@ -122,6 +122,43 @@ class LauncherLocalApprovalTests(unittest.TestCase):
                 approval_module.read_root_approval()
             chain.assert_not_called()
 
+    def test_trusted_root0600_posixpath_accepted_with_safe_ancestors(self):
+        # Actual Ubuntu Path is PosixPath, never exact type Path. Mock only
+        # root ownership of our temp directory/ancestors; no sudo or host QA.
+        with tempfile.TemporaryDirectory(prefix="qa525-posixpath-") as td:
+            file = Path(td) / "root0600-approval.json"
+            file.write_text("{}")
+            file.chmod(0o600)
+            real_lstat = Path.lstat
+
+            def root_metadata(path):
+                actual = real_lstat(path)
+                final = path == file
+                return types.SimpleNamespace(
+                    st_mode=(stat.S_IFREG | 0o600 if final
+                             else stat.S_IFDIR | 0o755),
+                    st_uid=0,
+                    st_nlink=1 if final else actual.st_nlink,
+                    st_dev=actual.st_dev,
+                    st_ino=actual.st_ino,
+                    st_size=actual.st_size,
+                )
+
+            with patch.object(Path, "lstat", autospec=True,
+                              side_effect=root_metadata):
+                observed = approval_module.trusted_chain(file)
+                self.assertEqual(file.stat().st_size, observed.st_size)
+                self.assertEqual(0, observed.st_uid)
+                self.assertEqual(stat.S_IFREG,
+                                 stat.S_IFMT(observed.st_mode))
+
+    def test_non_path_and_relative_inputs_still_rejected(self):
+        for path in (None, True, "/etc/pmgm/approval.json",
+                     Path("relative/approval.json"), 17):
+            with self.subTest(path=path), self.assertRaisesRegex(
+                    approval_module.Blocked, "LAUNCHER_APPROVAL_PATH_INVALID"):
+                approval_module.trusted_chain(path)
+
     def test_real_fs_guard_rejects_symlink_hardlink_and_untrusted_ancestors(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
