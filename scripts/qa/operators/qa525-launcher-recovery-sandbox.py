@@ -7,6 +7,7 @@ approved reversal of a *committed* launcher swap, not an interrupted journal
 repair and not permission to deploy or restore API/WEB.
 """
 from contextlib import contextmanager
+import importlib.util
 import fcntl
 import hashlib
 import json
@@ -164,7 +165,8 @@ def validate_approval(approval, receipt, *, now):
     return approval["nonce"]
 
 
-def rollback(root, approval, *, now=None, checkpoint=lambda stage: None):
+def rollback(root, approval, *, now=None, checkpoint=lambda stage: None,
+             sandbox_gate=None):
     """Simulate independently authorized reversal, with no auto retry.
 
     A pending original cut or any unrecognized journal entry is a hard STOP.
@@ -213,6 +215,8 @@ def rollback(root, approval, *, now=None, checkpoint=lambda stage: None):
                 "RECOVERY_BACKUP_OR_LIVE_HASH_DRIFT")
         timestamp = int(time.time()) if now is None else now
         nonce = validate_approval(approval, receipt, now=timestamp)
+        if sandbox_gate is not None:
+            sandbox_gate(receipt, sha(new), sha(old), timestamp)
         approved_snapshot = dict(approval)
         intent = state / ("rollback-intent-" + nonce + ".json")
         current = state / ("rollback-new-" + nonce + ".bin")
@@ -242,6 +246,9 @@ def rollback(root, approval, *, now=None, checkpoint=lambda stage: None):
             approval, receipt, now=int(time.time()) if now is None else now)
         require(approval == approved_snapshot and last_nonce == nonce,
                 "RECOVERY_APPROVAL_CHANGED_DURING_TRANSACTION")
+        if sandbox_gate is not None:
+            sandbox_gate(receipt, sha(new), sha(old),
+                         int(time.time()) if now is None else now)
         checkpoint("before_swap")
         os.replace(stage, live)
         sync_dir(live_dir)
@@ -258,6 +265,67 @@ def rollback(root, approval, *, now=None, checkpoint=lambda stage: None):
                 "recovery_nonce_sha256": sha(nonce.encode()),
                 "may_install": False, "may_apply": False,
                 "production_touched": False}
+
+
+def simulate_delayed_dual_recovery(root, recovery_claim, dual_approval, *,
+                                   now=None, checkpoint=lambda stage: None):
+    """ONLY /tmp simulation; an untrusted contract result NEVER grants root authority.
+
+    The existing fsync+swap sandbox is reused *after* validating original
+    receipt A and separate recovery claim B under the same sandbox lock.
+    Both sources/consent are rechecked before swap. This is deliberately NOT a
+    privileged bootstrap, Sigstore verifier, approval or host recovery tool.
+    """
+    require(type(recovery_claim) is dict and type(dual_approval) is dict,
+            "DELAYED_SANDBOX_INPUT_INVALID")
+    spec = importlib.util.spec_from_file_location(
+        "qa525_sandbox_delayed_contract",
+        Path(__file__).with_name("qa525-launcher-replacement-contract.py"))
+    require(spec is not None and spec.loader is not None,
+            "DELAYED_SANDBOX_CONTRACT_MISSING")
+    policy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(policy)
+    fields = {
+        "action": "rollback-root-launcher-supervised",
+        "scope": SCOPE,
+        "operator": "soporte@glmdch",
+        "approved": dual_approval.get("approved"),
+        "cut_nonce": dual_approval.get("cut_nonce"),
+        "nonce": dual_approval.get("nonce"),
+        "source_sha": dual_approval.get("cut_source_sha"),
+        "release_asset_sha256": dual_approval.get("cut_release_asset_sha256"),
+        "old_launcher_sha256": dual_approval.get("old_launcher_sha256"),
+        "new_launcher_sha256": dual_approval.get("new_launcher_sha256"),
+        "issued_at": dual_approval.get("issued_at"),
+        "expires_at": dual_approval.get("expires_at"),
+    }
+    # Snapshot immutable input identity; do not rely on the mutable act alone.
+    frozen_claim = encode(recovery_claim)
+    frozen_approval = encode(dual_approval)
+
+    def review_gate(receipt, current_sha, old_sha, stamp):
+        require(encode(recovery_claim) == frozen_claim and
+                encode(dual_approval) == frozen_approval,
+                "DELAYED_SANDBOX_CONSENT_OR_CLAIM_CHANGED")
+        try:
+            review = policy.assess_delayed_recovery_plan(
+                receipt, recovery_claim, dual_approval,
+                live_sha256=current_sha, backup_sha256=old_sha,
+                pending=False, now=stamp)
+        except policy.Blocked:
+            raise Blocked("DELAYED_SANDBOX_POLICY_REJECTED") from None
+        require(review.get("status") ==
+                    "REVIEWED_DELAYED_DUAL_PROVENANCE_NO_EXECUTION" and
+                review.get("claims_authenticated") is False and
+                review.get("may_recover") is False,
+                "DELAYED_SANDBOX_MUST_NOT_AUTHORIZE_ROOT")
+
+    report = rollback(root, fields, now=now, checkpoint=checkpoint,
+                      sandbox_gate=review_gate)
+    return {**report, "status":
+            "SIMULATED_DELAYED_DUAL_PROVENANCE_NO_HOST_CHANGE",
+            "recovery_claim_authenticated": False,
+            "approved_for_host_recovery": False}
 
 
 if __name__ == "__main__":
