@@ -114,6 +114,66 @@ class RootLauncherInstallerTests(unittest.TestCase):
                 with m.all_five_locks():
                     pass
 
+    def test_diagnostic_missing_lock_is_rejected_without_creation(self):
+        with tempfile.TemporaryDirectory(prefix="qa525-readonly-lock-missing-") as td:
+            paths = tuple(Path(td) / ("absent-" + str(i)) for i in range(5))
+            with patch.object(m, "LOCKS", paths), \
+                 patch.object(m, "require_host"), \
+                 patch.object(m, "lock_parent"):
+                with self.assertRaisesRegex(
+                        m.Blocked, "ROOT_READONLY_SHARED_LOCK_MISSING"):
+                    with m.all_five_locks(read_only=True):
+                        self.fail("Missing lock must not be created by a probe")
+                self.assertTrue(all(not p.exists() for p in paths))
+
+    def test_diagnostic_existing_locks_use_rdonly_without_creat_or_writes(self):
+        with tempfile.TemporaryDirectory(prefix="qa525-readonly-locks-") as td:
+            paths = tuple(Path(td) / ("lock-" + str(i)) for i in range(5))
+            for index, path in enumerate(paths):
+                path.write_bytes(("fixture-" + str(index)).encode())
+                path.chmod(0o600)
+            before = [(p.read_bytes(), p.stat().st_mtime_ns) for p in paths]
+            original_fstat = os.fstat
+            original_lstat = Path.lstat
+            original_open = os.open
+            opened = []
+
+            def root_owner(st):
+                return SimpleNamespace(st_mode=st.st_mode, st_uid=0,
+                                       st_nlink=st.st_nlink, st_dev=st.st_dev,
+                                       st_ino=st.st_ino)
+
+            def traced_open(path, flags, *args, **kwargs):
+                opened.append((path, flags))
+                return original_open(path, flags, *args, **kwargs)
+
+            with patch.object(m, "LOCKS", paths), \
+                 patch.object(m, "require_host"), \
+                 patch.object(m, "lock_parent"), \
+                 patch.object(m.os, "fstat",
+                              side_effect=lambda fd:
+                              root_owner(original_fstat(fd))), \
+                 patch.object(Path, "lstat", autospec=True,
+                              side_effect=lambda self:
+                              root_owner(original_lstat(self))), \
+                 patch.object(m.os, "open", side_effect=traced_open):
+                with m.all_five_locks(read_only=True):
+                    self.assertEqual(5, len(opened))
+                    for _, flags in opened:
+                        self.assertEqual(os.O_RDONLY, flags & os.O_ACCMODE)
+                        self.assertEqual(0, flags & os.O_CREAT)
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ANOTHER_QA_OPERATOR_RUNNING"):
+                        with m.all_five_locks():
+                            self.fail("Read-only inspection must block writer")
+                with m.all_five_locks():
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ANOTHER_QA_OPERATOR_RUNNING"):
+                        with m.all_five_locks(read_only=True):
+                            self.fail("Writer must block read-only inspection")
+            self.assertEqual(
+                before, [(p.read_bytes(), p.stat().st_mtime_ns) for p in paths])
+
     def test_wrong_host_blocks_before_import_or_filesystem(self):
         with patch.object(m.os, "geteuid", return_value=0), \
              patch.object(m.socket, "gethostname", return_value="srv01"), \
@@ -820,7 +880,8 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
                  patch.object(m, "LAUNCHER", launcher), \
                  patch.object(m, "require_host"), \
                  patch.object(m, "root_chain"), \
-                 patch.object(m, "all_five_locks", return_value=nullcontext()), \
+                 patch.object(m, "all_five_locks",
+                              return_value=nullcontext()) as acquired, \
                  patch.object(m, "read_bound",
                               side_effect=lambda path, maximum=4096, exact_mode=None:
                               Path(path).read_bytes()), \
@@ -841,6 +902,7 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
                     for key in ("signature_verified_by_inspection",
                                 "rollback_authorized", "may_resume", "may_apply"):
                         self.assertFalse(report[key])
+                acquired.assert_called_once_with(read_only=True)
                 writer.assert_not_called()
                 swap.assert_not_called()
                 self.assertEqual(before,
