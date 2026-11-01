@@ -1,0 +1,51 @@
+name: QA525 signed root launcher installer review (offline)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - "scripts/qa/operators/qa525-launcher-supervised-root-install.py"
+      - "tests/test_qa525_launcher_supervised_root_install.py"
+      - ".github/workflows/qa525-root-launcher-installer-review.yml"
+  push:
+    branches: [dev]
+    paths:
+      - "scripts/qa/operators/qa525-launcher-supervised-root-install.py"
+      - "tests/test_qa525_launcher_supervised_root_install.py"
+      - ".github/workflows/qa525-root-launcher-installer-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-root-transaction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout exact PR code only; no host credentials
+        uses: actions/checkout@v4
+      - name: Setup offline test Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Static syntax for privileged root source and adversarial tests
+        run: |
+          python -m py_compile scripts/qa/operators/qa525-launcher-supervised-root-install.py
+          python -m py_compile tests/test_qa525_launcher_supervised_root_install.py
+      - name: Hermetic root installer guards and journal tests (temporary files only)
+        run: python -m unittest discover -s tests -p 'test_qa525_launcher_supervised_root_install.py' -v
+      - name: No hidden deployment route
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("scripts/qa/operators/qa525-launcher-supervised-root-install.py").read_text()
+          assert '"--replace-approved"' in text
+          assert 'signed_candidate_preflight' in text
+          assert 'approval_reader.read_root_approval()' in text
+          assert 'all_five_locks()' in text
+          assert 'write_once(intent,' in text and 'write_once(backup,' in text
+          assert 'sync_dir(LAUNCHER.parent)' in text
+          assert 'ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION' in text
+          assert 'docker run' not in text and 'compose up' not in text
+          PY
