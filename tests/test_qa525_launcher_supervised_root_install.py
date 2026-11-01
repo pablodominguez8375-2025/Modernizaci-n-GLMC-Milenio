@@ -386,6 +386,94 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
         self.exercise(change_approval=True)
 
 
+class ReadOnlyPendingJournalTests(unittest.TestCase):
+    """Never resume or roll back based solely on an on-disk journal."""
+
+    def check(self, *, post=False, receipt=False, corrupt=None):
+        old = b"old signed launcher\n"
+        new = b"new signed launcher\n"
+        with tempfile.TemporaryDirectory(prefix="qa525-journal-inspect-") as td:
+            base = Path(td)
+            journal = base / "journal"
+            journal.mkdir(mode=0o700)
+            launcher = base / "pmgm-qa-update"
+            launcher.write_bytes(new if post else old)
+            launcher.chmod(0o700)
+            act = {
+                "status": "SWAP_INTENT_NO_DEPLOYMENT",
+                "source_sha": SHA,
+                "release_asset_sha256": "sha256:" + "c" * 64,
+                "old_launcher_sha256": m.digest(old),
+                "new_launcher_sha256": m.digest(new),
+                "nonce": NONCE,
+            }
+            intent = journal / ("intent-" + NONCE + ".json")
+            intent.write_bytes(m.json_bytes(act))
+            backup = journal / ("old-" + NONCE + ".bin")
+            backup.write_bytes(old)
+            if receipt:
+                (journal / ("receipt-" + NONCE + ".json")).write_bytes(
+                    m.json_bytes(dict(act, status="LAUNCHER_ATOMIC_SWAP_COMMITTED",
+                                      candidate_operator_sha256="d"*64)))
+            if corrupt == "backup":
+                backup.write_bytes(b"corrupt backup\n")
+            if corrupt == "unknown_live":
+                launcher.write_bytes(b"unrecognised third launcher\n")
+            if corrupt == "receipt":
+                (journal / ("receipt-" + NONCE + ".json")).write_bytes(
+                    m.json_bytes(dict(act, status="WRONG_STATUS")))
+            if corrupt == "duplicate":
+                intent.write_text('{"nonce":"bad","nonce":"bad-again"}')
+            if corrupt == "missing_backup":
+                backup.unlink()
+            before = {x.name: x.read_bytes() for x in journal.iterdir()}
+            with patch.object(m, "STATE", journal), \
+                 patch.object(m, "LAUNCHER", launcher), \
+                 patch.object(m, "require_host"), \
+                 patch.object(m, "root_chain"), \
+                 patch.object(m, "all_five_locks", return_value=nullcontext()), \
+                 patch.object(m, "read_bound",
+                              side_effect=lambda path, maximum=4096, exact_mode=None:
+                              Path(path).read_bytes()), \
+                 patch.object(m, "write_once") as writer, \
+                 patch.object(m.os, "replace") as swap:
+                if corrupt:
+                    with self.assertRaises(m.Blocked):
+                        m.inspect_pending_reconciliation()
+                else:
+                    report = m.inspect_pending_reconciliation()
+                    self.assertEqual("MANUAL_RECONCILIATION_REQUIRED_NO_AUTOREPAIR",
+                                     report["status"])
+                    self.assertEqual("POST_ATOMIC_SWAP" if post
+                                     else "PRE_ATOMIC_SWAP",
+                                     report["observed_phase"])
+                    self.assertEqual(receipt, report["durable_receipt_present"])
+                    self.assertTrue(report["backup_hash_matches_intent"])
+                    for key in ("signature_verified_by_inspection",
+                                "rollback_authorized", "may_resume", "may_apply"):
+                        self.assertFalse(report[key])
+                writer.assert_not_called()
+                swap.assert_not_called()
+                self.assertEqual(before,
+                    {x.name: x.read_bytes() for x in journal.iterdir()})
+
+    def test_pending_before_swap_read_only(self):
+        self.check(post=False)
+
+    def test_pending_after_swap_read_only(self):
+        self.check(post=True)
+
+    def test_committed_receipt_with_unremoved_intent_still_requires_human(self):
+        self.check(post=True, receipt=True)
+
+    def test_corrupt_backup_live_receipt_or_missing_journal_block(self):
+        for case, post in (("backup", False), ("unknown_live", False),
+                           ("receipt", True), ("duplicate", False),
+                           ("missing_backup", False)):
+            with self.subTest(case=case):
+                self.check(post=post, corrupt=case)
+
+
 class RetainedPackageDurabilityTests(unittest.TestCase):
     def test_fsync_accepts_private_source_tree_before_publish(self):
         with tempfile.TemporaryDirectory() as td:
