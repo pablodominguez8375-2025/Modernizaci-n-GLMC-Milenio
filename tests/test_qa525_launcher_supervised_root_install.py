@@ -1393,7 +1393,8 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
         original = m.os.replace
         def crash_after_atomic_replace(source, dest):
             original(source, dest)
-            raise RuntimeError("synthetic crash after atomic swap")
+            if Path(dest) == self.launcher:
+                raise RuntimeError("synthetic crash after atomic swap")
         with patch.object(m.os, "replace", side_effect=crash_after_atomic_replace):
             with self.assertRaisesRegex(RuntimeError, "synthetic crash"):
                 self.run_reversal()
