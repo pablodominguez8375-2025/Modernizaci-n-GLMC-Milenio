@@ -30,6 +30,10 @@ LAUNCHER = Path("/usr/local/sbin/pmgm-qa-update")
 STORE = Path("/opt/centenario/qa525-signed-stage")
 STATE = Path("/opt/centenario/qa525-launcher-replacement")
 PREFLIGHT_STATE = Path("/opt/centenario/qa525-signed-prepare")
+# Independently provisioned by a PRE-EXISTING trusted Sigstore bootstrap.
+# This installer may check it, but MUST NOT create/refresh this admission.
+ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
+BOOTSTRAP_STATUS = "EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY"
 SHA = re.compile(r"[a-f0-9]{40}")
 NONCE = re.compile(r"[a-f0-9]{64}")
 SCOPE = "QA525_SIGNED_ROOT_LAUNCHER_ONLY_EXPLICIT_SUPERVISION"
@@ -92,9 +96,56 @@ def root_chain(path, *, directory=False, exact_mode=None):
 
 
 def bootstrap_trusted_sources():
+    """Cross-check every privileged imported byte BEFORE helper imports.
+
+    REQUIRED prior trust anchor: a separately authenticated immutable
+    bootstrap must first verify Sigstore and install the 0600 admission.
+    Nothing in this file establishes that independent bootstrap's integrity.
+    """
     require_host()
-    for path in SOURCES:
-        root_chain(path)
+    root_chain(ADMISSION, exact_mode=0o600)
+    try:
+        packet = json.loads(
+            read_bound(ADMISSION, maximum=16_384, exact_mode=0o600),
+            object_pairs_hook=unique_json_fields)
+    except (UnicodeError, ValueError, TypeError):
+        raise Blocked("ROOT_BOOTSTRAP_ADMISSION_JSON_INVALID") from None
+    require(type(packet) is dict and set(packet) == {
+                "status", "source_sha", "release_asset_sha256",
+                "manifest_sha256", "trusted_verifier_sha256", "files"}
+            and packet["status"] == BOOTSTRAP_STATUS
+            and type(packet["source_sha"]) is str
+            and SHA.fullmatch(packet["source_sha"]) is not None
+            and type(packet["release_asset_sha256"]) is str
+            and re.fullmatch(r"sha256:[0-9a-f]{64}",
+                             packet["release_asset_sha256"]) is not None
+            and all(type(packet[k]) is str
+                    and NONCE.fullmatch(packet[k]) is not None
+                    for k in ("manifest_sha256", "trusted_verifier_sha256"))
+            and type(packet["files"]) is dict,
+            "ROOT_BOOTSTRAP_ADMISSION_FIELDS_INVALID")
+    expected = {str(source) for source in SOURCES}
+    require(set(packet["files"]) == expected
+            and all(type(name) is str and type(value) is str
+                    and NONCE.fullmatch(value) is not None
+                    for name, value in packet["files"].items()),
+            "ROOT_BOOTSTRAP_SIGNED_FILE_SET_INVALID")
+    for source in SOURCES:
+        root_chain(source)
+        require(digest(read_bound(source, maximum=2_000_000)) ==
+                packet["files"][str(source)],
+                "ROOT_BOOTSTRAP_SIGNED_SOURCE_HASH_MISMATCH")
+    return packet
+
+
+def verify_bootstrap_binding(plan):
+    """Make even a previously checked admission stale if dev/release moved."""
+    packet = bootstrap_trusted_sources()
+    require(packet["source_sha"] == plan.get("source_sha")
+            and packet["release_asset_sha256"] ==
+                plan.get("release_asset_sha256"),
+            "ROOT_BOOTSTRAP_SIGNED_RELEASE_IDENTITY_MISMATCH")
+    return packet
 
 
 def load(name, source):
@@ -427,6 +478,9 @@ def replace_approved():
         consumed = scan_history()
         plan = preflight.signed_candidate_preflight(inspector, signed,
                                                     stage_parent=PREFLIGHT_STATE)
+        # Independent admission is required BEFORE import, and bound again
+        # to the actual verified live release after the signed preflight.
+        verify_bootstrap_binding(plan)
         approval = approval_reader.read_root_approval()
         assessment = contract.assess_review(
             plan, approval, now=int(time.time()), pending=False,
