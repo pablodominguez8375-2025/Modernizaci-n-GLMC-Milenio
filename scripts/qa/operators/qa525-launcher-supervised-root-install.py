@@ -345,6 +345,13 @@ def replace_approved():
                     digest(new_bytes), "ROOT_STAGED_LAUNCHER_CHANGED")
             require(digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
                     digest(old_bytes), "ROOT_LAUNCHER_DRIFT_BEFORE_SWAP")
+            # The second download and on-disk fsync may take time. Reject
+            # expiry or approval substitution at the LAST pre-swap boundary.
+            last_approval = approval_reader.read_root_approval()
+            require(last_approval == approval
+                    and last_approval.get("nonce") == nonce
+                    and int(time.time()) < approval["expires_at"],
+                    "ROOT_APPROVAL_CHANGED_OR_EXPIRED_BEFORE_ATOMIC_SWAP")
             os.replace(staged, LAUNCHER)
             sync_dir(LAUNCHER.parent)
             require(digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
