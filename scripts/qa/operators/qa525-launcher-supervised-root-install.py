@@ -301,14 +301,21 @@ def lock_parent(path):
 
 
 @contextmanager
-def all_five_locks():
-    """Exact order of existing QA525 operators; nonblocking exclusive flock."""
+def all_five_locks(*, read_only=False):
+    """Exclusive flock; diagnostics MUST NEVER create/write a lock file."""
     require_host()
     with ExitStack() as stack:
         for path in LOCKS:
             lock_parent(path.parent)
-            fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW |
-                         os.O_CLOEXEC, 0o600)
+            # Read-only diagnostics must not create an absent lock or open any
+            # existing lock for writing. Linux flock supports LOCK_EX on O_RDONLY.
+            flags = (os.O_RDONLY if read_only else os.O_RDWR | os.O_CREAT)
+            try:
+                fd = os.open(path, flags | os.O_NOFOLLOW | os.O_CLOEXEC,
+                             0o600)
+            except FileNotFoundError:
+                raise Blocked("ROOT_READONLY_SHARED_LOCK_MISSING"
+                              if read_only else "ROOT_SHARED_LOCK_MISSING") from None
             stack.callback(os.close, fd)
             st = os.fstat(fd)
             require(stat.S_ISREG(st.st_mode) and st.st_uid == 0
@@ -408,7 +415,7 @@ def inspect_pending_reconciliation():
     require_host()
     root_chain(STATE, directory=True, exact_mode=0o700)
     root_chain(LAUNCHER, exact_mode=0o700)
-    with all_five_locks():
+    with all_five_locks(read_only=True):
         names = {p.name for p in STATE.iterdir()}
         require(len(names) <= 1000, "ROOT_RECONCILIATION_JOURNAL_TOO_LARGE")
         intents = [s for s in names if s.startswith("intent-")]
