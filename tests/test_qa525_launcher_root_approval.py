@@ -122,6 +122,81 @@ class LauncherLocalApprovalTests(unittest.TestCase):
                 approval_module.read_root_approval()
             chain.assert_not_called()
 
+    def test_trusted_root0600_posixpath_accepted_with_safe_ancestors(self):
+        # Actual Ubuntu Path is PosixPath, never exact type Path. Mock only
+        # root ownership of our temp directory/ancestors; no sudo or host QA.
+        with tempfile.TemporaryDirectory(prefix="qa525-posixpath-") as td:
+            file = Path(td) / "root0600-approval.json"
+            file.write_text("{}")
+            file.chmod(0o600)
+            real_lstat = Path.lstat
+
+            def root_metadata(path):
+                actual = real_lstat(path)
+                final = path == file
+                return types.SimpleNamespace(
+                    st_mode=(stat.S_IFREG | 0o600 if final
+                             else stat.S_IFDIR | 0o755),
+                    st_uid=0,
+                    st_nlink=1 if final else actual.st_nlink,
+                    st_dev=actual.st_dev,
+                    st_ino=actual.st_ino,
+                    st_size=actual.st_size,
+                )
+
+            with patch.object(Path, "lstat", autospec=True,
+                              side_effect=root_metadata):
+                observed = approval_module.trusted_chain(file)
+                self.assertEqual(file.stat().st_size, observed.st_size)
+                self.assertEqual(0, observed.st_uid)
+                self.assertEqual(stat.S_IFREG,
+                                 stat.S_IFMT(observed.st_mode))
+
+    def test_real_valid_approval_read_has_no_untrusted_path_false_negative(self):
+        import json
+        with tempfile.TemporaryDirectory(prefix="qa525-root0600-") as td:
+            file = Path(td) / "approval.json"
+            file.write_text(json.dumps(act(), sort_keys=True))
+            file.chmod(0o600)
+            real_lstat = Path.lstat
+            real_fstat = os.fstat
+
+            def fake_owner(original, *, final):
+                return types.SimpleNamespace(
+                    st_mode=(stat.S_IFREG | 0o600 if final
+                             else stat.S_IFDIR | 0o755),
+                    st_uid=0,
+                    st_nlink=1 if final else original.st_nlink,
+                    st_dev=original.st_dev,
+                    st_ino=original.st_ino,
+                    st_size=original.st_size,
+                )
+
+            with patch.object(approval_module, "APPROVAL", file), \
+                 patch.object(approval_module.os, "geteuid", return_value=0), \
+                 patch.object(approval_module.socket, "gethostname",
+                              return_value="glmdch"), \
+                 patch.object(approval_module.time, "time",
+                              return_value=NOW), \
+                 patch.object(Path, "lstat", autospec=True,
+                              side_effect=lambda p:
+                              fake_owner(real_lstat(p), final=p == file)), \
+                 patch.object(approval_module.os, "fstat",
+                              side_effect=lambda fd:
+                              fake_owner(real_fstat(fd), final=True)):
+                result = approval_module.read_root_approval()
+                self.assertEqual(act(), result)
+                report = approval_module.validate(result, NOW)
+                self.assertFalse(report["may_install"])
+                self.assertFalse(report["may_apply"])
+
+    def test_non_path_and_relative_inputs_still_rejected(self):
+        for path in (None, True, "/etc/pmgm/approval.json",
+                     Path("relative/approval.json"), 17):
+            with self.subTest(path=path), self.assertRaisesRegex(
+                    approval_module.Blocked, "LAUNCHER_APPROVAL_PATH_INVALID"):
+                approval_module.trusted_chain(path)
+
     def test_real_fs_guard_rejects_symlink_hardlink_and_untrusted_ancestors(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
