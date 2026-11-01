@@ -162,7 +162,11 @@ class RootBootstrapTests(unittest.TestCase):
         sys.modules[spec.name] = consumer
         spec.loader.exec_module(consumer)
         source_paths = tuple(self.stage / SHA / key for key in m.SOURCES)
-        with patch.object(consumer, "ADMISSION", self.admission), \
+        # This test validates receipt interoperability only; an independent
+        # negative test verifies that the real root entrypoint refuses Python
+        # without -I -S. Do not weaken the production isolation guard.
+        with patch.object(consumer, "require_host"), \
+             patch.object(consumer, "ADMISSION", self.admission), \
              patch.object(consumer, "SOURCES", source_paths), \
              patch.object(consumer, "root_chain"), \
              patch.object(consumer, "read_bound",
