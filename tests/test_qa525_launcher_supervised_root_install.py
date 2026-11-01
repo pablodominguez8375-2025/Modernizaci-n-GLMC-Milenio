@@ -464,6 +464,9 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                 if fault or bad_postflight:
                     self.assertTrue(pending.exists())
                     self.assertTrue(backup.exists())
+                    if bad_postflight:
+                        self.assertFalse(receipt.exists())
+                        self.assertEqual(2, retained.inspect_retained.call_count)
                     with self.assertRaisesRegex(
                             m.Blocked, "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION"):
                         m.scan_history()
