@@ -40,6 +40,7 @@ def build_release(*, missing=None, tampered=None, wrong_sha=False,
     members = {
         p: ("signed synthetic " + p).encode() for p in m.SOURCES
     }
+    members[m.BOOTSTRAP_SCRIPT] = FILE.read_bytes()
     members.update({
         "BUILD-INFO.txt": ("SOURCE_SHA=" + ("b" * 40 if wrong_sha else SHA) +
                            "\nSTORAGE=SIGNED_REBUILT_SILO_ARCHIVE_SYNTHETIC_QA\n").encode(),
@@ -143,6 +144,12 @@ class RootBootstrapTests(unittest.TestCase):
             self.verify(build_release(missing=m.SOURCES[0]))
         self.assertFalse(self.admission.exists())
         self.assertFalse((self.stage / SHA).exists())
+
+    def test_missing_signed_bootstrap_itself_never_issues_admission(self):
+        with self.assertRaisesRegex(
+                m.Blocked, "BOOTSTRAP_SIGNED_INSTALLER_OR_HELPERS_MISSING"):
+            self.verify(build_release(missing=m.BOOTSTRAP_SCRIPT))
+        self.assertFalse(self.admission.exists())
 
     def test_changed_signed_helper_never_stages(self):
         with self.assertRaisesRegex(m.Blocked, "BOOTSTRAP_SIGNED_MEMBER_MISMATCH"):
