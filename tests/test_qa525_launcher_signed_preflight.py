@@ -156,6 +156,13 @@ class SignedLauncherPreflightTests(unittest.TestCase):
             self.check()
         self.assertEqual([], list(self.parent.iterdir()))
 
+    def test_real_merged_operator_ast_matches_signed_upgrade_contract(self):
+        # Contract-test the REAL qa525-update.py shipped by the branch,
+        # not only the small synthetic fixture (which can hide syntax drift).
+        source = ROOT / "scripts/qa/operators/qa525-update.py"
+        self.assertTrue(source.is_file())
+        self.assertTrue(preflight.validate_operator_ast(source.read_bytes()))
+
     def test_candidate_missing_recovery_command_blocks(self):
         original = OPER.decode("utf-8")
         tampered = original.replace(
