@@ -549,6 +549,71 @@ class RealProductionContractCompatibilityTests(unittest.TestCase):
             approval.validate(dict(packet, approved=1), now)
 
 
+class HistoricalReceiptIntegrityTests(unittest.TestCase):
+    """Receipt+backup is a durable identity, not just a nonce marker."""
+
+    def check(self, *, corruption=None):
+        old = b"synthetic root-owned old launcher\n"
+        nonce = NONCE
+        record = {
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "source_sha": SHA,
+            "release_asset_sha256": "sha256:" + "c" * 64,
+            "old_launcher_sha256": m.digest(old),
+            "new_launcher_sha256": "d" * 64,
+            "candidate_operator_sha256": "e" * 64,
+            "nonce": nonce,
+        }
+        with tempfile.TemporaryDirectory(prefix="qa525-committed-history-") as td:
+            state = Path(td)
+            backup = state / ("old-" + nonce + ".bin")
+            receipt = state / ("receipt-" + nonce + ".json")
+            backup.write_bytes(old)
+            backup.chmod(0o700)
+            receipt.write_bytes(m.json_bytes(record))
+            receipt.chmod(0o600)
+            if corruption == "backup":
+                backup.write_bytes(b"forged recovery target\n")
+            if corruption == "source":
+                receipt.write_bytes(m.json_bytes(
+                    dict(record, source_sha="WRONG_COMMIT")))
+            if corruption == "field":
+                receipt.write_bytes(m.json_bytes(
+                    dict(record, unauthorized="true")))
+            if corruption == "new_equals_old":
+                receipt.write_bytes(m.json_bytes(
+                    dict(record, new_launcher_sha256=m.digest(old))))
+            if corruption == "candidate":
+                receipt.write_bytes(m.json_bytes(
+                    dict(record, candidate_operator_sha256="bad")))
+            if corruption == "duplicate":
+                receipt.write_bytes(
+                    b'{"status":"LAUNCHER_ATOMIC_SWAP_COMMITTED",'
+                    b'"status":"LAUNCHER_ATOMIC_SWAP_COMMITTED"}')
+            if corruption == "no_backup":
+                backup.unlink()
+            with patch.object(m, "STATE", state), \
+                 patch.object(m, "root_chain"), \
+                 patch.object(m, "read_bound",
+                     side_effect=lambda path, maximum=4096, exact_mode=None:
+                     Path(path).read_bytes()):
+                if corruption is None:
+                    self.assertEqual({nonce}, m.scan_history())
+                else:
+                    with self.assertRaises(m.Blocked):
+                        m.scan_history()
+
+    def test_committed_receipt_and_original_backup_can_be_replayed_as_history(self):
+        self.check()
+
+    def test_corrupt_historical_receipts_and_backups_fail_closed(self):
+        for corruption in (
+                "backup", "source", "field", "new_equals_old",
+                "candidate", "duplicate", "no_backup"):
+            with self.subTest(corruption=corruption):
+                self.check(corruption=corruption)
+
+
 class IndependentBootstrapAdmissionTests(unittest.TestCase):
     """Cross-check an externally provisioned receipt, never forge a signature."""
 
