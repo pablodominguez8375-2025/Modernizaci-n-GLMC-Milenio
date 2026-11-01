@@ -480,7 +480,7 @@ def replace_approved():
                                                     stage_parent=PREFLIGHT_STATE)
         # Independent admission is required BEFORE import, and bound again
         # to the actual verified live release after the signed preflight.
-        verify_bootstrap_binding(plan)
+        bootstrap_packet = verify_bootstrap_binding(plan)
         approval = approval_reader.read_root_approval()
         assessment = contract.assess_review(
             plan, approval, now=int(time.time()), pending=False,
@@ -524,6 +524,12 @@ def replace_approved():
                         "SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED",
                     "ROOT_SIGNED_RELEASE_CHANGED_DURING_CUT")
             signed.staging.verify_manifest(package, sha)
+            # Tie the externally authenticated helper admission to the
+            # actual Sigstore-verified signed manifest before any journal IO.
+            require(digest(preflight.stable_hash(
+                    package / "MANIFEST.sha256", maximum=5_000_000)) ==
+                    bootstrap_packet["manifest_sha256"],
+                    "ROOT_BOOTSTRAP_MANIFEST_BINDING_MISMATCH")
             operator = preflight.stable_hash(package /
                     "scripts/qa/operators/qa525-update.py")
             require(digest(operator) == plan["candidate_operator_sha256"],
