@@ -51,3 +51,7 @@ If there is a drift or unexpected file, mark STOP + MANUAL_RECONCILIATION_REQUIR
 ## 5. Continuity and handoff
 
 Record PRE/DURANTE/POST in GitHub Issue #822 and the official Proyecto Centenario Drive state log. Include exact evidence SHA/check IDs, host change/no-change, unresolved issues and next action. Do not claim `glmdch` updated without operator receipt and physical readback. No second VM, no `srv01`, no main/prod or PR #771/#737/#766.
+
+## Pre-import admission — additional no-go condition (1 Nov 2026)
+
+The draft root installer now checks a private `/etc/pmgm/qa525-bootstrap-admission.json` (root-owned, mode 0600) before importing any of its helper modules. A separately authenticated bootstrap must write this packet only AFTER it verifies the exact source, signer workflow, GitHub Sigstore provenance, signed manifest and every imported file hash. The packet must include exact current release SHA/digest and hashes for all privileged sources; it will be cross-checked again against signed preflight identity. A missing, invalid, stale or edited packet stops the installer. The installer **cannot issue its own admission**. Important: even a valid packet does NOT prove that the installer entrypoint itself was trusted before it began executing; that separate pre-execution bootstrap remains a mandatory, unaudited prerequisite. Do NOT copy a sample packet into /etc as a workaround, and do not run downloaded PR Python as root.
