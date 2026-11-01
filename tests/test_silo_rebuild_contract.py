@@ -164,6 +164,19 @@ class SiloRebuildContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rebuild.fixed_component_vex(evidence, 'latest')
 
+    def test_silo_artifact_names_are_unique_per_retry_without_changing_publisher_contract(self):
+        workflow = (ROOT / '.github/workflows/qa-silo-rebuild.yml').read_text()
+        self.assertIn(
+            'name: silo-rebuild-review-' + '${{ env.QA_VALIDATED_SOURCE_SHA }}'
+            + '-attempt-' + '${{ github.run_attempt }}', workflow)
+        self.assertIn(
+            'name: qa-glmdch-signed-storage-' + '${{ env.QA_VALIDATED_SOURCE_SHA }}',
+            workflow)
+        self.assertNotIn('name: qa-glmdch-signed-storage-' +
+                         '${{ env.QA_VALIDATED_SOURCE_SHA }}-attempt-', workflow)
+        publisher = (ROOT / 'scripts/qa/qa-agent-readiness.py').read_text()
+        self.assertIn('ARTIFACT_PREFIX = "qa-glmdch-signed-storage-"', publisher)
+
     def test_rebuild_does_not_publish_or_override_active_compose(self):
         dockerfile = (ROOT / 'infrastructure/silo/Dockerfile.qa-rebuild').read_text()
         workflow = (ROOT / '.github/workflows/qa-silo-rebuild.yml').read_text()
