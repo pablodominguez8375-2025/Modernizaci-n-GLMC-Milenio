@@ -126,7 +126,13 @@ class RootBootstrapTests(unittest.TestCase):
                              hashlib.sha256(Path(path).read_bytes()).hexdigest())
             self.assertEqual(0o600, stat.S_IMODE(Path(path).stat().st_mode))
         cmd = runner.call_args.args[0]
-        self.assertEqual(["gh", "attestation", "verify"], cmd[:3])
+        self.assertEqual([str(m.GH_BINARY), "attestation", "verify"], cmd[:3])
+        environment = runner.call_args.kwargs["env"]
+        self.assertEqual("/usr/bin:/bin", environment["PATH"])
+        self.assertEqual("C", environment["LC_ALL"])
+        self.assertEqual(set(environment), {"PATH", "HOME", "GH_CONFIG_DIR", "LC_ALL"})
+        self.assertNotEqual(os.environ.get("HOME"), environment["HOME"])
+        self.assertFalse(environment.get("GH_TOKEN"))
         self.assertIn("--deny-self-hosted-runners", cmd)
         self.assertEqual(m.SIGNER, cmd[cmd.index("--signer-workflow") + 1])
         self.assertEqual(SHA, cmd[cmd.index("--source-digest") + 1])
@@ -154,6 +160,17 @@ class RootBootstrapTests(unittest.TestCase):
         self.assertEqual("EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY",
                          packet["status"])
         self.assertEqual(12, len(packet["files"]))
+
+    def test_untrusted_pinned_gh_binary_blocks_before_verification(self):
+        original = m.root_owned
+        def require_system_gh(path, **kwargs):
+            if Path(path) == m.GH_BINARY:
+                raise m.Blocked("UNTRUSTED_SYSTEM_GH")
+            return original(path, **kwargs)
+        with patch.object(m, "root_owned", side_effect=require_system_gh):
+            with self.assertRaisesRegex(m.Blocked, "UNTRUSTED_SYSTEM_GH"):
+                self.verify(build_release())
+        self.assertFalse(self.admission.exists())
 
     def test_wrong_envelope_digest_refused_without_sigstore(self):
         fake = Mock()
