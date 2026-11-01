@@ -29,6 +29,16 @@ Salida informativa:
 `may_install=false`, `may_apply=false`. En fallos devuelve
 `BLOCKED_QA525_LAUNCHER_INSPECTION` y código estable no sensible.
 
+**Estado de continuidad legible (PR #830, fase read-only):** el inspector
+emite además `launcher_transition=INSTALLER_UPDATE_REQUIRED` **solo** cuando
+la plantilla de launcher heredado, su origen root-owned y los hashes superan
+la inspección; en cualquier fallo controlado emite
+`launcher_transition=LAUNCHER_INSPECTION_BLOCKED`. Se conserva el campo
+`status=LAUNCHER_OBSERVED_UPGRADE_NOT_AUTHORIZED` requerido por el
+preflight firmado previo. Estos estados no verifican que exista un release
+firmado, no acreditan una instalación, no renuevan aprobaciones y no permiten
+`may_install` ni `may_apply`.
+
 **NO usar esta herramienta desde código crudo de GitHub en glmdch.**
 Solo después de CI exact-head, revisión independiente y publicación firmada,
 el inspector podrá incorporarse a una instalación autorizada. Ningún comando
