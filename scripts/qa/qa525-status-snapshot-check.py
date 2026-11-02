@@ -72,12 +72,15 @@ def read_snapshot(path):
         if exc.errno == errno.ELOOP:
             raise Blocked("NOT_A_REGULAR_SMALL_SNAPSHOT") from None
         raise
-    with os.fdopen(fd, "rb") as stream:
-        status = os.fstat(stream.fileno())
+    try:
+        status = os.fstat(fd)
         require(stat.S_ISREG(status.st_mode) and 0 < status.st_size <= 16_384
                 and status.st_nlink == 1, "NOT_A_REGULAR_SMALL_SNAPSHOT")
-        data = stream.read(16_385)
-    require(len(data) <= 16_384, "SNAPSHOT_TOO_LARGE")
+        data = os.read(fd, 16_385)
+    finally:
+        os.close(fd)
+    require(len(data) == status.st_size,
+            "SNAPSHOT_INCOMPLETE_OR_CHANGED_DURING_READ")
     try:
         value = json.loads(data.decode("utf-8"), object_pairs_hook=unique_pairs,
                            parse_constant=no_json_constant)
