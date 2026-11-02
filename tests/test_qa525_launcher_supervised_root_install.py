@@ -1494,10 +1494,12 @@ class ReversalPolicyGateTests(unittest.TestCase):
                         {"cut_nonce": "7" * 64},
                         {"source_sha": "f" * 40},
                         {"cut_receipt_sha256": "f" * 64},
-                        {"recovery_source_sha": "f" * 40},
+                        {"recovery_source_sha": "invalid"},
+                        {"recovery_source_sha": self.receipt["source_sha"]},
+                        {"recovery_release_asset_sha256": "invalid"},
                         {"recovery_release_asset_sha256":
-                            "sha256:" + "f" * 64},
-                        {"recovery_manifest_sha256": "0" * 64},
+                            self.receipt["release_asset_sha256"]},
+                        {"recovery_manifest_sha256": "invalid"},
                         {"expires_at": 120},
                         {"extra": True}):
             approval = dict(self.approval, **changed)
