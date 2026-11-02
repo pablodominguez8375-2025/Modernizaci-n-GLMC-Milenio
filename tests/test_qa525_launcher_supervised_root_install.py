@@ -1571,6 +1571,110 @@ class PendingReconciliationPlanPolicyTests(unittest.TestCase):
 
 
 
+
+
+class PendingReceiptReviewTests(unittest.TestCase):
+    """Receipt B can describe reconciliation, never authenticate or authorize."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        spec = importlib.util.spec_from_file_location(
+            "qa525_append_only_pending_receipt_contract", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        p = self.policy
+        self.a = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "nonce": "1" * 64,
+        }
+        self.b = {
+            "status": "PENDING_LAUNCHER_RECOVERY_RECONCILIATION_COMMITTED",
+            "cut_source_sha": self.a["source_sha"],
+            "cut_release_asset_sha256": self.a["release_asset_sha256"],
+            "cut_nonce": self.a["nonce"],
+            "cut_intent_sha256": p.frozen_sha(self.a),
+            "old_launcher_sha256": self.a["old_launcher_sha256"],
+            "new_launcher_sha256": self.a["new_launcher_sha256"],
+            "recovery_source_sha": "f" * 40,
+            "recovery_release_asset_sha256": "sha256:" + "7" * 64,
+            "recovery_manifest_sha256": "8" * 64,
+            "recovery_executor_sha256": "9" * 64,
+            "recovery_nonce": "2" * 64,
+            "recovery_approval_sha256": "3" * 64,
+            "observed_phase": "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT",
+            "restored_launcher_sha256": self.a["old_launcher_sha256"],
+        }
+
+    def check(self, **kw):
+        return self.policy.assess_pending_reconciliation_receipt(
+            kw.pop("a", self.a), kw.pop("b", self.b),
+            old_backup_sha256=kw.pop("backup", self.a["old_launcher_sha256"]),
+            live_launcher_sha256=kw.pop("live", self.a["old_launcher_sha256"]),
+            original_receipt_present=kw.pop("original", False),
+            recovery_intent_present=kw.pop("pending_b", False), **kw)
+
+    def test_append_only_receipt_never_signs_off_on_retry(self):
+        for phase in ("PENDING_BEFORE_ATOMIC_SWAP",
+                      "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT"):
+            with self.subTest(phase=phase):
+                result = self.check(b={**self.b, "observed_phase": phase})
+                self.assertEqual(
+                    "REVIEWED_PENDING_RECOVERY_RECEIPT_UNTRUSTED_NO_EXECUTION",
+                    result["status"])
+                for key in ("may_install", "may_apply", "may_recover",
+                            "reconciliation_complete",
+                            "root_history_reconciliation_implemented"):
+                    self.assertIs(result[key], False)
+                self.assertTrue(result[
+                    "original_intent_must_remain_preserved"])
+                self.assertTrue(result[
+                    "receipt_needs_independent_root_authentication"])
+
+    def test_fake_completion_and_unreconciled_live_are_rejected(self):
+        for kw in (
+            {"original": True}, {"pending_b": True},
+            {"live": self.a["new_launcher_sha256"]},
+            {"live": "0" * 64}, {"backup": "0" * 64},
+            {"original": 0}, {"pending_b": 1},
+            {"a": {**self.a, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED"}},
+            {"a": {**self.a, "new_launcher_sha256": "0" * 64}},
+            {"b": {**self.b, "cut_intent_sha256": "0" * 64}},
+            {"b": {**self.b, "status": "FAKE_COMMITTED"}},
+            {"b": {**self.b, "restored_launcher_sha256":
+                   self.a["new_launcher_sha256"]}},
+            {"b": {**self.b, "recovery_nonce": self.a["nonce"]}},
+            {"b": {**self.b, "recovery_executor_sha256": "bad"}},
+            {"b": {**self.b, "recovery_source_sha": self.a["source_sha"]}},
+            {"b": {**self.b, "recovery_release_asset_sha256":
+                   self.a["release_asset_sha256"]}},
+            {"b": {**self.b, "observed_phase": "UNSUPPORTED_PHASE"}},
+            {"b": {**self.b, "surprise": "forged"}},
+        ):
+            with self.subTest(kw=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(**kw)
+
+    def test_original_intent_must_match_B_receipt_exactly(self):
+        for key, bad in (
+            ("cut_source_sha", "f" * 40),
+            ("cut_release_asset_sha256", "sha256:" + "0" * 64),
+            ("cut_nonce", "0" * 64),
+            ("old_launcher_sha256", "0" * 64),
+            ("new_launcher_sha256", "0" * 64),
+        ):
+            with self.subTest(key=key):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(b={**self.b, key: bad})
+
+
 class RootLauncherReversalTransactionTests(unittest.TestCase):
     """Real fsync and os.replace in disposable paths, never physical host."""
 
