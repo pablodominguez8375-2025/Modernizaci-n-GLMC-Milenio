@@ -275,10 +275,11 @@ class RootBootstrapTests(unittest.TestCase):
 
 
 
-class DelayedRecoveryBootstrapTests(RootBootstrapTests):
+class DelayedRecoveryBootstrapTests(unittest.TestCase):
     """Real A/B ZIP checks with disposable root-mocked staging, no QA host."""
 
     B = "b" * 40
+    verify = RootBootstrapTests.verify
 
     def setUp(self):
         super().setUp()
