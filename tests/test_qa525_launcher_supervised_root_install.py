@@ -1412,6 +1412,150 @@ class DelayedRecoveryPlanPolicyTests(unittest.TestCase):
             self.check(consumed=("not-a-hash",))
 
 
+
+
+class PendingReconciliationPlanPolicyTests(unittest.TestCase):
+    """Original A with intent but NO receipt: fail-closed A/B review only."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        spec = importlib.util.spec_from_file_location(
+            "qa525_pending_reconciliation_policy", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        p = self.policy
+        self.intent = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "nonce": "1" * 64,
+        }
+        self.claim = {
+            "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
+            "source_sha": "f" * 40,
+            "release_asset_sha256": "sha256:" + "7" * 64,
+            "manifest_sha256": "8" * 64,
+            "executor_sha256": "9" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+        self.approval = {
+            "action": p.PENDING_RECONCILIATION_ACTION,
+            "scope": p.PENDING_RECONCILIATION_SCOPE,
+            "environment": p.ENVIRONMENT,
+            "operator": "soporte@glmdch", "approved": True,
+            "cut_source_sha": self.intent["source_sha"],
+            "cut_release_asset_sha256": self.intent["release_asset_sha256"],
+            "cut_nonce": self.intent["nonce"],
+            "cut_intent_sha256": p.frozen_sha(self.intent),
+            "old_launcher_sha256": self.intent["old_launcher_sha256"],
+            "new_launcher_sha256": self.intent["new_launcher_sha256"],
+            "recovery_source_sha": self.claim["source_sha"],
+            "recovery_release_asset_sha256":
+                self.claim["release_asset_sha256"],
+            "recovery_manifest_sha256": self.claim["manifest_sha256"],
+            "recovery_executor_sha256": self.claim["executor_sha256"],
+            "nonce": "2" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+
+    def review(self, **kwargs):
+        return self.policy.assess_pending_reconciliation_plan(
+            kwargs.pop("intent", self.intent),
+            kwargs.pop("claim", self.claim),
+            kwargs.pop("approval", self.approval),
+            live_sha256=kwargs.pop("live", self.intent["old_launcher_sha256"]),
+            backup_sha256=kwargs.pop("backup", self.intent["old_launcher_sha256"]),
+            receipt_present=kwargs.pop("receipt", False),
+            now=kwargs.pop("now", 5000),
+            consumed_nonces=kwargs.pop("consumed", ()),
+            **kwargs)
+
+    def test_both_interruption_phases_never_authorize_or_claim_authentication(self):
+        for live, expected in (
+            (self.intent["old_launcher_sha256"], "PENDING_BEFORE_ATOMIC_SWAP"),
+            (self.intent["new_launcher_sha256"], "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT"),
+        ):
+            with self.subTest(phase=expected):
+                result = self.review(live=live)
+                self.assertEqual(
+                    "REVIEWED_PENDING_DUAL_PROVENANCE_NO_EXECUTION",
+                    result["status"])
+                self.assertEqual(expected, result["observed_phase"])
+                self.assertEqual(self.policy.frozen_sha(self.intent),
+                                 result["cut_intent_sha256"])
+                for key in ("may_install", "may_apply", "may_recover",
+                            "reconciliation_complete", "claims_authenticated"):
+                    self.assertIs(result[key], False)
+                for key in ("requires_independent_signed_root_executor",
+                            "requires_new_recovery_bootstrap",
+                            "requires_original_cut_authentication",
+                            "requires_root_journal_and_lock_verification"):
+                    self.assertIs(result[key], True)
+
+    def test_missing_backup_unknown_launcher_and_fake_receipt_refused(self):
+        for kw in ({"backup": "0" * 64},
+                   {"live": "0" * 64},
+                   {"receipt": True},
+                   {"receipt": 0},
+                   {"backup": "not a hash"},
+                   {"intent": {**self.intent, "status":
+                                "LAUNCHER_ATOMIC_SWAP_COMMITTED"}},
+                   {"intent": {**self.intent, "nonce": False}},
+                   {"intent": {**self.intent, "surprise": True}}):
+            with self.subTest(kw=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(**kw)
+
+    def test_tampered_original_and_distinct_B_binding_refused(self):
+        for changed in (
+            {"cut_intent_sha256": "0" * 64},
+            {"cut_source_sha": "0" * 40},
+            {"cut_nonce": "0" * 64},
+            {"recovery_source_sha": self.intent["source_sha"]},
+            {"recovery_executor_sha256": "0" * 64},
+            {"old_launcher_sha256": "0" * 64},
+            {"scope": "API_AND_WEB"},
+            {"approved": False},
+            {"extra": True},
+        ):
+            with self.subTest(changed=changed):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(approval={**self.approval, **changed})
+        with self.assertRaises(self.policy.Blocked):
+            self.review(intent={**self.intent, "new_launcher_sha256": "0" * 64})
+        with self.assertRaises(self.policy.Blocked):
+            self.review(claim={**self.claim, "manifest_sha256": "0" * 64})
+        with self.assertRaises(self.policy.Blocked):
+            self.review(claim={**self.claim, "purpose": "SIGSTORE_VERIFIED"})
+
+    def test_expired_claim_or_approval_replay_and_boolean_clock_refused(self):
+        for change in ({"expires_at": 5000},
+                       {"issued_at": 5001},
+                       {"expires_at": 5901},
+                       {"issued_at": True},
+                       {"expires_at": False}):
+            for packet in ("claim", "approval"):
+                with self.subTest(packet=packet, change=change):
+                    with self.assertRaises(self.policy.Blocked):
+                        self.review(**{
+                            packet: {**getattr(self, packet), **change}})
+        for kw in ({"now": True},
+                   {"consumed": ("2" * 64,)},
+                   {"consumed": ("bad",)},
+                   {"approval": {**self.approval, "nonce":
+                                 self.intent["nonce"]}}):
+            with self.subTest(kw=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(**kw)
+
+
+
 class RootLauncherReversalTransactionTests(unittest.TestCase):
     """Real fsync and os.replace in disposable paths, never physical host."""
 
