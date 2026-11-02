@@ -283,6 +283,120 @@ def assess_delayed_recovery_plan(committed, recovery_claim, approval, *,
     }
 
 
+
+# Interrupted original A is NOT a committed receipt. Unlike delayed rollback,
+# this review binds the original durable intent (not a fabricated commit) to a
+# distinct recovery B. It provides no authorization or executable operations.
+PENDING_RECONCILIATION_SCOPE = (
+    "QA525_LAUNCHER_ONLY_PENDING_RECONCILIATION_NO_API_WEB"
+)
+PENDING_RECONCILIATION_ACTION = "review-pending-root-launcher-reconciliation"
+PENDING_RECONCILIATION_INTENT_FIELDS = frozenset({
+    "status", "source_sha", "release_asset_sha256",
+    "old_launcher_sha256", "new_launcher_sha256", "nonce",
+})
+PENDING_RECONCILIATION_APPROVAL_FIELDS = frozenset({
+    "action", "scope", "environment", "operator", "approved",
+    "cut_source_sha", "cut_release_asset_sha256", "cut_nonce",
+    "cut_intent_sha256", "old_launcher_sha256", "new_launcher_sha256",
+    "recovery_source_sha", "recovery_release_asset_sha256",
+    "recovery_manifest_sha256", "recovery_executor_sha256",
+    "nonce", "issued_at", "expires_at",
+})
+
+
+def assess_pending_reconciliation_plan(intent, recovery_claim, approval, *,
+                                       live_sha256, backup_sha256,
+                                       receipt_present, now,
+                                       consumed_nonces=()):
+    """PURE review for an interrupted A with durable intent and NO receipt.
+
+    A and B must be authenticated by a future independent root verifier,
+    including journal custody, bootstrap source, Sigstore and operator consent.
+    The old A admission may be expired; the B claim and separate B approval
+    must each be fresh. Caller records are UNTRUSTED. Never auto-recover.
+    """
+    require(type(intent) is dict
+            and set(intent) == PENDING_RECONCILIATION_INTENT_FIELDS
+            and intent["status"] == "SWAP_INTENT_NO_DEPLOYMENT"
+            and valid_sha(intent["source_sha"], SHA)
+            and valid_sha(intent["release_asset_sha256"], DIGEST)
+            and all(valid_sha(intent[k], HASH) for k in (
+                "old_launcher_sha256", "new_launcher_sha256", "nonce"))
+            and intent["old_launcher_sha256"] != intent["new_launcher_sha256"],
+            "PENDING_RECONCILIATION_INTENT_INVALID")
+    require(type(receipt_present) is bool and receipt_present is False
+            and valid_sha(live_sha256, HASH)
+            and valid_sha(backup_sha256, HASH)
+            and backup_sha256 == intent["old_launcher_sha256"]
+            and live_sha256 in (
+                intent["old_launcher_sha256"], intent["new_launcher_sha256"]),
+            "PENDING_RECONCILIATION_JOURNAL_OR_LIVE_DRIFT")
+    require(type(recovery_claim) is dict
+            and set(recovery_claim) == DELAYED_RECOVERY_CLAIM_FIELDS
+            and recovery_claim["purpose"] ==
+                "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED"
+            and valid_sha(recovery_claim["source_sha"], SHA)
+            and valid_sha(recovery_claim["release_asset_sha256"], DIGEST)
+            and all(valid_sha(recovery_claim[k], HASH) for k in (
+                "manifest_sha256", "executor_sha256")),
+            "PENDING_RECONCILIATION_B_CLAIM_INVALID")
+    require(type(approval) is dict
+            and set(approval) == PENDING_RECONCILIATION_APPROVAL_FIELDS
+            and approval["action"] == PENDING_RECONCILIATION_ACTION
+            and approval["scope"] == PENDING_RECONCILIATION_SCOPE
+            and approval["environment"] == ENVIRONMENT
+            and approval["operator"] == "soporte@glmdch"
+            and approval["approved"] is True
+            and approval["cut_source_sha"] == intent["source_sha"]
+            and approval["cut_release_asset_sha256"] ==
+                intent["release_asset_sha256"]
+            and approval["cut_nonce"] == intent["nonce"]
+            and approval["cut_intent_sha256"] == frozen_sha(intent)
+            and all(approval[k] == intent[k] for k in (
+                "old_launcher_sha256", "new_launcher_sha256"))
+            and all(approval["recovery_" + k] == recovery_claim[k]
+                    for k in ("source_sha", "release_asset_sha256",
+                              "manifest_sha256", "executor_sha256")),
+            "PENDING_RECONCILIATION_SEPARATE_APPROVAL_REQUIRED")
+    nonce = approval["nonce"]
+    require(valid_sha(nonce, NONCE) and nonce != intent["nonce"]
+            and type(consumed_nonces) in (tuple, list, frozenset)
+            and all(valid_sha(n, NONCE) for n in consumed_nonces)
+            and nonce not in consumed_nonces,
+            "PENDING_RECONCILIATION_NONCE_REPLAY")
+    require(type(now) is int
+            and all(type(packet[k]) is int
+                    for packet in (approval, recovery_claim)
+                    for k in ("issued_at", "expires_at"))
+            and all(packet["issued_at"] <= now < packet["expires_at"]
+                    and 0 < packet["expires_at"] - packet["issued_at"] <= 900
+                    for packet in (approval, recovery_claim)),
+            "PENDING_RECONCILIATION_FRESH_B_REQUIRED")
+    return {
+        "status": "REVIEWED_PENDING_DUAL_PROVENANCE_NO_EXECUTION",
+        "scope": PENDING_RECONCILIATION_SCOPE,
+        "observed_phase": (
+            "PENDING_BEFORE_ATOMIC_SWAP"
+            if live_sha256 == intent["old_launcher_sha256"]
+            else "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT"),
+        "cut_source_sha": intent["source_sha"],
+        "cut_intent_sha256": frozen_sha(intent),
+        "recovery_source_sha": recovery_claim["source_sha"],
+        "recovery_nonce": nonce,
+        "may_install": False,
+        "may_apply": False,
+        "may_recover": False,
+        "reconciliation_complete": False,
+        "claims_authenticated": False,
+        "requires_independent_signed_root_executor": True,
+        "requires_new_recovery_bootstrap": True,
+        "requires_original_cut_authentication": True,
+        "requires_root_journal_and_lock_verification": True,
+    }
+
+
+
 def assess_interrupted_swap(*, old_sha, new_sha, live_sha, backup_sha,
                             pending, source_sha, release_asset_sha256,
                             nonce, intent=None, receipt=None):
