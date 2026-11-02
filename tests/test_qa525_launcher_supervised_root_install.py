@@ -486,7 +486,16 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                 pending = state / ("intent-" + NONCE + ".json")
                 receipt = state / ("receipt-" + NONCE + ".json")
                 backup = state / ("old-" + NONCE + ".bin")
-                if fault or bad_postflight or expired_at_swap:
+                if fault == "after_receipt":
+                    # Committed cut with benign intent residue: history stays
+                    # readable (no permanent block); the cut is not re-run.
+                    self.assertTrue(pending.exists())
+                    self.assertTrue(receipt.exists())
+                    self.assertEqual({NONCE}, m.scan_history())
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_RELEASE_ALREADY_RETAINED_OR_INVALID"):
+                        m.replace_approved()
+                elif fault or bad_postflight or expired_at_swap:
                     self.assertTrue(pending.exists())
                     self.assertTrue(backup.exists())
                     if bad_postflight:
@@ -2167,6 +2176,98 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
             self.run_reversal()
 
 
+
+
+class CommittedResidualIntentTests(unittest.TestCase):
+    """Crash AFTER receipt is durable, BEFORE intent.unlink() (replace_approved)."""
+
+    CHILD = r"""
+import importlib.util, os, signal, sys
+from pathlib import Path
+base, source = Path(sys.argv[1]), Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("qa525_residue_child", source)
+mod = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = mod
+spec.loader.exec_module(mod)
+state = base / "state"
+old = b"old-root-owned-synthetic-launcher\n"
+nonce = "b" * 64
+intent = {"status": "SWAP_INTENT_NO_DEPLOYMENT", "source_sha": "a" * 40,
+          "release_asset_sha256": "sha256:" + "c" * 64,
+          "old_launcher_sha256": mod.digest(old),
+          "new_launcher_sha256": "d" * 64, "nonce": nonce}
+mod.write_once(state / ("intent-" + nonce + ".json"), mod.json_bytes(intent))
+mod.write_once(state / ("old-" + nonce + ".bin"), old, mode=0o700)
+mod.write_once(state / ("receipt-" + nonce + ".json"), mod.json_bytes(
+    {**intent, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+     "candidate_operator_sha256": "e" * 64}))
+os.kill(os.getpid(), signal.SIGKILL)
+"""
+
+    def killed_state(self, td):
+        import signal
+        import subprocess
+        base = Path(td)
+        (base / "state").mkdir(mode=0o700)
+        child = subprocess.run([sys.executable, "-B", "-c", self.CHILD,
+                                str(base), str(SOURCE)],
+                               capture_output=True, text=True, timeout=15)
+        self.assertEqual(-signal.SIGKILL, child.returncode,
+                         msg=child.stdout + child.stderr)
+        return base / "state"
+
+    def scan(self, state):
+        with patch.object(m, "STATE", state), patch.object(m, "root_chain"), \
+             patch.object(m, "read_bound", side_effect=(
+                 lambda path, maximum=4096, exact_mode=None:
+                 Path(path).read_bytes())):
+            return m.scan_history()
+
+    def test_real_sigkill_after_receipt_leaves_readable_committed_history(self):
+        with tempfile.TemporaryDirectory(prefix="qa525-residue-") as td:
+            state = self.killed_state(td)
+            self.assertTrue((state / ("intent-" + NONCE + ".json")).is_file())
+            self.assertEqual({NONCE}, self.scan(state))
+            # Nothing was deleted or renamed by the scan.
+            self.assertEqual(3, len(list(state.iterdir())))
+
+    def test_residue_with_any_differing_receipt_field_stays_blocked(self):
+        for field, value in (("source_sha", "f" * 40),
+                             ("release_asset_sha256", "sha256:" + "f" * 64),
+                             ("new_launcher_sha256", "f" * 64),
+                             ("old_launcher_sha256", "f" * 64)):
+            with self.subTest(field=field), \
+                 tempfile.TemporaryDirectory(prefix="qa525-residue-") as td:
+                state = self.killed_state(td)
+                receipt = state / ("receipt-" + NONCE + ".json")
+                data = json.loads(receipt.read_text())
+                data[field] = value
+                receipt.write_bytes(m.json_bytes(data))
+                with self.assertRaises(m.Blocked):
+                    self.scan(state)
+
+    def test_residue_without_receipt_or_backup_or_valid_intent_stays_blocked(self):
+        for drop in ("receipt-" + NONCE + ".json", "old-" + NONCE + ".bin"):
+            with self.subTest(drop=drop), \
+                 tempfile.TemporaryDirectory(prefix="qa525-residue-") as td:
+                state = self.killed_state(td)
+                (state / drop).unlink()
+                with self.assertRaisesRegex(
+                        m.Blocked, "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION|"
+                                   "ROOT_LAUNCHER_INCOMPLETE_JOURNAL"):
+                    self.scan(state)
+        for mutate in ({"status": "SWAP_INTENT_X"}, {"nonce": "9" * 64},
+                       {"extra": "field"}):
+            with self.subTest(mutate=mutate), \
+                 tempfile.TemporaryDirectory(prefix="qa525-residue-") as td:
+                state = self.killed_state(td)
+                intent = state / ("intent-" + NONCE + ".json")
+                data = json.loads(intent.read_text())
+                data.update(mutate)
+                intent.write_bytes(m.json_bytes(data))
+                with self.assertRaisesRegex(
+                        m.Blocked, "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION"):
+                    self.scan(state)
 
 
 if __name__ == "__main__":

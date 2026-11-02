@@ -1,0 +1,98 @@
+{
+  "schema_version": "pmgm.qa525.readonly.snapshot.v1",
+  "document_type": "HISTORICAL_READ_ONLY_OBSERVATION_NOT_AUTHORIZATION",
+  "observed_date": "2026-11-02",
+  "generated_by": "ChatGPT IA - documentary connector verification",
+  "provenance_rule": "GitHub and Drive must be rechecked at each new session; this record never substitutes for live host evidence",
+  "automation_status": "NOT_AUTOMATED_NOT_SIGNED_NOT_DEPLOYED",
+  "environment": {
+    "name": "QA_SYNTHETIC",
+    "single_physical_host": "glmdch",
+    "allowed_host_names": [
+      "glmdch"
+    ],
+    "physical_host_readback_this_snapshot": false,
+    "production_authorized": false,
+    "main_promotion_authorized": false
+  },
+  "github": {
+    "repository": "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio",
+    "observed_dev_sha": "0d045f75e62d283987a0fa5e3d293918e113c811",
+    "observed_main_sha": "6dfb9546a4873baff15955cf86abfd7d47e3d111",
+    "launcher_recovery_pr": {
+      "number": 838,
+      "head_sha": "49718753028c27bb7ac6fc81b873deb4b62a1b19",
+      "state": "OPEN_DRAFT_NOT_MERGED",
+      "ci_workflows_exact_head": "8_OF_8_COMPLETED_SUCCESS",
+      "independent_approved_reviews": 0,
+      "code_status": "SANDBOX_AND_PURE_CONTRACTS_NOT_PHYSICAL_RECOVERY"
+    },
+    "original_signed_release": {
+      "source_sha": "0d045f75e62d283987a0fa5e3d293918e113c811",
+      "asset_sha256": "2ff0829580974b4db5c1d055f33b05c8b5ada735618459c87308b48e697ef25c",
+      "asset_bytes": 110451796,
+      "contains_pr_838_changes": false
+    }
+  },
+  "physical_qa": {
+    "verification_level": "NOT_REINSPECTED_IN_THIS_SNAPSHOT",
+    "launcher": "LAST_OPERATOR_EVIDENCE_OLD_LAUNCHER_NO_CURRENT_READBACK",
+    "api_web": "LAST_OPERATOR_EVIDENCE_APPLIED_41d9c490d138419c7286445f37e7aeddf0d1b8d5_NOT_REINSPECTED",
+    "pending_prepared": "LAST_OPERATOR_EVIDENCE_A184936D_PREPARED_EXPIRED_NOT_APPLIED",
+    "any_fresh_application": "NOT_CLAIMED",
+    "uat": "NOT_COMPLETED",
+    "issues_under_test": [
+      "VER_COMO_HTTP_415",
+      "TALLER_00_SUPPORT",
+      "CREAR_USUARIO",
+      "ASIGNAR_PERFILES"
+    ]
+  },
+  "backup_g6": {
+    "snapshot_id": "20261102T110545Z",
+    "archive_sha256": "772a645f09823648ed25a287f837653aef4cced2ba95413422d8f20f65a9d915",
+    "encrypted_offhost_copy": "VERIFIED_BY_PRIOR_HASH_AND_CURRENT_METADATA_ONLY",
+    "same_host_isolated_restore": "PASS_PRIOR_OPERATOR_EVIDENCE_POSTGRES_2DB_GLOBALS_AND_SILO_CLEANUP",
+    "disaster_restore_other_host": "PENDING",
+    "iam_restore": "NOT_INCLUDED",
+    "atomic_cross_resource_snapshot": "NOT_PROVEN",
+    "validity_for_future_cut": "REASSESS_FRESHNESS_BEFORE_APPROVAL"
+  },
+  "decision": {
+    "launcher_physical_cut": "NO_GO",
+    "root_bootstrap": "DO_NOT_EXECUTE",
+    "api_web_physical_update": "ON_HOLD_SEPARATE_APPROVAL_REQUIRED",
+    "blockers": [
+      "INDEPENDENT_ROOT_CODE_SECURITY_REVIEW_MISSING",
+      "A_PENDING_NO_RECEIPT_ROOT_B_RECOVERY_AND_AUTHENTICATED_HISTORY_NOT_PROVEN",
+      "A_COMMITTED_WITH_RESIDUAL_INTENT_SIGNED_CLEANUP_NOT_PROVEN",
+      "PRE_ROOT_TRUST_AND_DUAL_SIGNED_RELEASE_A_B_NOT_AUTHORIZED",
+      "NO_VERIFIED_FRESH_HOST_PREFLIGHT_FOR_THIS_ACT"
+    ],
+    "next_allowed_action": "OBTAIN_INDEPENDENT_REVIEW_OF_PR_838_AND_APPROVED_RECOVERY_DESIGN_WITH_INERT_TESTS; NO HOST MUTATION",
+    "post_gate_sequence": "NEW_DEV_SHA_SIGNED_RELEASE_ONLY_AFTER_APPROVED_REVIEW; CONTEMPORARY_G6_AND_LAUNCHER_ONLY_AUTHORIZATION; SUPERVISED_CUT; SEPARATE_API_WEB_ACT; AUTHENTICATED_SMOKE_AND_UAT",
+    "restrictions": [
+      "DO_NOT_MERGE_MAIN",
+      "DO_NOT_USE_SRV01",
+      "DO_NOT_AUTO_APPROVE",
+      "DO_NOT_EXECUTE_RAW_PR_CODE_AS_ROOT",
+      "DO_NOT_CLEAR_OLD_JOURNALS_OR_BYPASS_BLOCKED_ROOT_WRITE",
+      "DO_NOT_REPEAT_EF100"
+    ]
+  },
+  "source_links": {
+    "primary_qa_issue": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525",
+    "launcher_blocker_issue": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/822",
+    "readiness_automation_issue": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/821",
+    "candidate_pr": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/838",
+    "exact_head_evidence": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6576812743",
+    "recovery_matrix": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/822#issuecomment-6576964753"
+  },
+  "consumption_rules": [
+    "ALL_VALUES_ARE_POINT_IN_TIME_EVIDENCE; NEVER CLAIM LIVE_STATUS_WITHOUT_FRESH_TOOL_OR_HOST_READBACK",
+    "DO_NOT_INFER_HOST_DEPLOYMENT_FROM_CI_RELEASE_OR_SIGNED_ARTIFACT",
+    "IF_PHYSICAL_FIELDS_HAVE_NO_NEW_EVIDENCE_KEEP_UNKNOWN_OR_LAST_OBSERVED",
+    "ANY_CHANGE_REQUIRES_NEW_ISSUE_PR_REVIEW_AND_APPROVAL_PROPORTIONATE_TO_RISK",
+    "THIS_FILE_IS_NEITHER_A_SIGNATURE_NOR_AN_APPROVAL_NOR_A_COMPLETE_COLLECTOR"
+  ]
+}
