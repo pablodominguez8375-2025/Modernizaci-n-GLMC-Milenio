@@ -1730,6 +1730,100 @@ class PendingReconciliationPlanPolicyTests(unittest.TestCase):
 
 
 
+
+
+class CommittedIntentResiduePolicyTests(unittest.TestCase):
+    """SIGKILL after committed receipt but before removing original intent."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = (ROOT / "scripts/qa/operators" /
+                  "qa525-launcher-replacement-contract.py")
+        spec = importlib.util.spec_from_file_location(
+            "qa525_committed_intent_residue_review", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        self.a = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "nonce": "1" * 64,
+        }
+        self.receipt = {
+            **self.a, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": "e" * 64,
+        }
+
+    def review(self, *, a=None, receipt=None, backup=None, live=None):
+        return self.policy.assess_committed_intent_residue(
+            self.a if a is None else a,
+            self.receipt if receipt is None else receipt,
+            old_backup_sha256=(
+                self.a["old_launcher_sha256"] if backup is None else backup),
+            live_launcher_sha256=(
+                self.a["new_launcher_sha256"] if live is None else live),
+        )
+
+    def test_durable_receipt_with_unremoved_intent_has_no_authority(self):
+        result = self.review()
+        self.assertEqual(
+            "REVIEWED_COMMITTED_CUT_INTENT_RESIDUE_NO_EXECUTION",
+            result["status"])
+        self.assertEqual(
+            "POST_COMMITTED_RECEIPT_PRE_INTENT_CLEANUP",
+            result["observed_phase"])
+        self.assertEqual(
+            self.policy.frozen_sha(self.receipt),
+            result["committed_receipt_sha256"])
+        self.assertTrue(result["original_committed_receipt_preserved"])
+        for name in (
+            "may_install", "may_apply", "may_recover", "may_delete_intent",
+            "may_rollback", "reconciliation_complete",
+        ):
+            self.assertIs(result[name], False)
+        for name in (
+            "requires_independent_root_custody_authentication",
+            "requires_signed_cleanup_approval",
+            "requires_locked_idempotent_journal_reconciliation",
+        ):
+            self.assertIs(result[name], True)
+
+    def test_never_conflate_committed_with_uncommitted_cut(self):
+        for changed in (
+            {"status": "SWAP_INTENT_NO_DEPLOYMENT"},
+            {"source_sha": "f" * 40},
+            {"release_asset_sha256": "sha256:" + "0" * 64},
+            {"nonce": "2" * 64},
+            {"old_launcher_sha256": "0" * 64},
+            {"new_launcher_sha256": "0" * 64},
+            {"candidate_operator_sha256": "wrong"},
+            {"extra": True},
+        ):
+            with self.subTest(change=changed):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(receipt={**self.receipt, **changed})
+
+    def test_old_live_missing_backup_or_forged_intent_fails_closed(self):
+        for kw in (
+            {"live": self.a["old_launcher_sha256"]},
+            {"live": "0" * 64},
+            {"backup": "0" * 64},
+            {"backup": True},
+            {"a": {**self.a, "nonce": "2" * 64}},
+            {"a": {**self.a, "status": "FAKE_SUCCESS"}},
+            {"a": {**self.a, "extra": "unexpected"}},
+        ):
+            with self.subTest(change=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(**kw)
+
+
+
 class PendingReceiptReviewTests(unittest.TestCase):
     """Receipt B can describe reconciliation, never authenticate or authorize."""
 
