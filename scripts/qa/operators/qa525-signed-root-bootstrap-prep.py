@@ -403,10 +403,14 @@ def _prepare_locked(envelope, sha, expected, verifier_sha, *, now=None,
 
 def read_historical_private(path, *, limit=16_384, mode=0o600):
     """Bounded root-only read; historical packet is NOT current authority."""
-    root_owned(path, mode=mode)
-    before = path.lstat()
-    require(0 < before.st_size <= limit, "RECOVERY_A_EVIDENCE_SIZE_INVALID")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        root_owned(path, mode=mode)
+        before = path.lstat()
+        require(0 < before.st_size <= limit,
+                "RECOVERY_A_EVIDENCE_SIZE_INVALID")
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        raise Blocked("RECOVERY_A_EVIDENCE_MISSING_OR_UNREADABLE") from None
     try:
         st = os.fstat(fd)
         require(st.st_uid == 0 and st.st_nlink == 1
