@@ -282,7 +282,7 @@ class DelayedRecoveryBootstrapTests(unittest.TestCase):
     verify = RootBootstrapTests.verify
 
     def setUp(self):
-        super().setUp()
+        RootBootstrapTests.setUp(self)
         self.pending = Path(self.context.name) / "pending"
         self.pending.mkdir(mode=0o700)
         self.launcher = Path(self.context.name) / "bin" / "pmgm-qa-update"
