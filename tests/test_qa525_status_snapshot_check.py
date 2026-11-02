@@ -87,6 +87,25 @@ class QA525StatusSnapshotTests(unittest.TestCase):
         value["physical_qa"]["uat"] = "PASS"
         self.assert_blocked(value, "PHYSICAL_HOST_NOT_PROVEN")
 
+    def test_spoofed_last_observed_launcher_or_api_web_blocks(self):
+        value = self.valid()
+        value["physical_qa"]["launcher"] = "INSTALLED_WITHOUT_PROOF"
+        self.assert_blocked(value, "PHYSICAL_HOST_NOT_PROVEN")
+        value = self.valid()
+        value["physical_qa"]["api_web"] = "RUNNING_CURRENT_VERSION"
+        self.assert_blocked(value, "PHYSICAL_HOST_NOT_PROVEN")
+        value = self.valid()
+        value["physical_qa"]["pending_prepared"] = "APPLIED"
+        self.assert_blocked(value, "PHYSICAL_HOST_NOT_PROVEN")
+
+    def test_forged_g6_offhost_or_same_host_credential_claim_blocks(self):
+        value = self.valid()
+        value["backup_g6"]["encrypted_offhost_copy"] = "RESTORE_ALL_VERIFIED"
+        self.assert_blocked(value, "G6_OVERCLAIM_OR_INVALID_HASH")
+        value = self.valid()
+        value["backup_g6"]["same_host_isolated_restore"] = "IAM_AND_ALL_DB_PASS"
+        self.assert_blocked(value, "G6_OVERCLAIM_OR_INVALID_HASH")
+
     def test_false_disaster_recovery_or_iam_claims_block(self):
         value = self.valid()
         value["backup_g6"]["disaster_restore_other_host"] = "PASS"
