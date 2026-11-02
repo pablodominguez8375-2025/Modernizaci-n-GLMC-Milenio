@@ -345,8 +345,9 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
             store = base / "signed"
             state = base / "journal"
             prepare = base / "prepare"
+            recovery = base / "recovery"
             live_dir = base / "bin"
-            for item in (store, state, prepare, live_dir):
+            for item in (store, state, prepare, recovery, live_dir):
                 item.mkdir(mode=0o700)
             launcher = live_dir / "pmgm-qa-update"
             launcher.write_bytes(old)
@@ -420,7 +421,8 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
             with ExitStack() as stack:
                 for key, value in (
                     ("LAUNCHER", launcher), ("STORE", store), ("STATE", state),
-                    ("PREFLIGHT_STATE", prepare)):
+                    ("PREFLIGHT_STATE", prepare),
+                    ("RECOVERY_STATE", recovery)):
                     stack.enter_context(patch.object(m, key, value))
                 stack.enter_context(patch.object(m, "require_host"))
                 stack.enter_context(patch.object(m, "root_chain"))
