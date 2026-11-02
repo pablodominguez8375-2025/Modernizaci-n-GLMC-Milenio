@@ -35,6 +35,8 @@ RECOVERY_APPROVAL = Path("/etc/pmgm/qa525-launcher-rollback.json")
 # Independently provisioned by a PRE-EXISTING trusted Sigstore bootstrap.
 # This installer may check it, but MUST NOT create/refresh this admission.
 ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
+RECOVERY_B_ADMISSION = Path("/etc/pmgm/qa525-recovery-bootstrap-admission.json")
+RECOVERY_B_STATUS = "EXTERNAL_SIGSTORE_RECOVERY_B_ADMISSION_ONLY"
 BOOTSTRAP_STATUS = "EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY"
 SHA = re.compile(r"[a-f0-9]{40}")
 NONCE = re.compile(r"[a-f0-9]{64}")
@@ -151,6 +153,66 @@ def bootstrap_trusted_sources():
                 packet["files"][str(source)],
                 "ROOT_BOOTSTRAP_SIGNED_SOURCE_HASH_MISMATCH")
     return packet
+
+
+
+
+def bootstrap_recovery_b_trusted_sources():
+    """Authenticate separately signed recovery B, never revive expired A.
+
+    Trusted root bootstrap B must have signed and durably emitted its own
+    fresh B admission *before* this separately pinned root file is executed.
+    This check is necessary but is NOT sufficient to authorize recovery.
+    """
+    require_host()
+    root_chain(RECOVERY_B_ADMISSION, exact_mode=0o600)
+    try:
+        packet = json.loads(
+            read_bound(RECOVERY_B_ADMISSION, maximum=16_384,
+                       exact_mode=0o600),
+            object_pairs_hook=unique_json_fields)
+    except (ValueError, TypeError, UnicodeError):
+        raise Blocked("ROOT_RECOVERY_B_ADMISSION_JSON_INVALID") from None
+    require(type(packet) is dict and set(packet) == {
+                "status", "cut_source_sha", "cut_release_asset_sha256",
+                "cut_manifest_sha256", "cut_nonce", "cut_intent_sha256",
+                "cut_old_launcher_sha256", "cut_new_launcher_sha256",
+                "source_sha", "release_asset_sha256", "manifest_sha256",
+                "trusted_verifier_sha256", "files", "issued_at", "expires_at"}
+            and packet["status"] == RECOVERY_B_STATUS
+            and all(type(packet[k]) is str and
+                    SHA.fullmatch(packet[k]) is not None for k in (
+                        "cut_source_sha", "source_sha"))
+            and packet["source_sha"] != packet["cut_source_sha"]
+            and all(type(packet[k]) is str and re.fullmatch(
+                        r"sha256:[0-9a-f]{64}", packet[k]) is not None
+                    for k in ("cut_release_asset_sha256",
+                              "release_asset_sha256"))
+            and packet["release_asset_sha256"] !=
+                packet["cut_release_asset_sha256"]
+            and all(type(packet[k]) is str and
+                    NONCE.fullmatch(packet[k]) is not None
+                    for k in ("cut_manifest_sha256", "cut_nonce",
+                              "cut_intent_sha256", "cut_old_launcher_sha256",
+                              "cut_new_launcher_sha256", "manifest_sha256",
+                              "trusted_verifier_sha256"))
+            and packet["cut_old_launcher_sha256"] !=
+                packet["cut_new_launcher_sha256"]
+            and type(packet["files"]) is dict,
+            "ROOT_RECOVERY_B_ADMISSION_FIELDS_INVALID")
+    require_bootstrap_fresh(packet, int(time.time()))
+    require(set(packet["files"]) == {str(item) for item in SOURCES}
+            and all(type(v) is str and NONCE.fullmatch(v) is not None
+                    for v in packet["files"].values()),
+            "ROOT_RECOVERY_B_SOURCE_MANIFEST_INVALID")
+    for source in SOURCES:
+        root_chain(source, exact_mode=0o600)
+        require(digest(read_bound(source, maximum=2_000_000,
+                                  exact_mode=0o600)) ==
+                packet["files"][str(source)],
+                "ROOT_RECOVERY_B_SOURCE_HASH_MISMATCH")
+    return packet
+
 
 
 def verify_bootstrap_binding(plan):
@@ -437,7 +499,7 @@ def scan_history(*, pending_nonce=None):
     return consumed
 
 
-def inspect_pending_reconciliation():
+def inspect_pending_reconciliation(*, expected_b_packet=None):
     """Classify one unfinished durable journal WITHOUT authorizing any action.
 
     This is a read-only diagnostic to be run by a separately authenticated,
@@ -497,6 +559,20 @@ def inspect_pending_reconciliation():
         old_bytes = read_bound(backup, exact_mode=0o700)
         require(digest(old_bytes) == act["old_launcher_sha256"],
                 "ROOT_RECONCILIATION_BACKUP_HASH_MISMATCH")
+        if expected_b_packet is not None:
+            require(type(expected_b_packet) is dict
+                    and expected_b_packet.get("cut_source_sha") ==
+                        act["source_sha"]
+                    and expected_b_packet.get("cut_release_asset_sha256") ==
+                        act["release_asset_sha256"]
+                    and expected_b_packet.get("cut_nonce") == nonce
+                    and expected_b_packet.get("cut_intent_sha256") ==
+                        digest(json_bytes(act).strip())
+                    and expected_b_packet.get("cut_old_launcher_sha256") ==
+                        act["old_launcher_sha256"]
+                    and expected_b_packet.get("cut_new_launcher_sha256") ==
+                        act["new_launcher_sha256"],
+                    "ROOT_RECOVERY_B_NOT_BOUND_TO_PENDING_A")
         current_hash = digest(read_bound(LAUNCHER, exact_mode=0o700))
         require(current_hash in (
                     act["old_launcher_sha256"], act["new_launcher_sha256"]),
@@ -835,9 +911,18 @@ def main(argv=None):
     choice.add_argument("--replace-approved", action="store_true")
     choice.add_argument("--inspect-pending", action="store_true")
     choice.add_argument("--rollback-approved", action="store_true")
+    choice.add_argument("--inspect-recovery-b", action="store_true")
     args = parser.parse_args(argv)
     try:
-        if args.inspect_pending:
+        if args.inspect_recovery_b:
+            b = bootstrap_recovery_b_trusted_sources()
+            report = inspect_pending_reconciliation(expected_b_packet=b)
+            require_bootstrap_fresh(b, int(time.time()))
+            report["recovery_b_signed_source_admitted"] = True
+            report["may_apply"] = False
+            report["may_recover"] = False
+            print(json.dumps(report, sort_keys=True))
+        elif args.inspect_pending:
             # An inspection is not permission to execute unverified Python:
             # require the same externally provisioned source admission first.
             bootstrap_trusted_sources()
@@ -852,7 +937,7 @@ def main(argv=None):
         # reconciliation; never automatically replay or alter Docker/identity.
         code = str(exc) if isinstance(exc, Blocked) else "ROOT_SIGNED_LAUNCHER_ABORTED"
         print(json.dumps({"status": ("BLOCKED_QA525_LAUNCHER_INSPECTION"
-                                     if args.inspect_pending else
+                                     if (args.inspect_pending or args.inspect_recovery_b) else
                                      "BLOCKED_QA525_LAUNCHER_ROLLBACK"
                                      if args.rollback_approved else
                                      "BLOCKED_QA525_LAUNCHER_REPLACE"),
