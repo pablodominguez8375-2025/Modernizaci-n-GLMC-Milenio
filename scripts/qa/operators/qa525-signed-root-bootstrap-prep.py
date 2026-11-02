@@ -648,10 +648,23 @@ def main(argv=None):
     p.add_argument("--source-sha", required=True)
     p.add_argument("--expected-zip-sha256", required=True)
     p.add_argument("--trusted-bootstrap-sha256", required=True)
+    p.add_argument("--prepare-recovery-b", action="store_true")
+    p.add_argument("--cut-nonce")
     args = p.parse_args(argv)
     try:
-        report = prepare(args.verified_envelope, args.source_sha,
-                         args.expected_zip_sha256, args.trusted_bootstrap_sha256)
+        if args.prepare_recovery_b:
+            require(args.cut_nonce is not None,
+                    "RECOVERY_BOOTSTRAP_CUT_NONCE_REQUIRED")
+            report = prepare_delayed_recovery(
+                args.verified_envelope, args.source_sha,
+                args.expected_zip_sha256, args.trusted_bootstrap_sha256,
+                args.cut_nonce)
+        else:
+            require(args.cut_nonce is None,
+                    "RECOVERY_BOOTSTRAP_CUT_NONCE_WITHOUT_B_MODE")
+            report = prepare(args.verified_envelope, args.source_sha,
+                             args.expected_zip_sha256,
+                             args.trusted_bootstrap_sha256)
         print(json.dumps(report, sort_keys=True))
         return 0
     except (Blocked, OSError, ValueError, TypeError, RuntimeError,
