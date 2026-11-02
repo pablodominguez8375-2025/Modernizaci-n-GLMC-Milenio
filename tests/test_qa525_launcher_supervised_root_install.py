@@ -894,6 +894,163 @@ class ReadOnlyDiagnosticCliTests(unittest.TestCase):
             inspect.assert_not_called()
 
 
+
+
+class RecoveryBAdmissionReviewTests(unittest.TestCase):
+    """B-only independently admitted byte set; synthetic root guards only."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="qa525-admission-B-")
+        self.addCleanup(self.temp.cleanup)
+        base = Path(self.temp.name)
+        self.sources = tuple(base / ("signed-B-" + str(i) + ".py")
+                             for i in range(12))
+        for i, path in enumerate(self.sources):
+            path.write_bytes(("signed-source-B-%02d" % i).encode())
+            path.chmod(0o600)
+        self.admission = base / "B-admission.json"
+        self.packet = {
+            "status": m.RECOVERY_B_STATUS,
+            "cut_source_sha": "a" * 40,
+            "cut_release_asset_sha256": "sha256:" + "b" * 64,
+            "cut_manifest_sha256": "c" * 64,
+            "cut_nonce": "1" * 64,
+            "cut_intent_sha256": "d" * 64,
+            "cut_old_launcher_sha256": "e" * 64,
+            "cut_new_launcher_sha256": "f" * 64,
+            "source_sha": "9" * 40,
+            "release_asset_sha256": "sha256:" + "8" * 64,
+            "manifest_sha256": "7" * 64,
+            "trusted_verifier_sha256": "6" * 64,
+            "files": {str(p): m.digest(p.read_bytes())
+                      for p in self.sources},
+            "issued_at": 100, "expires_at": 900,
+        }
+        self.write_packet()
+
+    def write_packet(self):
+        self.admission.write_bytes(m.json_bytes(self.packet))
+        self.admission.chmod(0o600)
+
+    def check(self):
+        with patch.object(m, "RECOVERY_B_ADMISSION", self.admission), \
+             patch.object(m, "SOURCES", self.sources), \
+             patch.object(m, "require_host"), \
+             patch.object(m, "root_chain"), \
+             patch.object(m, "read_bound",
+                          side_effect=lambda p, maximum=4096, exact_mode=None:
+                          Path(p).read_bytes()), \
+             patch.object(m.time, "time", return_value=500):
+            return m.bootstrap_recovery_b_trusted_sources()
+
+    def test_valid_B_packet_checks_every_attested_member_before_import(self):
+        packet = self.check()
+        self.assertEqual(self.packet, packet)
+        self.assertEqual(m.RECOVERY_B_STATUS, packet["status"])
+
+    def test_B_packet_expiry_bad_source_and_A_alias_fail_closed(self):
+        for mutation in (
+            {"expires_at": 500},
+            {"issued_at": 501},
+            {"expires_at": 1001},
+            {"source_sha": self.packet["cut_source_sha"]},
+            {"release_asset_sha256":
+             self.packet["cut_release_asset_sha256"]},
+            {"cut_nonce": "bad"},
+            {"cut_intent_sha256": "bad"},
+            {"extra": "forbidden"},
+            {"status": "EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY"},
+        ):
+            with self.subTest(mutation=mutation):
+                baseline = dict(self.packet)
+                self.packet.update(mutation)
+                self.write_packet()
+                try:
+                    with self.assertRaises(m.Blocked):
+                        self.check()
+                finally:
+                    self.packet = baseline
+        self.write_packet()
+
+    def test_tampered_B_member_and_extra_manifest_are_rejected(self):
+        self.sources[0].write_bytes(b"tampered")
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_B_SOURCE_HASH_MISMATCH"):
+            self.check()
+        self.sources[0].write_bytes(b"signed-source-B-00")
+        self.packet["files"]["extra.py"] = "0" * 64
+        self.write_packet()
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_B_SOURCE_MANIFEST_INVALID"):
+            self.check()
+
+
+class RecoveryBPendingJournalReviewTests(unittest.TestCase):
+    """B admission binding is checked under five shared read-only locks."""
+
+    def test_B_admission_cannot_bind_to_different_A_intent(self):
+        with tempfile.TemporaryDirectory(prefix="qa525-b-journal-") as td:
+            base = Path(td)
+            state = base / "journal"
+            state.mkdir(mode=0o700)
+            launcher = base / "pmgm-qa-update"
+            old, new = b"old B-recovery test\n", b"new B-recovery test\n"
+            launcher.write_bytes(new)
+            launcher.chmod(0o700)
+            intent = {
+                "status": "SWAP_INTENT_NO_DEPLOYMENT",
+                "source_sha": "a" * 40,
+                "release_asset_sha256": "sha256:" + "b" * 64,
+                "old_launcher_sha256": m.digest(old),
+                "new_launcher_sha256": m.digest(new),
+                "nonce": "1" * 64,
+            }
+            (state / ("intent-" + intent["nonce"] + ".json")).write_bytes(
+                m.json_bytes(intent))
+            (state / ("old-" + intent["nonce"] + ".bin")).write_bytes(old)
+            b = {
+                "cut_source_sha": intent["source_sha"],
+                "cut_release_asset_sha256":
+                    intent["release_asset_sha256"],
+                "cut_nonce": intent["nonce"],
+                "cut_intent_sha256":
+                    m.digest(m.json_bytes(intent).strip()),
+                "cut_old_launcher_sha256": intent["old_launcher_sha256"],
+                "cut_new_launcher_sha256": intent["new_launcher_sha256"],
+            }
+            original = {p.name: p.read_bytes() for p in state.iterdir()}
+            with patch.object(m, "STATE", state), \
+                 patch.object(m, "LAUNCHER", launcher), \
+                 patch.object(m, "require_host"), \
+                 patch.object(m, "root_chain"), \
+                 patch.object(m, "all_five_locks",
+                              return_value=nullcontext()) as locks, \
+                 patch.object(m, "read_bound",
+                              side_effect=lambda path, maximum=4096,
+                                  exact_mode=None: Path(path).read_bytes()):
+                report = m.inspect_pending_reconciliation(
+                    expected_b_packet=b)
+                self.assertEqual("POST_ATOMIC_SWAP", report["observed_phase"])
+                self.assertFalse(report["may_apply"])
+                for key, val in (
+                    ("cut_source_sha", "f" * 40),
+                    ("cut_intent_sha256", "0" * 64),
+                    ("cut_old_launcher_sha256", "0" * 64),
+                    ("cut_nonce", "9" * 64),
+                ):
+                    with self.subTest(key=key):
+                        with self.assertRaisesRegex(
+                                m.Blocked,
+                                "ROOT_RECOVERY_B_NOT_BOUND_TO_PENDING_A"):
+                            m.inspect_pending_reconciliation(
+                                expected_b_packet={**b, key: val})
+                self.assertEqual(original, {
+                    p.name: p.read_bytes() for p in state.iterdir()})
+                self.assertEqual("new B-recovery test\n",
+                                 launcher.read_text())
+                self.assertEqual(5, locks.call_count)
+
+
 class ReadOnlyPendingJournalTests(unittest.TestCase):
     """Never resume or roll back based solely on an on-disk journal."""
 
