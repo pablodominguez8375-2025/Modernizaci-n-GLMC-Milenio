@@ -1006,6 +1006,16 @@ def rollback_approved():
                 and digest(json_bytes(receipt).rstrip(b"\n")) ==
                     packet["cut_receipt_sha256"],
                 "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT")
+        require(
+            approval.get("cut_receipt_sha256") ==
+                packet["cut_receipt_sha256"]
+            and approval.get("recovery_source_sha") ==
+                packet["source_sha"]
+            and approval.get("recovery_release_asset_sha256") ==
+                packet["release_asset_sha256"]
+            and approval.get("recovery_manifest_sha256") ==
+                packet["manifest_sha256"],
+            "ROOT_REVERSAL_APPROVAL_B_IDENTITY_MISMATCH")
         approval_copy = dict(approval)
         plan = assess_root_reversal(contract, 
             receipt, approval, current_launcher_sha256=digest(current),
@@ -1057,7 +1067,8 @@ def rollback_approved():
             receipt, last_approval, current_launcher_sha256=digest(
                 read_bound(LAUNCHER, exact_mode=0o700)),
             backup_sha256=digest(read_bound(backup_path, exact_mode=0o700)),
-            pending=False, now=int(time.time()))
+            pending=False, now=int(time.time()),
+            consumed_nonces=tuple(sorted(consumed)))
         require(last["recovery_nonce"] == nonce,
                 "ROOT_REVERSAL_NONCE_CHANGED_BEFORE_SWAP")
         os.replace(staged, LAUNCHER)

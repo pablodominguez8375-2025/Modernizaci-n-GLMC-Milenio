@@ -2,6 +2,42 @@
 
 **Status: BLOCKED FOR PHYSICAL EXECUTION.** Approved as a DOCUMENTARY HANDOFF ONLY when reviewed. Source: Issue #822, PR #834, proposed ADR `docs/adr/ADR-qa525-signed-root-bootstrap-and-recovery.md`. This runbook **is not itself authorization** for any privileged action.
 
+## QA525 — Adenda de revisión 02-11-2026 (PR #838, todavía DRAFT)
+
+**El texto histórico más abajo describe etapas anteriores y no autoriza ejecutar.**
+La PR #840 P0-1 se integró a `dev` en `ed05a8e95cde07d09dc1d6a5260f61fa5346ec47`.
+PR #838 desarrolla P0-3 (rollback B para A COMMITTED, con A vencida) y P0-4
+(consumo duradero del nonce desde receipt B y archivo `.superseded`).
+Toda revisión debe referirse al **HEAD vivo exacto**, con CI completo y dictamen
+independiente de Claude. No existe todavía una release integrada/firmada de PR838
+ni confianza independiente PRE-root demostrada en `glmdch`; no ejecutar.
+
+**Aprobación de REVERSIÓN B (separada del permiso de reemplazo A):**
+la autorización privada root0600 `/etc/pmgm/qa525-launcher-rollback.json`
+debe contener todos los campos heredados de la aprobación original
+(`action=rollback-root-launcher-supervised`,
+`scope=QA525_LAUNCHER_ONLY_RECOVERY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION`,
+`environment=QA_GLMDCH_ONLY`, `operator=soporte@glmdch`,
+`approved=true`, `cut_nonce`, nonce nuevo B, `source_sha`,
+`release_asset_sha256`, `old_launcher_sha256`,
+`new_launcher_sha256`, `issued_at`, `expires_at`) **Y**:
+`cut_receipt_sha256`, `recovery_source_sha`,
+`recovery_release_asset_sha256`, `recovery_manifest_sha256`.
+Estos cuatro vínculos nuevos deben coincidir *exactamente* con la admisión B
+verificada, y el hash del recibo original autenticado. El contrato rechaza
+campos adicionales, identidades B distintas, consentimiento vencido y replays.
+Admisión B 0600 desde ambos ZIP Sigstore A/B no sustituye consentimiento:
+requiere los cinco locks, preflight física, G6, custodia de prepared antiguo,
+revalidación de aprobación y TTL al último límite antes de `os.replace`.
+
+**Recuperación si SIGKILL:** con receipt B durable pero intent B no archivado,
+el scanner detiene nuevas operaciones; no debe borrar, renombrar ni editar
+manual o automáticamente el historial para sortearlo. La reconciliación sigue
+siendo manual y **separadamente aprobada** como determinó el Sponsor; no está
+implementado `--reconcile-approved`. Aprobación launcher-only y
+posterior aprobación API+WEB son actos diferentes. Ventana del 03-11-2026
+**condicionada** a los gates, sin obligación de aplicar si siguen pendientes.
+
 ## 0. Scope, truth and ownership
 
 - Sole physical QA host: `glmdch` (no additional VM; `srv01` is not a physical fallback).

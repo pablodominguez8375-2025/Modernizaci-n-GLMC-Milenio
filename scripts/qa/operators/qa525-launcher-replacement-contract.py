@@ -161,7 +161,9 @@ RECOVERY_RECEIPT_FIELDS = frozenset({
 RECOVERY_APPROVAL_FIELDS = frozenset({
     "action", "scope", "environment", "operator", "approved",
     "cut_nonce", "nonce", "source_sha", "release_asset_sha256",
-    "old_launcher_sha256", "new_launcher_sha256", "issued_at", "expires_at",
+    "old_launcher_sha256", "new_launcher_sha256", "cut_receipt_sha256",
+    "recovery_source_sha", "recovery_release_asset_sha256",
+    "recovery_manifest_sha256", "issued_at", "expires_at",
 })
 
 
@@ -197,7 +199,16 @@ def assess_reversal(committed, approval, *, current_launcher_sha256,
             and all(approval[k] == committed[k] for k in (
                 "source_sha", "release_asset_sha256",
                 "old_launcher_sha256", "new_launcher_sha256"))
-            and approval["cut_nonce"] == committed["nonce"],
+            and approval["cut_nonce"] == committed["nonce"]
+            and valid_sha(approval["cut_receipt_sha256"], HASH)
+            and approval["cut_receipt_sha256"] == frozen_sha(committed)
+            and valid_sha(approval["recovery_source_sha"], SHA)
+            and valid_sha(approval["recovery_release_asset_sha256"], DIGEST)
+            and valid_sha(approval["recovery_manifest_sha256"], HASH)
+            and approval["recovery_source_sha"] !=
+                committed["source_sha"]
+            and approval["recovery_release_asset_sha256"] !=
+                committed["release_asset_sha256"],
             "RECOVERY_SEPARATE_APPROVAL_REQUIRED")
     nonce = approval["nonce"]
     require(valid_sha(nonce, NONCE) and nonce != committed["nonce"]

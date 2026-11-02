@@ -1459,6 +1459,10 @@ class ReversalPolicyGateTests(unittest.TestCase):
             "release_asset_sha256": self.receipt["release_asset_sha256"],
             "old_launcher_sha256": self.receipt["old_launcher_sha256"],
             "new_launcher_sha256": self.receipt["new_launcher_sha256"],
+            "cut_receipt_sha256": self.policy.frozen_sha(self.receipt),
+            "recovery_source_sha": "c" * 40,
+            "recovery_release_asset_sha256": "sha256:" + "d" * 64,
+            "recovery_manifest_sha256": "f" * 64,
             "issued_at": 100, "expires_at": 200,
         }
 
@@ -1489,6 +1493,11 @@ class ReversalPolicyGateTests(unittest.TestCase):
                         {"scope": "API_AND_WEB"},
                         {"cut_nonce": "7" * 64},
                         {"source_sha": "f" * 40},
+                        {"cut_receipt_sha256": "f" * 64},
+                        {"recovery_source_sha": "f" * 40},
+                        {"recovery_release_asset_sha256":
+                            "sha256:" + "f" * 64},
+                        {"recovery_manifest_sha256": "0" * 64},
                         {"expires_at": 120},
                         {"extra": True}):
             approval = dict(self.approval, **changed)
@@ -2066,6 +2075,11 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
             "source_sha": self.sha, "release_asset_sha256": self.release,
             "old_launcher_sha256": m.digest(self.old),
             "new_launcher_sha256": m.digest(self.new),
+            "cut_receipt_sha256": m.digest(m.json_bytes(
+                self.receipt).rstrip(b"\n")),
+            "recovery_source_sha": "c" * 40,
+            "recovery_release_asset_sha256": "sha256:" + "d" * 64,
+            "recovery_manifest_sha256": "f" * 64,
             "issued_at": self.now - 5, "expires_at": self.now + 120,
         }
         self.save_approval()
@@ -2233,6 +2247,37 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
                         fixture.run_reversal()
                 finally:
                     fixture.doCleanups()
+
+    def test_B_identity_change_after_approval_blocks_before_intent(self):
+        """Sponsor consent is for a specific signed B source and manifest."""
+        original = dict(self.packet)
+        for bad in ({"source_sha": "f" * 40},
+                    {"release_asset_sha256": "sha256:" + "e" * 64},
+                    {"manifest_sha256": "a" * 64}):
+            with self.subTest(bad=bad):
+                self.packet = {**original, **bad}
+                with self.assertRaisesRegex(
+                        m.Blocked, "ROOT_REVERSAL_APPROVAL_B_IDENTITY_MISMATCH"):
+                    self.run_reversal()
+                self.assertEqual(self.new, self.launcher.read_bytes())
+                self.assertFalse(any(self.recovery.iterdir()))
+        self.packet = original
+
+    def test_approval_receipt_hash_and_B_manifest_must_be_exact(self):
+        original = dict(self.approval)
+        for bad in ({"cut_receipt_sha256": "f" * 64},
+                    {"recovery_source_sha": "e" * 40},
+                    {"recovery_release_asset_sha256": "sha256:" + "e" * 64},
+                    {"recovery_manifest_sha256": "e" * 64}):
+            with self.subTest(bad=bad):
+                self.approval = {**original, **bad}
+                self.save_approval()
+                with self.assertRaises(m.Blocked):
+                    self.run_reversal()
+                self.assertEqual(self.new, self.launcher.read_bytes())
+                self.assertFalse(any(self.recovery.iterdir()))
+        self.approval = original
+        self.save_approval()
 
     def test_recovery_interruption_after_durable_intent_blocks_retry(self):
         before = m.write_once
