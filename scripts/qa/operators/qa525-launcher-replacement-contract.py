@@ -401,6 +401,98 @@ def assess_pending_reconciliation_plan(intent, recovery_claim, approval, *,
 
 
 
+
+
+# Append-only B receipt for forensic verification of an original interrupted
+# A. Even a valid-looking JSON record is NEVER proof of signer, custody or
+# runtime permissions; root source B must authenticate those independently.
+PENDING_RECONCILIATION_RECEIPT_FIELDS = frozenset({
+    "status", "cut_source_sha", "cut_release_asset_sha256", "cut_nonce",
+    "cut_intent_sha256", "old_launcher_sha256", "new_launcher_sha256",
+    "recovery_source_sha", "recovery_release_asset_sha256",
+    "recovery_manifest_sha256", "recovery_executor_sha256",
+    "recovery_nonce", "recovery_approval_sha256", "observed_phase",
+    "restored_launcher_sha256",
+})
+
+
+def assess_pending_reconciliation_receipt(intent, recovery_receipt, *,
+                                          old_backup_sha256,
+                                          live_launcher_sha256,
+                                          original_receipt_present,
+                                          recovery_intent_present):
+    """Pure verification of proposed separate B receipt; never release A.
+
+    The original intent must be preserved byte-for-byte by a real executor.
+    This checks caller-supplied identities only, not file ownership, locks,
+    Sigstore, fsync, or any real B authority. It must NOT be used by itself
+    to permit scan_history(), a fresh installer cut or any root execution.
+    """
+    require(type(intent) is dict
+            and set(intent) == PENDING_RECONCILIATION_INTENT_FIELDS
+            and intent["status"] == "SWAP_INTENT_NO_DEPLOYMENT"
+            and valid_sha(intent["source_sha"], SHA)
+            and valid_sha(intent["release_asset_sha256"], DIGEST)
+            and all(valid_sha(intent[k], HASH) for k in (
+                "old_launcher_sha256", "new_launcher_sha256", "nonce"))
+            and intent["old_launcher_sha256"] !=
+                intent["new_launcher_sha256"],
+            "PENDING_RECEIPT_ORIGINAL_INTENT_INVALID")
+    require(type(original_receipt_present) is bool
+            and original_receipt_present is False
+            and type(recovery_intent_present) is bool
+            and recovery_intent_present is False
+            and valid_sha(old_backup_sha256, HASH)
+            and valid_sha(live_launcher_sha256, HASH)
+            and old_backup_sha256 == intent["old_launcher_sha256"]
+            and live_launcher_sha256 == intent["old_launcher_sha256"],
+            "PENDING_RECEIPT_LIVE_OR_JOURNAL_NOT_RECONCILED")
+    require(type(recovery_receipt) is dict
+            and set(recovery_receipt) ==
+                PENDING_RECONCILIATION_RECEIPT_FIELDS
+            and recovery_receipt["status"] ==
+                "PENDING_LAUNCHER_RECOVERY_RECONCILIATION_COMMITTED"
+            and all(recovery_receipt[k] == intent[k] for k in (
+                "old_launcher_sha256", "new_launcher_sha256"))
+            and recovery_receipt["cut_source_sha"] == intent["source_sha"]
+            and recovery_receipt["cut_release_asset_sha256"] ==
+                intent["release_asset_sha256"]
+            and recovery_receipt["cut_nonce"] == intent["nonce"]
+            and recovery_receipt["cut_intent_sha256"] == frozen_sha(intent)
+            and valid_sha(recovery_receipt["recovery_source_sha"], SHA)
+            and valid_sha(recovery_receipt["recovery_release_asset_sha256"],
+                          DIGEST)
+            and all(valid_sha(recovery_receipt[k], HASH) for k in (
+                "recovery_manifest_sha256", "recovery_executor_sha256",
+                "recovery_nonce", "recovery_approval_sha256"))
+            and recovery_receipt["recovery_nonce"] != intent["nonce"]
+            and recovery_receipt["recovery_source_sha"] !=
+                intent["source_sha"]
+            and recovery_receipt["recovery_release_asset_sha256"] !=
+                intent["release_asset_sha256"]
+            and recovery_receipt["restored_launcher_sha256"] ==
+                intent["old_launcher_sha256"]
+            and recovery_receipt["observed_phase"] in (
+                "PENDING_BEFORE_ATOMIC_SWAP",
+                "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT"),
+            "PENDING_RECEIPT_RECONCILIATION_PROOF_INVALID")
+    return {
+        "status": "REVIEWED_PENDING_RECOVERY_RECEIPT_UNTRUSTED_NO_EXECUTION",
+        "scope": PENDING_RECONCILIATION_SCOPE,
+        "cut_source_sha": intent["source_sha"],
+        "cut_intent_sha256": frozen_sha(intent),
+        "recovery_source_sha": recovery_receipt["recovery_source_sha"],
+        "recovery_nonce": recovery_receipt["recovery_nonce"],
+        "observed_phase": recovery_receipt["observed_phase"],
+        "original_intent_must_remain_preserved": True,
+        "receipt_needs_independent_root_authentication": True,
+        "root_history_reconciliation_implemented": False,
+        "may_install": False, "may_apply": False, "may_recover": False,
+        "reconciliation_complete": False,
+    }
+
+
+
 def assess_interrupted_swap(*, old_sha, new_sha, live_sha, backup_sha,
                             pending, source_sha, release_asset_sha256,
                             nonce, intent=None, receipt=None):
