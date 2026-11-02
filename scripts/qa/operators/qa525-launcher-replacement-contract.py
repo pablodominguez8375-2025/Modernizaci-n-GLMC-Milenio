@@ -493,6 +493,75 @@ def assess_pending_reconciliation_receipt(intent, recovery_receipt, *,
 
 
 
+
+
+# Interruption AFTER the A committed receipt is durable but BEFORE its
+# original intent has been removed. This is NOT an uncommitted A cut.
+# A future authenticated reconciler must handle it separately, never forge
+# a missing receipt, and must not replay an approved cut.
+COMMITTED_INTENT_RESIDUE_RECEIPT_FIELDS = frozenset({
+    "status", "source_sha", "release_asset_sha256",
+    "old_launcher_sha256", "new_launcher_sha256",
+    "candidate_operator_sha256", "nonce",
+})
+
+
+def assess_committed_intent_residue(intent, committed_receipt, *,
+                                    old_backup_sha256,
+                                    live_launcher_sha256):
+    """Pure classification of post-receipt crash residue; NO execution.
+
+    Checks identities and SHA consistency only. Not evidence of custody,
+    Sigstore, a valid root signer, durable fsync or operator approval.
+    An intact committed receipt and launcher B are essential; restoring the
+    old launcher here would *undo a committed cut* and must not be automatic.
+    """
+    require(type(intent) is dict
+            and set(intent) == PENDING_RECONCILIATION_INTENT_FIELDS
+            and intent.get("status") == "SWAP_INTENT_NO_DEPLOYMENT"
+            and valid_sha(intent.get("source_sha"), SHA)
+            and valid_sha(intent.get("release_asset_sha256"), DIGEST)
+            and all(valid_sha(intent.get(k), HASH) for k in (
+                "old_launcher_sha256", "new_launcher_sha256", "nonce"))
+            and intent["old_launcher_sha256"] != intent["new_launcher_sha256"],
+            "COMMITTED_RESIDUE_ORIGINAL_INTENT_INVALID")
+    require(type(committed_receipt) is dict
+            and set(committed_receipt) ==
+                COMMITTED_INTENT_RESIDUE_RECEIPT_FIELDS
+            and committed_receipt.get("status") ==
+                "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+            and all(committed_receipt.get(k) == intent[k]
+                    for k in intent if k != "status")
+            and valid_sha(committed_receipt.get(
+                "candidate_operator_sha256"), HASH),
+            "COMMITTED_RESIDUE_RECEIPT_NOT_MATCHED")
+    require(valid_sha(old_backup_sha256, HASH)
+            and valid_sha(live_launcher_sha256, HASH)
+            and old_backup_sha256 == intent["old_launcher_sha256"]
+            and live_launcher_sha256 == intent["new_launcher_sha256"],
+            "COMMITTED_RESIDUE_BACKUP_OR_LIVE_DRIFT")
+    return {
+        "status": "REVIEWED_COMMITTED_CUT_INTENT_RESIDUE_NO_EXECUTION",
+        "source_sha": intent["source_sha"],
+        "cut_nonce_sha256": hashlib.sha256(
+            intent["nonce"].encode("ascii")).hexdigest(),
+        "intent_sha256": frozen_sha(intent),
+        "committed_receipt_sha256": frozen_sha(committed_receipt),
+        "observed_phase": "POST_COMMITTED_RECEIPT_PRE_INTENT_CLEANUP",
+        "original_committed_receipt_preserved": True,
+        "requires_independent_root_custody_authentication": True,
+        "requires_signed_cleanup_approval": True,
+        "requires_locked_idempotent_journal_reconciliation": True,
+        "may_install": False,
+        "may_apply": False,
+        "may_recover": False,
+        "may_delete_intent": False,
+        "may_rollback": False,
+        "reconciliation_complete": False,
+    }
+
+
+
 def assess_interrupted_swap(*, old_sha, new_sha, live_sha, backup_sha,
                             pending, source_sha, release_asset_sha256,
                             nonce, intent=None, receipt=None):
