@@ -443,7 +443,8 @@ def unique_fields(pairs):
 
 def _prepare_delayed_recovery_locked(b_envelope, b_sha, b_digest,
                                      verifier_sha, cut_nonce, *,
-                                     now=None, verify=subprocess.run):
+                                     now=None, verify=subprocess.run,
+                                     committed=False):
     """Authenticate A and B from separate Sigstore archives; admit B only.
 
     A bootstrap admission may be EXPIRED, but is read as historical evidence,
@@ -472,9 +473,10 @@ def _prepare_delayed_recovery_locked(b_envelope, b_sha, b_digest,
     try:
         a = json.loads(read_historical_private(ADMISSION),
                        object_pairs_hook=unique_fields)
-        intent_path = PENDING_STATE / ("intent-" + cut_nonce + ".json")
-        intent = json.loads(read_historical_private(intent_path),
-                            object_pairs_hook=unique_fields)
+        evidence_path = PENDING_STATE / (
+            ("receipt-" if committed else "intent-") + cut_nonce + ".json")
+        evidence = json.loads(read_historical_private(evidence_path),
+                              object_pairs_hook=unique_fields)
     except (ValueError, UnicodeError, TypeError):
         raise Blocked("RECOVERY_BOOTSTRAP_A_EVIDENCE_INVALID") from None
     require(type(a) is dict and set(a) == {
@@ -497,32 +499,73 @@ def _prepare_delayed_recovery_locked(b_envelope, b_sha, b_digest,
     require(a["source_sha"] != b_sha
             and a["release_asset_sha256"] != "sha256:" + b_digest,
             "RECOVERY_BOOTSTRAP_B_MUST_DIFFER_FROM_A")
-    require(type(intent) is dict and set(intent) == {
-                "status", "source_sha", "release_asset_sha256",
-                "old_launcher_sha256", "new_launcher_sha256", "nonce"}
-            and intent["status"] == "SWAP_INTENT_NO_DEPLOYMENT"
-            and intent["source_sha"] == a["source_sha"]
-            and intent["release_asset_sha256"] ==
-                a["release_asset_sha256"]
-            and intent["nonce"] == cut_nonce
-            and all(type(intent[k]) is str and
-                    SHA64.fullmatch(intent[k]) is not None for k in (
-                        "old_launcher_sha256", "new_launcher_sha256"))
-            and intent["old_launcher_sha256"] !=
-                intent["new_launcher_sha256"],
-            "RECOVERY_BOOTSTRAP_PENDING_A_INTENT_INVALID")
-    require(not (PENDING_STATE /
-                 ("receipt-" + cut_nonce + ".json")).exists(),
-            "RECOVERY_BOOTSTRAP_ORIGINAL_CUT_ALREADY_COMMITTED")
+    if committed:
+        receipt = evidence
+        require(type(receipt) is dict and set(receipt) == {
+                    "status", "source_sha", "release_asset_sha256",
+                    "old_launcher_sha256", "new_launcher_sha256",
+                    "candidate_operator_sha256", "nonce"}
+                and receipt["status"] == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+                and receipt["source_sha"] == a["source_sha"]
+                and receipt["release_asset_sha256"] ==
+                    a["release_asset_sha256"]
+                and receipt["nonce"] == cut_nonce
+                and all(type(receipt[k]) is str and
+                        SHA64.fullmatch(receipt[k]) is not None for k in (
+                            "old_launcher_sha256", "new_launcher_sha256",
+                            "candidate_operator_sha256"))
+                and receipt["old_launcher_sha256"] !=
+                    receipt["new_launcher_sha256"],
+                "RECOVERY_BOOTSTRAP_COMMITTED_A_RECEIPT_INVALID")
+        # Historical intent may be absent, residual, or archived, but
+        # no two contradictory copies are allowed.
+        residuals = [
+            PENDING_STATE / ("intent-" + cut_nonce + ".json"),
+            PENDING_STATE / ("intent-" + cut_nonce + ".superseded")]
+        require(sum(p.exists() or p.is_symlink() for p in residuals) <= 1,
+                "RECOVERY_BOOTSTRAP_COMMITTED_A_DUPLICATE_INTENT")
+        expected = {k: v for k, v in receipt.items()
+                    if k not in ("status", "candidate_operator_sha256")}
+        for residual in residuals:
+            if residual.exists() or residual.is_symlink():
+                old_intent = json.loads(
+                    read_historical_private(residual),
+                    object_pairs_hook=unique_fields)
+                require(type(old_intent) is dict
+                        and old_intent == {
+                            **expected, "status": "SWAP_INTENT_NO_DEPLOYMENT"},
+                        "RECOVERY_BOOTSTRAP_COMMITTED_A_RESIDUE_INVALID")
+        cut_evidence = receipt
+    else:
+        intent = evidence
+        require(type(intent) is dict and set(intent) == {
+                    "status", "source_sha", "release_asset_sha256",
+                    "old_launcher_sha256", "new_launcher_sha256", "nonce"}
+                and intent["status"] == "SWAP_INTENT_NO_DEPLOYMENT"
+                and intent["source_sha"] == a["source_sha"]
+                and intent["release_asset_sha256"] ==
+                    a["release_asset_sha256"]
+                and intent["nonce"] == cut_nonce
+                and all(type(intent[k]) is str and
+                        SHA64.fullmatch(intent[k]) is not None for k in (
+                            "old_launcher_sha256", "new_launcher_sha256"))
+                and intent["old_launcher_sha256"] !=
+                    intent["new_launcher_sha256"],
+                "RECOVERY_BOOTSTRAP_PENDING_A_INTENT_INVALID")
+        require(not (PENDING_STATE /
+                     ("receipt-" + cut_nonce + ".json")).exists(),
+                "RECOVERY_BOOTSTRAP_ORIGINAL_CUT_ALREADY_COMMITTED")
+        cut_evidence = intent
     old_bytes = read_historical_private(
         PENDING_STATE / ("old-" + cut_nonce + ".bin"), mode=0o700,
         limit=4096)
     require(hashlib.sha256(old_bytes).hexdigest() ==
-            intent["old_launcher_sha256"],
+            cut_evidence["old_launcher_sha256"],
             "RECOVERY_BOOTSTRAP_A_BACKUP_INVALID")
     live_sha = digest_file(LAUNCHER, maximum=4096)
-    require(live_sha in (intent["old_launcher_sha256"],
-                         intent["new_launcher_sha256"]),
+    require((live_sha == cut_evidence["new_launcher_sha256"] if committed
+             else live_sha in (cut_evidence["old_launcher_sha256"],
+                               cut_evidence["new_launcher_sha256"])),
             "RECOVERY_BOOTSTRAP_UNKNOWN_LIVE_LAUNCHER")
     expected_files = {
         str(STORE / a["source_sha"] / name) for name in SOURCES}
@@ -568,18 +611,21 @@ def _prepare_delayed_recovery_locked(b_envelope, b_sha, b_digest,
             os.fsync(fd)
         finally:
             os.close(fd)
-        intent_sha = hashlib.sha256(json.dumps(
-            intent, sort_keys=True, separators=(",", ":"),
+        evidence_sha = hashlib.sha256(json.dumps(
+            cut_evidence, sort_keys=True, separators=(",", ":"),
             ensure_ascii=True).encode()).hexdigest()
         packet = {
-            "status": "EXTERNAL_SIGSTORE_RECOVERY_B_ADMISSION_ONLY",
+            "status": ("EXTERNAL_SIGSTORE_RECOVERY_B_COMMITTED_ADMISSION_ONLY"
+                       if committed else
+                       "EXTERNAL_SIGSTORE_RECOVERY_B_ADMISSION_ONLY"),
             "cut_source_sha": a["source_sha"],
             "cut_release_asset_sha256": a["release_asset_sha256"],
             "cut_manifest_sha256": a["manifest_sha256"],
             "cut_nonce": cut_nonce,
-            "cut_intent_sha256": intent_sha,
-            "cut_old_launcher_sha256": intent["old_launcher_sha256"],
-            "cut_new_launcher_sha256": intent["new_launcher_sha256"],
+            ("cut_receipt_sha256" if committed else
+             "cut_intent_sha256"): evidence_sha,
+            "cut_old_launcher_sha256": cut_evidence["old_launcher_sha256"],
+            "cut_new_launcher_sha256": cut_evidence["new_launcher_sha256"],
             "source_sha": b_sha,
             "release_asset_sha256": "sha256:" + b_digest,
             "manifest_sha256": b_manifest,
@@ -608,11 +654,14 @@ def _prepare_delayed_recovery_locked(b_envelope, b_sha, b_digest,
         finally:
             os.close(fd)
         return {
-            "status": "QA525_DUAL_SIGNED_RECOVERY_B_PREPARED_NO_ACTION",
+            "status": ("QA525_COMMITTED_DUAL_SIGNED_B_PREPARED_NO_ACTION"
+                       if committed else
+                       "QA525_DUAL_SIGNED_RECOVERY_B_PREPARED_NO_ACTION"),
             "cut_source_sha": a["source_sha"],
             "recovery_source_sha": b_sha,
             "recovery_manifest_sha256": b_manifest,
-            "cut_intent_sha256": intent_sha,
+            ("cut_receipt_sha256" if committed else
+             "cut_intent_sha256"): evidence_sha,
             "bootstrap_admission_lifetime_seconds": 900,
             "original_admission_overwritten": False,
             "original_journal_changed": False,
@@ -636,6 +685,18 @@ def prepare_delayed_recovery(b_envelope, b_sha, b_digest, verifier_sha,
 
 
 
+def prepare_committed_recovery(b_envelope, b_sha, b_digest, verifier_sha,
+                               cut_nonce, *, now=None, verify=subprocess.run):
+    """Separate fresh B admission for COMMITTED original cut A."""
+    require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
+            "RECOVERY_BOOTSTRAP_ROOT_GLMDCH_ONLY")
+    require_isolated_root_python()
+    with locked_bootstrap():
+        return _prepare_delayed_recovery_locked(
+            b_envelope, b_sha, b_digest, verifier_sha, cut_nonce,
+            now=now, verify=verify, committed=True)
+
+
 def prepare(envelope, sha, expected, verifier_sha, *, now=None,
             verify=subprocess.run):
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
@@ -652,14 +713,19 @@ def main(argv=None):
     p.add_argument("--source-sha", required=True)
     p.add_argument("--expected-zip-sha256", required=True)
     p.add_argument("--trusted-bootstrap-sha256", required=True)
-    p.add_argument("--prepare-recovery-b", action="store_true")
+    modes = p.add_mutually_exclusive_group()
+    modes.add_argument("--prepare-recovery-b", action="store_true")
+    modes.add_argument("--prepare-committed-recovery-b", action="store_true")
     p.add_argument("--cut-nonce")
     args = p.parse_args(argv)
     try:
-        if args.prepare_recovery_b:
+        if args.prepare_recovery_b or args.prepare_committed_recovery_b:
             require(args.cut_nonce is not None,
                     "RECOVERY_BOOTSTRAP_CUT_NONCE_REQUIRED")
-            report = prepare_delayed_recovery(
+            action = (prepare_committed_recovery if
+                      args.prepare_committed_recovery_b else
+                      prepare_delayed_recovery)
+            report = action(
                 args.verified_envelope, args.source_sha,
                 args.expected_zip_sha256, args.trusted_bootstrap_sha256,
                 args.cut_nonce)

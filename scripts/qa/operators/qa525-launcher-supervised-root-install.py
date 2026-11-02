@@ -37,6 +37,8 @@ RECOVERY_APPROVAL = Path("/etc/pmgm/qa525-launcher-rollback.json")
 ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
 RECOVERY_B_ADMISSION = Path("/etc/pmgm/qa525-recovery-bootstrap-admission.json")
 RECOVERY_B_STATUS = "EXTERNAL_SIGSTORE_RECOVERY_B_ADMISSION_ONLY"
+RECOVERY_COMMITTED_B_STATUS = (
+    "EXTERNAL_SIGSTORE_RECOVERY_B_COMMITTED_ADMISSION_ONLY")
 BOOTSTRAP_STATUS = "EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY"
 SHA = re.compile(r"[a-f0-9]{40}")
 NONCE = re.compile(r"[a-f0-9]{64}")
@@ -157,7 +159,7 @@ def bootstrap_trusted_sources():
 
 
 
-def bootstrap_recovery_b_trusted_sources():
+def bootstrap_recovery_b_trusted_sources(*, committed=False):
     """Authenticate separately signed recovery B, never revive expired A.
 
     Trusted root bootstrap B must have signed and durably emitted its own
@@ -173,13 +175,16 @@ def bootstrap_recovery_b_trusted_sources():
             object_pairs_hook=unique_json_fields)
     except (ValueError, TypeError, UnicodeError):
         raise Blocked("ROOT_RECOVERY_B_ADMISSION_JSON_INVALID") from None
+    evidence_field = ("cut_receipt_sha256" if committed else
+                      "cut_intent_sha256")
     require(type(packet) is dict and set(packet) == {
                 "status", "cut_source_sha", "cut_release_asset_sha256",
-                "cut_manifest_sha256", "cut_nonce", "cut_intent_sha256",
+                "cut_manifest_sha256", "cut_nonce", evidence_field,
                 "cut_old_launcher_sha256", "cut_new_launcher_sha256",
                 "source_sha", "release_asset_sha256", "manifest_sha256",
                 "trusted_verifier_sha256", "files", "issued_at", "expires_at"}
-            and packet["status"] == RECOVERY_B_STATUS
+            and packet["status"] == (RECOVERY_COMMITTED_B_STATUS
+                                    if committed else RECOVERY_B_STATUS)
             and all(type(packet[k]) is str and
                     SHA.fullmatch(packet[k]) is not None for k in (
                         "cut_source_sha", "source_sha"))
@@ -193,7 +198,7 @@ def bootstrap_recovery_b_trusted_sources():
             and all(type(packet[k]) is str and
                     NONCE.fullmatch(packet[k]) is not None
                     for k in ("cut_manifest_sha256", "cut_nonce",
-                              "cut_intent_sha256", "cut_old_launcher_sha256",
+                              evidence_field, "cut_old_launcher_sha256",
                               "cut_new_launcher_sha256", "manifest_sha256",
                               "trusted_verifier_sha256"))
             and packet["cut_old_launcher_sha256"] !=
@@ -437,10 +442,15 @@ def residual_intent_is_committed(entry, names):
     it stays as harmless audit residue and its nonce is already consumed.
     """
     name = entry.name
-    if not (name.endswith(".json") and
-            NONCE.fullmatch(name[len("intent-"):-len(".json")]) is not None):
+    suffix = (".json" if name.endswith(".json") else
+              ".superseded" if name.endswith(".superseded") else None)
+    if suffix is None or NONCE.fullmatch(
+            name[len("intent-"):-len(suffix)]) is None:
         return False
-    nonce = name[len("intent-"):-len(".json")]
+    nonce = name[len("intent-"):-len(suffix)]
+    if ("intent-" + nonce + (".superseded" if suffix == ".json" else
+                             ".json")) in names:
+        return False
     receipt_name, backup_name = ("receipt-" + nonce + ".json",
                                  "old-" + nonce + ".bin")
     if receipt_name not in names or backup_name not in names:
@@ -463,7 +473,106 @@ def residual_intent_is_committed(entry, names):
                     if k != "status"))
 
 
-def scan_history(*, pending_nonce=None):
+
+def scan_recovery_history():
+    """Authenticate completed B receipts and persistently consume their nonces.
+
+    A partial B triplet blocks all further privileged actions. Completed
+    receipts, archives and backups are append-only; none may be silently
+    unlinked or renamed out of this trusted history.
+    """
+    root_chain(RECOVERY_STATE, directory=True, exact_mode=0o700)
+    entries = sorted(RECOVERY_STATE.iterdir(), key=lambda p: p.name)
+    require(len(entries) <= 1000, "ROOT_RECOVERY_HISTORY_TOO_LARGE")
+    names = {e.name for e in entries}
+    reversed_cuts = set()
+    nonces = set()
+    for entry in entries:
+        name = entry.name
+        require(not entry.is_symlink(), "ROOT_RECOVERY_HISTORY_SYMLINK")
+        require(name.startswith(("rollback-intent-", "rollback-new-",
+                                 "rollback-receipt-")),
+                "ROOT_RECOVERY_HISTORY_UNKNOWN_ENTRY")
+        prefix, suffix = (("rollback-intent-", ".superseded") if
+                          name.startswith("rollback-intent-") else
+                          ("rollback-new-", ".bin") if
+                          name.startswith("rollback-new-") else
+                          ("rollback-receipt-", ".json"))
+        nonce = name[len(prefix):-len(suffix)] if name.endswith(suffix) else ""
+        require(NONCE.fullmatch(nonce) is not None,
+                "ROOT_RECOVERY_HISTORY_NONCE_INVALID")
+        trio = {
+            "rollback-intent-" + nonce + ".superseded",
+            "rollback-new-" + nonce + ".bin",
+            "rollback-receipt-" + nonce + ".json"}
+        require(trio <= names, "ROOT_RECOVERY_INCOMPLETE_OR_UNARCHIVED")
+        if name.startswith("rollback-receipt-"):
+            try:
+                record = json.loads(read_bound(
+                    entry, maximum=4096, exact_mode=0o600),
+                    object_pairs_hook=unique_json_fields)
+                intent = json.loads(read_bound(
+                    RECOVERY_STATE / ("rollback-intent-" + nonce +
+                                      ".superseded"),
+                    maximum=4096, exact_mode=0o600),
+                    object_pairs_hook=unique_json_fields)
+            except (ValueError, TypeError, UnicodeError):
+                raise Blocked("ROOT_RECOVERY_HISTORY_JSON_INVALID") from None
+            fields = {"status", "cut_nonce", "recovery_nonce", "source_sha",
+                      "release_asset_sha256", "old_launcher_sha256",
+                      "new_launcher_sha256", "recovery_source_sha",
+                      "recovery_release_asset_sha256",
+                      "recovery_manifest_sha256", "cut_receipt_sha256"}
+            require(type(record) is dict and set(record) == fields
+                    and record["status"] == "ROLLBACK_ATOMIC_SWAP_COMMITTED"
+                    and record["recovery_nonce"] == nonce
+                    and type(intent) is dict and set(intent) == fields
+                    and intent == {**record,
+                                   "status": "ROLLBACK_INTENT_NO_DEPLOYMENT"}
+                    and all(type(record[k]) is str and
+                            NONCE.fullmatch(record[k]) is not None for k in (
+                                "cut_nonce", "old_launcher_sha256",
+                                "new_launcher_sha256",
+                                "recovery_manifest_sha256",
+                                "cut_receipt_sha256"))
+                    and type(record["source_sha"]) is str
+                    and SHA.fullmatch(record["source_sha"]) is not None
+                    and type(record["recovery_source_sha"]) is str
+                    and SHA.fullmatch(record["recovery_source_sha"]) is not None
+                    and record["source_sha"] != record["recovery_source_sha"]
+                    and re.fullmatch(r"sha256:[a-f0-9]{64}",
+                                     record["release_asset_sha256"]) is not None
+                    and re.fullmatch(r"sha256:[a-f0-9]{64}",
+                                     record["recovery_release_asset_sha256"])
+                       is not None,
+                    "ROOT_RECOVERY_HISTORY_RECEIPT_INVALID")
+            cut = record["cut_nonce"]
+            require(cut not in reversed_cuts and cut != nonce,
+                    "ROOT_RECOVERY_HISTORY_REPLAYED_CUT")
+            original = json.loads(read_bound(
+                STATE / ("receipt-" + cut + ".json"),
+                maximum=4096, exact_mode=0o600),
+                object_pairs_hook=unique_json_fields)
+            require(type(original) is dict and original.get("nonce") == cut
+                    and original.get("status") ==
+                        "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+                    and digest(json_bytes(original).rstrip(b"\n")) ==
+                        record["cut_receipt_sha256"]
+                    and all(original.get(k) == record[k] for k in (
+                        "source_sha", "release_asset_sha256",
+                        "old_launcher_sha256", "new_launcher_sha256")),
+                    "ROOT_RECOVERY_HISTORY_ORIGINAL_RECEIPT_DRIFT")
+            saved_new = read_bound(
+                RECOVERY_STATE / ("rollback-new-" + nonce + ".bin"),
+                exact_mode=0o700)
+            require(digest(saved_new) == record["new_launcher_sha256"],
+                    "ROOT_RECOVERY_HISTORY_SAVED_NEW_INVALID")
+            nonces.add(nonce)
+            reversed_cuts.add(cut)
+    return nonces, reversed_cuts
+
+
+def scan_history(*, pending_nonce=None, verify_recovery=False):
     """Verify all historical receipts; optionally exclude ONE pending triplet.
 
     The pending triplet is validated independently by the read-only inspector.
@@ -541,6 +650,11 @@ def scan_history(*, pending_nonce=None):
             consumed.add(suffix)
         else:
             read_bound(entry, maximum=4096, exact_mode=0o700)
+    if verify_recovery:
+        b_nonces, _ = scan_recovery_history()
+        require(consumed.isdisjoint(b_nonces),
+                "ROOT_CROSS_JOURNAL_NONCE_REPLAY")
+        consumed.update(b_nonces)
     return consumed
 
 
@@ -678,7 +792,7 @@ def replace_approved():
     root_chain(PREFLIGHT_STATE, directory=True, exact_mode=0o700)
     root_chain(LAUNCHER, exact_mode=0o700)
     with all_five_locks():
-        consumed = scan_history()
+        consumed = scan_history(verify_recovery=True)
         plan = preflight.signed_candidate_preflight(inspector, signed,
                                                     stage_parent=PREFLIGHT_STATE)
         # Independent admission is required BEFORE import, and bound again
@@ -744,7 +858,7 @@ def replace_approved():
                     "ROOT_APPROVAL_CHANGED_DURING_RELEASE_DOWNLOAD")
             renewed_cut = contract.assess_review(
                 plan, renewed_approval, now=int(time.time()),
-                pending=False, consumed_nonces=tuple(sorted(scan_history())))
+                pending=False, consumed_nonces=tuple(sorted(scan_history(verify_recovery=True))))
             require(renewed_cut.get("nonce") == nonce,
                     "ROOT_REVIEW_NONCE_CHANGED_DURING_DOWNLOAD")
             require(digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
@@ -810,7 +924,10 @@ def replace_approved():
                 **record, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
                 "candidate_operator_sha256": plan["candidate_operator_sha256"],
             }))
-            intent.unlink()
+            archived = STATE / ("intent-" + nonce + ".superseded")
+            require(not archived.exists() and not archived.is_symlink(),
+                    "ROOT_LAUNCHER_ARCHIVE_COLLISION")
+            os.rename(intent, archived)
             sync_dir(STATE)
         return {
             "status": "QA525_LAUNCHER_REPLACED_NO_API_WEB_DEPLOY",
@@ -854,20 +971,22 @@ def rollback_approved():
     This root code is inert until independently signed, staged and approved.
     """
     require_host()
-    packet = bootstrap_trusted_sources()  # BEFORE importing even trusted helpers
+    packet = bootstrap_recovery_b_trusted_sources(
+        committed=True)  # Authenticated fresh B before helper imports
     contract = load("qa525_reversal_contract", SOURCES[4])
     root_chain(STATE, directory=True, exact_mode=0o700)
     root_chain(RECOVERY_STATE, directory=True, exact_mode=0o700)
     root_chain(LAUNCHER, exact_mode=0o700)
     with all_five_locks():
-        consumed = scan_history()  # validates every old receipt/backup; no intents
-        require(not any(RECOVERY_STATE.iterdir()),
-                "ROOT_REVERSAL_PREVIOUS_OR_PARTIAL_STATE")
+        consumed = scan_history(verify_recovery=True)
+        _, reversed_cuts = scan_recovery_history()
         approval = read_reversal_approval()
         cut_nonce = approval.get("cut_nonce") if type(approval) is dict else None
         require(type(cut_nonce) is str and NONCE.fullmatch(cut_nonce),
                 "ROOT_REVERSAL_CUT_NONCE_INVALID")
-        require(cut_nonce in consumed, "ROOT_REVERSAL_CUT_NOT_COMMITTED")
+        require(cut_nonce in consumed and cut_nonce not in reversed_cuts
+                and packet["cut_nonce"] == cut_nonce,
+                "ROOT_REVERSAL_CUT_NOT_COMMITTED_OR_ALREADY_REVERSED")
         receipt_path = STATE / ("receipt-" + cut_nonce + ".json")
         backup_path = STATE / ("old-" + cut_nonce + ".bin")
         try:
@@ -877,14 +996,21 @@ def rollback_approved():
             raise Blocked("ROOT_REVERSAL_ORIGINAL_RECEIPT_INVALID") from None
         old = read_bound(backup_path, exact_mode=0o700)
         current = read_bound(LAUNCHER, exact_mode=0o700)
-        require(receipt.get("source_sha") == packet["source_sha"]
+        require(receipt.get("source_sha") == packet["cut_source_sha"]
                 and receipt.get("release_asset_sha256") ==
-                    packet["release_asset_sha256"],
+                    packet["cut_release_asset_sha256"]
+                and receipt.get("old_launcher_sha256") ==
+                    packet["cut_old_launcher_sha256"]
+                and receipt.get("new_launcher_sha256") ==
+                    packet["cut_new_launcher_sha256"]
+                and digest(json_bytes(receipt).rstrip(b"\n")) ==
+                    packet["cut_receipt_sha256"],
                 "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT")
         approval_copy = dict(approval)
         plan = assess_root_reversal(contract, 
             receipt, approval, current_launcher_sha256=digest(current),
-            backup_sha256=digest(old), pending=False, now=int(time.time()))
+            backup_sha256=digest(old), pending=False, now=int(time.time()),
+            consumed_nonces=tuple(sorted(consumed)))
         require(plan.get("status") ==
                     "REVIEWED_LAUNCHER_REVERSAL_PLAN_NO_INSTALL"
                 and plan.get("may_recover") is False
@@ -905,6 +1031,10 @@ def rollback_approved():
             "release_asset_sha256": receipt["release_asset_sha256"],
             "old_launcher_sha256": digest(old),
             "new_launcher_sha256": digest(current),
+            "recovery_source_sha": packet["source_sha"],
+            "recovery_release_asset_sha256": packet["release_asset_sha256"],
+            "recovery_manifest_sha256": packet["manifest_sha256"],
+            "cut_receipt_sha256": packet["cut_receipt_sha256"],
         }
         write_once(intent, json_bytes(record))
         write_once(saved_new, current, mode=0o700)
@@ -937,7 +1067,11 @@ def rollback_approved():
                 "ROOT_REVERSAL_POST_SWAP_HASH_DRIFT")
         write_once(receipt_new, json_bytes({
             **record, "status": "ROLLBACK_ATOMIC_SWAP_COMMITTED"}))
-        intent.unlink()
+        archived = RECOVERY_STATE / ("rollback-intent-" + nonce +
+                                     ".superseded")
+        require(not archived.exists() and not archived.is_symlink(),
+                "ROOT_REVERSAL_ARCHIVE_COLLISION")
+        os.rename(intent, archived)
         sync_dir(RECOVERY_STATE)
         return {
             "status": "QA525_LAUNCHER_ROLLED_BACK_NO_API_WEB_DEPLOY",

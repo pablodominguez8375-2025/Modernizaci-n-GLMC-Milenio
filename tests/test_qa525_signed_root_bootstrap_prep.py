@@ -327,7 +327,10 @@ class DelayedRecoveryBootstrapTests(unittest.TestCase):
         self.b_envelope.chmod(0o600)
 
     def admit_b(self, **kwargs):
-        return m.prepare_delayed_recovery(
+        mode = kwargs.pop("committed", False)
+        action = (m.prepare_committed_recovery if mode else
+                  m.prepare_delayed_recovery)
+        return action(
             kwargs.pop("envelope", self.b_envelope),
             kwargs.pop("sha", self.B),
             kwargs.pop("digest", hashlib.sha256(self.b_bytes).hexdigest()),
@@ -446,6 +449,72 @@ class DelayedRecoveryBootstrapTests(unittest.TestCase):
             self.admit_b()
         self.assertEqual(original_receipt, path.read_bytes())
         self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(self.b_admission.exists())
+
+    def test_committed_A_gets_independent_B_after_A_expiry_with_residual(self):
+        receipt = {
+            **self.intent, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": hashlib.sha256(
+                b"synthetic signed operator").hexdigest()}
+        self.launcher.write_bytes(self.new)
+        target = self.pending / ("receipt-" + self.nonce + ".json")
+        target.write_text(json.dumps(receipt))
+        target.chmod(0o600)
+        original = self.intent_path.read_bytes()
+        old_A = self.admission.read_bytes()
+        report = self.admit_b(committed=True)
+        self.assertEqual(
+            "QA525_COMMITTED_DUAL_SIGNED_B_PREPARED_NO_ACTION",
+            report["status"])
+        self.assertFalse(report["may_recover"])
+        self.assertEqual(original, self.intent_path.read_bytes())
+        self.assertEqual(old_A, self.admission.read_bytes())
+        packet = json.loads(self.b_admission.read_text())
+        self.assertEqual(
+            "EXTERNAL_SIGSTORE_RECOVERY_B_COMMITTED_ADMISSION_ONLY",
+            packet["status"])
+        self.assertEqual(self.nonce, packet["cut_nonce"])
+        self.assertEqual(hashlib.sha256(json.dumps(
+            receipt, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=True).encode()).hexdigest(),
+            packet["cut_receipt_sha256"])
+        self.assertEqual(self.B, packet["source_sha"])
+        self.assertEqual(SHA, packet["cut_source_sha"])
+
+    def test_committed_A_after_intent_cleanup_gets_fresh_B(self):
+        receipt = {
+            **self.intent, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": "e" * 64}
+        self.launcher.write_bytes(self.new)
+        target = self.pending / ("receipt-" + self.nonce + ".json")
+        target.write_text(json.dumps(receipt))
+        target.chmod(0o600)
+        self.intent_path.unlink()  # fixture setup, not production algorithm
+        result = self.admit_b(committed=True)
+        self.assertEqual(
+            "QA525_COMMITTED_DUAL_SIGNED_B_PREPARED_NO_ACTION",
+            result["status"])
+        self.assertFalse(self.intent_path.exists())
+        self.assertEqual(receipt, json.loads(target.read_text()))
+
+    def test_committed_A_tampered_receipt_or_old_backup_blocks_B(self):
+        receipt = {
+            **self.intent, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": "e" * 64}
+        self.launcher.write_bytes(self.new)
+        target = self.pending / ("receipt-" + self.nonce + ".json")
+        target.write_text(json.dumps(receipt))
+        target.chmod(0o600)
+        receipt["new_launcher_sha256"] = "f" * 64
+        target.write_text(json.dumps(receipt))
+        with self.assertRaises(m.Blocked):
+            self.admit_b(committed=True)
+        self.assertFalse(self.b_admission.exists())
+        receipt["new_launcher_sha256"] = hashlib.sha256(self.new).hexdigest()
+        target.write_text(json.dumps(receipt))
+        self.backup.write_bytes(b"modified backup")
+        with self.assertRaises(m.Blocked):
+            self.admit_b(committed=True)
         self.assertFalse(self.b_admission.exists())
 
     def test_refuses_bad_B_sigstore_and_no_recovery_admission(self):

@@ -2068,7 +2068,17 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
         }
         self.save_approval()
         self.packet = {
-            "source_sha": self.sha, "release_asset_sha256": self.release,
+            "status": m.RECOVERY_COMMITTED_B_STATUS,
+            "cut_source_sha": self.sha,
+            "cut_release_asset_sha256": self.release,
+            "cut_nonce": self.cut,
+            "cut_old_launcher_sha256": m.digest(self.old),
+            "cut_new_launcher_sha256": m.digest(self.new),
+            "cut_receipt_sha256": m.digest(m.json_bytes(
+                self.receipt).rstrip(b"\n")),
+            "source_sha": "c" * 40,
+            "release_asset_sha256": "sha256:" + "d" * 64,
+            "manifest_sha256": "f" * 64,
             "issued_at": self.now - 5, "expires_at": self.now + 120,
         }
 
@@ -2084,13 +2094,13 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
              patch.object(m, "require_host"), \
              patch.object(m, "root_chain"), \
              patch.object(m, "all_five_locks", return_value=nullcontext()) as locks, \
-             patch.object(m, "bootstrap_trusted_sources",
+             patch.object(m, "bootstrap_recovery_b_trusted_sources",
                           return_value=self.packet) as admitted, \
              patch.object(m, "read_bound",
                           side_effect=lambda path, maximum=4096, exact_mode=None:
                           Path(path).read_bytes()):
             result = m.rollback_approved()
-            admitted.assert_called_once()
+            admitted.assert_called_once_with(committed=True)
             locks.assert_called_once()
             return result
 
@@ -2135,8 +2145,8 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
         dual-provenance design needs separate adversarial tests and review.
         """
         original = dict(self.packet)
-        for changed in ({"source_sha": "c" * 40},
-                        {"release_asset_sha256": "sha256:" + "d" * 64}):
+        for changed in ({"cut_source_sha": "f" * 40},
+                        {"cut_release_asset_sha256": "sha256:" + "f" * 64}):
             with self.subTest(changed=changed):
                 self.packet = dict(original, **changed)
                 with self.assertRaisesRegex(
@@ -2144,6 +2154,83 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
                     self.run_reversal()
                 self.assertEqual(self.new, self.launcher.read_bytes())
                 self.assertFalse(any(self.recovery.iterdir()))
+
+    def test_rollback_with_B_admission_after_A_expired(self):
+        """A's 900-second bootstrap must never be refreshed for signed B."""
+        with patch.object(m, "bootstrap_trusted_sources",
+                          side_effect=AssertionError("A bootstrap was used")):
+            result = self.run_reversal()
+        self.assertEqual(
+            "QA525_LAUNCHER_ROLLED_BACK_NO_API_WEB_DEPLOY",
+            result["status"])
+        self.assertTrue((self.recovery / (
+            "rollback-intent-" + self.nonce + ".superseded")).exists())
+        self.assertFalse((self.recovery / (
+            "rollback-intent-" + self.nonce + ".json")).exists())
+
+    def test_reconcile_nonce_replay_after_archive_rejected(self):
+        """Retained signed-B receipt counts as nonce consumed after archive."""
+        self.run_reversal()
+        with patch.object(m, "STATE", self.state), \
+             patch.object(m, "RECOVERY_STATE", self.recovery), \
+             patch.object(m, "root_chain"), \
+             patch.object(m, "read_bound",
+                          side_effect=lambda p, maximum=4096, exact_mode=None:
+                          Path(p).read_bytes()):
+            consumed = m.scan_history(verify_recovery=True)
+        self.assertEqual({self.cut, self.nonce}, consumed)
+        self.assertTrue((self.recovery / (
+            "rollback-receipt-" + self.nonce + ".json")).exists())
+        self.assertTrue((self.recovery / (
+            "rollback-intent-" + self.nonce + ".superseded")).exists())
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+
+    def test_actual_sigkill_in_rollback_before_and_after_B_receipt(self):
+        """SIGKILL strikes the REAL rollback method, not sandbox simulation."""
+        import multiprocessing
+        import signal
+        for boundary in ("after_swap", "after_receipt"):
+            with self.subTest(boundary=boundary):
+                # Each iteration uses a new temporary fixture to keep the
+                # original A and approval independent of earlier transactions.
+                fixture = RootLauncherReversalTransactionTests(
+                    methodName="test_separate_approved_root_reversal_preserves_old_receipt")
+                fixture.setUp()
+                try:
+                    def child():
+                        original_replace = m.os.replace
+                        original_write = m.write_once
+                        def replace_and_die(source, dest):
+                            original_replace(source, dest)
+                            if (boundary == "after_swap" and
+                                    Path(dest) == fixture.launcher):
+                                os.kill(os.getpid(), signal.SIGKILL)
+                        def write_and_die(path, content, mode=0o600):
+                            original_write(path, content, mode=mode)
+                            if (boundary == "after_receipt" and
+                                    Path(path).name.startswith("rollback-receipt-")):
+                                os.kill(os.getpid(), signal.SIGKILL)
+                        with patch.object(m.os, "replace",
+                                          side_effect=replace_and_die), \
+                             patch.object(m, "write_once",
+                                          side_effect=write_and_die):
+                            fixture.run_reversal()
+                    proc = multiprocessing.get_context("fork").Process(
+                        target=child)
+                    proc.start()
+                    proc.join(timeout=15)
+                    if proc.is_alive():
+                        proc.kill()
+                        proc.join(timeout=5)
+                    self.assertEqual(-signal.SIGKILL, proc.exitcode)
+                    self.assertEqual(fixture.old, fixture.launcher.read_bytes())
+                    self.assertTrue((fixture.recovery / (
+                        "rollback-intent-" + fixture.nonce + ".json")).exists())
+                    with self.assertRaises(m.Blocked):
+                        fixture.run_reversal()
+                finally:
+                    fixture.doCleanups()
 
     def test_recovery_interruption_after_durable_intent_blocks_retry(self):
         before = m.write_once
