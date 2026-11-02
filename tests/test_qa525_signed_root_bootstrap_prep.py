@@ -37,14 +37,14 @@ def make_zip(files):
 
 
 def build_release(*, missing=None, tampered=None, wrong_sha=False,
-                  extra=None):
-    base = f"Proyecto-Centenario-QA-srv01-{SHA[:12]}"
+                  extra=None, source_sha=SHA):
+    base = f"Proyecto-Centenario-QA-srv01-{source_sha[:12]}"
     members = {
         p: ("signed synthetic " + p).encode() for p in m.SOURCES
     }
     members[m.BOOTSTRAP_SCRIPT] = FILE.read_bytes()
     members.update({
-        "BUILD-INFO.txt": ("SOURCE_SHA=" + ("b" * 40 if wrong_sha else SHA) +
+        "BUILD-INFO.txt": ("SOURCE_SHA=" + ("b" * 40 if wrong_sha else source_sha) +
                            "\nSTORAGE=SIGNED_REBUILT_SILO_ARCHIVE_SYNTHETIC_QA\n").encode(),
         "README.txt": b"synthetic docs",
     })
@@ -271,6 +271,165 @@ class RootBootstrapTests(unittest.TestCase):
         with patch.object(m.os, "geteuid", return_value=1001):
             with self.assertRaisesRegex(m.Blocked, "BOOTSTRAP_ROOT_GLMDCH_ONLY"):
                 m.prepare(self.envelope, SHA, "c" * 64, BOOTSTRAP_HASH)
+
+
+
+
+class DelayedRecoveryBootstrapTests(unittest.TestCase):
+    """Real A/B ZIP checks with disposable root-mocked staging, no QA host."""
+
+    B = "b" * 40
+    verify = RootBootstrapTests.verify
+
+    def setUp(self):
+        RootBootstrapTests.setUp(self)
+        self.pending = Path(self.context.name) / "pending"
+        self.pending.mkdir(mode=0o700)
+        self.launcher = Path(self.context.name) / "bin" / "pmgm-qa-update"
+        self.launcher.parent.mkdir(mode=0o700)
+        self.original = b"synthetic original launcher\n"
+        self.launcher.write_bytes(self.original)
+        self.launcher.chmod(0o700)
+        self.new = b"synthetic target launcher\n"
+        self.nonce = "9" * 64
+        self.b_admission = Path(self.context.name) / "recovery-admission.json"
+        for patcher in (
+            patch.object(m, "PENDING_STATE", self.pending),
+            patch.object(m, "LAUNCHER", self.launcher),
+            patch.object(m, "RECOVERY_ADMISSION", self.b_admission),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        original_zip = build_release()
+        self.verify(original_zip)
+        a_envelope = self.stage / ("qa-signed-" + SHA + ".zip")
+        a_envelope.write_bytes(original_zip)
+        a_envelope.chmod(0o600)
+        self.a_original_admission = self.admission.read_bytes()
+        self.intent = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": SHA,
+            "release_asset_sha256":
+                "sha256:" + hashlib.sha256(original_zip).hexdigest(),
+            "old_launcher_sha256": hashlib.sha256(self.original).hexdigest(),
+            "new_launcher_sha256": hashlib.sha256(self.new).hexdigest(),
+            "nonce": self.nonce,
+        }
+        self.intent_path = self.pending / ("intent-" + self.nonce + ".json")
+        self.intent_path.write_text(json.dumps(self.intent))
+        self.intent_path.chmod(0o600)
+        self.backup = self.pending / ("old-" + self.nonce + ".bin")
+        self.backup.write_bytes(self.original)
+        self.backup.chmod(0o700)
+        self.b_envelope = Path(self.context.name) / "B.zip"
+        self.b_bytes = build_release(source_sha=self.B)
+        self.b_envelope.write_bytes(self.b_bytes)
+        self.b_envelope.chmod(0o600)
+
+    def admit_b(self, **kwargs):
+        return m.prepare_delayed_recovery(
+            kwargs.pop("envelope", self.b_envelope),
+            kwargs.pop("sha", self.B),
+            kwargs.pop("digest", hashlib.sha256(self.b_bytes).hexdigest()),
+            BOOTSTRAP_HASH, kwargs.pop("nonce", self.nonce),
+            now=kwargs.pop("now", 1_900_000_000),
+            verify=kwargs.pop("verify", Mock()),
+            **kwargs)
+
+    def test_b_admission_verifies_both_signed_envelopes_and_preserves_A(self):
+        before = self.intent_path.read_bytes()
+        after = self.admit_b()
+        self.assertEqual(
+            "QA525_DUAL_SIGNED_RECOVERY_B_PREPARED_NO_ACTION",
+            after["status"])
+        self.assertFalse(after["may_recover"])
+        self.assertFalse(after["may_install"])
+        self.assertFalse(after["may_apply"])
+        self.assertEqual(self.a_original_admission, self.admission.read_bytes())
+        self.assertEqual(before, self.intent_path.read_bytes())
+        self.assertEqual(self.original, self.backup.read_bytes())
+        self.assertEqual(self.original, self.launcher.read_bytes())
+        b_packet = json.loads(self.b_admission.read_text())
+        self.assertEqual("EXTERNAL_SIGSTORE_RECOVERY_B_ADMISSION_ONLY",
+                         b_packet["status"])
+        self.assertEqual(1_900_000_000, b_packet["issued_at"])
+        self.assertEqual(1_900_000_900, b_packet["expires_at"])
+        self.assertEqual(SHA, b_packet["cut_source_sha"])
+        self.assertEqual(self.B, b_packet["source_sha"])
+        self.assertEqual(hashlib.sha256(json.dumps(
+            self.intent, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=True).encode()).hexdigest(),
+            b_packet["cut_intent_sha256"])
+        self.assertEqual(set(b_packet["files"]), {
+            str(self.stage / ("recovery-" + self.B) / s) for s in m.SOURCES})
+        for path, digest in b_packet["files"].items():
+            self.assertEqual(hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+                             digest)
+        self.assertFalse(
+            (self.pending / ("receipt-" + self.nonce + ".json")).exists())
+
+    def test_expired_original_A_admission_cannot_be_reissued_or_overwritten(self):
+        self.assertLess(json.loads(
+            self.admission.read_text())["expires_at"], 1_900_000_000)
+        self.admit_b()
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_ALREADY_ADMITTED"):
+            self.admit_b()
+        self.assertEqual(self.a_original_admission, self.admission.read_bytes())
+
+    def test_refuses_tampered_original_sources_and_archive(self):
+        source = self.stage / SHA / m.SOURCES[0]
+        source.write_bytes(b"tampered")
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_HISTORICAL_A_SOURCE_DRIFT"):
+            self.admit_b()
+        self.assertFalse(self.b_admission.exists())
+
+    def test_refuses_missing_original_intent_backup_and_commit_ambiguity(self):
+        for target, error in (
+            (self.intent_path, "BOOTSTRAP_ROOT_PATH_MISSING"),
+            (self.backup, "BOOTSTRAP_ROOT_PATH_MISSING"),
+        ):
+            target.rename(target.with_suffix(".hidden"))
+            try:
+                with self.subTest(target=target):
+                    with self.assertRaises(m.Blocked):
+                        self.admit_b()
+                    self.assertFalse(self.b_admission.exists())
+            finally:
+                target.with_suffix(".hidden").rename(target)
+        receipt = self.pending / ("receipt-" + self.nonce + ".json")
+        receipt.write_text('{"status":"FAKE"}')
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_ORIGINAL_CUT_ALREADY_COMMITTED"):
+            self.admit_b()
+        self.assertFalse(self.b_admission.exists())
+
+    def test_refuses_bad_B_sigstore_and_no_recovery_admission(self):
+        failure = Mock(side_effect=subprocess.CalledProcessError(1, "gh"))
+        with self.assertRaisesRegex(
+                m.Blocked, "BOOTSTRAP_ATTESTATION_FAILED"):
+            self.admit_b(verify=failure)
+        self.assertFalse(self.b_admission.exists())
+        self.assertFalse((self.stage / ("recovery-" + self.B)).exists())
+
+    def test_refuses_reusing_A_source_as_B(self):
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_B_MUST_DIFFER_FROM_A"):
+            self.admit_b(sha=SHA, digest=hashlib.sha256(
+                (self.stage / ("qa-signed-" + SHA + ".zip")).read_bytes()
+                ).hexdigest())
+        self.assertFalse(self.b_admission.exists())
+
+    def test_refuses_unrecognized_launcher_and_wrong_nonce(self):
+        self.launcher.write_bytes(b"unexpected launcher")
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_UNKNOWN_LIVE_LAUNCHER"):
+            self.admit_b()
+        self.launcher.write_bytes(self.original)
+        with self.assertRaises(m.Blocked):
+            self.admit_b(nonce="0" * 64)
+        self.assertFalse(self.b_admission.exists())
 
 
 if __name__ == "__main__":

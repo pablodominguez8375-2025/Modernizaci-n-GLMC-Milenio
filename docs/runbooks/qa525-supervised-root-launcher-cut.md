@@ -99,3 +99,40 @@ Output `QA525_SIGNED_SOURCES_PREPARED_NO_LAUNCHER_CHANGE` proves only that attes
 
 ## QA525 isolated interpreter review, 2026-11-01
 PR834 now requires isolated and no-site Python flags for the privileged preparer and installer. The preparer pins the GitHub attestation verifier to /usr/bin/gh and uses a minimal environment. Hermetic tests cover this requirement and receipt compatibility. This is not authorization to change the host. The independently established first-execution trust anchor, disaster recovery review and explicit launcher-only approval are still pending.
+
+
+## QA525 rollback independiente — candidato PR #838 (revisión, NO AUTORIZADO)
+
+PR #834 fue fusionada a dev@0d045f75e62d283987a0fa5e3d293918e113c811,
+y su release ZIP y bootstrap firmados fueron verificados y retenidos en glmdch,
+**sin ejecución**. Los siete informes G6 declaran restauración aislada local
+PASS, pero desastre fuera del host pendiente, IAM no restaurado y consistencia
+multirrecurso sin demostrar.
+
+PR #838 en borrador desarrolla dos piezas separadas: un simulador que solo
+admite raíces desechables en /tmp y el contrato puro `assess_reversal` para un
+futuro ejecutor root. También propone `--rollback-approved` en el instalador
+root, **todavía NO fusionado, NO firmado en la release física y NO ejecutable en
+glmdch**. El modo nuevo exige admisión externa de fuentes firmadas todavía
+vigente, aprobación distinta `/etc/pmgm/qa525-launcher-rollback.json`
+root0600, `/opt/centenario/qa525-launcher-recovery` root0700 preexistente,
+receipt antiguo comprometido, backup original SHA verificado y launcher vivo
+igual al hash NUEVO registrado, además de los cinco locks del operador.
+
+El rollback deja `rollback-intent`, copia durable del nuevo launcher, staging
+del viejo y `os.replace` atómico con `fsync` y `rollback-receipt`; no toca
+API/WEB, Compose, EF, Keycloak ni SMTP. El journal NO se reintenta ni limpia
+automáticamente si ocurre una falla. El SHA y nonce exactos deben constar en
+una aprobación independiente, distinta a la instalación original, y no
+reutilizarse. **Si el corte ORIGINAL quedó interrumpido y existe intent sin
+receipt, este modo NO LO RECUPERA:** se requiere reconciliación manual y revisión
+de los bytes bajo locks. No se debe crear aprobación ni directorios del modo
+nuevo en glmdch mientras la PR no esté integrada, firmada, revisada y habilitada
+por autorización física separada.
+
+El nuevo código necesita: controles CI exact-head, revisión independiente de
+seguridad/custodia, aprobación del operador y del sponsor sobre el corte
+launcher-only, prueba de rollback en ambiente temporal y nuevo paquete firmado
+del SHA integrado. No prometer que el paquete físico del corte 0d045f75
+contiene un modo rollback que no tenía. Mantener `main` y `glmdch` sin
+cambios; ninguna operación API/WEB está incluida.

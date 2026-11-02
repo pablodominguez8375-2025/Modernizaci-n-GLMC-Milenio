@@ -894,6 +894,163 @@ class ReadOnlyDiagnosticCliTests(unittest.TestCase):
             inspect.assert_not_called()
 
 
+
+
+class RecoveryBAdmissionReviewTests(unittest.TestCase):
+    """B-only independently admitted byte set; synthetic root guards only."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="qa525-admission-B-")
+        self.addCleanup(self.temp.cleanup)
+        base = Path(self.temp.name)
+        self.sources = tuple(base / ("signed-B-" + str(i) + ".py")
+                             for i in range(12))
+        for i, path in enumerate(self.sources):
+            path.write_bytes(("signed-source-B-%02d" % i).encode())
+            path.chmod(0o600)
+        self.admission = base / "B-admission.json"
+        self.packet = {
+            "status": m.RECOVERY_B_STATUS,
+            "cut_source_sha": "a" * 40,
+            "cut_release_asset_sha256": "sha256:" + "b" * 64,
+            "cut_manifest_sha256": "c" * 64,
+            "cut_nonce": "1" * 64,
+            "cut_intent_sha256": "d" * 64,
+            "cut_old_launcher_sha256": "e" * 64,
+            "cut_new_launcher_sha256": "f" * 64,
+            "source_sha": "9" * 40,
+            "release_asset_sha256": "sha256:" + "8" * 64,
+            "manifest_sha256": "7" * 64,
+            "trusted_verifier_sha256": "6" * 64,
+            "files": {str(p): m.digest(p.read_bytes())
+                      for p in self.sources},
+            "issued_at": 100, "expires_at": 900,
+        }
+        self.write_packet()
+
+    def write_packet(self):
+        self.admission.write_bytes(m.json_bytes(self.packet))
+        self.admission.chmod(0o600)
+
+    def check(self):
+        with patch.object(m, "RECOVERY_B_ADMISSION", self.admission), \
+             patch.object(m, "SOURCES", self.sources), \
+             patch.object(m, "require_host"), \
+             patch.object(m, "root_chain"), \
+             patch.object(m, "read_bound",
+                          side_effect=lambda p, maximum=4096, exact_mode=None:
+                          Path(p).read_bytes()), \
+             patch.object(m.time, "time", return_value=500):
+            return m.bootstrap_recovery_b_trusted_sources()
+
+    def test_valid_B_packet_checks_every_attested_member_before_import(self):
+        packet = self.check()
+        self.assertEqual(self.packet, packet)
+        self.assertEqual(m.RECOVERY_B_STATUS, packet["status"])
+
+    def test_B_packet_expiry_bad_source_and_A_alias_fail_closed(self):
+        for mutation in (
+            {"expires_at": 500},
+            {"issued_at": 501},
+            {"expires_at": 1001},
+            {"source_sha": self.packet["cut_source_sha"]},
+            {"release_asset_sha256":
+             self.packet["cut_release_asset_sha256"]},
+            {"cut_nonce": "bad"},
+            {"cut_intent_sha256": "bad"},
+            {"extra": "forbidden"},
+            {"status": "EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY"},
+        ):
+            with self.subTest(mutation=mutation):
+                baseline = dict(self.packet)
+                self.packet.update(mutation)
+                self.write_packet()
+                try:
+                    with self.assertRaises(m.Blocked):
+                        self.check()
+                finally:
+                    self.packet = baseline
+        self.write_packet()
+
+    def test_tampered_B_member_and_extra_manifest_are_rejected(self):
+        self.sources[0].write_bytes(b"tampered")
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_B_SOURCE_HASH_MISMATCH"):
+            self.check()
+        self.sources[0].write_bytes(b"signed-source-B-00")
+        self.packet["files"]["extra.py"] = "0" * 64
+        self.write_packet()
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_B_SOURCE_MANIFEST_INVALID"):
+            self.check()
+
+
+class RecoveryBPendingJournalReviewTests(unittest.TestCase):
+    """B admission binding is checked under five shared read-only locks."""
+
+    def test_B_admission_cannot_bind_to_different_A_intent(self):
+        with tempfile.TemporaryDirectory(prefix="qa525-b-journal-") as td:
+            base = Path(td)
+            state = base / "journal"
+            state.mkdir(mode=0o700)
+            launcher = base / "pmgm-qa-update"
+            old, new = b"old B-recovery test\n", b"new B-recovery test\n"
+            launcher.write_bytes(new)
+            launcher.chmod(0o700)
+            intent = {
+                "status": "SWAP_INTENT_NO_DEPLOYMENT",
+                "source_sha": "a" * 40,
+                "release_asset_sha256": "sha256:" + "b" * 64,
+                "old_launcher_sha256": m.digest(old),
+                "new_launcher_sha256": m.digest(new),
+                "nonce": "1" * 64,
+            }
+            (state / ("intent-" + intent["nonce"] + ".json")).write_bytes(
+                m.json_bytes(intent))
+            (state / ("old-" + intent["nonce"] + ".bin")).write_bytes(old)
+            b = {
+                "cut_source_sha": intent["source_sha"],
+                "cut_release_asset_sha256":
+                    intent["release_asset_sha256"],
+                "cut_nonce": intent["nonce"],
+                "cut_intent_sha256":
+                    m.digest(m.json_bytes(intent).strip()),
+                "cut_old_launcher_sha256": intent["old_launcher_sha256"],
+                "cut_new_launcher_sha256": intent["new_launcher_sha256"],
+            }
+            original = {p.name: p.read_bytes() for p in state.iterdir()}
+            with patch.object(m, "STATE", state), \
+                 patch.object(m, "LAUNCHER", launcher), \
+                 patch.object(m, "require_host"), \
+                 patch.object(m, "root_chain"), \
+                 patch.object(m, "all_five_locks",
+                              return_value=nullcontext()) as locks, \
+                 patch.object(m, "read_bound",
+                              side_effect=lambda path, maximum=4096,
+                                  exact_mode=None: Path(path).read_bytes()):
+                report = m.inspect_pending_reconciliation(
+                    expected_b_packet=b)
+                self.assertEqual("POST_ATOMIC_SWAP", report["observed_phase"])
+                self.assertFalse(report["may_apply"])
+                for key, val in (
+                    ("cut_source_sha", "f" * 40),
+                    ("cut_intent_sha256", "0" * 64),
+                    ("cut_old_launcher_sha256", "0" * 64),
+                    ("cut_nonce", "9" * 64),
+                ):
+                    with self.subTest(key=key):
+                        with self.assertRaisesRegex(
+                                m.Blocked,
+                                "ROOT_RECOVERY_B_NOT_BOUND_TO_PENDING_A"):
+                            m.inspect_pending_reconciliation(
+                                expected_b_packet={**b, key: val})
+                self.assertEqual(original, {
+                    p.name: p.read_bytes() for p in state.iterdir()})
+                self.assertEqual("new B-recovery test\n",
+                                 launcher.read_text())
+                self.assertEqual(5, locks.call_count)
+
+
 class ReadOnlyPendingJournalTests(unittest.TestCase):
     """Never resume or roll back based solely on an on-disk journal."""
 
@@ -1173,6 +1330,761 @@ raise SystemExit("UNREACHABLE")
 
     def test_actual_sigkill_after_swap_leaves_intent_and_blocks_retry(self):
         self.check_kill("after_atomic_swap")
+
+
+# Include disposable reversal regressions in the existing QA525 root-review gate.
+from test_qa525_launcher_recovery_sandbox import RecoverySandboxTests
+from test_qa525_delayed_recovery_signed_evidence_audit import DelayedDualSignedEvidenceAuditTests
+
+
+
+class ReversalPolicyGateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        src = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        sp = importlib.util.spec_from_file_location("qa525_reversal_policy", src)
+        cls.policy = importlib.util.module_from_spec(sp)
+        sys.modules[sp.name] = cls.policy
+        sp.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        self.receipt = {
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "source_sha": "a" * 40, "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "candidate_operator_sha256": "e" * 64,
+            "nonce": "1" * 64,
+        }
+        self.approval = {
+            "action": "rollback-root-launcher-supervised",
+            "scope": self.policy.RECOVERY_SCOPE,
+            "environment": self.policy.ENVIRONMENT,
+            "operator": "soporte@glmdch", "approved": True,
+            "cut_nonce": self.receipt["nonce"], "nonce": "2" * 64,
+            "source_sha": self.receipt["source_sha"],
+            "release_asset_sha256": self.receipt["release_asset_sha256"],
+            "old_launcher_sha256": self.receipt["old_launcher_sha256"],
+            "new_launcher_sha256": self.receipt["new_launcher_sha256"],
+            "issued_at": 100, "expires_at": 200,
+        }
+
+    def review(self, *, receipt=None, approval=None, current=None,
+               backup=None, pending=False, consumed=()):
+        return self.policy.assess_reversal(
+            self.receipt if receipt is None else receipt,
+            self.approval if approval is None else approval,
+            current_launcher_sha256=self.receipt["new_launcher_sha256"]
+                if current is None else current,
+            backup_sha256=self.receipt["old_launcher_sha256"]
+                if backup is None else backup,
+            pending=pending, now=120, consumed_nonces=consumed)
+
+    def test_distinct_approval_yields_review_only_never_rollback_permission(self):
+        outcome = self.review()
+        self.assertEqual("REVIEWED_LAUNCHER_REVERSAL_PLAN_NO_INSTALL",
+                         outcome["status"])
+        for flag in ("may_install", "may_apply", "may_recover",
+                     "rollback_complete"):
+            self.assertFalse(outcome[flag])
+        self.assertTrue(outcome["requires_independent_signed_root_executor"])
+
+    def test_nonce_replay_and_expired_forged_approvals_rejected(self):
+        for changed in ({"nonce": self.receipt["nonce"]},
+                        {"nonce": "3" * 64},
+                        {"approved": False},
+                        {"scope": "API_AND_WEB"},
+                        {"cut_nonce": "7" * 64},
+                        {"source_sha": "f" * 40},
+                        {"expires_at": 120},
+                        {"extra": True}):
+            approval = dict(self.approval, **changed)
+            with self.subTest(changed=changed):
+                if changed == {"nonce": "3" * 64}:
+                    with self.assertRaises(self.policy.Blocked):
+                        self.review(approval=approval, consumed=("3" * 64,))
+                else:
+                    with self.assertRaises(self.policy.Blocked):
+                        self.review(approval=approval)
+
+    def test_pending_unknown_live_and_bad_backup_rejected(self):
+        with self.assertRaises(self.policy.Blocked):
+            self.review(pending=True)
+        with self.assertRaises(self.policy.Blocked):
+            self.review(current="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.review(backup="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.review(receipt={**self.receipt, "status": "INCOMPLETE"})
+
+
+
+
+
+
+class DelayedRecoveryPlanPolicyTests(unittest.TestCase):
+    """Dual provenance is a pure review, never root or deployment authority."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        spec = importlib.util.spec_from_file_location(
+            "qa525_delayed_reversal_policy", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        p = self.policy
+        self.original = {
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "candidate_operator_sha256": "e" * 64,
+            "nonce": "1" * 64,
+        }
+        self.claim = {
+            "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
+            "source_sha": "f" * 40,
+            "release_asset_sha256": "sha256:" + "7" * 64,
+            "manifest_sha256": "8" * 64,
+            "executor_sha256": "9" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+        self.approval = {
+            "action": p.DELAYED_RECOVERY_ACTION,
+            "scope": p.DELAYED_RECOVERY_SCOPE,
+            "environment": p.ENVIRONMENT,
+            "operator": "soporte@glmdch",
+            "approved": True,
+            "cut_source_sha": self.original["source_sha"],
+            "cut_release_asset_sha256":
+                self.original["release_asset_sha256"],
+            "cut_nonce": self.original["nonce"],
+            "cut_receipt_sha256": p.frozen_sha(self.original),
+            "old_launcher_sha256": self.original["old_launcher_sha256"],
+            "new_launcher_sha256": self.original["new_launcher_sha256"],
+            "recovery_source_sha": self.claim["source_sha"],
+            "recovery_release_asset_sha256":
+                self.claim["release_asset_sha256"],
+            "recovery_manifest_sha256": self.claim["manifest_sha256"],
+            "recovery_executor_sha256": self.claim["executor_sha256"],
+            "nonce": "2" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+
+    def check(self, *, committed=None, claim=None, approval=None,
+              now=5000, pending=False, live=None, backup=None, consumed=()):
+        return self.policy.assess_delayed_recovery_plan(
+            self.original if committed is None else committed,
+            self.claim if claim is None else claim,
+            self.approval if approval is None else approval,
+            live_sha256=(self.original["new_launcher_sha256"]
+                         if live is None else live),
+            backup_sha256=(self.original["old_launcher_sha256"]
+                           if backup is None else backup),
+            pending=pending, now=now, consumed_nonces=consumed)
+
+    def test_fresh_dual_provenance_only_produces_untrusted_plan(self):
+        outcome = self.check()
+        self.assertEqual("REVIEWED_DELAYED_DUAL_PROVENANCE_NO_EXECUTION",
+                         outcome["status"])
+        self.assertEqual(self.claim["source_sha"],
+                         outcome["recovery_source_sha"])
+        self.assertEqual(self.original["source_sha"],
+                         outcome["cut_source_sha"])
+        self.assertNotEqual(outcome["recovery_source_sha"],
+                            outcome["cut_source_sha"])
+        for field in ("may_install", "may_apply", "may_recover",
+                      "rollback_complete", "claims_authenticated"):
+            self.assertFalse(outcome[field])
+        for field in ("requires_independent_signed_root_executor",
+                      "requires_new_recovery_bootstrap",
+                      "requires_original_cut_authentication",
+                      "requires_root_journal_and_lock_verification"):
+            self.assertTrue(outcome[field])
+
+    def test_independent_recovery_source_digest_manifest_executor_bound(self):
+        for changes in ({"source_sha": "0" * 40},
+                        {"release_asset_sha256": "sha256:" + "0" * 64},
+                        {"manifest_sha256": "0" * 64},
+                        {"executor_sha256": "0" * 64},
+                        {"purpose": "CLAIMED_SIGSTORE_PASS"},
+                        {"extra": "anything"}):
+            with self.subTest(changes=changes):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(claim={**self.claim, **changes})
+
+    def test_original_cut_receipt_and_approval_are_bound_exactly(self):
+        for changes in ({"cut_source_sha": "0" * 40},
+                        {"cut_release_asset_sha256": "sha256:" + "0" * 64},
+                        {"cut_receipt_sha256": "0" * 64},
+                        {"cut_nonce": "0" * 64},
+                        {"old_launcher_sha256": "0" * 64},
+                        {"recovery_source_sha": "0" * 40},
+                        {"scope": "API_AND_WEB"},
+                        {"approved": False},
+                        {"extra": "anything"}):
+            with self.subTest(changes=changes):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(approval={**self.approval, **changes})
+        with self.assertRaises(self.policy.Blocked):
+            self.check(committed={**self.original, "status": "INCOMPLETE"})
+        with self.assertRaises(self.policy.Blocked):
+            self.check(committed={**self.original, "nonce": "0" * 64})
+
+    def test_fresh_recovery_has_own_short_lifetime_no_old_admission(self):
+        # The original installation admission was one-shot and long expired:
+        # it is intentionally NOT an input. Only a fresh untrusted review
+        # claim plus a distinct fresh approval can yield a NON-authorizing plan.
+        self.assertFalse(self.check()["may_recover"])
+        for change in ({"expires_at": 5000},
+                       {"issued_at": 5001},
+                       {"expires_at": 5901},
+                       {"issued_at": True},
+                       {"expires_at": False}):
+            for field in ("claim", "approval"):
+                with self.subTest(field=field, change=change):
+                    kwargs = {field: {**getattr(self, field), **change}}
+                    with self.assertRaises(self.policy.Blocked):
+                        self.check(**kwargs)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(now=True)
+
+    def test_pending_invalid_live_backup_and_replayed_nonce_refused(self):
+        with self.assertRaises(self.policy.Blocked):
+            self.check(pending=True)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(live="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(backup="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(consumed=("2" * 64,))
+        with self.assertRaises(self.policy.Blocked):
+            self.check(approval={**self.approval,
+                                 "nonce": self.original["nonce"]})
+        with self.assertRaises(self.policy.Blocked):
+            self.check(consumed=("not-a-hash",))
+
+
+
+
+class PendingReconciliationPlanPolicyTests(unittest.TestCase):
+    """Original A with intent but NO receipt: fail-closed A/B review only."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        spec = importlib.util.spec_from_file_location(
+            "qa525_pending_reconciliation_policy", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        p = self.policy
+        self.intent = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "nonce": "1" * 64,
+        }
+        self.claim = {
+            "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
+            "source_sha": "f" * 40,
+            "release_asset_sha256": "sha256:" + "7" * 64,
+            "manifest_sha256": "8" * 64,
+            "executor_sha256": "9" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+        self.approval = {
+            "action": p.PENDING_RECONCILIATION_ACTION,
+            "scope": p.PENDING_RECONCILIATION_SCOPE,
+            "environment": p.ENVIRONMENT,
+            "operator": "soporte@glmdch", "approved": True,
+            "cut_source_sha": self.intent["source_sha"],
+            "cut_release_asset_sha256": self.intent["release_asset_sha256"],
+            "cut_nonce": self.intent["nonce"],
+            "cut_intent_sha256": p.frozen_sha(self.intent),
+            "old_launcher_sha256": self.intent["old_launcher_sha256"],
+            "new_launcher_sha256": self.intent["new_launcher_sha256"],
+            "recovery_source_sha": self.claim["source_sha"],
+            "recovery_release_asset_sha256":
+                self.claim["release_asset_sha256"],
+            "recovery_manifest_sha256": self.claim["manifest_sha256"],
+            "recovery_executor_sha256": self.claim["executor_sha256"],
+            "nonce": "2" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+
+    def review(self, **kwargs):
+        return self.policy.assess_pending_reconciliation_plan(
+            kwargs.pop("intent", self.intent),
+            kwargs.pop("claim", self.claim),
+            kwargs.pop("approval", self.approval),
+            live_sha256=kwargs.pop("live", self.intent["old_launcher_sha256"]),
+            backup_sha256=kwargs.pop("backup", self.intent["old_launcher_sha256"]),
+            receipt_present=kwargs.pop("receipt", False),
+            now=kwargs.pop("now", 5000),
+            consumed_nonces=kwargs.pop("consumed", ()),
+            **kwargs)
+
+    def test_both_interruption_phases_never_authorize_or_claim_authentication(self):
+        for live, expected in (
+            (self.intent["old_launcher_sha256"], "PENDING_BEFORE_ATOMIC_SWAP"),
+            (self.intent["new_launcher_sha256"], "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT"),
+        ):
+            with self.subTest(phase=expected):
+                result = self.review(live=live)
+                self.assertEqual(
+                    "REVIEWED_PENDING_DUAL_PROVENANCE_NO_EXECUTION",
+                    result["status"])
+                self.assertEqual(expected, result["observed_phase"])
+                self.assertEqual(self.policy.frozen_sha(self.intent),
+                                 result["cut_intent_sha256"])
+                for key in ("may_install", "may_apply", "may_recover",
+                            "reconciliation_complete", "claims_authenticated"):
+                    self.assertIs(result[key], False)
+                for key in ("requires_independent_signed_root_executor",
+                            "requires_new_recovery_bootstrap",
+                            "requires_original_cut_authentication",
+                            "requires_root_journal_and_lock_verification"):
+                    self.assertIs(result[key], True)
+
+    def test_missing_backup_unknown_launcher_and_fake_receipt_refused(self):
+        for kw in ({"backup": "0" * 64},
+                   {"live": "0" * 64},
+                   {"receipt": True},
+                   {"receipt": 0},
+                   {"backup": "not a hash"},
+                   {"intent": {**self.intent, "status":
+                                "LAUNCHER_ATOMIC_SWAP_COMMITTED"}},
+                   {"intent": {**self.intent, "nonce": False}},
+                   {"intent": {**self.intent, "surprise": True}}):
+            with self.subTest(kw=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(**kw)
+
+    def test_tampered_original_and_distinct_B_binding_refused(self):
+        for changed in (
+            {"cut_intent_sha256": "0" * 64},
+            {"cut_source_sha": "0" * 40},
+            {"cut_nonce": "0" * 64},
+            {"recovery_source_sha": self.intent["source_sha"]},
+            {"recovery_executor_sha256": "0" * 64},
+            {"old_launcher_sha256": "0" * 64},
+            {"scope": "API_AND_WEB"},
+            {"approved": False},
+            {"extra": True},
+        ):
+            with self.subTest(changed=changed):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(approval={**self.approval, **changed})
+        with self.assertRaises(self.policy.Blocked):
+            self.review(intent={**self.intent, "new_launcher_sha256": "0" * 64})
+        with self.assertRaises(self.policy.Blocked):
+            self.review(claim={**self.claim, "manifest_sha256": "0" * 64})
+        with self.assertRaises(self.policy.Blocked):
+            self.review(claim={**self.claim, "purpose": "SIGSTORE_VERIFIED"})
+
+
+    def test_A_cannot_be_reused_as_recovery_B_even_if_approval_matches(self):
+        for change in (
+            {"source_sha": self.intent["source_sha"]},
+            {"release_asset_sha256": self.intent["release_asset_sha256"]},
+        ):
+            claim = {**self.claim, **change}
+            approval = {**self.approval,
+                        **{"recovery_" + k: v for k, v in change.items()}}
+            with self.subTest(change=change):
+                with self.assertRaisesRegex(
+                        self.policy.Blocked,
+                        "PENDING_RECONCILIATION_B_NOT_DISTINCT_FROM_A"):
+                    self.review(claim=claim, approval=approval)
+
+    def test_expired_claim_or_approval_replay_and_boolean_clock_refused(self):
+        for change in ({"expires_at": 5000},
+                       {"issued_at": 5001},
+                       {"expires_at": 5901},
+                       {"issued_at": True},
+                       {"expires_at": False}):
+            for packet in ("claim", "approval"):
+                with self.subTest(packet=packet, change=change):
+                    with self.assertRaises(self.policy.Blocked):
+                        self.review(**{
+                            packet: {**getattr(self, packet), **change}})
+        for kw in ({"now": True},
+                   {"consumed": ("2" * 64,)},
+                   {"consumed": ("bad",)},
+                   {"approval": {**self.approval, "nonce":
+                                 self.intent["nonce"]}}):
+            with self.subTest(kw=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(**kw)
+
+
+
+
+
+
+
+class CommittedIntentResiduePolicyTests(unittest.TestCase):
+    """SIGKILL after committed receipt but before removing original intent."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = (ROOT / "scripts/qa/operators" /
+                  "qa525-launcher-replacement-contract.py")
+        spec = importlib.util.spec_from_file_location(
+            "qa525_committed_intent_residue_review", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        self.a = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "nonce": "1" * 64,
+        }
+        self.receipt = {
+            **self.a, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": "e" * 64,
+        }
+
+    def review(self, *, a=None, receipt=None, backup=None, live=None):
+        return self.policy.assess_committed_intent_residue(
+            self.a if a is None else a,
+            self.receipt if receipt is None else receipt,
+            old_backup_sha256=(
+                self.a["old_launcher_sha256"] if backup is None else backup),
+            live_launcher_sha256=(
+                self.a["new_launcher_sha256"] if live is None else live),
+        )
+
+    def test_durable_receipt_with_unremoved_intent_has_no_authority(self):
+        result = self.review()
+        self.assertEqual(
+            "REVIEWED_COMMITTED_CUT_INTENT_RESIDUE_NO_EXECUTION",
+            result["status"])
+        self.assertEqual(
+            "POST_COMMITTED_RECEIPT_PRE_INTENT_CLEANUP",
+            result["observed_phase"])
+        self.assertEqual(
+            self.policy.frozen_sha(self.receipt),
+            result["committed_receipt_sha256"])
+        self.assertTrue(result["original_committed_receipt_preserved"])
+        for name in (
+            "may_install", "may_apply", "may_recover", "may_delete_intent",
+            "may_rollback", "reconciliation_complete",
+        ):
+            self.assertIs(result[name], False)
+        for name in (
+            "requires_independent_root_custody_authentication",
+            "requires_signed_cleanup_approval",
+            "requires_locked_idempotent_journal_reconciliation",
+        ):
+            self.assertIs(result[name], True)
+
+    def test_never_conflate_committed_with_uncommitted_cut(self):
+        for changed in (
+            {"status": "SWAP_INTENT_NO_DEPLOYMENT"},
+            {"source_sha": "f" * 40},
+            {"release_asset_sha256": "sha256:" + "0" * 64},
+            {"nonce": "2" * 64},
+            {"old_launcher_sha256": "0" * 64},
+            {"new_launcher_sha256": "0" * 64},
+            {"candidate_operator_sha256": "wrong"},
+            {"extra": True},
+        ):
+            with self.subTest(change=changed):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(receipt={**self.receipt, **changed})
+
+    def test_old_live_missing_backup_or_forged_intent_fails_closed(self):
+        for kw in (
+            {"live": self.a["old_launcher_sha256"]},
+            {"live": "0" * 64},
+            {"backup": "0" * 64},
+            {"backup": True},
+            {"a": {**self.a, "nonce": "2" * 64}},
+            {"a": {**self.a, "status": "FAKE_SUCCESS"}},
+            {"a": {**self.a, "extra": "unexpected"}},
+        ):
+            with self.subTest(change=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.review(**kw)
+
+
+
+class PendingReceiptReviewTests(unittest.TestCase):
+    """Receipt B can describe reconciliation, never authenticate or authorize."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        spec = importlib.util.spec_from_file_location(
+            "qa525_append_only_pending_receipt_contract", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        p = self.policy
+        self.a = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "nonce": "1" * 64,
+        }
+        self.b = {
+            "status": "PENDING_LAUNCHER_RECOVERY_RECONCILIATION_COMMITTED",
+            "cut_source_sha": self.a["source_sha"],
+            "cut_release_asset_sha256": self.a["release_asset_sha256"],
+            "cut_nonce": self.a["nonce"],
+            "cut_intent_sha256": p.frozen_sha(self.a),
+            "old_launcher_sha256": self.a["old_launcher_sha256"],
+            "new_launcher_sha256": self.a["new_launcher_sha256"],
+            "recovery_source_sha": "f" * 40,
+            "recovery_release_asset_sha256": "sha256:" + "7" * 64,
+            "recovery_manifest_sha256": "8" * 64,
+            "recovery_executor_sha256": "9" * 64,
+            "recovery_nonce": "2" * 64,
+            "recovery_approval_sha256": "3" * 64,
+            "observed_phase": "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT",
+            "restored_launcher_sha256": self.a["old_launcher_sha256"],
+        }
+
+    def check(self, **kw):
+        return self.policy.assess_pending_reconciliation_receipt(
+            kw.pop("a", self.a), kw.pop("b", self.b),
+            old_backup_sha256=kw.pop("backup", self.a["old_launcher_sha256"]),
+            live_launcher_sha256=kw.pop("live", self.a["old_launcher_sha256"]),
+            original_receipt_present=kw.pop("original", False),
+            recovery_intent_present=kw.pop("pending_b", False), **kw)
+
+    def test_append_only_receipt_never_signs_off_on_retry(self):
+        for phase in ("PENDING_BEFORE_ATOMIC_SWAP",
+                      "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT"):
+            with self.subTest(phase=phase):
+                result = self.check(b={**self.b, "observed_phase": phase})
+                self.assertEqual(
+                    "REVIEWED_PENDING_RECOVERY_RECEIPT_UNTRUSTED_NO_EXECUTION",
+                    result["status"])
+                for key in ("may_install", "may_apply", "may_recover",
+                            "reconciliation_complete",
+                            "root_history_reconciliation_implemented"):
+                    self.assertIs(result[key], False)
+                self.assertTrue(result[
+                    "original_intent_must_remain_preserved"])
+                self.assertTrue(result[
+                    "receipt_needs_independent_root_authentication"])
+
+    def test_fake_completion_and_unreconciled_live_are_rejected(self):
+        for kw in (
+            {"original": True}, {"pending_b": True},
+            {"live": self.a["new_launcher_sha256"]},
+            {"live": "0" * 64}, {"backup": "0" * 64},
+            {"original": 0}, {"pending_b": 1},
+            {"a": {**self.a, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED"}},
+            {"a": {**self.a, "new_launcher_sha256": "0" * 64}},
+            {"b": {**self.b, "cut_intent_sha256": "0" * 64}},
+            {"b": {**self.b, "status": "FAKE_COMMITTED"}},
+            {"b": {**self.b, "restored_launcher_sha256":
+                   self.a["new_launcher_sha256"]}},
+            {"b": {**self.b, "recovery_nonce": self.a["nonce"]}},
+            {"b": {**self.b, "recovery_executor_sha256": "bad"}},
+            {"b": {**self.b, "recovery_source_sha": self.a["source_sha"]}},
+            {"b": {**self.b, "recovery_release_asset_sha256":
+                   self.a["release_asset_sha256"]}},
+            {"b": {**self.b, "observed_phase": "UNSUPPORTED_PHASE"}},
+            {"b": {**self.b, "surprise": "forged"}},
+        ):
+            with self.subTest(kw=kw):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(**kw)
+
+    def test_original_intent_must_match_B_receipt_exactly(self):
+        for key, bad in (
+            ("cut_source_sha", "f" * 40),
+            ("cut_release_asset_sha256", "sha256:" + "0" * 64),
+            ("cut_nonce", "0" * 64),
+            ("old_launcher_sha256", "0" * 64),
+            ("new_launcher_sha256", "0" * 64),
+        ):
+            with self.subTest(key=key):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(b={**self.b, key: bad})
+
+
+class RootLauncherReversalTransactionTests(unittest.TestCase):
+    """Real fsync and os.replace in disposable paths, never physical host."""
+
+    def setUp(self):
+        import time
+        self.temp = tempfile.TemporaryDirectory(prefix="qa525-root-reverse-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.state = self.root / "state"
+        self.recovery = self.root / "recovery"
+        self.bin = self.root / "bin"
+        for p in (self.state, self.recovery, self.bin):
+            p.mkdir(mode=0o700)
+        self.launcher = self.bin / "pmgm-qa-update"
+        self.old = b"original launcher verified\n"
+        self.new = b"synthetic signed replacement\n"
+        self.launcher.write_bytes(self.new)
+        self.launcher.chmod(0o700)
+        self.cut = "1" * 64
+        self.nonce = "2" * 64
+        self.sha = "a" * 40
+        self.release = "sha256:" + "b" * 64
+        self.receipt = {
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "source_sha": self.sha, "release_asset_sha256": self.release,
+            "old_launcher_sha256": m.digest(self.old),
+            "new_launcher_sha256": m.digest(self.new),
+            "candidate_operator_sha256": "e" * 64,
+            "nonce": self.cut,
+        }
+        old = self.state / ("old-" + self.cut + ".bin")
+        old.write_bytes(self.old)
+        old.chmod(0o700)
+        saved = self.state / ("receipt-" + self.cut + ".json")
+        saved.write_bytes(m.json_bytes(self.receipt))
+        saved.chmod(0o600)
+        self.approval_file = self.root / "recovery-approval.json"
+        self.now = int(time.time())
+        self.approval = {
+            "action": "rollback-root-launcher-supervised",
+            "scope": "QA525_LAUNCHER_ONLY_RECOVERY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION",
+            "environment": "QA_GLMDCH_ONLY",
+            "operator": "soporte@glmdch", "approved": True,
+            "cut_nonce": self.cut, "nonce": self.nonce,
+            "source_sha": self.sha, "release_asset_sha256": self.release,
+            "old_launcher_sha256": m.digest(self.old),
+            "new_launcher_sha256": m.digest(self.new),
+            "issued_at": self.now - 5, "expires_at": self.now + 120,
+        }
+        self.save_approval()
+        self.packet = {
+            "source_sha": self.sha, "release_asset_sha256": self.release,
+            "issued_at": self.now - 5, "expires_at": self.now + 120,
+        }
+
+    def save_approval(self):
+        self.approval_file.write_bytes(m.json_bytes(self.approval))
+        self.approval_file.chmod(0o600)
+
+    def run_reversal(self):
+        with patch.object(m, "STATE", self.state), \
+             patch.object(m, "RECOVERY_STATE", self.recovery), \
+             patch.object(m, "RECOVERY_APPROVAL", self.approval_file), \
+             patch.object(m, "LAUNCHER", self.launcher), \
+             patch.object(m, "require_host"), \
+             patch.object(m, "root_chain"), \
+             patch.object(m, "all_five_locks", return_value=nullcontext()) as locks, \
+             patch.object(m, "bootstrap_trusted_sources",
+                          return_value=self.packet) as admitted, \
+             patch.object(m, "read_bound",
+                          side_effect=lambda path, maximum=4096, exact_mode=None:
+                          Path(path).read_bytes()):
+            result = m.rollback_approved()
+            admitted.assert_called_once()
+            locks.assert_called_once()
+            return result
+
+    def test_separate_approved_root_reversal_preserves_old_receipt(self):
+        result = self.run_reversal()
+        self.assertEqual("QA525_LAUNCHER_ROLLED_BACK_NO_API_WEB_DEPLOY",
+                         result["status"])
+        self.assertEqual(self.old, self.launcher.read_bytes())
+        self.assertEqual(self.new, (self.recovery /
+            ("rollback-new-" + self.nonce + ".bin")).read_bytes())
+        self.assertTrue((self.recovery /
+            ("rollback-receipt-" + self.nonce + ".json")).is_file())
+        self.assertFalse((self.recovery /
+            ("rollback-intent-" + self.nonce + ".json")).exists())
+        self.assertTrue((self.state /
+            ("receipt-" + self.cut + ".json")).is_file())
+        self.assertFalse(result["api_web_changed"])
+        self.assertFalse(result["may_apply"])
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+
+    def test_invalid_approval_or_pending_cut_never_writes(self):
+        self.approval["approved"] = False
+        self.save_approval()
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(any(self.recovery.iterdir()))
+        self.approval["approved"] = True
+        self.save_approval()
+        pending = self.state / ("intent-" + self.cut + ".json")
+        pending.write_text("uncertain")
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(any(self.recovery.iterdir()))
+
+    def test_cross_release_recovery_fails_closed_pending_dual_provenance(self):
+        """A later signed bootstrap cannot recover a different original cut.
+
+        Current design intentionally rejects the mismatch; a future
+        dual-provenance design needs separate adversarial tests and review.
+        """
+        original = dict(self.packet)
+        for changed in ({"source_sha": "c" * 40},
+                        {"release_asset_sha256": "sha256:" + "d" * 64}):
+            with self.subTest(changed=changed):
+                self.packet = dict(original, **changed)
+                with self.assertRaisesRegex(
+                        m.Blocked, "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT"):
+                    self.run_reversal()
+                self.assertEqual(self.new, self.launcher.read_bytes())
+                self.assertFalse(any(self.recovery.iterdir()))
+
+    def test_recovery_interruption_after_durable_intent_blocks_retry(self):
+        before = m.write_once
+        def interrupt(path, content, mode=0o600):
+            if Path(path).name.startswith("rollback-new-"):
+                raise RuntimeError("synthetic crash before backup")
+            return before(path, content, mode=mode)
+        with patch.object(m, "write_once", side_effect=interrupt):
+            with self.assertRaisesRegex(RuntimeError, "synthetic crash"):
+                self.run_reversal()
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertEqual(["rollback-intent-" + self.nonce + ".json"],
+                         [x.name for x in self.recovery.iterdir()])
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+
+    def test_recovery_interruption_after_swap_blocks_retry(self):
+        original = m.os.replace
+        def crash_after_atomic_replace(source, dest):
+            original(source, dest)
+            if Path(dest) == self.launcher:
+                raise RuntimeError("synthetic crash after atomic swap")
+        with patch.object(m.os, "replace", side_effect=crash_after_atomic_replace):
+            with self.assertRaisesRegex(RuntimeError, "synthetic crash"):
+                self.run_reversal()
+        self.assertEqual(self.old, self.launcher.read_bytes())
+        self.assertTrue((self.recovery /
+            ("rollback-intent-" + self.nonce + ".json")).is_file())
+        with self.assertRaises(m.Blocked):
+            self.run_reversal()
+
+
 
 
 if __name__ == "__main__":

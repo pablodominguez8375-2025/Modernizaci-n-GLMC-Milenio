@@ -30,9 +30,13 @@ LAUNCHER = Path("/usr/local/sbin/pmgm-qa-update")
 STORE = Path("/opt/centenario/qa525-signed-stage")
 STATE = Path("/opt/centenario/qa525-launcher-replacement")
 PREFLIGHT_STATE = Path("/opt/centenario/qa525-signed-prepare")
+RECOVERY_STATE = Path("/opt/centenario/qa525-launcher-recovery")
+RECOVERY_APPROVAL = Path("/etc/pmgm/qa525-launcher-rollback.json")
 # Independently provisioned by a PRE-EXISTING trusted Sigstore bootstrap.
 # This installer may check it, but MUST NOT create/refresh this admission.
 ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
+RECOVERY_B_ADMISSION = Path("/etc/pmgm/qa525-recovery-bootstrap-admission.json")
+RECOVERY_B_STATUS = "EXTERNAL_SIGSTORE_RECOVERY_B_ADMISSION_ONLY"
 BOOTSTRAP_STATUS = "EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY"
 SHA = re.compile(r"[a-f0-9]{40}")
 NONCE = re.compile(r"[a-f0-9]{64}")
@@ -149,6 +153,66 @@ def bootstrap_trusted_sources():
                 packet["files"][str(source)],
                 "ROOT_BOOTSTRAP_SIGNED_SOURCE_HASH_MISMATCH")
     return packet
+
+
+
+
+def bootstrap_recovery_b_trusted_sources():
+    """Authenticate separately signed recovery B, never revive expired A.
+
+    Trusted root bootstrap B must have signed and durably emitted its own
+    fresh B admission *before* this separately pinned root file is executed.
+    This check is necessary but is NOT sufficient to authorize recovery.
+    """
+    require_host()
+    root_chain(RECOVERY_B_ADMISSION, exact_mode=0o600)
+    try:
+        packet = json.loads(
+            read_bound(RECOVERY_B_ADMISSION, maximum=16_384,
+                       exact_mode=0o600),
+            object_pairs_hook=unique_json_fields)
+    except (ValueError, TypeError, UnicodeError):
+        raise Blocked("ROOT_RECOVERY_B_ADMISSION_JSON_INVALID") from None
+    require(type(packet) is dict and set(packet) == {
+                "status", "cut_source_sha", "cut_release_asset_sha256",
+                "cut_manifest_sha256", "cut_nonce", "cut_intent_sha256",
+                "cut_old_launcher_sha256", "cut_new_launcher_sha256",
+                "source_sha", "release_asset_sha256", "manifest_sha256",
+                "trusted_verifier_sha256", "files", "issued_at", "expires_at"}
+            and packet["status"] == RECOVERY_B_STATUS
+            and all(type(packet[k]) is str and
+                    SHA.fullmatch(packet[k]) is not None for k in (
+                        "cut_source_sha", "source_sha"))
+            and packet["source_sha"] != packet["cut_source_sha"]
+            and all(type(packet[k]) is str and re.fullmatch(
+                        r"sha256:[0-9a-f]{64}", packet[k]) is not None
+                    for k in ("cut_release_asset_sha256",
+                              "release_asset_sha256"))
+            and packet["release_asset_sha256"] !=
+                packet["cut_release_asset_sha256"]
+            and all(type(packet[k]) is str and
+                    NONCE.fullmatch(packet[k]) is not None
+                    for k in ("cut_manifest_sha256", "cut_nonce",
+                              "cut_intent_sha256", "cut_old_launcher_sha256",
+                              "cut_new_launcher_sha256", "manifest_sha256",
+                              "trusted_verifier_sha256"))
+            and packet["cut_old_launcher_sha256"] !=
+                packet["cut_new_launcher_sha256"]
+            and type(packet["files"]) is dict,
+            "ROOT_RECOVERY_B_ADMISSION_FIELDS_INVALID")
+    require_bootstrap_fresh(packet, int(time.time()))
+    require(set(packet["files"]) == {str(item) for item in SOURCES}
+            and all(type(v) is str and NONCE.fullmatch(v) is not None
+                    for v in packet["files"].values()),
+            "ROOT_RECOVERY_B_SOURCE_MANIFEST_INVALID")
+    for source in SOURCES:
+        root_chain(source, exact_mode=0o600)
+        require(digest(read_bound(source, maximum=2_000_000,
+                                  exact_mode=0o600)) ==
+                packet["files"][str(source)],
+                "ROOT_RECOVERY_B_SOURCE_HASH_MISMATCH")
+    return packet
+
 
 
 def verify_bootstrap_binding(plan):
@@ -435,7 +499,7 @@ def scan_history(*, pending_nonce=None):
     return consumed
 
 
-def inspect_pending_reconciliation():
+def inspect_pending_reconciliation(*, expected_b_packet=None):
     """Classify one unfinished durable journal WITHOUT authorizing any action.
 
     This is a read-only diagnostic to be run by a separately authenticated,
@@ -495,6 +559,20 @@ def inspect_pending_reconciliation():
         old_bytes = read_bound(backup, exact_mode=0o700)
         require(digest(old_bytes) == act["old_launcher_sha256"],
                 "ROOT_RECONCILIATION_BACKUP_HASH_MISMATCH")
+        if expected_b_packet is not None:
+            require(type(expected_b_packet) is dict
+                    and expected_b_packet.get("cut_source_sha") ==
+                        act["source_sha"]
+                    and expected_b_packet.get("cut_release_asset_sha256") ==
+                        act["release_asset_sha256"]
+                    and expected_b_packet.get("cut_nonce") == nonce
+                    and expected_b_packet.get("cut_intent_sha256") ==
+                        digest(json_bytes(act).strip())
+                    and expected_b_packet.get("cut_old_launcher_sha256") ==
+                        act["old_launcher_sha256"]
+                    and expected_b_packet.get("cut_new_launcher_sha256") ==
+                        act["new_launcher_sha256"],
+                    "ROOT_RECOVERY_B_NOT_BOUND_TO_PENDING_A")
         current_hash = digest(read_bound(LAUNCHER, exact_mode=0o700))
         require(current_hash in (
                     act["old_launcher_sha256"], act["new_launcher_sha256"]),
@@ -702,18 +780,155 @@ def replace_approved():
         }
 
 
+
+def read_reversal_approval():
+    """Separate physical act; bootstrap admission is NOT rollback consent."""
+    root_chain(RECOVERY_APPROVAL, exact_mode=0o600)
+    try:
+        return json.loads(read_bound(RECOVERY_APPROVAL, maximum=4096,
+                                     exact_mode=0o600),
+                          object_pairs_hook=unique_json_fields)
+    except (ValueError, UnicodeError, TypeError):
+        raise Blocked("ROOT_REVERSAL_APPROVAL_JSON_INVALID") from None
+
+
+
+def assess_root_reversal(contract, receipt, approval, **kwargs):
+    """Preserve a stable root CLI refusal if the pure policy rejects the act."""
+    try:
+        return contract.assess_reversal(receipt, approval, **kwargs)
+    except contract.Blocked as exc:
+        raise Blocked(str(exc)) from None
+
+
+def rollback_approved():
+    """One-shot supervised reversal of a COMMITTED launcher cut, no API/WEB.
+
+    Refuses an interrupted original cut. Existing rollback journal residue
+    requires manual reconciliation; never delete or replay automatically.
+    This root code is inert until independently signed, staged and approved.
+    """
+    require_host()
+    packet = bootstrap_trusted_sources()  # BEFORE importing even trusted helpers
+    contract = load("qa525_reversal_contract", SOURCES[4])
+    root_chain(STATE, directory=True, exact_mode=0o700)
+    root_chain(RECOVERY_STATE, directory=True, exact_mode=0o700)
+    root_chain(LAUNCHER, exact_mode=0o700)
+    with all_five_locks():
+        consumed = scan_history()  # validates every old receipt/backup; no intents
+        require(not any(RECOVERY_STATE.iterdir()),
+                "ROOT_REVERSAL_PREVIOUS_OR_PARTIAL_STATE")
+        approval = read_reversal_approval()
+        cut_nonce = approval.get("cut_nonce") if type(approval) is dict else None
+        require(type(cut_nonce) is str and NONCE.fullmatch(cut_nonce),
+                "ROOT_REVERSAL_CUT_NONCE_INVALID")
+        require(cut_nonce in consumed, "ROOT_REVERSAL_CUT_NOT_COMMITTED")
+        receipt_path = STATE / ("receipt-" + cut_nonce + ".json")
+        backup_path = STATE / ("old-" + cut_nonce + ".bin")
+        try:
+            receipt = json.loads(read_bound(receipt_path, exact_mode=0o600),
+                                 object_pairs_hook=unique_json_fields)
+        except (UnicodeError, ValueError, TypeError):
+            raise Blocked("ROOT_REVERSAL_ORIGINAL_RECEIPT_INVALID") from None
+        old = read_bound(backup_path, exact_mode=0o700)
+        current = read_bound(LAUNCHER, exact_mode=0o700)
+        require(receipt.get("source_sha") == packet["source_sha"]
+                and receipt.get("release_asset_sha256") ==
+                    packet["release_asset_sha256"],
+                "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT")
+        approval_copy = dict(approval)
+        plan = assess_root_reversal(contract, 
+            receipt, approval, current_launcher_sha256=digest(current),
+            backup_sha256=digest(old), pending=False, now=int(time.time()))
+        require(plan.get("status") ==
+                    "REVIEWED_LAUNCHER_REVERSAL_PLAN_NO_INSTALL"
+                and plan.get("may_recover") is False
+                and plan.get("may_apply") is False,
+                "ROOT_REVERSAL_POLICY_BLOCKED")
+        nonce = plan["recovery_nonce"]
+        intent = RECOVERY_STATE / ("rollback-intent-" + nonce + ".json")
+        saved_new = RECOVERY_STATE / ("rollback-new-" + nonce + ".bin")
+        receipt_new = RECOVERY_STATE / ("rollback-receipt-" + nonce + ".json")
+        staged = LAUNCHER.parent / (".pmgm-qa-recovery-" + nonce + ".tmp")
+        require(all(not p.exists() and not p.is_symlink()
+                    for p in (intent, saved_new, receipt_new, staged)),
+                "ROOT_REVERSAL_STAGING_ALREADY_EXISTS")
+        record = {
+            "status": "ROLLBACK_INTENT_NO_DEPLOYMENT",
+            "cut_nonce": cut_nonce, "recovery_nonce": nonce,
+            "source_sha": receipt["source_sha"],
+            "release_asset_sha256": receipt["release_asset_sha256"],
+            "old_launcher_sha256": digest(old),
+            "new_launcher_sha256": digest(current),
+        }
+        write_once(intent, json_bytes(record))
+        write_once(saved_new, current, mode=0o700)
+        require(digest(read_bound(saved_new, exact_mode=0o700)) ==
+                record["new_launcher_sha256"],
+                "ROOT_REVERSAL_NEW_LAUNCHER_BACKUP_DRIFT")
+        write_once(staged, old, mode=0o700)
+        require(digest(read_bound(staged, exact_mode=0o700)) ==
+                record["old_launcher_sha256"]
+                and digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
+                    record["new_launcher_sha256"]
+                and digest(read_bound(backup_path, exact_mode=0o700)) ==
+                    record["old_launcher_sha256"],
+                "ROOT_REVERSAL_DRIFT_BEFORE_SWAP")
+        require_bootstrap_fresh(packet, int(time.time()))
+        last_approval = read_reversal_approval()
+        require(last_approval == approval_copy,
+                "ROOT_REVERSAL_APPROVAL_CHANGED_BEFORE_SWAP")
+        last = assess_root_reversal(contract, 
+            receipt, last_approval, current_launcher_sha256=digest(
+                read_bound(LAUNCHER, exact_mode=0o700)),
+            backup_sha256=digest(read_bound(backup_path, exact_mode=0o700)),
+            pending=False, now=int(time.time()))
+        require(last["recovery_nonce"] == nonce,
+                "ROOT_REVERSAL_NONCE_CHANGED_BEFORE_SWAP")
+        os.replace(staged, LAUNCHER)
+        sync_dir(LAUNCHER.parent)
+        require(digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
+                record["old_launcher_sha256"],
+                "ROOT_REVERSAL_POST_SWAP_HASH_DRIFT")
+        write_once(receipt_new, json_bytes({
+            **record, "status": "ROLLBACK_ATOMIC_SWAP_COMMITTED"}))
+        intent.unlink()
+        sync_dir(RECOVERY_STATE)
+        return {
+            "status": "QA525_LAUNCHER_ROLLED_BACK_NO_API_WEB_DEPLOY",
+            "source_sha": receipt["source_sha"],
+            "launcher_sha256": record["old_launcher_sha256"],
+            "recovery_nonce_sha256": digest(nonce.encode("ascii")),
+            "api_web_changed": False,
+            "may_apply": False,
+            "requires_manual_postflight": True,
+        }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     choice = parser.add_mutually_exclusive_group(required=True)
     choice.add_argument("--replace-approved", action="store_true")
     choice.add_argument("--inspect-pending", action="store_true")
+    choice.add_argument("--rollback-approved", action="store_true")
+    choice.add_argument("--inspect-recovery-b", action="store_true")
     args = parser.parse_args(argv)
     try:
-        if args.inspect_pending:
+        if args.inspect_recovery_b:
+            b = bootstrap_recovery_b_trusted_sources()
+            report = inspect_pending_reconciliation(expected_b_packet=b)
+            require_bootstrap_fresh(b, int(time.time()))
+            report["recovery_b_signed_source_admitted"] = True
+            report["may_apply"] = False
+            report["may_recover"] = False
+            print(json.dumps(report, sort_keys=True))
+        elif args.inspect_pending:
             # An inspection is not permission to execute unverified Python:
             # require the same externally provisioned source admission first.
             bootstrap_trusted_sources()
             print(json.dumps(inspect_pending_reconciliation(), sort_keys=True))
+        elif args.rollback_approved:
+            print(json.dumps(rollback_approved(), sort_keys=True))
         else:
             print(json.dumps(replace_approved(), sort_keys=True))
         return 0
@@ -722,7 +937,9 @@ def main(argv=None):
         # reconciliation; never automatically replay or alter Docker/identity.
         code = str(exc) if isinstance(exc, Blocked) else "ROOT_SIGNED_LAUNCHER_ABORTED"
         print(json.dumps({"status": ("BLOCKED_QA525_LAUNCHER_INSPECTION"
-                                     if args.inspect_pending else
+                                     if (args.inspect_pending or args.inspect_recovery_b) else
+                                     "BLOCKED_QA525_LAUNCHER_ROLLBACK"
+                                     if args.rollback_approved else
                                      "BLOCKED_QA525_LAUNCHER_REPLACE"),
                           "code": code, "scope": SCOPE,
                           "may_install": False, "may_apply": False,
