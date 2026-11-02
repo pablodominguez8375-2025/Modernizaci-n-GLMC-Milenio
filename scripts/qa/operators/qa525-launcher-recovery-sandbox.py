@@ -328,5 +328,172 @@ def simulate_delayed_dual_recovery(root, recovery_claim, dual_approval, *,
             "approved_for_host_recovery": False}
 
 
+
+def simulate_interrupted_A_pending_recovery(
+        root, recovery_claim, separate_approval, *, now=None,
+        checkpoint=lambda stage: None):
+    """ONLY disposable /tmp: model interrupted A without a committed receipt.
+
+    A intent/backup are never deleted or rewritten. Fresh *synthetic* B claim
+    and consent are checked twice under one sandbox lock. New B intent,
+    snapshot, and receipt are durable; a crash leaves a blocking journal.
+    Even success DOES NOT reconcile the original A journal for production,
+    authenticate a signature, authorize an install, or touch QA services.
+    """
+    require(type(recovery_claim) is dict and type(separate_approval) is dict,
+            "PENDING_SANDBOX_INPUT_INVALID")
+    root = trust(root)
+    state, live_dir, recovery = (root / "state", root / "live",
+                                 root / "recovery")
+    info = recovery.lstat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid()
+            and stat.S_IMODE(info.st_mode) == 0o700,
+            "PENDING_SANDBOX_RECOVERY_DIRECTORY_INVALID")
+    policy_path = Path(__file__).with_name(
+        "qa525-launcher-replacement-contract.py")
+    spec = importlib.util.spec_from_file_location(
+        "qa525_sandbox_pending_contract", policy_path)
+    require(spec is not None and spec.loader is not None,
+            "PENDING_SANDBOX_POLICY_MISSING")
+    policy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(policy)
+    live = live_dir / "pmgm-qa-update"
+    with exclusive_lock(state / "recovery.lock"):
+        entries = {p.name for p in state.iterdir()}
+        intents = sorted(p for p in entries if p.startswith("intent-"))
+        require(len(intents) == 1, "PENDING_SANDBOX_ONE_A_INTENT_REQUIRED")
+        item = intents[0]
+        require(item.endswith(".json")
+                and HASH.fullmatch(item[len("intent-"):-5]) is not None,
+                "PENDING_SANDBOX_A_NONCE_INVALID")
+        cut = item[len("intent-"):-5]
+        require(entries == {"recovery.lock", item,
+                            "old-" + cut + ".bin"}
+                and not any(recovery.iterdir()),
+                "PENDING_SANDBOX_HISTORY_NOT_CLEAN")
+        original_path = state / item
+        old_path = state / ("old-" + cut + ".bin")
+        original_raw = trusted_file(original_path, 0o600)
+        try:
+            original = json.loads(original_raw,
+                                  object_pairs_hook=unique_fields)
+        except (ValueError, TypeError, UnicodeError):
+            raise Blocked("PENDING_SANDBOX_ORIGINAL_INTENT_JSON") from None
+        require(type(original) is dict and original.get("nonce") == cut,
+                "PENDING_SANDBOX_ORIGINAL_INTENT_MISMATCH")
+        old_bytes = trusted_file(old_path, 0o700)
+        live_bytes = trusted_file(live, 0o700)
+        issued = int(time.time()) if now is None else now
+        claim_frozen = encode(recovery_claim)
+        approval_frozen = encode(separate_approval)
+
+        def review(stamp, current_sha):
+            require(claim_frozen == encode(recovery_claim)
+                    and approval_frozen == encode(separate_approval),
+                    "PENDING_SANDBOX_MUTATED_B_APPROVAL")
+            try:
+                result = policy.assess_pending_reconciliation_plan(
+                    original, recovery_claim, separate_approval,
+                    live_sha256=current_sha, backup_sha256=sha(old_bytes),
+                    receipt_present=False, now=stamp)
+            except policy.Blocked:
+                raise Blocked("PENDING_SANDBOX_POLICY_REFUSED") from None
+            require(result["may_recover"] is False
+                    and result["may_apply"] is False
+                    and result["claims_authenticated"] is False
+                    and result["cut_intent_sha256"] ==
+                        policy.frozen_sha(original),
+                    "PENDING_SANDBOX_NO_AUTHORITY_REQUIRED")
+            return result
+
+        plan = review(issued, sha(live_bytes))
+        nonce = plan["recovery_nonce"]
+        intent_b = recovery / ("pending-intent-" + nonce + ".json")
+        snapshot_b = recovery / ("pending-snapshot-" + nonce + ".bin")
+        receipt_b = recovery / ("pending-receipt-" + nonce + ".json")
+        staged = live_dir / (".pending-recovery-" + nonce + ".tmp")
+        require(all(not p.exists() and not p.is_symlink()
+                    for p in (intent_b, snapshot_b, receipt_b, staged)),
+                "PENDING_SANDBOX_REPLAY_OR_STAGE_EXISTS")
+        phase = plan["observed_phase"]
+        journal_b = {
+            "status": "PENDING_B_SANDBOX_INTENT_NO_ACTION",
+            "cut_source_sha": original["source_sha"],
+            "cut_nonce": cut,
+            "cut_intent_sha256": plan["cut_intent_sha256"],
+            "recovery_source_sha": recovery_claim["source_sha"],
+            "recovery_nonce": nonce,
+            "observed_phase": phase,
+            "observed_live_sha256": sha(live_bytes),
+        }
+        checkpoint("before_intent")
+        durable(intent_b, encode(journal_b), mode=0o600)
+        checkpoint("after_intent")
+        durable(snapshot_b, live_bytes, mode=0o700)
+        require(sha(trusted_file(snapshot_b, 0o700)) == sha(live_bytes),
+                "PENDING_SANDBOX_SNAPSHOT_B_DRIFT")
+        checkpoint("after_snapshot")
+        durable(staged, old_bytes, mode=0o700)
+        require(sha(trusted_file(staged, 0o700)) == sha(old_bytes)
+                and sha(trusted_file(live, 0o700)) == sha(live_bytes)
+                and trusted_file(original_path, 0o600) == original_raw
+                and sha(trusted_file(old_path, 0o700)) == sha(old_bytes),
+                "PENDING_SANDBOX_PRE_SWAP_ORIGINAL_DRIFT")
+        require(review(int(time.time()) if now is None else now,
+                       sha(trusted_file(live, 0o700))) == plan,
+                "PENDING_SANDBOX_REVIEW_CHANGED_BEFORE_SWAP")
+        checkpoint("before_swap")
+        os.replace(staged, live)
+        sync_dir(live_dir)
+        checkpoint("after_swap")
+        require(sha(trusted_file(live, 0o700)) == sha(old_bytes),
+                "PENDING_SANDBOX_POST_SWAP_INVALID")
+        receipt = {
+            "status": "PENDING_LAUNCHER_RECOVERY_RECONCILIATION_COMMITTED",
+            "cut_source_sha": original["source_sha"],
+            "cut_release_asset_sha256": original["release_asset_sha256"],
+            "cut_nonce": cut,
+            "cut_intent_sha256": policy.frozen_sha(original),
+            "old_launcher_sha256": original["old_launcher_sha256"],
+            "new_launcher_sha256": original["new_launcher_sha256"],
+            "recovery_source_sha": recovery_claim["source_sha"],
+            "recovery_release_asset_sha256":
+                recovery_claim["release_asset_sha256"],
+            "recovery_manifest_sha256":
+                recovery_claim["manifest_sha256"],
+            "recovery_executor_sha256":
+                recovery_claim["executor_sha256"],
+            "recovery_nonce": nonce,
+            "recovery_approval_sha256": sha(approval_frozen.strip()),
+            "observed_phase": phase,
+            "restored_launcher_sha256": sha(old_bytes),
+        }
+        durable(receipt_b, encode(receipt), mode=0o600)
+        checkpoint("after_receipt")
+        intent_b.unlink()
+        sync_dir(recovery)
+        verified = policy.assess_pending_reconciliation_receipt(
+            original, json.loads(trusted_file(receipt_b, 0o600)),
+            old_backup_sha256=sha(trusted_file(old_path, 0o700)),
+            live_launcher_sha256=sha(trusted_file(live, 0o700)),
+            original_receipt_present=False,
+            recovery_intent_present=intent_b.exists())
+        require(verified["reconciliation_complete"] is False
+                and verified["may_install"] is False,
+                "PENDING_SANDBOX_NEVER_UNBLOCKS_ORIGINAL_A")
+        require(trusted_file(original_path, 0o600) == original_raw,
+                "PENDING_SANDBOX_A_INTENT_MUST_SURVIVE")
+        return {
+            "status": "SIMULATED_INTERRUPTED_A_RESTORED_NO_HOST_CHANGE",
+            "phase": phase,
+            "cut_intent_sha256": policy.frozen_sha(original),
+            "recovery_receipt_sha256": sha(trusted_file(receipt_b, 0o600)),
+            "original_intent_preserved": True,
+            "reconciliation_complete": False,
+            "may_recover": False, "may_install": False, "may_apply": False,
+            "authenticated": False, "production_touched": False,
+        }
+
+
 if __name__ == "__main__":
     raise SystemExit("RECOVERY_SANDBOX_LIBRARY_ONLY_NO_HOST_ENTRYPOINT")
