@@ -144,3 +144,43 @@ CI exact-HEAD completo, G6 y autorización launcher-only continúan como
 gates NO-GO para cualquier operación física.
 
 Trazabilidad: Issues #822/#525, este handoff y Drive Proyecto Centenario.
+
+
+## Reconciliación de recibo separado sin borrar intent — continuidad 01-11-2026
+
+Este incremento en PR #838 incorpora dos revisiones A/B **sin privilegios**:
+\`assess_pending_reconciliation_plan()\` clasifica un corte original A con
+\`SWAP_INTENT_NO_DEPLOYMENT\` y sin \`LAUNCHER_ATOMIC_SWAP_COMMITTED\`.
+\`review_pending_two_signed_envelopes()\` liga A a un ZIP firmado de origen A,
+y la revisión B a un segundo ZIP Sigstore/manifest verificado, sin fingir
+que un intent sea un recibo committed. El claim B tiene source SHA/digest
+diferentes de A; nonce, hash de intent, approval y vigencia <=900s se comparan
+antes de emitir exclusivamente un plan de revisión sin efectos.
+
+\`assess_pending_reconciliation_receipt()\` especifica el futuro formato de
+**recibo B separado, append-only**, con identidades de A, hash canónico del
+intent original preservado, firma/manifest/ejecutor B por verificar externamente,
+nonce distinto, aprobación B vinculada, fase previa/posterior al swap y
+SHA antiguo restaurado verificado. Rechaza falso receipt A, historial B pendiente,
+drift de backup/live y datos ajenos. La autenticidad de tales campos debe ser
+establecida por un ejecutor root independiente *antes* de usar el recibo: el
+contrato solo compara datos suministrados y devuelve siempre
+\`may_apply=false\`, \`may_install=false\`, \`may_recover=false\`,
+\`reconciliation_complete=false\` y
+\`root_history_reconciliation_implemented=false\`.
+
+**NO afirmamos recuperación completada:** el código actual
+\`scan_history()\` del instalador root todavía bloquea un intent A, incluso
+si hay un recibo B no autenticado. No implementar un bypass que acepte el
+recibo puramente por su apariencia JSON. Falta un ejecutor B firmado con
+cadena de confianza root independiente, cinco locks, verificación duradera
+de fuentes/actas y reconciliación verificable de historia original
+conservada, ensayos SIGKILL y revisión independiente. La release firmada A
+custodiada en glmdch no incluye B ni esta política de PR draft. No cambiar
+\`dev\`/main, QA glmdch, EF, Docker o IAM con esta entrega.
+
+Commits de esta etapa: \`f9638732\` contrato del recibo, \`0b714ee9\`
+pruebas adversariales. CI exigible del HEAD FINAL de PR, no de los commits
+previos. Tras el review independiente y la integración de código revisado
+deberá generarse nueva release firmada B; en ventana autorizada, primero
+launcher-only, luego API+WEB por acto distinto, G6 vigente y smoke/UAT.
