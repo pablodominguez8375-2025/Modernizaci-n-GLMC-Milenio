@@ -184,3 +184,49 @@ pruebas adversariales. CI exigible del HEAD FINAL de PR, no de los commits
 previos. Tras el review independiente y la integración de código revisado
 deberá generarse nueva release firmada B; en ventana autorizada, primero
 launcher-only, luego API+WEB por acto distinto, G6 vigente y smoke/UAT.
+
+
+## Bootstrap B con doble Sigstore y diagnóstico root de solo lectura — 01-11-2026
+
+Incremento en **esta misma PR #838 DRAFT, no dev ni QA físico**.
+El preparador firmado \`qa525-signed-root-bootstrap-prep.py\` incorpora
+\`--prepare-recovery-b --cut-nonce <nonce>\` como operación **separada** de
+\`--verified-envelope\` y el pin SHA del propio bootstrap. Es privilegio root
+que **NO debe ejecutarse** desde fuente de PR ni sin revisión de anclaje
+independiente previa a la primera instrucción Python. NO es una autorización
+de rollback ni acceso a Docker/BD/API/WEB.
+
+Con un \`intent\` A pendiente que conserve su backup, comprueba la evidencia
+histórica A (aunque su admisión de 900 s esté **expirada**, nunca se renueva),
+reverifica la firma Sigstore y manifiesto **del archivo A original** usando
+el digest del bootstrap A guardado históricamente, revalida el hash de sus
+fuentes retenidas y obtiene la identidad de B de su ZIP **distinto y también
+firmado**. Rechaza SHA/digest B iguales a A, un recibo A committed, ausencia
+de backup, hashes o launcher desconocidos y alteración de fuentes. Bajo el
+bootstrap.lock ya existente publica solo un directorio
+\`/opt/centenario/qa525-root-source/recovery-<SHA_B>\` y una admisión B propia
+root0600 \`/etc/pmgm/qa525-recovery-bootstrap-admission.json\` con vigencia
+de 900 s. Jamás reemplaza \`qa525-bootstrap-admission.json\`, el intent o el
+backup A. Si se corta entre la publicación del directorio B y su admisión,
+deja evidencia residual bloqueante, no autorreintenta.
+
+El ejecutor firmado \`qa525-launcher-supervised-root-install.py\` ahora
+comprende \`--inspect-recovery-b\` como **diagnóstico exclusivamente de
+lectura**: valida B admission, los 12 módulos y su SHA antes de importarlos,
+su plazo fresco; toma los cinco locks excluyentes read-only y verifica
+vinculación exacta de A intent/backup/fase con la admisión B. No ejecuta
+recuperación, swap, autorización ni archivado de prepared anterior.
+Las nuevas pruebas herméticas \`test_qa525_signed_root_bootstrap_prep.py\`
+y \`test_qa525_launcher_supervised_root_install.py\` comprueban doble
+sobre firmado, A expirada intacta, no repetición de B, tamper, original
+ausente, fase/hashes/identificadores falsos y limitación de no-escritura.
+**El CI de esta PR es sintético:** sus mocks de Sigstore/UID no equivalen
+a firmas y permisos verificados en glmdch.
+
+**Sigue bloqueado** hasta diseñar y aprobar el ejecutor B de rescate durable
+que materialice el recibo B independiente y haga que el historial original A
+reconciliado sea aceptado sin borrados ni confianza ciega en JSON. Se exigen
+cinco locks durante la recuperación real, fail-closed al SIGKILL, control de
+replays, revisión independiente, release B exacta firmada post-merge,
+G6 contemporáneo y doble aprobación launcher-only y API+WEB. No ejecutar el
+bootstrap A/B, inspección privilegiada o despliegue a partir de este texto.
