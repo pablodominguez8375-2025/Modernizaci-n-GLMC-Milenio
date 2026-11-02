@@ -146,6 +146,12 @@ def verify(snapshot, *, today=None):
                           "uat", "issues_under_test"}, "PHYSICAL_SCHEMA_DRIFT")
     require(physical["verification_level"] ==
             "NOT_REINSPECTED_IN_THIS_SNAPSHOT"
+            and physical["launcher"] ==
+            "LAST_OPERATOR_EVIDENCE_OLD_LAUNCHER_NO_CURRENT_READBACK"
+            and physical["api_web"] ==
+            "LAST_OPERATOR_EVIDENCE_APPLIED_41d9c490d138419c7286445f37e7aeddf0d1b8d5_NOT_REINSPECTED"
+            and physical["pending_prepared"] ==
+            "LAST_OPERATOR_EVIDENCE_A184936D_PREPARED_EXPIRED_NOT_APPLIED"
             and physical["any_fresh_application"] == "NOT_CLAIMED"
             and physical["uat"] == "NOT_COMPLETED"
             and type(physical["issues_under_test"]) is list
@@ -161,6 +167,10 @@ def verify(snapshot, *, today=None):
     require(re.fullmatch(r"20[0-9]{6}T[0-9]{6}Z",
                          backup["snapshot_id"]) is not None
             and sha64(backup["archive_sha256"])
+            and backup["encrypted_offhost_copy"] ==
+            "VERIFIED_BY_PRIOR_HASH_AND_CURRENT_METADATA_ONLY"
+            and backup["same_host_isolated_restore"] ==
+            "PASS_PRIOR_OPERATOR_EVIDENCE_POSTGRES_2DB_GLOBALS_AND_SILO_CLEANUP"
             and backup["disaster_restore_other_host"] == "PENDING"
             and backup["iam_restore"] == "NOT_INCLUDED"
             and backup["atomic_cross_resource_snapshot"] == "NOT_PROVEN"
