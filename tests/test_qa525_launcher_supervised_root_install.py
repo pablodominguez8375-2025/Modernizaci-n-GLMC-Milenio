@@ -1339,6 +1339,87 @@ from test_qa525_delayed_recovery_signed_evidence_audit import DelayedDualSignedE
 
 
 
+
+class NonceCustodyPurePolicyTests(unittest.TestCase):
+    """Claims-only anti-replay gate, never a signed journal or root action."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        spec = importlib.util.spec_from_file_location(
+            "qa525_nonce_custody_policy", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def fixture(self, **changes):
+        data = {
+            "cut_nonce": "1" * 64,
+            "recovery_nonce": "2" * 64,
+            "committed_cut_nonces": ("1" * 64,),
+            "pending_cut_nonces": (),
+            "recovery_receipt_nonces": (),
+            "recovery_intent_nonces": (),
+            "tombstone_nonces": (),
+            "committed_residual_verified": False,
+        }
+        data.update(changes)
+        return self.policy.assess_nonce_custody(**data)
+
+    def test_committed_cut_and_unused_recovery_nonce_is_review_only(self):
+        result = self.fixture()
+        self.assertEqual("REVIEWED_NONCE_CUSTODY_CLAIMS_ONLY_NO_EXECUTION",
+                         result["status"])
+        self.assertFalse(result["claims_authenticated"])
+        self.assertTrue(result["requires_signed_root_history_validation"])
+        self.assertTrue(result["requires_durable_nonce_tombstone"])
+        for key in ("may_install", "may_apply", "may_recover"):
+            self.assertFalse(result[key])
+        self.assertNotIn("cut_nonce", result)
+        self.assertNotIn("recovery_nonce", result)
+
+    def test_committed_intent_residual_requires_separate_authentication(self):
+        with self.assertRaisesRegex(
+                self.policy.Blocked,
+                "NONCE_CUSTODY_COMMITTED_CUT_NOT_PROVEN"):
+            self.fixture(pending_cut_nonces=("1" * 64,))
+        outcome = self.fixture(
+            pending_cut_nonces=("1" * 64,),
+            committed_residual_verified=True)
+        self.assertFalse(outcome["may_recover"])
+
+    def test_recovery_nonce_replay_rejected_in_every_catalog(self):
+        for key in ("committed_cut_nonces", "pending_cut_nonces",
+                    "recovery_receipt_nonces", "recovery_intent_nonces",
+                    "tombstone_nonces"):
+            with self.subTest(catalog=key):
+                baseline = ("1" * 64,) if key == "committed_cut_nonces" else ()
+                updates = {key: baseline + ("2" * 64,)}
+                if key == "pending_cut_nonces":
+                    updates["committed_residual_verified"] = True
+                with self.assertRaises(self.policy.Blocked):
+                    self.fixture(**updates)
+
+    def test_orphan_pending_cut_and_absent_commit_fail_closed(self):
+        for changes in (
+            {"committed_cut_nonces": ()},
+            {"pending_cut_nonces": ("3" * 64,)},
+            {"committed_residual_verified": "yes"},
+            {"cut_nonce": "2" * 64},
+            {"recovery_nonce": "1" * 64},
+        ):
+            with self.subTest(changes=changes):
+                with self.assertRaises(self.policy.Blocked):
+                    self.fixture(**changes)
+
+    def test_malformed_catalog_and_duplicates_rejected(self):
+        for value in (("z" * 64,), ["1" * 64, "1" * 64],
+                      "1" * 64, (True,), {"1" * 64}, None):
+            with self.subTest(value=value):
+                with self.assertRaises(self.policy.Blocked):
+                    self.fixture(tombstone_nonces=value)
+
+
 class ReversalPolicyGateTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
