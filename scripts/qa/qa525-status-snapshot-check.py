@@ -9,6 +9,7 @@ GitHub/Drive AND physical-host evidence.
 import argparse
 from datetime import date
 import json
+import os
 from pathlib import Path
 import re
 import stat
@@ -58,12 +59,18 @@ def no_json_constant(_):
 
 
 def read_snapshot(path):
+    """Read one bounded regular-file descriptor; reject symlinks at open time.
+
+    lstat followed by read_bytes would permit a path swap between the
+    two operations. O_NOFOLLOW + fstat bind validation to the actual fd.
+    """
     path = Path(path)
-    status = path.lstat()
-    require(stat.S_ISREG(status.st_mode) and status.st_size <= 16_384
-            and status.st_size > 0 and status.st_nlink == 1,
-            "NOT_A_REGULAR_SMALL_SNAPSHOT")
-    data = path.read_bytes()
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    with os.fdopen(fd, "rb") as stream:
+        status = os.fstat(stream.fileno())
+        require(stat.S_ISREG(status.st_mode) and 0 < status.st_size <= 16_384
+                and status.st_nlink == 1, "NOT_A_REGULAR_SMALL_SNAPSHOT")
+        data = stream.read(16_385)
     require(len(data) <= 16_384, "SNAPSHOT_TOO_LARGE")
     try:
         value = json.loads(data.decode("utf-8"), object_pairs_hook=unique_pairs,
