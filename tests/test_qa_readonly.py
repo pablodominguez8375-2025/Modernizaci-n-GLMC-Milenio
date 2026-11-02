@@ -155,5 +155,10 @@ class QaReadonlyTests(unittest.TestCase):
             self.assertEqual(list(Path(temp).iterdir()), [])
 
 
+# Keep QA525 portable-snapshot adversarial coverage in the already established
+# QA readonly workflow without touching a shared/hot Actions workflow definition.
+# unittest discovers this imported TestCase alongside QaReadonlyTests.
+from test_qa525_status_snapshot_check import QA525StatusSnapshotTests
+
 if __name__ == '__main__':
     unittest.main()
