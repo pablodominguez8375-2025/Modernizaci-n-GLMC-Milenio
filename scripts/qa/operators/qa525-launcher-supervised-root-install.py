@@ -359,6 +359,46 @@ def unique_json_fields(pairs):
     return result
 
 
+INTENT_FIELDS = frozenset({
+    "status", "source_sha", "release_asset_sha256",
+    "old_launcher_sha256", "new_launcher_sha256", "nonce"})
+
+
+def residual_intent_is_committed(entry, names):
+    """True only for intent-N whose receipt-N is the exact COMMITTED superset.
+
+    The receipt itself is fully validated (fields, hashes, backup) by the
+    caller's receipt branch in the same scan; this only proves that the stale
+    intent carries the same identity. The intent is never deleted or renamed:
+    it stays as harmless audit residue and its nonce is already consumed.
+    """
+    name = entry.name
+    if not (name.endswith(".json") and
+            NONCE.fullmatch(name[len("intent-"):-len(".json")]) is not None):
+        return False
+    nonce = name[len("intent-"):-len(".json")]
+    receipt_name, backup_name = ("receipt-" + nonce + ".json",
+                                 "old-" + nonce + ".bin")
+    if receipt_name not in names or backup_name not in names:
+        return False
+    try:
+        intent = json.loads(read_bound(entry, maximum=4096, exact_mode=0o600),
+                            object_pairs_hook=unique_json_fields)
+        receipt = json.loads(
+            read_bound(STATE / receipt_name, maximum=4096, exact_mode=0o600),
+            object_pairs_hook=unique_json_fields)
+    except (ValueError, UnicodeError, TypeError):
+        return False
+    return (type(intent) is dict and set(intent) == INTENT_FIELDS
+            and intent["status"] == "SWAP_INTENT_NO_DEPLOYMENT"
+            and intent["nonce"] == nonce
+            and type(receipt) is dict
+            and set(receipt) == INTENT_FIELDS | {"candidate_operator_sha256"}
+            and receipt["status"] == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+            and all(receipt[k] == intent[k] for k in INTENT_FIELDS
+                    if k != "status"))
+
+
 def scan_history(*, pending_nonce=None):
     """Verify all historical receipts; optionally exclude ONE pending triplet.
 
@@ -386,8 +426,13 @@ def scan_history(*, pending_nonce=None):
             # Inspect-pending validates these three contents and consistency
             # under the SAME five read-only locks, before reporting any phase.
             continue
-        require(not name.startswith("intent-"),
-                "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION")
+        if name.startswith("intent-"):
+            # Only the benign crash window AFTER the receipt is durable and
+            # BEFORE intent.unlink() is a committed cut. Everything else
+            # (no receipt, differing receipt, no backup) stays blocked.
+            require(residual_intent_is_committed(entry, names),
+                    "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION")
+            continue
         require(name.startswith(("receipt-", "old-")),
                 "ROOT_LAUNCHER_UNKNOWN_JOURNAL_ENTRY")
         suffix = name.split("-", 1)[1]
