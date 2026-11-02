@@ -1534,6 +1534,21 @@ class PendingReconciliationPlanPolicyTests(unittest.TestCase):
         with self.assertRaises(self.policy.Blocked):
             self.review(claim={**self.claim, "purpose": "SIGSTORE_VERIFIED"})
 
+
+    def test_A_cannot_be_reused_as_recovery_B_even_if_approval_matches(self):
+        for change in (
+            {"source_sha": self.intent["source_sha"]},
+            {"release_asset_sha256": self.intent["release_asset_sha256"]},
+        ):
+            claim = {**self.claim, **change}
+            approval = {**self.approval,
+                        **{"recovery_" + k: v for k, v in change.items()}}
+            with self.subTest(change=change):
+                with self.assertRaisesRegex(
+                        self.policy.Blocked,
+                        "PENDING_RECONCILIATION_B_NOT_DISTINCT_FROM_A"):
+                    self.review(claim=claim, approval=approval)
+
     def test_expired_claim_or_approval_replay_and_boolean_clock_refused(self):
         for change in ({"expires_at": 5000},
                        {"issued_at": 5001},
