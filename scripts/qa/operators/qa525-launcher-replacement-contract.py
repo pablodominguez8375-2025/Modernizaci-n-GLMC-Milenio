@@ -39,6 +39,55 @@ def frozen_sha(value):
     ).hexdigest()
 
 
+
+def assess_nonce_custody(*, cut_nonce, recovery_nonce,
+                         committed_cut_nonces, pending_cut_nonces,
+                         recovery_receipt_nonces, recovery_intent_nonces,
+                         tombstone_nonces, committed_residual_verified=False):
+    """Pure cross-journal anti-replay check; NO evidence authentication.
+
+    The calling trusted root executor must first acquire the five exclusive
+    locks and independently attest every file and every historical nonce.
+    A claimed tombstone is NOT itself proof of a durable signed tombstone.
+    This review cannot authorize changes, release locks, or clean journals.
+    """
+    require(valid_sha(cut_nonce, NONCE) and
+            valid_sha(recovery_nonce, NONCE) and
+            cut_nonce != recovery_nonce and
+            type(committed_residual_verified) is bool,
+            "NONCE_CUSTODY_IDENTITIES_INVALID")
+    groups = (committed_cut_nonces, pending_cut_nonces,
+              recovery_receipt_nonces, recovery_intent_nonces,
+              tombstone_nonces)
+    require(all(type(g) in (tuple, list, frozenset)
+                and all(valid_sha(x, NONCE) for x in g)
+                and len(g) == len(set(g)) for g in groups),
+            "NONCE_CUSTODY_CATALOG_INVALID")
+    committed, pending, recovered, recovery_pending, tombstones = (
+        tuple(set(g) for g in groups))
+    require(cut_nonce in committed and
+            (cut_nonce not in pending or committed_residual_verified),
+            "NONCE_CUSTODY_COMMITTED_CUT_NOT_PROVEN")
+    require(not (pending - {cut_nonce}),
+            "NONCE_CUSTODY_OTHER_PENDING_CUT_BLOCKED")
+    require(recovery_nonce not in (
+                committed | pending | recovered | recovery_pending |
+                tombstones),
+            "NONCE_CUSTODY_RECOVERY_NONCE_ALREADY_USED")
+    # The source of this history, its completeness, and residue authenticity
+    # must be proven separately; this non-authorizing object is never a token.
+    return {
+        "status": "REVIEWED_NONCE_CUSTODY_CLAIMS_ONLY_NO_EXECUTION",
+        "cut_nonce_sha256": hashlib.sha256(cut_nonce.encode("ascii")).hexdigest(),
+        "recovery_nonce_sha256":
+            hashlib.sha256(recovery_nonce.encode("ascii")).hexdigest(),
+        "claims_authenticated": False,
+        "requires_signed_root_history_validation": True,
+        "requires_durable_nonce_tombstone": True,
+        "may_install": False, "may_apply": False, "may_recover": False,
+    }
+
+
 def assess_review(preflight, approval, *, now, pending, consumed_nonces=()):
     """Validate ephemeral signed preflight and one root approval packet.
 
