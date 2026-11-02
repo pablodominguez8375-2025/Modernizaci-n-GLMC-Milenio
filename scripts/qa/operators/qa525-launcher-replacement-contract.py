@@ -341,6 +341,10 @@ def assess_pending_reconciliation_plan(intent, recovery_claim, approval, *,
             and all(valid_sha(recovery_claim[k], HASH) for k in (
                 "manifest_sha256", "executor_sha256")),
             "PENDING_RECONCILIATION_B_CLAIM_INVALID")
+    require(recovery_claim["source_sha"] != intent["source_sha"]
+            and recovery_claim["release_asset_sha256"] !=
+                intent["release_asset_sha256"],
+            "PENDING_RECONCILIATION_B_NOT_DISTINCT_FROM_A")
     require(type(approval) is dict
             and set(approval) == PENDING_RECONCILIATION_APPROVAL_FIELDS
             and approval["action"] == PENDING_RECONCILIATION_ACTION
