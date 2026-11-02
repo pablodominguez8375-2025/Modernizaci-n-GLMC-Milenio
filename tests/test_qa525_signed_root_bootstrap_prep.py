@@ -405,6 +405,49 @@ class DelayedRecoveryBootstrapTests(unittest.TestCase):
             self.admit_b()
         self.assertFalse(self.b_admission.exists())
 
+    def test_current_B_admission_blocks_valid_committed_A_with_intent_residue(self):
+        """Observed gap: B is scoped to unfinished A, even with valid commit."""
+        receipt = {
+            **self.intent,
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": hashlib.sha256(
+                b"synthetic signed operator").hexdigest(),
+        }
+        self.launcher.write_bytes(self.new)
+        path = self.pending / ("receipt-" + self.nonce + ".json")
+        path.write_text(json.dumps(receipt))
+        path.chmod(0o600)
+        original_intent = self.intent_path.read_bytes()
+        original_receipt = path.read_bytes()
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_ORIGINAL_CUT_ALREADY_COMMITTED"):
+            self.admit_b()
+        self.assertEqual(original_intent, self.intent_path.read_bytes())
+        self.assertEqual(original_receipt, path.read_bytes())
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(self.b_admission.exists())
+
+    def test_current_B_admission_blocks_committed_A_after_intent_cleanup(self):
+        """The clean committed case also lacks a recovery-B bootstrap path."""
+        receipt = {
+            **self.intent,
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": hashlib.sha256(
+                b"synthetic signed operator").hexdigest(),
+        }
+        self.launcher.write_bytes(self.new)
+        path = self.pending / ("receipt-" + self.nonce + ".json")
+        path.write_text(json.dumps(receipt))
+        path.chmod(0o600)
+        self.intent_path.unlink()
+        original_receipt = path.read_bytes()
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_A_EVIDENCE_MISSING_OR_UNREADABLE"):
+            self.admit_b()
+        self.assertEqual(original_receipt, path.read_bytes())
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(self.b_admission.exists())
+
     def test_refuses_bad_B_sigstore_and_no_recovery_admission(self):
         failure = Mock(side_effect=subprocess.CalledProcessError(1, "gh"))
         with self.assertRaisesRegex(
