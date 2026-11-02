@@ -34,6 +34,7 @@ GH_BINARY = Path("/usr/bin/gh")  # checked exact system binary, never PATH looku
 ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
 RECOVERY_ADMISSION = Path("/etc/pmgm/qa525-recovery-bootstrap-admission.json")
 PENDING_STATE = Path("/opt/centenario/qa525-launcher-replacement")
+RECOVERY_STATE = Path("/opt/centenario/qa525-launcher-recovery")
 LAUNCHER = Path("/usr/local/sbin/pmgm-qa-update")
 SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 SHA64 = re.compile(r"[a-f0-9]{64}\Z")
@@ -99,6 +100,24 @@ def root_owned(path, *, directory=False, mode=None):
         if n == 0 and mode is not None:
             require(stat.S_IMODE(s.st_mode) == mode,
                     "BOOTSTRAP_ROOT_PATH_MODE_INVALID")
+
+
+def require_recovery_state_provisioned():
+    """PRE-window fail-closed gate; never create a journal in root code.
+
+    An independently authorized operator must provision the empty root:root
+    0700 directory during pre-window preparation. Existing entries are
+    evidence, not disposable staging files.
+    """
+    try:
+        state = RECOVERY_STATE.lstat()
+        require(stat.S_ISDIR(state.st_mode)
+                and stat.S_IMODE(state.st_mode) == 0o700
+                and not stat.S_ISLNK(state.st_mode),
+                "ROOT_RECOVERY_STATE_NOT_PROVISIONED")
+        root_owned(RECOVERY_STATE, directory=True, mode=0o700)
+    except (OSError, Blocked):
+        raise Blocked("ROOT_RECOVERY_STATE_NOT_PROVISIONED") from None
 
 
 def require_isolated_root_python():
@@ -334,6 +353,7 @@ def _prepare_locked(envelope, sha, expected, verifier_sha, *, now=None,
     require(digest_file(Path(__file__), maximum=200_000) == verifier_sha,
             "BOOTSTRAP_TRUSTED_VERIFIER_HASH_MISMATCH")
     root_owned(STORE, directory=True, mode=0o700)
+    require_recovery_state_provisioned()
     root_owned(ADMISSION.parent, directory=True)
     require(not ADMISSION.exists() and not ADMISSION.is_symlink(),
             "BOOTSTRAP_ADMISSION_ALREADY_EXISTS")
@@ -460,6 +480,7 @@ def _prepare_delayed_recovery_locked(b_envelope, b_sha, b_digest,
     require(digest_file(Path(__file__), maximum=200_000) == verifier_sha,
             "RECOVERY_BOOTSTRAP_EXECUTOR_PIN_MISMATCH")
     root_owned(STORE, directory=True, mode=0o700)
+    require_recovery_state_provisioned()
     root_owned(RECOVERY_ADMISSION.parent, directory=True)
     root_owned(PENDING_STATE, directory=True, mode=0o700)
     root_owned(LAUNCHER, mode=0o700)

@@ -2293,8 +2293,35 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
         self.assertEqual(self.new, self.launcher.read_bytes())
         self.assertEqual(["rollback-intent-" + self.nonce + ".json"],
                          [x.name for x in self.recovery.iterdir()])
-        with self.assertRaises(m.Blocked):
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_PENDING_MANUAL_RECONCILIATION"):
             self.run_reversal()
+
+    def test_receipt_before_B_archive_stays_blocked_for_manual_reconciliation(self):
+        """F2: COMMITTED B receipt plus residual intent is not auto-recovered."""
+        original = m.os.rename
+        def crash_before_archive(source, target):
+            if (Path(source).name ==
+                    "rollback-intent-" + self.nonce + ".json"
+                    and Path(target).name ==
+                    "rollback-intent-" + self.nonce + ".superseded"):
+                raise RuntimeError("synthetic crash after B receipt")
+            return original(source, target)
+        with patch.object(m.os, "rename", side_effect=crash_before_archive):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "synthetic crash after B receipt"):
+                self.run_reversal()
+        self.assertEqual(self.old, self.launcher.read_bytes())
+        pending = self.recovery / ("rollback-intent-" + self.nonce + ".json")
+        receipt = self.recovery / ("rollback-receipt-" + self.nonce + ".json")
+        saved = self.recovery / ("rollback-new-" + self.nonce + ".bin")
+        self.assertTrue(all(p.is_file() for p in (pending, receipt, saved)))
+        original_files = {p.name: p.read_bytes() for p in self.recovery.iterdir()}
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_PENDING_MANUAL_RECONCILIATION"):
+            self.run_reversal()
+        self.assertEqual(original_files,
+                         {p.name: p.read_bytes() for p in self.recovery.iterdir()})
 
     def test_recovery_interruption_after_swap_blocks_retry(self):
         original = m.os.replace

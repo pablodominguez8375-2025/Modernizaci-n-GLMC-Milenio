@@ -493,6 +493,16 @@ def scan_recovery_history():
         require(name.startswith(("rollback-intent-", "rollback-new-",
                                  "rollback-receipt-")),
                 "ROOT_RECOVERY_HISTORY_UNKNOWN_ENTRY")
+        if name.startswith("rollback-intent-") and name.endswith(".json"):
+            # A durable intent before archival is an interrupted B operation.
+            # This includes the crash AFTER a COMMITTED B receipt but BEFORE
+            # the intended .superseded rename: block all privileged actions,
+            # leave forensic evidence intact, require separately supervised
+            # manual reconciliation (never auto-retry or auto-delete).
+            pending = name[len("rollback-intent-"):-len(".json")]
+            require(NONCE.fullmatch(pending) is not None,
+                    "ROOT_RECOVERY_HISTORY_NONCE_INVALID")
+            raise Blocked("ROOT_RECOVERY_PENDING_MANUAL_RECONCILIATION")
         prefix, suffix = (("rollback-intent-", ".superseded") if
                           name.startswith("rollback-intent-") else
                           ("rollback-new-", ".bin") if
@@ -505,7 +515,8 @@ def scan_recovery_history():
             "rollback-intent-" + nonce + ".superseded",
             "rollback-new-" + nonce + ".bin",
             "rollback-receipt-" + nonce + ".json"}
-        require(trio <= names, "ROOT_RECOVERY_INCOMPLETE_OR_UNARCHIVED")
+        require(trio <= names,
+                "ROOT_RECOVERY_PENDING_MANUAL_RECONCILIATION")
         if name.startswith("rollback-receipt-"):
             try:
                 record = json.loads(read_bound(

@@ -38,6 +38,62 @@ implementado `--reconcile-approved`. Aprobación launcher-only y
 posterior aprobación API+WEB son actos diferentes. Ventana del 03-11-2026
 **condicionada** a los gates, sin obligación de aplicar si siguen pendientes.
 
+## F1 — Precondición ejecutable PRE-ventana: journal B root0700
+
+**No ejecutar estos comandos ahora ni desde una PR.** Son pasos para el
+operador autorizado sobre el único host `glmdch`, **solo después** de
+autenticar de forma independiente el bootstrap antes del primer byte root,
+inspeccionar el estado del host y confirmar G6/restore y permisos de la
+ventana launcher-only. Ningún comando de aquí otorga aprobación de un
+swap o rollback.
+
+Antes de la primera admisión ordinaria A, el directorio
+`/opt/centenario/qa525-launcher-recovery` **debe existir**
+como directorio real (no symlink) root:root modo `0700`.
+Si no existe y el operador autorizado valida que se trata de la preparación
+inicial, aprovisionar una sola vez durante la fase PRE-ventana:
+
+```sh
+sudo install -d -m 0700 -o root -g root -- /opt/centenario/qa525-launcher-recovery
+sudo stat -c '%u:%g %a %F' -- /opt/centenario/qa525-launcher-recovery
+```
+
+La salida esperada del segundo comando es `0:0 700 directory`; confirmar
+además que **no es enlace simbólico** y que sus ancestros y contenido son
+seguros antes de confiar en él. **Si existe en estado inesperado, no cambiar
+dueño/modo ni borrar entradas automáticamente:** bloquear y auditar primero.
+El bootstrap ordinario `qa525-signed-root-bootstrap-prep.py` comprueba
+ruta/propietario/tipo/modo ANTES de emitir una admisión A y falla con
+`ROOT_RECOVERY_STATE_NOT_PROVISIONED` cuando falta o es inseguro; no lo
+crea automáticamente ni realiza una operación en el launcher. Esa misma
+precondición rige para la preparación de B. La documentación no reemplaza
+el control físico ni autoriza ejecutarlo con permisos de superusuario.
+
+## F2 — Tabla de interrupciones del rollback B: bloqueo conservador
+
+Ante una interrupción, conservar el journal y los hashes originales bajo
+custodia; detener también nuevos cortes A hasta la conciliación manual
+**separadamente aprobada**, sin reutilizar el nonce B. Los estados parciales
+válidos de un nonce B retornan
+`ROOT_RECOVERY_PENDING_MANUAL_RECONCILIATION` desde
+`scan_recovery_history`; es un diagnóstico, no un comando de reparación.
+
+| Punto de fallo | Evidencia esperada | Launcher vivo y revisión requerida |
+| --- | --- | --- |
+| Tras crear `rollback-intent-N.json`, antes de `rollback-new-N.bin` | Intent B solamente | Debería seguir en el lanzador nuevo; **medir hash**, bloquear; conciliación manual |
+| Tras guardar `rollback-new-N.bin`, antes del `.tmp` | Intent y copia del nuevo | Debería seguir nuevo; comprobar copia y hashes, bloquear; conciliación manual |
+| Tras escribir `.pmgm-qa-recovery-N.tmp`, antes del swap | Intent, copia y archivo temporal | Debería seguir nuevo; verificar estado real y `.tmp`, bloquear; conciliación manual |
+| Después del `os.replace` y fsync, sin recibo B | Intent y copia, launcher ya antiguo; `.tmp` puede faltar | **No presuponer rollback fallido**: comprobar launcher antiguo y archivos, bloquear; conciliación manual |
+| Recibo B durable pero antes de archivar intent | Intent `.json`, copia y `rollback-receipt-N.json` | Launcher antiguo restaurado, pero residuo pendiente: **bloquear**, no autoconvertir a completo ni renombrar por cuenta propia |
+| Recibo B durable e intent `.superseded` | Recibo, copia y archivo `.superseded` coherentes | Rollback B completo; nonce consumido. La reversión no se reejecuta |
+
+Los seis casos se distinguen por lectura de bytes y atributos del journal
+bajo locks, no por un correo ni por un estado GitHub. El primer estado no
+autoriza intentar de nuevo B; el quinto (receipt antes de archivo) tampoco.
+Los registros incompletos bloquean de forma deliberada nuevas operaciones.
+No se implementa `--reconcile-approved` para esta ventana por instrucción
+del Sponsor. El histórico del intent no se elimina para sortear un bloqueo.
+
 ## 0. Scope, truth and ownership
 
 - Sole physical QA host: `glmdch` (no additional VM; `srv01` is not a physical fallback).

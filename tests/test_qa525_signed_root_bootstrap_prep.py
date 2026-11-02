@@ -81,6 +81,8 @@ class RootBootstrapTests(unittest.TestCase):
         self.lock.write_bytes(b"")
         self.lock.chmod(0o600)
         self.admission = root / "admission.json"
+        self.recovery_state = root / "recovery"
+        self.recovery_state.mkdir(mode=0o700)
         self.envelope = root / "envelope.zip"
         original_fstat = os.fstat
         def as_root_fd(fd):
@@ -92,6 +94,7 @@ class RootBootstrapTests(unittest.TestCase):
             patch.object(m, "STORE", self.stage),
             patch.object(m, "LOCK", self.lock),
             patch.object(m, "ADMISSION", self.admission),
+            patch.object(m, "RECOVERY_STATE", self.recovery_state),
             patch.object(m, "root_owned"),
             patch.object(m.os, "geteuid", return_value=0),
             patch.object(m, "require_isolated_root_python"),
@@ -119,6 +122,47 @@ class RootBootstrapTests(unittest.TestCase):
                         ORIGINAL_ISOLATION()
         with patch.object(m.sys, "flags", SimpleNamespace(isolated=1, no_site=1)):
             ORIGINAL_ISOLATION()
+
+    def test_missing_recovery_journal_blocks_before_A_admission_or_sigstore(self):
+        """F1: required root recovery directory is never created by Python."""
+        self.recovery_state.rmdir()
+        signed = Mock()
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_STATE_NOT_PROVISIONED"):
+            self.verify(build_release(), mock=signed)
+        signed.assert_not_called()
+        self.assertFalse(self.admission.exists())
+        self.assertFalse((self.stage / SHA).exists())
+        self.assertFalse(self.recovery_state.exists())
+
+    def test_wrong_mode_or_symlink_recovery_journal_blocks_before_A(self):
+        """Reject unsafe pre-window ownership/mode path, never repair it."""
+        with self.subTest(case="mode_0755"):
+            self.recovery_state.chmod(0o755)
+            with self.assertRaisesRegex(
+                    m.Blocked, "ROOT_RECOVERY_STATE_NOT_PROVISIONED"):
+                self.verify(build_release())
+            self.recovery_state.chmod(0o700)
+        with self.subTest(case="symlink"):
+            self.recovery_state.rmdir()
+            self.recovery_state.symlink_to(self.stage, target_is_directory=True)
+            with self.assertRaisesRegex(
+                    m.Blocked, "ROOT_RECOVERY_STATE_NOT_PROVISIONED"):
+                self.verify(build_release())
+        self.assertFalse(self.admission.exists())
+        self.assertFalse((self.stage / SHA).exists())
+
+    def test_preexisting_empty_recovery_journal_preserved_during_A_admission(self):
+        """F1 positive counterpart: prepared root0700 directory is not changed."""
+        before = self.recovery_state.stat()
+        self.verify(build_release())
+        self.assertTrue(self.admission.is_file())
+        self.assertTrue(self.recovery_state.is_dir())
+        self.assertEqual(0o700, stat.S_IMODE(self.recovery_state.stat().st_mode))
+        self.assertEqual((before.st_dev, before.st_ino),
+                         (self.recovery_state.stat().st_dev,
+                          self.recovery_state.stat().st_ino))
+        self.assertEqual([], list(self.recovery_state.iterdir()))
 
     def test_signed_source_is_staged_without_running_and_admitted_900_seconds(self):
         answer, runner = self.verify(build_release())
