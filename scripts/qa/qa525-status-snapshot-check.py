@@ -8,6 +8,7 @@ GitHub/Drive AND physical-host evidence.
 """
 import argparse
 from datetime import date
+import errno
 import json
 import os
 from pathlib import Path
@@ -65,7 +66,12 @@ def read_snapshot(path):
     two operations. O_NOFOLLOW + fstat bind validation to the actual fd.
     """
     path = Path(path)
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise Blocked("NOT_A_REGULAR_SMALL_SNAPSHOT") from None
+        raise
     with os.fdopen(fd, "rb") as stream:
         status = os.fstat(stream.fileno())
         require(stat.S_ISREG(status.st_mode) and 0 < status.st_size <= 16_384
