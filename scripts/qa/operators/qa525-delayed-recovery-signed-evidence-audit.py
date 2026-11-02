@@ -158,5 +158,104 @@ def review_two_signed_envelopes(cut_zip, cut_source_sha, cut_zip_sha256,
     }
 
 
+
+
+def review_pending_two_signed_envelopes(cut_zip, cut_source_sha, cut_zip_sha256,
+                                        recovery_zip, recovery_source_sha,
+                                        recovery_zip_sha256, intent, approval, *,
+                                        live_sha256, backup_sha256,
+                                        receipt_present, now,
+                                        consumed_nonces=(), audit_fn=None):
+    """Unprivileged signed A/B review for an unfinished original cut.
+
+    The original is identified by its *intent*, NEVER by an invented committed
+    receipt. Historical root-owned journal custody and operator approval
+    authentication must be verified by a future separately trusted root
+    executor. Even genuine Sigstore evidence is NOT deployment authority.
+    """
+    require(os.geteuid() != 0, "PENDING_DUAL_EVIDENCE_ROOT_FORBIDDEN")
+    require(type(now) is int and now > 0
+            and type(receipt_present) is bool
+            and all(type(s) is str and SOURCE.fullmatch(s) is not None
+                    for s in (cut_source_sha, recovery_source_sha))
+            and all(type(s) is str and HASH.fullmatch(s) is not None
+                    for s in (cut_zip_sha256, recovery_zip_sha256)),
+            "PENDING_DUAL_IDENTITY_INVALID")
+    require(type(intent) is dict
+            and intent.get("source_sha") == cut_source_sha
+            and intent.get("release_asset_sha256") ==
+                "sha256:" + cut_zip_sha256,
+            "PENDING_DUAL_ORIGINAL_NOT_BOUND_TO_INTENT")
+    contract_path = Path(__file__).with_name(
+        "qa525-launcher-replacement-contract.py")
+    require(contract_path.is_file() and not contract_path.is_symlink(),
+            "PENDING_DUAL_LOCAL_CONTRACT_MISSING")
+    before = hashlib.sha256(contract_path.read_bytes()).hexdigest()
+    simulated = audit_fn is not None
+    if audit_fn is None:
+        verifier = load_local("qa525-attested-installer-audit.py")
+        audit_fn = verifier.audit
+    try:
+        a = validate_report(
+            audit_fn(Path(cut_zip), cut_source_sha, cut_zip_sha256),
+            cut_source_sha, cut_zip_sha256)
+        b = validate_report(
+            audit_fn(Path(recovery_zip), recovery_source_sha,
+                     recovery_zip_sha256),
+            recovery_source_sha, recovery_zip_sha256)
+    except Blocked:
+        raise
+    except Exception:
+        raise Blocked("PENDING_DUAL_SIGSTORE_EVIDENCE_FAILED") from None
+    require(b["privileged_sources_sha256"][CONTRACT_REL] == before
+            and hashlib.sha256(contract_path.read_bytes()).hexdigest() == before,
+            "PENDING_DUAL_CONTRACT_NOT_IN_SIGNED_B")
+    # Do not load even local policy Python until B's manifest binds its bytes.
+    policy = load_local("qa525-launcher-replacement-contract.py")
+    require(hashlib.sha256(contract_path.read_bytes()).hexdigest() == before,
+            "PENDING_DUAL_CONTRACT_CHANGED")
+    claim = {
+        "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
+        "source_sha": recovery_source_sha,
+        "release_asset_sha256": "sha256:" + recovery_zip_sha256,
+        "manifest_sha256": b["manifest_sha256"],
+        "executor_sha256": b["privileged_sources_sha256"][ROOT_EXEC_REL],
+        "issued_at": now, "expires_at": now + 900,
+    }
+    try:
+        plan = policy.assess_pending_reconciliation_plan(
+            intent, claim, approval, live_sha256=live_sha256,
+            backup_sha256=backup_sha256, receipt_present=receipt_present,
+            now=now, consumed_nonces=consumed_nonces)
+    except policy.Blocked:
+        raise Blocked("PENDING_DUAL_RECONCILIATION_REVIEW_REJECTED") from None
+    require(plan.get("may_recover") is False
+            and plan.get("may_install") is False
+            and plan.get("may_apply") is False
+            and plan.get("claims_authenticated") is False,
+            "PENDING_DUAL_REVIEW_MUST_NEVER_AUTHORIZE")
+    return {
+        "status": ("SYNTHETIC_PENDING_DUAL_REVIEW_NO_AUTHENTICATION"
+                   if simulated else
+                   "PENDING_DUAL_SIGNED_ENVELOPES_AUDITED_NO_RECOVERY"),
+        "cut_source_sha": a["source_sha"],
+        "cut_release_asset_sha256": a["release_asset_sha256"],
+        "cut_intent_sha256": plan["cut_intent_sha256"],
+        "recovery_source_sha": b["source_sha"],
+        "recovery_release_asset_sha256": b["release_asset_sha256"],
+        "recovery_manifest_sha256": b["manifest_sha256"],
+        "recovery_executor_sha256": claim["executor_sha256"],
+        "observed_phase": plan["observed_phase"],
+        "review_status": plan["status"],
+        "cut_intent_authenticated_by_audit": False,
+        "approval_authenticated_by_audit": False,
+        "release_envelopes_sigstore_checked_unprivileged": not simulated,
+        "bootstrap_admission_created": False,
+        "may_install": False, "may_apply": False, "may_recover": False,
+        "physical_host_touched": False,
+    }
+
+
+
 if __name__ == "__main__":
     raise SystemExit("QA525_DELAYED_EVIDENCE_LIBRARY_ONLY_NO_HOST_ENTRYPOINT")
