@@ -207,5 +207,134 @@ class DelayedDualSignedEvidenceAuditTests(unittest.TestCase):
         self.assertEqual([], list(Path(self.tmp.name).iterdir()))
 
 
+
+
+class PendingDualSignedEvidenceAuditTests(DelayedDualSignedEvidenceAuditTests):
+    """A is an interrupted intent, never a committed receipt; no root access."""
+
+    def setUp(self):
+        super().setUp()
+        self.intent = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": self.a,
+            "release_asset_sha256": "sha256:" + self.da,
+            "old_launcher_sha256": "2" * 64,
+            "new_launcher_sha256": "3" * 64,
+            "nonce": "1" * 64,
+        }
+        self.pending_approval = {
+            "action": policy.PENDING_RECONCILIATION_ACTION,
+            "scope": policy.PENDING_RECONCILIATION_SCOPE,
+            "environment": policy.ENVIRONMENT,
+            "operator": "soporte@glmdch",
+            "approved": True,
+            "cut_source_sha": self.a,
+            "cut_release_asset_sha256": "sha256:" + self.da,
+            "cut_nonce": self.intent["nonce"],
+            "cut_intent_sha256": policy.frozen_sha(self.intent),
+            "old_launcher_sha256": self.intent["old_launcher_sha256"],
+            "new_launcher_sha256": self.intent["new_launcher_sha256"],
+            "recovery_source_sha": self.b,
+            "recovery_release_asset_sha256": "sha256:" + self.db,
+            "recovery_manifest_sha256": self.signed_b["manifest_sha256"],
+            "recovery_executor_sha256":
+                self.signed_b["privileged_sources_sha256"][m.ROOT_EXEC_REL],
+            "nonce": "f" * 64,
+            "issued_at": self.now - 1,
+            "expires_at": self.now + 120,
+        }
+
+    def pending_review(self, *, intent=None, approval=None, live=None,
+                       backup=None, receipt=False, now=5000, consumed=()):
+        with patch.object(m.os, "geteuid", return_value=1000):
+            return m.review_pending_two_signed_envelopes(
+                self.cut_zip, self.a, self.da,
+                self.recovery_zip, self.b, self.db,
+                self.intent if intent is None else intent,
+                self.pending_approval if approval is None else approval,
+                live_sha256=(self.intent["old_launcher_sha256"]
+                             if live is None else live),
+                backup_sha256=(self.intent["old_launcher_sha256"]
+                               if backup is None else backup),
+                receipt_present=receipt, now=now,
+                consumed_nonces=consumed, audit_fn=self.fake_audit)
+
+    def test_pending_signed_a_b_review_never_authorizes_both_phases(self):
+        for live, phase in (
+            (self.intent["old_launcher_sha256"], "PENDING_BEFORE_ATOMIC_SWAP"),
+            (self.intent["new_launcher_sha256"],
+             "PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT"),
+        ):
+            with self.subTest(phase=phase):
+                result = self.pending_review(live=live)
+                self.assertEqual(phase, result["observed_phase"])
+                self.assertEqual(
+                    "SYNTHETIC_PENDING_DUAL_REVIEW_NO_AUTHENTICATION",
+                    result["status"])
+                self.assertEqual(self.a, result["cut_source_sha"])
+                self.assertEqual(self.b, result["recovery_source_sha"])
+                self.assertEqual(policy.frozen_sha(self.intent),
+                                 result["cut_intent_sha256"])
+                for key in ("may_install", "may_apply", "may_recover",
+                            "cut_intent_authenticated_by_audit",
+                            "approval_authenticated_by_audit",
+                            "release_envelopes_sigstore_checked_unprivileged",
+                            "bootstrap_admission_created",
+                            "physical_host_touched"):
+                    self.assertIs(result[key], False)
+
+    def test_pending_rejects_mismatched_intent_and_signed_b(self):
+        with self.assertRaisesRegex(
+                m.Blocked, "PENDING_DUAL_ORIGINAL_NOT_BOUND_TO_INTENT"):
+            self.pending_review(intent={**self.intent,
+                                        "source_sha": "0" * 40})
+        with self.assertRaisesRegex(
+                m.Blocked, "PENDING_DUAL_RECONCILIATION_REVIEW_REJECTED"):
+            self.pending_review(intent={**self.intent,
+                                        "new_launcher_sha256": "0" * 64})
+        with self.assertRaises(m.Blocked):
+            self.pending_review(approval={**self.pending_approval,
+                                          "cut_intent_sha256": "0" * 64})
+        with self.assertRaises(m.Blocked):
+            self.pending_review(approval={**self.pending_approval,
+                                          "recovery_executor_sha256": "0" * 64})
+        with self.assertRaises(m.Blocked):
+            self.pending_review(receipt=True)
+        with self.assertRaises(m.Blocked):
+            self.pending_review(live="0" * 64)
+        with self.assertRaises(m.Blocked):
+            self.pending_review(consumed=("f" * 64,))
+
+    def test_pending_does_not_import_policy_before_manifest_sha_match(self):
+        prior = self.signed_b["privileged_sources_sha256"][m.CONTRACT_REL]
+        self.signed_b["privileged_sources_sha256"][m.CONTRACT_REL] = "0" * 64
+        try:
+            with patch.object(m, "load_local", wraps=m.load_local) as loaded:
+                with self.assertRaisesRegex(
+                        m.Blocked, "PENDING_DUAL_CONTRACT_NOT_IN_SIGNED_B"):
+                    self.pending_review()
+                self.assertNotIn(
+                    "qa525-launcher-replacement-contract.py",
+                    [args.args[0] for args in loaded.call_args_list])
+        finally:
+            self.signed_b["privileged_sources_sha256"][m.CONTRACT_REL] = prior
+
+    def test_pending_root_and_expiration_fail_closed(self):
+        with patch.object(m.os, "geteuid", return_value=0):
+            with self.assertRaisesRegex(
+                    m.Blocked, "PENDING_DUAL_EVIDENCE_ROOT_FORBIDDEN"):
+                m.review_pending_two_signed_envelopes(
+                    self.cut_zip, self.a, self.da,
+                    self.recovery_zip, self.b, self.db,
+                    self.intent, self.pending_approval,
+                    live_sha256=self.intent["old_launcher_sha256"],
+                    backup_sha256=self.intent["old_launcher_sha256"],
+                    receipt_present=False, now=self.now,
+                    audit_fn=self.fake_audit)
+        with self.assertRaises(m.Blocked):
+            self.pending_review(approval={**self.pending_approval,
+                                          "expires_at": 5000})
+
+
 if __name__ == "__main__":
     unittest.main()
