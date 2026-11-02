@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "scripts/qa/qa525-status-snapshot-check.py"
@@ -150,6 +151,16 @@ class QA525StatusSnapshotTests(unittest.TestCase):
                 m.read_snapshot(symlink)
             with self.assertRaisesRegex(m.Blocked, "NOT_A_REGULAR_SMALL_SNAPSHOT"):
                 m.read_snapshot(Path(tmp))
+
+    def test_descriptor_bound_read_avoids_second_path_dereference(self):
+        with tempfile.TemporaryDirectory(prefix="qa525-status-test-") as tmp:
+            path = Path(tmp) / "snapshot.json"
+            path.write_text(json.dumps(self.valid()))
+            with patch.object(Path, "read_bytes",
+                              side_effect=AssertionError("reopen not allowed")):
+                result = m.read_snapshot(path)
+            self.assertEqual(result["schema_version"],
+                             "pmgm.qa525.readonly.snapshot.v1")
 
     def test_cli_refuses_garbage_non_authorizing(self):
         with tempfile.TemporaryDirectory(prefix="qa525-status-test-") as tmp:
