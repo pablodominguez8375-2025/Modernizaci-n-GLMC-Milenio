@@ -2,6 +2,98 @@
 
 **Status: BLOCKED FOR PHYSICAL EXECUTION.** Approved as a DOCUMENTARY HANDOFF ONLY when reviewed. Source: Issue #822, PR #834, proposed ADR `docs/adr/ADR-qa525-signed-root-bootstrap-and-recovery.md`. This runbook **is not itself authorization** for any privileged action.
 
+## QA525 — Adenda de revisión 02-11-2026 (PR #838, todavía DRAFT)
+
+**El texto histórico más abajo describe etapas anteriores y no autoriza ejecutar.**
+La PR #840 P0-1 se integró a `dev` en `ed05a8e95cde07d09dc1d6a5260f61fa5346ec47`.
+PR #838 desarrolla P0-3 (rollback B para A COMMITTED, con A vencida) y P0-4
+(consumo duradero del nonce desde receipt B y archivo `.superseded`).
+Toda revisión debe referirse al **HEAD vivo exacto**, con CI completo y dictamen
+independiente de Claude. No existe todavía una release integrada/firmada de PR838
+ni confianza independiente PRE-root demostrada en `glmdch`; no ejecutar.
+
+**Aprobación de REVERSIÓN B (separada del permiso de reemplazo A):**
+la autorización privada root0600 `/etc/pmgm/qa525-launcher-rollback.json`
+debe contener todos los campos heredados de la aprobación original
+(`action=rollback-root-launcher-supervised`,
+`scope=QA525_LAUNCHER_ONLY_RECOVERY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION`,
+`environment=QA_GLMDCH_ONLY`, `operator=soporte@glmdch`,
+`approved=true`, `cut_nonce`, nonce nuevo B, `source_sha`,
+`release_asset_sha256`, `old_launcher_sha256`,
+`new_launcher_sha256`, `issued_at`, `expires_at`) **Y**:
+`cut_receipt_sha256`, `recovery_source_sha`,
+`recovery_release_asset_sha256`, `recovery_manifest_sha256`.
+Estos cuatro vínculos nuevos deben coincidir *exactamente* con la admisión B
+verificada, y el hash del recibo original autenticado. El contrato rechaza
+campos adicionales, identidades B distintas, consentimiento vencido y replays.
+Admisión B 0600 desde ambos ZIP Sigstore A/B no sustituye consentimiento:
+requiere los cinco locks, preflight física, G6, custodia de prepared antiguo,
+revalidación de aprobación y TTL al último límite antes de `os.replace`.
+
+**Recuperación si SIGKILL:** con receipt B durable pero intent B no archivado,
+el scanner detiene nuevas operaciones; no debe borrar, renombrar ni editar
+manual o automáticamente el historial para sortearlo. La reconciliación sigue
+siendo manual y **separadamente aprobada** como determinó el Sponsor; no está
+implementado `--reconcile-approved`. Aprobación launcher-only y
+posterior aprobación API+WEB son actos diferentes. Ventana del 03-11-2026
+**condicionada** a los gates, sin obligación de aplicar si siguen pendientes.
+
+## F1 — Precondición ejecutable PRE-ventana: journal B root0700
+
+**No ejecutar estos comandos ahora ni desde una PR.** Son pasos para el
+operador autorizado sobre el único host `glmdch`, **solo después** de
+autenticar de forma independiente el bootstrap antes del primer byte root,
+inspeccionar el estado del host y confirmar G6/restore y permisos de la
+ventana launcher-only. Ningún comando de aquí otorga aprobación de un
+swap o rollback.
+
+Antes de la primera admisión ordinaria A, el directorio
+`/opt/centenario/qa525-launcher-recovery` **debe existir**
+como directorio real (no symlink) root:root modo `0700`.
+Si no existe y el operador autorizado valida que se trata de la preparación
+inicial, aprovisionar una sola vez durante la fase PRE-ventana:
+
+```sh
+sudo install -d -m 0700 -o root -g root -- /opt/centenario/qa525-launcher-recovery
+sudo stat -c '%u:%g %a %F' -- /opt/centenario/qa525-launcher-recovery
+```
+
+La salida esperada del segundo comando es `0:0 700 directory`; confirmar
+además que **no es enlace simbólico** y que sus ancestros y contenido son
+seguros antes de confiar en él. **Si existe en estado inesperado, no cambiar
+dueño/modo ni borrar entradas automáticamente:** bloquear y auditar primero.
+El bootstrap ordinario `qa525-signed-root-bootstrap-prep.py` comprueba
+ruta/propietario/tipo/modo ANTES de emitir una admisión A y falla con
+`ROOT_RECOVERY_STATE_NOT_PROVISIONED` cuando falta o es inseguro; no lo
+crea automáticamente ni realiza una operación en el launcher. Esa misma
+precondición rige para la preparación de B. La documentación no reemplaza
+el control físico ni autoriza ejecutarlo con permisos de superusuario.
+
+## F2 — Tabla de interrupciones del rollback B: bloqueo conservador
+
+Ante una interrupción, conservar el journal y los hashes originales bajo
+custodia; detener también nuevos cortes A hasta la conciliación manual
+**separadamente aprobada**, sin reutilizar el nonce B. Los estados parciales
+válidos de un nonce B retornan
+`ROOT_RECOVERY_PENDING_MANUAL_RECONCILIATION` desde
+`scan_recovery_history`; es un diagnóstico, no un comando de reparación.
+
+| Punto de fallo | Evidencia esperada | Launcher vivo y revisión requerida |
+| --- | --- | --- |
+| Tras crear `rollback-intent-N.json`, antes de `rollback-new-N.bin` | Intent B solamente | Debería seguir en el lanzador nuevo; **medir hash**, bloquear; conciliación manual |
+| Tras guardar `rollback-new-N.bin`, antes del `.tmp` | Intent y copia del nuevo | Debería seguir nuevo; comprobar copia y hashes, bloquear; conciliación manual |
+| Tras escribir `.pmgm-qa-recovery-N.tmp`, antes del swap | Intent, copia y archivo temporal | Debería seguir nuevo; verificar estado real y `.tmp`, bloquear; conciliación manual |
+| Después del `os.replace` y fsync, sin recibo B | Intent y copia, launcher ya antiguo; `.tmp` puede faltar | **No presuponer rollback fallido**: comprobar launcher antiguo y archivos, bloquear; conciliación manual |
+| Recibo B durable pero antes de archivar intent | Intent `.json`, copia y `rollback-receipt-N.json` | Launcher antiguo restaurado, pero residuo pendiente: **bloquear**, no autoconvertir a completo ni renombrar por cuenta propia |
+| Recibo B durable e intent `.superseded` | Recibo, copia y archivo `.superseded` coherentes | Rollback B completo; nonce consumido. La reversión no se reejecuta |
+
+Los seis casos se distinguen por lectura de bytes y atributos del journal
+bajo locks, no por un correo ni por un estado GitHub. El primer estado no
+autoriza intentar de nuevo B; el quinto (receipt antes de archivo) tampoco.
+Los registros incompletos bloquean de forma deliberada nuevas operaciones.
+No se implementa `--reconcile-approved` para esta ventana por instrucción
+del Sponsor. El histórico del intent no se elimina para sortear un bloqueo.
+
 ## 0. Scope, truth and ownership
 
 - Sole physical QA host: `glmdch` (no additional VM; `srv01` is not a physical fallback).
@@ -99,3 +191,40 @@ Output `QA525_SIGNED_SOURCES_PREPARED_NO_LAUNCHER_CHANGE` proves only that attes
 
 ## QA525 isolated interpreter review, 2026-11-01
 PR834 now requires isolated and no-site Python flags for the privileged preparer and installer. The preparer pins the GitHub attestation verifier to /usr/bin/gh and uses a minimal environment. Hermetic tests cover this requirement and receipt compatibility. This is not authorization to change the host. The independently established first-execution trust anchor, disaster recovery review and explicit launcher-only approval are still pending.
+
+
+## QA525 rollback independiente — candidato PR #838 (revisión, NO AUTORIZADO)
+
+PR #834 fue fusionada a dev@0d045f75e62d283987a0fa5e3d293918e113c811,
+y su release ZIP y bootstrap firmados fueron verificados y retenidos en glmdch,
+**sin ejecución**. Los siete informes G6 declaran restauración aislada local
+PASS, pero desastre fuera del host pendiente, IAM no restaurado y consistencia
+multirrecurso sin demostrar.
+
+PR #838 en borrador desarrolla dos piezas separadas: un simulador que solo
+admite raíces desechables en /tmp y el contrato puro `assess_reversal` para un
+futuro ejecutor root. También propone `--rollback-approved` en el instalador
+root, **todavía NO fusionado, NO firmado en la release física y NO ejecutable en
+glmdch**. El modo nuevo exige admisión externa de fuentes firmadas todavía
+vigente, aprobación distinta `/etc/pmgm/qa525-launcher-rollback.json`
+root0600, `/opt/centenario/qa525-launcher-recovery` root0700 preexistente,
+receipt antiguo comprometido, backup original SHA verificado y launcher vivo
+igual al hash NUEVO registrado, además de los cinco locks del operador.
+
+El rollback deja `rollback-intent`, copia durable del nuevo launcher, staging
+del viejo y `os.replace` atómico con `fsync` y `rollback-receipt`; no toca
+API/WEB, Compose, EF, Keycloak ni SMTP. El journal NO se reintenta ni limpia
+automáticamente si ocurre una falla. El SHA y nonce exactos deben constar en
+una aprobación independiente, distinta a la instalación original, y no
+reutilizarse. **Si el corte ORIGINAL quedó interrumpido y existe intent sin
+receipt, este modo NO LO RECUPERA:** se requiere reconciliación manual y revisión
+de los bytes bajo locks. No se debe crear aprobación ni directorios del modo
+nuevo en glmdch mientras la PR no esté integrada, firmada, revisada y habilitada
+por autorización física separada.
+
+El nuevo código necesita: controles CI exact-head, revisión independiente de
+seguridad/custodia, aprobación del operador y del sponsor sobre el corte
+launcher-only, prueba de rollback en ambiente temporal y nuevo paquete firmado
+del SHA integrado. No prometer que el paquete físico del corte 0d045f75
+contiene un modo rollback que no tenía. Mantener `main` y `glmdch` sin
+cambios; ninguna operación API/WEB está incluida.

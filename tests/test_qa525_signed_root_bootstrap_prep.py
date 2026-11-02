@@ -37,14 +37,14 @@ def make_zip(files):
 
 
 def build_release(*, missing=None, tampered=None, wrong_sha=False,
-                  extra=None):
-    base = f"Proyecto-Centenario-QA-srv01-{SHA[:12]}"
+                  extra=None, source_sha=SHA):
+    base = f"Proyecto-Centenario-QA-srv01-{source_sha[:12]}"
     members = {
         p: ("signed synthetic " + p).encode() for p in m.SOURCES
     }
     members[m.BOOTSTRAP_SCRIPT] = FILE.read_bytes()
     members.update({
-        "BUILD-INFO.txt": ("SOURCE_SHA=" + ("b" * 40 if wrong_sha else SHA) +
+        "BUILD-INFO.txt": ("SOURCE_SHA=" + ("b" * 40 if wrong_sha else source_sha) +
                            "\nSTORAGE=SIGNED_REBUILT_SILO_ARCHIVE_SYNTHETIC_QA\n").encode(),
         "README.txt": b"synthetic docs",
     })
@@ -81,6 +81,8 @@ class RootBootstrapTests(unittest.TestCase):
         self.lock.write_bytes(b"")
         self.lock.chmod(0o600)
         self.admission = root / "admission.json"
+        self.recovery_state = root / "recovery"
+        self.recovery_state.mkdir(mode=0o700)
         self.envelope = root / "envelope.zip"
         original_fstat = os.fstat
         def as_root_fd(fd):
@@ -92,6 +94,7 @@ class RootBootstrapTests(unittest.TestCase):
             patch.object(m, "STORE", self.stage),
             patch.object(m, "LOCK", self.lock),
             patch.object(m, "ADMISSION", self.admission),
+            patch.object(m, "RECOVERY_STATE", self.recovery_state),
             patch.object(m, "root_owned"),
             patch.object(m.os, "geteuid", return_value=0),
             patch.object(m, "require_isolated_root_python"),
@@ -119,6 +122,47 @@ class RootBootstrapTests(unittest.TestCase):
                         ORIGINAL_ISOLATION()
         with patch.object(m.sys, "flags", SimpleNamespace(isolated=1, no_site=1)):
             ORIGINAL_ISOLATION()
+
+    def test_missing_recovery_journal_blocks_before_A_admission_or_sigstore(self):
+        """F1: required root recovery directory is never created by Python."""
+        self.recovery_state.rmdir()
+        signed = Mock()
+        with self.assertRaisesRegex(
+                m.Blocked, "ROOT_RECOVERY_STATE_NOT_PROVISIONED"):
+            self.verify(build_release(), mock=signed)
+        signed.assert_not_called()
+        self.assertFalse(self.admission.exists())
+        self.assertFalse((self.stage / SHA).exists())
+        self.assertFalse(self.recovery_state.exists())
+
+    def test_wrong_mode_or_symlink_recovery_journal_blocks_before_A(self):
+        """Reject unsafe pre-window ownership/mode path, never repair it."""
+        with self.subTest(case="mode_0755"):
+            self.recovery_state.chmod(0o755)
+            with self.assertRaisesRegex(
+                    m.Blocked, "ROOT_RECOVERY_STATE_NOT_PROVISIONED"):
+                self.verify(build_release())
+            self.recovery_state.chmod(0o700)
+        with self.subTest(case="symlink"):
+            self.recovery_state.rmdir()
+            self.recovery_state.symlink_to(self.stage, target_is_directory=True)
+            with self.assertRaisesRegex(
+                    m.Blocked, "ROOT_RECOVERY_STATE_NOT_PROVISIONED"):
+                self.verify(build_release())
+        self.assertFalse(self.admission.exists())
+        self.assertFalse((self.stage / SHA).exists())
+
+    def test_preexisting_empty_recovery_journal_preserved_during_A_admission(self):
+        """F1 positive counterpart: prepared root0700 directory is not changed."""
+        before = self.recovery_state.stat()
+        self.verify(build_release())
+        self.assertTrue(self.admission.is_file())
+        self.assertTrue(self.recovery_state.is_dir())
+        self.assertEqual(0o700, stat.S_IMODE(self.recovery_state.stat().st_mode))
+        self.assertEqual((before.st_dev, before.st_ino),
+                         (self.recovery_state.stat().st_dev,
+                          self.recovery_state.stat().st_ino))
+        self.assertEqual([], list(self.recovery_state.iterdir()))
 
     def test_signed_source_is_staged_without_running_and_admitted_900_seconds(self):
         answer, runner = self.verify(build_release())
@@ -271,6 +315,277 @@ class RootBootstrapTests(unittest.TestCase):
         with patch.object(m.os, "geteuid", return_value=1001):
             with self.assertRaisesRegex(m.Blocked, "BOOTSTRAP_ROOT_GLMDCH_ONLY"):
                 m.prepare(self.envelope, SHA, "c" * 64, BOOTSTRAP_HASH)
+
+
+
+
+class DelayedRecoveryBootstrapTests(unittest.TestCase):
+    """Real A/B ZIP checks with disposable root-mocked staging, no QA host."""
+
+    B = "b" * 40
+    verify = RootBootstrapTests.verify
+
+    def setUp(self):
+        RootBootstrapTests.setUp(self)
+        self.pending = Path(self.context.name) / "pending"
+        self.pending.mkdir(mode=0o700)
+        self.launcher = Path(self.context.name) / "bin" / "pmgm-qa-update"
+        self.launcher.parent.mkdir(mode=0o700)
+        self.original = b"synthetic original launcher\n"
+        self.launcher.write_bytes(self.original)
+        self.launcher.chmod(0o700)
+        self.new = b"synthetic target launcher\n"
+        self.nonce = "9" * 64
+        self.b_admission = Path(self.context.name) / "recovery-admission.json"
+        for patcher in (
+            patch.object(m, "PENDING_STATE", self.pending),
+            patch.object(m, "LAUNCHER", self.launcher),
+            patch.object(m, "RECOVERY_ADMISSION", self.b_admission),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        original_zip = build_release()
+        self.verify(original_zip)
+        a_envelope = self.stage / ("qa-signed-" + SHA + ".zip")
+        a_envelope.write_bytes(original_zip)
+        a_envelope.chmod(0o600)
+        self.a_original_admission = self.admission.read_bytes()
+        self.intent = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": SHA,
+            "release_asset_sha256":
+                "sha256:" + hashlib.sha256(original_zip).hexdigest(),
+            "old_launcher_sha256": hashlib.sha256(self.original).hexdigest(),
+            "new_launcher_sha256": hashlib.sha256(self.new).hexdigest(),
+            "nonce": self.nonce,
+        }
+        self.intent_path = self.pending / ("intent-" + self.nonce + ".json")
+        self.intent_path.write_text(json.dumps(self.intent))
+        self.intent_path.chmod(0o600)
+        self.backup = self.pending / ("old-" + self.nonce + ".bin")
+        self.backup.write_bytes(self.original)
+        self.backup.chmod(0o700)
+        self.b_envelope = Path(self.context.name) / "B.zip"
+        self.b_bytes = build_release(source_sha=self.B)
+        self.b_envelope.write_bytes(self.b_bytes)
+        self.b_envelope.chmod(0o600)
+
+    def admit_b(self, **kwargs):
+        mode = kwargs.pop("committed", False)
+        action = (m.prepare_committed_recovery if mode else
+                  m.prepare_delayed_recovery)
+        return action(
+            kwargs.pop("envelope", self.b_envelope),
+            kwargs.pop("sha", self.B),
+            kwargs.pop("digest", hashlib.sha256(self.b_bytes).hexdigest()),
+            BOOTSTRAP_HASH, kwargs.pop("nonce", self.nonce),
+            now=kwargs.pop("now", 1_900_000_000),
+            verify=kwargs.pop("verify", Mock()),
+            **kwargs)
+
+    def test_b_admission_verifies_both_signed_envelopes_and_preserves_A(self):
+        before = self.intent_path.read_bytes()
+        after = self.admit_b()
+        self.assertEqual(
+            "QA525_DUAL_SIGNED_RECOVERY_B_PREPARED_NO_ACTION",
+            after["status"])
+        self.assertFalse(after["may_recover"])
+        self.assertFalse(after["may_install"])
+        self.assertFalse(after["may_apply"])
+        self.assertEqual(self.a_original_admission, self.admission.read_bytes())
+        self.assertEqual(before, self.intent_path.read_bytes())
+        self.assertEqual(self.original, self.backup.read_bytes())
+        self.assertEqual(self.original, self.launcher.read_bytes())
+        b_packet = json.loads(self.b_admission.read_text())
+        self.assertEqual("EXTERNAL_SIGSTORE_RECOVERY_B_ADMISSION_ONLY",
+                         b_packet["status"])
+        self.assertEqual(1_900_000_000, b_packet["issued_at"])
+        self.assertEqual(1_900_000_900, b_packet["expires_at"])
+        self.assertEqual(SHA, b_packet["cut_source_sha"])
+        self.assertEqual(self.B, b_packet["source_sha"])
+        self.assertEqual(hashlib.sha256(json.dumps(
+            self.intent, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=True).encode()).hexdigest(),
+            b_packet["cut_intent_sha256"])
+        self.assertEqual(set(b_packet["files"]), {
+            str(self.stage / ("recovery-" + self.B) / s) for s in m.SOURCES})
+        for path, digest in b_packet["files"].items():
+            self.assertEqual(hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+                             digest)
+        self.assertFalse(
+            (self.pending / ("receipt-" + self.nonce + ".json")).exists())
+
+    def test_expired_original_A_admission_cannot_be_reissued_or_overwritten(self):
+        self.assertLess(json.loads(
+            self.admission.read_text())["expires_at"], 1_900_000_000)
+        self.admit_b()
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_ALREADY_ADMITTED"):
+            self.admit_b()
+        self.assertEqual(self.a_original_admission, self.admission.read_bytes())
+
+    def test_refuses_tampered_original_sources_and_archive(self):
+        source = self.stage / SHA / m.SOURCES[0]
+        source.write_bytes(b"tampered")
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_HISTORICAL_A_SOURCE_DRIFT"):
+            self.admit_b()
+        self.assertFalse(self.b_admission.exists())
+
+    def test_refuses_missing_original_intent_backup_and_commit_ambiguity(self):
+        for target, error in (
+            (self.intent_path, "BOOTSTRAP_ROOT_PATH_MISSING"),
+            (self.backup, "BOOTSTRAP_ROOT_PATH_MISSING"),
+        ):
+            target.rename(target.with_suffix(".hidden"))
+            try:
+                with self.subTest(target=target):
+                    with self.assertRaises(m.Blocked):
+                        self.admit_b()
+                    self.assertFalse(self.b_admission.exists())
+            finally:
+                target.with_suffix(".hidden").rename(target)
+        receipt = self.pending / ("receipt-" + self.nonce + ".json")
+        receipt.write_text('{"status":"FAKE"}')
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_ORIGINAL_CUT_ALREADY_COMMITTED"):
+            self.admit_b()
+        self.assertFalse(self.b_admission.exists())
+
+    def test_current_B_admission_blocks_valid_committed_A_with_intent_residue(self):
+        """Observed gap: B is scoped to unfinished A, even with valid commit."""
+        receipt = {
+            **self.intent,
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": hashlib.sha256(
+                b"synthetic signed operator").hexdigest(),
+        }
+        self.launcher.write_bytes(self.new)
+        path = self.pending / ("receipt-" + self.nonce + ".json")
+        path.write_text(json.dumps(receipt))
+        path.chmod(0o600)
+        original_intent = self.intent_path.read_bytes()
+        original_receipt = path.read_bytes()
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_ORIGINAL_CUT_ALREADY_COMMITTED"):
+            self.admit_b()
+        self.assertEqual(original_intent, self.intent_path.read_bytes())
+        self.assertEqual(original_receipt, path.read_bytes())
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(self.b_admission.exists())
+
+    def test_current_B_admission_blocks_committed_A_after_intent_cleanup(self):
+        """The clean committed case also lacks a recovery-B bootstrap path."""
+        receipt = {
+            **self.intent,
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": hashlib.sha256(
+                b"synthetic signed operator").hexdigest(),
+        }
+        self.launcher.write_bytes(self.new)
+        path = self.pending / ("receipt-" + self.nonce + ".json")
+        path.write_text(json.dumps(receipt))
+        path.chmod(0o600)
+        self.intent_path.unlink()
+        original_receipt = path.read_bytes()
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_A_EVIDENCE_MISSING_OR_UNREADABLE"):
+            self.admit_b()
+        self.assertEqual(original_receipt, path.read_bytes())
+        self.assertEqual(self.new, self.launcher.read_bytes())
+        self.assertFalse(self.b_admission.exists())
+
+    def test_committed_A_gets_independent_B_after_A_expiry_with_residual(self):
+        receipt = {
+            **self.intent, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": hashlib.sha256(
+                b"synthetic signed operator").hexdigest()}
+        self.launcher.write_bytes(self.new)
+        target = self.pending / ("receipt-" + self.nonce + ".json")
+        target.write_text(json.dumps(receipt))
+        target.chmod(0o600)
+        original = self.intent_path.read_bytes()
+        old_A = self.admission.read_bytes()
+        report = self.admit_b(committed=True)
+        self.assertEqual(
+            "QA525_COMMITTED_DUAL_SIGNED_B_PREPARED_NO_ACTION",
+            report["status"])
+        self.assertFalse(report["may_recover"])
+        self.assertEqual(original, self.intent_path.read_bytes())
+        self.assertEqual(old_A, self.admission.read_bytes())
+        packet = json.loads(self.b_admission.read_text())
+        self.assertEqual(
+            "EXTERNAL_SIGSTORE_RECOVERY_B_COMMITTED_ADMISSION_ONLY",
+            packet["status"])
+        self.assertEqual(self.nonce, packet["cut_nonce"])
+        self.assertEqual(hashlib.sha256(json.dumps(
+            receipt, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=True).encode()).hexdigest(),
+            packet["cut_receipt_sha256"])
+        self.assertEqual(self.B, packet["source_sha"])
+        self.assertEqual(SHA, packet["cut_source_sha"])
+
+    def test_committed_A_after_intent_cleanup_gets_fresh_B(self):
+        receipt = {
+            **self.intent, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": "e" * 64}
+        self.launcher.write_bytes(self.new)
+        target = self.pending / ("receipt-" + self.nonce + ".json")
+        target.write_text(json.dumps(receipt))
+        target.chmod(0o600)
+        self.intent_path.unlink()  # fixture setup, not production algorithm
+        result = self.admit_b(committed=True)
+        self.assertEqual(
+            "QA525_COMMITTED_DUAL_SIGNED_B_PREPARED_NO_ACTION",
+            result["status"])
+        self.assertFalse(self.intent_path.exists())
+        self.assertEqual(receipt, json.loads(target.read_text()))
+
+    def test_committed_A_tampered_receipt_or_old_backup_blocks_B(self):
+        receipt = {
+            **self.intent, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "candidate_operator_sha256": "e" * 64}
+        self.launcher.write_bytes(self.new)
+        target = self.pending / ("receipt-" + self.nonce + ".json")
+        target.write_text(json.dumps(receipt))
+        target.chmod(0o600)
+        receipt["new_launcher_sha256"] = "f" * 64
+        target.write_text(json.dumps(receipt))
+        with self.assertRaises(m.Blocked):
+            self.admit_b(committed=True)
+        self.assertFalse(self.b_admission.exists())
+        receipt["new_launcher_sha256"] = hashlib.sha256(self.new).hexdigest()
+        target.write_text(json.dumps(receipt))
+        self.backup.write_bytes(b"modified backup")
+        with self.assertRaises(m.Blocked):
+            self.admit_b(committed=True)
+        self.assertFalse(self.b_admission.exists())
+
+    def test_refuses_bad_B_sigstore_and_no_recovery_admission(self):
+        failure = Mock(side_effect=subprocess.CalledProcessError(1, "gh"))
+        with self.assertRaisesRegex(
+                m.Blocked, "BOOTSTRAP_ATTESTATION_FAILED"):
+            self.admit_b(verify=failure)
+        self.assertFalse(self.b_admission.exists())
+        self.assertFalse((self.stage / ("recovery-" + self.B)).exists())
+
+    def test_refuses_reusing_A_source_as_B(self):
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_B_MUST_DIFFER_FROM_A"):
+            self.admit_b(sha=SHA, digest=hashlib.sha256(
+                (self.stage / ("qa-signed-" + SHA + ".zip")).read_bytes()
+                ).hexdigest())
+        self.assertFalse(self.b_admission.exists())
+
+    def test_refuses_unrecognized_launcher_and_wrong_nonce(self):
+        self.launcher.write_bytes(b"unexpected launcher")
+        with self.assertRaisesRegex(
+                m.Blocked, "RECOVERY_BOOTSTRAP_UNKNOWN_LIVE_LAUNCHER"):
+            self.admit_b()
+        self.launcher.write_bytes(self.original)
+        with self.assertRaises(m.Blocked):
+            self.admit_b(nonce="0" * 64)
+        self.assertFalse(self.b_admission.exists())
 
 
 if __name__ == "__main__":
