@@ -323,5 +323,235 @@ mod.rollback(Path(sys.argv[2]), approval, now=int(sys.argv[4]),
         self.assertEqual(OLD, self.live.read_bytes())
 
 
+
+class InterruptedAPendingSandboxTests(unittest.TestCase):
+    """No-root recovery A->B in /tmp only; never authorizes real QA."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix=m.PREFIX)
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.state = self.root / "state"
+        self.live_dir = self.root / "live"
+        self.recovery = self.root / "recovery"
+        for folder in (self.state, self.live_dir, self.recovery):
+            folder.mkdir(mode=0o700)
+        self.live = self.live_dir / "pmgm-qa-update"
+        self.old, self.new = OLD, NEW
+        self.nonce_a = CUT
+        self.nonce_b = REVERSAL
+        self.intent = {
+            "status": "SWAP_INTENT_NO_DEPLOYMENT",
+            "source_sha": SHA,
+            "release_asset_sha256": DIGEST,
+            "old_launcher_sha256": m.sha(self.old),
+            "new_launcher_sha256": m.sha(self.new),
+            "nonce": self.nonce_a,
+        }
+        self.intent_path = self.state / ("intent-" + CUT + ".json")
+        self.intent_path.write_bytes(m.encode(self.intent))
+        self.intent_path.chmod(0o600)
+        self.backup = self.state / ("old-" + CUT + ".bin")
+        self.backup.write_bytes(self.old)
+        self.backup.chmod(0o700)
+        self.lock = self.state / "recovery.lock"
+        self.lock.write_bytes(b"lock")
+        self.lock.chmod(0o600)
+        self.now = int(time.time())
+        self.claim = {
+            "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
+            "source_sha": "e" * 40,
+            "release_asset_sha256": "sha256:" + "f" * 64,
+            "manifest_sha256": "4" * 64,
+            "executor_sha256": "5" * 64,
+            "issued_at": self.now - 5,
+            "expires_at": self.now + 120,
+        }
+        canonical_intent_sha = m.sha(m.encode(self.intent).strip())
+        self.approval = {
+            "action": "review-pending-root-launcher-reconciliation",
+            "scope": "QA525_LAUNCHER_ONLY_PENDING_RECONCILIATION_NO_API_WEB",
+            "environment": "QA_GLMDCH_ONLY",
+            "operator": "soporte@glmdch",
+            "approved": True,
+            "cut_source_sha": self.intent["source_sha"],
+            "cut_release_asset_sha256": self.intent["release_asset_sha256"],
+            "cut_nonce": CUT, "cut_intent_sha256": canonical_intent_sha,
+            "old_launcher_sha256": self.intent["old_launcher_sha256"],
+            "new_launcher_sha256": self.intent["new_launcher_sha256"],
+            "recovery_source_sha": self.claim["source_sha"],
+            "recovery_release_asset_sha256": self.claim["release_asset_sha256"],
+            "recovery_manifest_sha256": self.claim["manifest_sha256"],
+            "recovery_executor_sha256": self.claim["executor_sha256"],
+            "nonce": REVERSAL,
+            "issued_at": self.now - 5,
+            "expires_at": self.now + 120,
+        }
+        self.live.write_bytes(self.new)
+        self.live.chmod(0o700)
+
+    def call(self, *, claim=None, approval=None, checkpoint=None):
+        return m.simulate_interrupted_A_pending_recovery(
+            self.root, self.claim if claim is None else claim,
+            self.approval if approval is None else approval,
+            now=self.now,
+            checkpoint=(checkpoint if checkpoint is not None
+                        else lambda name: None))
+
+    def test_post_swap_without_A_receipt_restores_in_tmp_with_B_receipt(self):
+        a_before = self.intent_path.read_bytes()
+        b_before = self.backup.read_bytes()
+        result = self.call()
+        self.assertEqual(
+            "SIMULATED_INTERRUPTED_A_RESTORED_NO_HOST_CHANGE",
+            result["status"])
+        self.assertEqual("PENDING_AFTER_ATOMIC_SWAP_NO_RECEIPT",
+                         result["phase"])
+        self.assertEqual(self.old, self.live.read_bytes())
+        self.assertEqual(a_before, self.intent_path.read_bytes())
+        self.assertEqual(b_before, self.backup.read_bytes())
+        receipt = self.recovery / (
+            "pending-receipt-" + self.nonce_b + ".json")
+        self.assertEqual(
+            "PENDING_LAUNCHER_RECOVERY_RECONCILIATION_COMMITTED",
+            json.loads(receipt.read_text())["status"])
+        self.assertFalse(
+            (self.recovery / ("pending-intent-" + self.nonce_b +
+                              ".json")).exists())
+        self.assertEqual(self.new, (
+            self.recovery /
+            ("pending-snapshot-" + self.nonce_b + ".bin")).read_bytes())
+        for field in ("may_apply", "may_recover", "may_install",
+                      "reconciliation_complete", "authenticated",
+                      "production_touched"):
+            self.assertIs(result[field], False)
+        with self.assertRaises(m.Blocked):
+            self.call()
+
+    def test_pre_swap_without_receipt_preserves_original_bytes(self):
+        self.live.write_bytes(self.old)
+        a_before = self.intent_path.read_bytes()
+        result = self.call()
+        self.assertEqual("PENDING_BEFORE_ATOMIC_SWAP", result["phase"])
+        self.assertEqual(self.old, self.live.read_bytes())
+        self.assertEqual(a_before, self.intent_path.read_bytes())
+        self.assertEqual(self.old, (
+            self.recovery / ("pending-snapshot-" + REVERSAL +
+                             ".bin")).read_bytes())
+        self.assertFalse(result["may_install"])
+
+    def test_forged_A_receipt_unknown_journal_and_bad_backup_stop(self):
+        old_live = self.live.read_bytes()
+        receipt_a = self.state / ("receipt-" + CUT + ".json")
+        receipt_a.write_text('{"status":"LAUNCHER_ATOMIC_SWAP_COMMITTED"}')
+        with self.assertRaises(m.Blocked):
+            self.call()
+        receipt_a.unlink()
+        unknown = self.state / "unknown.txt"
+        unknown.write_bytes(b"evil")
+        with self.assertRaises(m.Blocked):
+            self.call()
+        unknown.unlink()
+        self.backup.write_bytes(b"not original")
+        with self.assertRaises(m.Blocked):
+            self.call()
+        self.assertEqual(old_live, self.live.read_bytes())
+        self.assertEqual([], list(self.recovery.iterdir()))
+
+    def test_B_claim_stale_or_nonce_replay_or_consent_forged_block(self):
+        forged_cases = (
+            ({"expires_at": self.now}, {}),
+            ({"source_sha": SHA}, {}),
+            ({"release_asset_sha256": DIGEST}, {}),
+            ({}, {"approved": False}),
+            ({}, {"nonce": CUT}),
+            ({}, {"cut_intent_sha256": "0" * 64}),
+            ({}, {"recovery_manifest_sha256": "0" * 64}),
+            ({}, {"issued_at": self.now + 5}),
+            ({}, {"expires_at": self.now + 901}),
+        )
+        for claim_changes, approval_changes in forged_cases:
+            with self.subTest(claim=claim_changes, consent=approval_changes):
+                with self.assertRaises(m.Blocked):
+                    self.call(
+                        claim={**self.claim, **claim_changes},
+                        approval={**self.approval, **approval_changes})
+                self.assertEqual([], list(self.recovery.iterdir()))
+                self.assertEqual(self.new, self.live.read_bytes())
+
+    def test_sigkill_after_intent_after_swap_and_receipt_block_replay(self):
+        child_code = """
+import importlib.util, json, os, signal, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("qa525_synthetic_child", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+claim = json.loads(Path(sys.argv[3]).read_text())
+approval = json.loads(Path(sys.argv[4]).read_text())
+def halt(stage):
+    if stage == sys.argv[6]:
+        os.kill(os.getpid(), signal.SIGKILL)
+m.simulate_interrupted_A_pending_recovery(
+    Path(sys.argv[2]), claim, approval, now=int(sys.argv[5]),
+    checkpoint=halt)
+"""
+        for point, expected_live in (
+            ("after_intent", self.new),
+            ("after_swap", self.old),
+            ("after_receipt", self.old),
+        ):
+            with self.subTest(point=point):
+                # Each SIGKILL run gets an independent fresh disposable root.
+                with tempfile.TemporaryDirectory(prefix=m.PREFIX) as td:
+                    root = Path(td)
+                    for dirname in ("state", "live", "recovery"):
+                        (root / dirname).mkdir(mode=0o700)
+                    live = root / "live" / "pmgm-qa-update"
+                    live.write_bytes(self.new)
+                    live.chmod(0o700)
+                    intent = root / "state" / ("intent-" + CUT + ".json")
+                    intent.write_bytes(m.encode(self.intent))
+                    intent.chmod(0o600)
+                    backup = root / "state" / ("old-" + CUT + ".bin")
+                    backup.write_bytes(self.old)
+                    backup.chmod(0o700)
+                    lock = root / "state" / "recovery.lock"
+                    lock.write_bytes(b"lock")
+                    lock.chmod(0o600)
+                    files = []
+                    for name, packet in (
+                            ("claim.json", self.claim),
+                            ("approval.json", self.approval)):
+                        p = root / name
+                        p.write_text(json.dumps(packet))
+                        files.append(p)
+                    process = subprocess.run(
+                        [sys.executable, "-B", "-c", child_code, str(MODULE),
+                         str(root), str(files[0]), str(files[1]),
+                         str(self.now), point],
+                        capture_output=True, text=True, timeout=20)
+                    self.assertEqual(-signal.SIGKILL,
+                                     process.returncode, process.stderr)
+                    self.assertEqual(expected_live, live.read_bytes())
+                    self.assertTrue((root / "recovery" /
+                        ("pending-intent-" + REVERSAL + ".json")).exists())
+                    self.assertEqual(m.encode(self.intent), intent.read_bytes())
+                    with self.assertRaises(m.Blocked):
+                        m.simulate_interrupted_A_pending_recovery(
+                            root, self.claim, self.approval, now=self.now)
+
+    def test_no_real_host_path_and_symlink_rejected(self):
+        with self.assertRaises(m.Blocked):
+            m.simulate_interrupted_A_pending_recovery(
+                Path("/opt/centenario"), self.claim, self.approval,
+                now=self.now)
+        self.backup.unlink()
+        self.backup.symlink_to(self.live)
+        with self.assertRaises(m.Blocked):
+            self.call()
+        self.assertEqual(self.new, self.live.read_bytes())
+
+
+
 if __name__ == "__main__":
     unittest.main()
