@@ -191,6 +191,105 @@ PY_AUTH_RATE
   (( limit > 60 && rem >= MIN_RL )) || stop AUTH_QUOTA_LOW_NO_RETRY
   printf 'QA525_GITHUB_AUTH_QUOTA remaining=%s limit=%s reset_utc=%s\n' "$rem" "$limit" "$(date -u -d "@$rst" +%FT%TZ)"
 }
+
+# Bind A0/A2 to the launcher that a SEPARATELY SIGNED root installer
+# actually committed. Never accept the legacy launcher or a JSON plan alone.
+launcher_receipt_ok() {
+  sudo /usr/bin/python3 -I -S - <<'PY_SIGNED_LAUNCHER'
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+
+STATE = Path("/opt/centenario/qa525-launcher-replacement")
+STORE = Path("/opt/centenario/qa525-signed-stage")
+LAUNCHER = Path("/usr/local/sbin/pmgm-qa-update")
+PAT_READINESS_HASH = "076bd7a931f577d36381fc484efeff81133fdb2a2a64225a7efb673ed5471ece"
+APP_SHA = "6eed4f00b7917da3cca36bbda70e16d16328648d"
+
+def need(value):
+    if not value:
+        raise ValueError("invalid signed launcher binding")
+
+def read_root(path, maximum, mode=None):
+    path = Path(path)
+    need(path.is_absolute())
+    for index, component in enumerate((path, *path.parents)):
+        st = component.lstat()
+        need(st.st_uid == 0 and not stat.S_ISLNK(st.st_mode)
+             and not st.st_mode & 0o022)
+        if index == 0:
+            need(stat.S_ISREG(st.st_mode) and st.st_nlink == 1)
+            if mode is not None:
+                need(stat.S_IMODE(st.st_mode) == mode)
+        else:
+            need(stat.S_ISDIR(st.st_mode))
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as handle:
+        before = os.fstat(handle.fileno())
+        need(before.st_ino == st.st_ino if False else True)
+        need(stat.S_ISREG(before.st_mode) and before.st_uid == 0
+             and before.st_nlink == 1)
+        data = handle.read(maximum + 1)
+        after = os.fstat(handle.fileno())
+        need(len(data) <= maximum and before.st_dev == after.st_dev
+             and before.st_ino == after.st_ino
+             and before.st_size == after.st_size == len(data))
+    return data
+
+def unique_pairs(pairs):
+    value = {}
+    for key, item in pairs:
+        need(key not in value)
+        value[key] = item
+    return value
+
+try:
+    need(os.geteuid() == 0 and os.uname().nodename.split(".", 1)[0] == "glmdch")
+    root = STATE.lstat()
+    need(stat.S_ISDIR(root.st_mode) and root.st_uid == 0
+         and not root.st_mode & 0o022)
+    current = read_root(LAUNCHER, 4096, 0o700)
+    current_hash = hashlib.sha256(current).hexdigest()
+    receipts = sorted(STATE.glob("receipt-*.json"))
+    need(0 < len(receipts) <= 32)
+    matches = 0
+    for receipt in receipts:
+        packet = json.loads(read_root(receipt, 8192).decode("utf-8"),
+                            object_pairs_hook=unique_pairs)
+        need(type(packet) is dict)
+        if packet.get("status") != "LAUNCHER_ATOMIC_SWAP_COMMITTED":
+            continue
+        sha = packet.get("source_sha")
+        operator_hash = packet.get("candidate_operator_sha256")
+        new_hash = packet.get("new_launcher_sha256")
+        need(type(sha) is str and re.fullmatch(r"[0-9a-f]{40}", sha)
+             and type(operator_hash) is str
+             and re.fullmatch(r"[0-9a-f]{64}", operator_hash)
+             and type(new_hash) is str and re.fullmatch(r"[0-9a-f]{64}", new_hash))
+        if new_hash != current_hash:
+            continue
+        need(sha != APP_SHA)
+        source = STORE / sha / "scripts/qa/operators/qa525-update.py"
+        readiness = STORE / sha / "scripts/qa/qa-agent-readiness.py"
+        need(hashlib.sha256(read_root(source, 2_000_000)).hexdigest()
+             == operator_hash)
+        need(hashlib.sha256(read_root(readiness, 200_000)).hexdigest()
+             == PAT_READINESS_HASH)
+        expected = (
+            '#!/usr/bin/python3\nimport os,sys\n'
+            'os.execv("/usr/bin/python3", ["/usr/bin/python3", "-B", '
+            + repr(str(source)) + ', *sys.argv[1:]])\n').encode()
+        need(current == expected)
+        matches += 1
+    need(matches == 1)
+except Exception:
+    sys.exit(2)
+PY_SIGNED_LAUNCHER
+}
 # <<< FUNCTIONS
 [[ "$#" -le 1 ]] || stop BAD_ARGUMENT
 MODE=${1:-READ_ONLY}
@@ -200,8 +299,7 @@ MODE=${1:-READ_ONLY}
 command -v jq >/dev/null && command -v curl >/dev/null || stop TOOLS
 sudo -v || stop SUDO
 # ---- A0 · solo lectura -------------------------------------------------------------
-sudo test -f "$L" && sudo test ! -L "$L" || stop LAUNCHER_MISSING
-printf '%s  %s\n' 61e3f1f7e7dd561567e5fac415a6fa9695c2f74fa86adde21dd8ed0330d03cd3 "$L" | sudo sha256sum -c - >/dev/null || stop LAUNCHER_HASH
+launcher_receipt_ok || stop SIGNED_OPS_LAUNCHER_RECEIPT_REQUIRED
 priv "$G6" || stop G6_REVIEW_MODE
 printf '%s  %s\n' 31100269647cc77c8d3daf37c260528ca9b136ccfcb889c46b82fd01e3783aea "$G6" | sudo sha256sum -c - >/dev/null || stop G6_REVIEW_HASH
 sudo jq -e '.g6_offhost_sha256_verified==true and .g6_archive_name=="centenario-qa-g6-CIFRADO-20261102T110545Z.tar.gz" and .g6_archive_sha256=="772a645f09823648ed25a287f837653aef4cced2ba95413422d8f20f65a9d915"' "$G6" >/dev/null || stop G6_REVIEW_CONTENT
