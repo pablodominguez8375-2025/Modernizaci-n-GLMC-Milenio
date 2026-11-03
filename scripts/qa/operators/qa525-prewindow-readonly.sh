@@ -14,7 +14,7 @@ tmp='/tmp/qa525-audit-EigD7wok'
 out() { printf '%s=%s\n' "$1" "$2"; }
 is_absent() { ! sudo test -e "$1" && ! sudo test -L "$1"; }
 dir_mode() { [ "$(sudo stat -c '%u:%g %a %F' -- "$1" 2>/dev/null || :)" = "0:0 $2 directory" ]; }
-file_mode() { [ "$(sudo stat -c '%u:%g %a %F %h' -- "$1" 2>/dev/null || :)" = "0:0 $2 regular file 1" ]; }
+file_mode() { [ "$(sudo stat -c '%u:%g %a %h' -- "$1" 2>/dev/null || :)" = "0:0 $2 1" ] && sudo test -f "$1" && ! sudo test -L "$1"; }
 sum_eq() {
   actual="$(sudo sha256sum -- "$1" 2>/dev/null | awk '{print $1}')" || return 1
   [ "$actual" = "$2" ]
