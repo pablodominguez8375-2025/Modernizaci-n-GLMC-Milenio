@@ -123,6 +123,18 @@ class PatClientTests(unittest.TestCase):
         self.assertEqual(check.returncode,0,check.stderr)
         inner = source.split("<<'PY_AUTH_RATE'\n",1)[1].split('\nPY_AUTH_RATE',1)[0]
         ast.parse(inner)
+        signed = source.split("<<'PY_SIGNED_LAUNCHER'\n", 1)[1].split(
+            '\nPY_SIGNED_LAUNCHER', 1)[0]
+        ast.parse(signed)
+        for invariant in (
+            'LAUNCHER_ATOMIC_SWAP_COMMITTED', 'candidate_operator_sha256',
+            'PAT_READINESS_HASH', 'os.O_NOFOLLOW', 'os.O_CLOEXEC',
+            'latest.st_ino == before.st_ino', 'current == expected',
+            'source_sha', 'matches == 1',
+        ):
+            self.assertIn(invariant, signed)
+        self.assertNotIn('if False else True', signed)
+        self.assertNotIn('61e3f1f7e7dd561567e5fac415a6fa9695c2f74fa86adde21dd8ed0330d03cd3', source)
 
     def test_route_preserves_original_security_controls(self):
         s=ROUTE.read_text()
