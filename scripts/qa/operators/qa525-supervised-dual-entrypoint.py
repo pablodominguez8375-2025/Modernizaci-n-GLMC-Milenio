@@ -612,6 +612,26 @@ def validate_prepared_review_mode(prepared, single_operator):
             "PREPARED_REVIEW_MODE_MISMATCH")
 
 
+def checked_evidence_step(phase, step, check):
+    """Keep constant failure context; never include arbitrary exception text."""
+    require(phase in ("pre", "just-before-apply", "post")
+            and step in ("SOURCE", "APPROVAL", "REVIEW", "DATABASE", "G6"),
+            "EVIDENCE_CONTEXT_INVALID")
+    prefix = {"pre": "PRE", "just-before-apply": "ACTIVATION", "post": "POST"}[phase]
+    code = "EVIDENCE_" + prefix + "_" + step + "_FAILED"
+    try:
+        accepted = check()
+    except Exception as exc:
+        # A tiny existing public network-code vocabulary is safe to retain.
+        known = str(exc)
+        if known in {"GITHUB_API_RATE_LIMITED", "GITHUB_API_RETRY_LATER",
+                     "GITHUB_API_HTTP_ERROR", "GITHUB_API_UNAVAILABLE"}:
+            raise Blocked(code + "_" + known) from None
+        raise Blocked(code) from None
+    require(accepted is True, code)
+    return True
+
+
 def phase_source(signed, verified_source, phase):
     require(phase in ("pre", "just-before-apply", "post"),
             "EVIDENCE_PHASE_INVALID")
@@ -660,6 +680,8 @@ def main():
         schema_gate = load("qa525_pr813_schema_review", HERE / "qa525-support00-schema-gate.py")
         post_db_probe = load("qa525_pr813_post_db_probe", HERE / "qa525-support00-post-db-readonly.py")
     with build.exclusive():
+        require(not os.path.lexists(STATE / "pending-dual-reconciliation.json"),
+                "PENDING_DUAL_RECONCILIATION_INCOMPLETE")
         review = private_json(REVIEW, maximum=8192)
         source = signed.gate.evaluate(signed.gate.readiness.fetch_public,
                                      expected_sha=review.get("source_sha"))
@@ -832,22 +854,27 @@ def main():
         require(not used.exists() and not used.is_symlink(),
                 "SUPERVISION_ALREADY_CONSUMED")
         def evidence(phase, sha, old, candidate):
-            if sha != target or candidate != new:
-                return False
-            try:
-                fresh = phase_source(signed, current_source, phase)
-                return (fresh == current_source and
-                        approval.validate(approve, fresh, prepared, int(time.time()))
-                        ["status"] == "LOCAL_SUPERVISED_CUT_MATCH_NO_DEPLOYMENT_AUTHORITY"
-                        and approved_review(review, fresh, comparison,
-                                            int(time.time()),
-                                            schema_approved=known_schema) is None
-                        and (not known_schema or validate_post_db_dba(
-                            review, fresh, int(time.time()), adapter.docker,
-                            schema_gate, post_db_probe, single_operator=single_operator))
-                        and validate_g6(review, int(time.time())))
-            except Exception:
-                return False
+            require(sha == target and candidate == new,
+                    "EVIDENCE_TARGET_CHANGED")
+            fresh = {}
+            def source_check():
+                fresh.update(phase_source(signed, current_source, phase))
+                return fresh == current_source
+            checked_evidence_step(phase, "SOURCE", source_check)
+            checked_evidence_step(phase, "APPROVAL", lambda:
+                approval.validate(approve, fresh, prepared, int(time.time()))
+                ["status"] == "LOCAL_SUPERVISED_CUT_MATCH_NO_DEPLOYMENT_AUTHORITY")
+            checked_evidence_step(phase, "REVIEW", lambda:
+                approved_review(review, fresh, comparison, int(time.time()),
+                                schema_approved=known_schema) is None)
+            if known_schema:
+                checked_evidence_step(phase, "DATABASE", lambda:
+                    validate_post_db_dba(review, fresh, int(time.time()),
+                        adapter.docker, schema_gate, post_db_probe,
+                        single_operator=single_operator) is True)
+            checked_evidence_step(phase, "G6", lambda:
+                validate_g6(review, int(time.time())) is True)
+            return True
         require(evidence("pre", target, before, new) is True,
                 "SUPERVISED_EVIDENCE_DRIFTED")
         # Pin both prior images while the same exclusive locks are held.
