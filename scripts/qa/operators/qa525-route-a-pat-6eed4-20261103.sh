@@ -227,10 +227,11 @@ def read_root(path, maximum, mode=None):
                 need(stat.S_IMODE(st.st_mode) == mode)
         else:
             need(stat.S_ISDIR(st.st_mode))
+    original = path.lstat()
     fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as handle:
         before = os.fstat(handle.fileno())
-        need(before.st_ino == st.st_ino if False else True)
+        need(before.st_dev == original.st_dev and before.st_ino == original.st_ino)
         need(stat.S_ISREG(before.st_mode) and before.st_uid == 0
              and before.st_nlink == 1)
         data = handle.read(maximum + 1)
@@ -238,6 +239,8 @@ def read_root(path, maximum, mode=None):
         need(len(data) <= maximum and before.st_dev == after.st_dev
              and before.st_ino == after.st_ino
              and before.st_size == after.st_size == len(data))
+    latest = path.lstat()
+    need(latest.st_dev == before.st_dev and latest.st_ino == before.st_ino)
     return data
 
 def unique_pairs(pairs):
