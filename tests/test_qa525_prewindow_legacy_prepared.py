@@ -69,6 +69,7 @@ class LegacyPreparedDoesNotBlockLauncherOnlyTests(unittest.TestCase):
                  patch.object(pre.socket, "gethostname", return_value="glmdch"), \
                  patch.object(pre, "trusted_file"), \
                  patch.object(pre, "private_stage_parent"), \
+                 patch.object(pre, "stable_hash", side_effect=lambda path, maximum=2_000_000: Path(path).read_bytes()), \
                  patch.object(pre, "validate_operator_ast"):
                 result = pre.signed_candidate_preflight(
                     inspector, signed, stage_parent=parent)
