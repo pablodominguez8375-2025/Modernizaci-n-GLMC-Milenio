@@ -2,6 +2,8 @@
 
 Repositorio central del proyecto de modernización digital de la Gran Logia Mixta de Chile.
 
+> **Ruta QA actual (nota de vigencia documental, 03-11-2026):** el único servidor QA físico autorizado es `glmdch`. La continuidad y los bloqueos operativos se verifican en [Issue #525](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525) y en el [Estado Maestro Operativo de Drive](https://docs.google.com/document/d/1gyhxyWULLLHUjm32zLu5fsrWI2wdfQlgcSm7s98LFZg/edit). Los SHA, estados de servidor y autorizaciones deben revalidarse en cada corte; **CI/ZIP/Pages no equivalen a despliegue QA**. Las referencias siguientes a `srv01` describen el flujo legado, no habilitan un segundo host ni son instrucciones operativas para `glmdch`.
+
 ## Objetivo
 
 Construir una plataforma institucional unificada con acceso único, base maestra de datos, trazabilidad, seguridad, gestión logial, Régimen Interior, Gran Secretaría, Gran Tesorería, Gran Hospitalaria, Biblioteca Virtual, Gran Archivero y servicios digitales para los miembros.
@@ -14,20 +16,20 @@ Construir una plataforma institucional unificada con acceso único, base maestra
 
 La demo de GitHub Pages utiliza exclusivamente datos ficticios y frontend estático. No está conectada a la futura VM, PostgreSQL, Keycloak, MinIO ni datos institucionales reales. La cabecera de la demo identifica el entorno y el SHA corto del build publicado para facilitar soporte y trazabilidad.
 
-**Instalable QA srv01 (vigente):**
+**Instalable QA `srv01` (antecedente histórico, no vigente en `glmdch`):**
 
-GitHub Actions genera `Proyecto-Centenario-QA-srv01-<SHA>.zip` desde el mismo SHA integrado en `dev` que identifica el corte de demo. El ZIP incorpora código, infraestructura, migraciones, documentación, `BUILD-INFO.txt`, `MANIFEST.sha256`, Git bundle y `INSTALAR.sh`, que ejecuta preflight, construcción del stack, arranque y smoke autenticado sobre el perfil QA de `srv01`.
+El flujo histórico de GitHub Actions generaba `Proyecto-Centenario-QA-srv01-<SHA>.zip` desde el mismo SHA integrado en `dev` que identifica el corte de demo. El ZIP incorpora código, infraestructura, migraciones, documentación, `BUILD-INFO.txt`, `MANIFEST.sha256`, Git bundle y `INSTALAR.sh`, que ejecuta preflight, construcción del stack, arranque y smoke autenticado sobre el perfil QA de `srv01`.
 
-El perfil QA usa API real, PostgreSQL, Keycloak, MinIO y ClamAV con datos/identidades ficticias. No es producción y permite HTTP en red QA controlada. El paquete pre-UAT histórico se conserva como antecedente de release, pero el artefacto operativo vigente para `srv01` es el nuevo paquete QA por SHA.
+El perfil QA histórico contemplaba API real, PostgreSQL, Keycloak, MinIO y ClamAV con identidades ficticias. El paquete pre-UAT y el flujo instalable `srv01` se conservan para auditoría; no deben utilizarse para determinar la versión, el método de instalación ni los controles de seguridad del QA actual en `glmdch`.
 
-La demo sirve para **mostrar y revisar la experiencia funcional con datos ficticios**; el paquete QA sirve para **instalar y validar el sistema completo en `srv01`**. Ninguno autoriza por sí solo la carga de datos personales reales ni una promoción a producción estable.
+La demo sirve para **mostrar y revisar la experiencia funcional con datos ficticios**; el paquete histórico de `srv01` documenta un flujo anterior de instalación. El QA operativo actual en `glmdch` exige su propio instalable/corte firmado y controles aprobados, descritos en #525. Ni la demo ni los paquetes autorizan datos personales reales ni promoción a producción estable.
 
 Documentos principales:
 
 - `docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md` — funcionamiento, versionado visible, evidencia responsive y límites de la demo pública.
-- `docs/installation/QA-SRV01-INSTALL.md` — guía vigente del instalable QA para `srv01`.
-- `docs/installation/QA-SRV01-AUTODEPLOY.md` — despliegue automatizado desde Pages con backup/rollback.
-- `docs/qa/PMGM-SRV01-REGRESSION-KIT.md` — matriz/evidencia de regresión QA ligada al SHA instalado.
+- `docs/installation/QA-SRV01-INSTALL.md` — guía histórica del instalable QA para `srv01`.
+- `docs/installation/QA-SRV01-AUTODEPLOY.md` — flujo histórico desde Pages, NO autorizado para `glmdch`.
+- `docs/qa/PMGM-SRV01-REGRESSION-KIT.md` — matriz histórica de regresión `srv01`.
 - `docs/installation/PREUAT-INSTALL.md` — guía histórica del paquete pre-UAT.
 - `docs/installation/VM-IMPLEMENTATION-CHECKLIST.md` — checklist de implementación y evidencia de la VM.
 - `docs/ui/PMGM-UI-001-identidad-visual-responsive.md` — contrato visual y responsive basado en las PPT aprobadas.
@@ -42,9 +44,9 @@ Para cada incremento funcional, Proyecto Centenario exige tres salidas del **mis
 
 1. **Código real integrado en `dev`**, con pruebas, migraciones, permisos, auditoría y documentación aplicable.
 2. **Demo funcional en GitHub Pages**, con datos exclusivamente ficticios/sintéticos y adaptadores mock que reproduzcan los mismos flujos, formularios, estados y validaciones del producto. La demo no es una maqueta paralela.
-3. **Paquete instalable para QA en `srv01`**, reproducible y trazable, con aplicación, infraestructura, scripts/runbook, migraciones, manifiesto/checksums y configuración segura necesaria para levantar el stack operacional.
+3. **Paquete instalable reproducible y trazable para el QA autorizado del corte** (actualmente `glmdch`), con aplicación, infraestructura, scripts/runbook, migraciones, manifiesto/checksums, firmas y configuración segura exigidos por el procedimiento vigente; empaquetado no equivale a despliegue físico.
 
-Un incremento no se considera cerrado únicamente por tener PR fusionado o CI verde. Debe quedar actualizada la demo y generado/actualizado el instalable. El despliegue real en `srv01` y QA/UAT se registran como una etapa posterior verificable; si no se ejecutaron, deben quedar expresamente pendientes.
+Un incremento no se considera cerrado únicamente por tener PR fusionado o CI verde. Debe quedar actualizada la demo y generado/actualizado el instalable. El despliegue físico real en el QA autorizado y sus pruebas QA/UAT se registran como etapas posteriores verificables; si no se ejecutaron, deben quedar expresamente pendientes.
 
 ## Estado actual
 
