@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # QA525 · RUTA A PAT — CANDIDATO SIN INSTALACIÓN AUTORIZADA · custodia de los 5 registros del intento cfe4 PENDING + UN solo intento de actualización a 6eed4.
-# Autor: Claude. Revisor independiente requerido: ChatGPT. Autorización específica del Sponsor requerida.
+# Derivado de Ruta A v3 (Claude), adaptado para PAT por ChatGPT. Revisión independiente distinta de ambos autores y autorización específica del Sponsor requeridas.
 # NO ejecutar en glmdch hasta revisión independiente y distribución firmada de este exacto hash.
 # Sin argumento: SOLO LECTURA (A0). Con EXECUTE_A1_A2: custodia bajo los 5 locks (A1) y un único intento (A2).
 # Ejecutar siempre como archivo: `bash archivo [EXECUTE_A1_A2]` (stop() hace exit 2).
