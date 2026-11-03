@@ -20,24 +20,64 @@ Este archivo de script es un **borrador** (solo `bash -n` revisado en entorno de
 
 ## Guion de ventana — pasos futuros BLOQUEADOS hasta dictamen y gates
 
-**Paso 0 — Sponsor valida alcance y DR; OPERADOR; salida GO_PREWINDOW solo con evidencia.** Confirmar copia off-host del **mismo G6 02-11**, SHA-256 comparado de forma independiente, y su file ID en Drive bajo custodia (NO publicar ID). El acta G6 histórica actual tiene 3 campos que **no** coinciden y no se modifica por atajo. Una nueva acta custodiada, versionada y aprobada deberá vincular exactamente `g6_archive_name`, `g6_archive_sha256`, `g6_restore_report_name`, `g6_drive_file_id` y `g6_offhost_sha256_verified` a la copia 02-11, con acta antigua conservada y hash registrado. **No transferir `true` desde G6 antiguo.** El Sponsor debe aceptar *por escrito para launcher-only* los límites DR: otro host PENDING, snapshot NOT_PROVEN, IAM NOT_INCLUDED. Si no hay copia verificable o aceptación, **ABORTAR**.
+**Paso 0 — Sponsor valida alcance y DR; OPERADOR; salida GO_PREWINDOW solo con evidencia.** Confirmar copia off-host del **mismo G6 02-11**, SHA-256 comparado de forma independiente, y su file ID en Drive bajo custodia (NO publicar ID). **Política del Sponsor, no gate consumido por el instalador launcher-only:** el ejecutor no lee el acta G6 por sí mismo. El acta G6 histórica actual tiene 3 campos que **no** coinciden y no se modifica por atajo. Una nueva acta custodiada, versionada y aprobada deberá vincular exactamente `g6_archive_name`, `g6_archive_sha256`, `g6_restore_report_name`, `g6_drive_file_id` y `g6_offhost_sha256_verified` a la copia 02-11, con acta antigua conservada y hash registrado. **No transferir `true` desde G6 antiguo.** El Sponsor debe aceptar *por escrito para launcher-only* los límites DR: otro host PENDING, snapshot NOT_PROVEN, IAM NOT_INCLUDED. Si no hay copia verificable o aceptación, **ABORTAR**.
 
-**Paso 1 — Ancla independiente antes del primer byte de Python root; operador con revisión Claude.** Confirmar código exacto y SHA anclado desde manifiesto auditado y revisión independiente del bootstrap; no confiar solo en que el propio programa se verifique. Con checks de ancestros `/opt`, `/opt/centenario`, `qa525-root-source` y `/etc/pmgm`, promover **sin sobreescribir** desde `/tmp` a archivos NUEVOS bajo `/opt/centenario/qa525-root-source` (root:root, 0600): ZIP `qa-signed-cfe4e6573ece2ae81414cc252047d36cc56e5c73.zip` y bootstrap `qa525-signed-root-bootstrap-cfe4.py`. Los comandos propuestos, **solo después de autorización para PRE y revisión independiente**, son:
+**Paso 1 — Ancla PRE-root independiente; operador, solo con aprobación específica de preparación y revisión Claude.** Los SHA del ZIP (\`fab786...\`) y del bootstrap (\`a5c76...\`) deben proceder de (A) la auditoría Sigstore/manifiesto realizada sin root y (B) el commit/release GitHub fijados en \`cfe4e657...\`, verificados por separado. Antes de ejecutar el primer byte de Python root: revisar estáticamente la fuente, fiarse solo de las herramientas del sistema ya confiables, inspeccionar ancestros y el destino, verificar hashes con \`sudo sha256sum -c\` **después** de copiar a custodia root. NO confiar en el \`--trusted-bootstrap-sha256\` del propio Python como ancla independiente. Mantener intactos los archivos históricos y no usar rutas mutables.
+
+**BLOQUE PROPUESTO, NO AUTORIZADO (solo durante PRE aprobada):**
 ~~~sh
-SHA=cfe4e6573ece2ae81414cc252047d36cc56e5c73
-SRC=/tmp/qa525-audit-EigD7wok
-DST=/opt/centenario/qa525-root-source
-sudo test ! -e "$DST/qa-signed-$SHA.zip" &&
-sudo test ! -e "$DST/qa525-signed-root-bootstrap-cfe4.py" || exit 2
-sudo install -m 0600 -o root -g root -T -- "$SRC/qa-signed-$SHA.zip" "$DST/qa-signed-$SHA.zip"
-sudo install -m 0600 -o root -g root -T -- "$SRC/qa525-signed-root-bootstrap-cfe4.py" "$DST/qa525-signed-root-bootstrap-cfe4.py"
-sudo sha256sum -- "$DST/qa-signed-$SHA.zip" "$DST/qa525-signed-root-bootstrap-cfe4.py"
+( set -e
+  SHA=cfe4e6573ece2ae81414cc252047d36cc56e5c73
+  SRC=/tmp/qa525-audit-EigD7wok
+  DST=/opt/centenario/qa525-root-source
+  sudo test ! -e "$DST/qa-signed-$SHA.zip"
+  sudo test ! -L "$DST/qa-signed-$SHA.zip"
+  sudo test ! -e "$DST/qa525-signed-root-bootstrap-cfe4.py"
+  sudo test ! -L "$DST/qa525-signed-root-bootstrap-cfe4.py"
+  # Esta promoción requiere exclusión operativa y verificación de rutas/ancestros.
+  # No reutilizar como recuperador automático de fallos parciales.
+  sudo install -m 0600 -o root -g root -T -- "$SRC/qa-signed-$SHA.zip" "$DST/qa-signed-$SHA.zip"
+  sudo install -m 0600 -o root -g root -T -- "$SRC/qa525-signed-root-bootstrap-cfe4.py" "$DST/qa525-signed-root-bootstrap-cfe4.py"
+  printf '%s  %s\n%s  %s\n' \
+    fab78644c2fe95d2f747794c0f85b21cb6ed438679bb11fd629e9a9e54b5d358 "$DST/qa-signed-$SHA.zip" \
+    a5c76cfc0f94f0bf1c93fa2c83602bd1ead1ac61b65472f98f277042fa7f9769 "$DST/qa525-signed-root-bootstrap-cfe4.py" \
+    | sudo sha256sum -c -
+)
 ~~~
-La salida root debe corresponder EXACTAMENTE a los hashes fijados arriba antes de ningún `sudo python3`. Estos comandos no están autorizados ahora; el script original root `qa525-signed-root-bootstrap-prep.py` (sha `c10037ac...`) debe permanecer intacto. Si ruta, modo, hash o ancla no coinciden, ABORTAR, preservar fuentes para revisión.
+**ABORTAR** ante cualquier hash, ruta o modo inesperado. El uso de \`install -T\` no proporciona exclusión atómica \`O_EXCL\`: un revisor debe validar la custodia y protección frente a carreras/TOCTOU **antes** de aprobar este bloque. La shell externa no se cierra ante fallo, gracias al subshell. Nunca copiar ni ejecutar el bootstrap directamente de \`/tmp\` con \`sudo python3\`; el archivo antiguo \`qa525-signed-root-bootstrap-prep.py\` (SHA \`c10037ac...\`) debe permanecer idéntico.
 
 **Paso 2 — F1; operador bajo aprobación de PRE.** Validar que `/opt/centenario/qa525-launcher-recovery` no existe ni como symlink. Luego `sudo install -d -m 0700 -o root -g root -- /opt/centenario/qa525-launcher-recovery` y `sudo stat -c '%u:%g %a %F' -- /opt/centenario/qa525-launcher-recovery`: esperar `0:0 700 directory`, vacío. Si existe de modo inesperado o con entradas, **no chmod/chown/limpiar**, ABORTAR.
 
-**Paso 3 — Custodia prepared a184 y otros journals; operador.** No borrar ni editar `/opt/centenario/qa525-signed-prepare/prepared.json`: registrar SHA-256 root con `sudo sha256sum`, modo 0600, estado y vínculo anterior; no usar `fresh_backup_created=false` para actualizar G6 nuevo. **No archivar todavía manualmente:** el archivado seguro solo se realiza mediante la función revisada, firmada y expresamente aprobada `--archive-expired-prepared` cuando el launcher autorizado esté instalado y haya sido verificada su procedencia; no inventar operación de `mv` como sustituto. Si ese requisito impide avance, informar a Claude y **ABORTAR**, sin saltar el gate.
+**Paso 3 — Inventario y preservación de prepared a184; operador; NO abortar por su antigüedad.** Registrar \`sudo sha256sum\`, modo, propietario de \`/opt/centenario/qa525-signed-prepare/prepared.json\`; conservar bytes y estado sin editar ni archivar manualmente. El instalador del lanzador usa una carpeta temporal bajo \`PREFLIGHT_STATE\` durante \`signed_candidate_preflight(stage_parent=PREFLIGHT_STATE)\`, **no lee \`prepared.json\`**. Esta afirmación queda cubierta por la prueba hermética en la rama de revisión de #841. El archivado de prepared/actas caducadas pertenece al ejecutor \`qa525-update.py\`, disponible SOLO tras el reemplazo y lectura posterior: ir al Paso **7b**, nunca usar \`mv\` manual.
+
+**Antes de Paso 4 — reloj, hash candidato y borrador privado; completar sin producir admisión.** El \`candidate_operator_sha256\` **no es** el SHA del nuevo bootstrap ni el SHA del lanzador renderizado: es SHA-256 de \`scripts/qa/operators/qa525-update.py\` dentro del paquete firmado. Obtenerlo una sola vez del ZIP ya auditado con este comando **sin sudo** (validar previamente SHA del ZIP y reporte Sigstore PASS):
+~~~sh
+( set -e
+  D=/tmp/qa525-audit-EigD7wok
+  SHA=cfe4e6573ece2ae81414cc252047d36cc56e5c73
+  echo 'fab78644c2fe95d2f747794c0f85b21cb6ed438679bb11fd629e9a9e54b5d358  '"$D/qa-signed-$SHA.zip" | sha256sum -c -
+  python3 -I -S -B - "$D/qa-signed-$SHA.zip" "$SHA" <<'PY'
+import hashlib, io, sys, zipfile
+outer_path, sha = sys.argv[1:]
+inner_name = "Proyecto-Centenario-QA-srv01-" + sha[:12] + ".zip"
+root = inner_name[:-4]
+rel = "scripts/qa/operators/qa525-update.py"
+with zipfile.ZipFile(outer_path) as outer:
+    inner_bytes = outer.read(inner_name)
+with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner:
+    manifest = inner.read(root + "/MANIFEST.sha256").decode("utf-8").splitlines()
+    payload = inner.read(root + "/" + rel)
+    expected = hashlib.sha256(payload).hexdigest()
+    needle = expected + "  ./" + rel
+    if manifest.count(needle) != 1:
+        raise SystemExit("BLOQUEADO_CANDIDATE_MANIFEST_NO_COINCIDE")
+    print("CANDIDATE_OPERATOR_SHA256=" + expected)
+PY
+)
+~~~
+Ese hash se usa solo para PRE-ARMAR un borrador privado de la aprobación launcher-only con los campos fijos y hashes, **sin** \`issued_at\`, \`expires_at\`, \`nonce\` ni \`approved=true\` todavía. El hash se revalidará dentro del preflight firmado root. Confirmar previamente custodia G6, F1, logs limpios y locks. **No crear ningún JSON de aprobación antes del consentimiento expreso del Sponsor.**
+
+**Presupuesto temporal:** después de emitirse la admisión A, los Pasos 5→6 deben terminar en **máximo 600 s**, siempre antes de su TTL ≤900 s y del TTL todavía vigente de la aprobación separada. Anotar \`date -u\` al completar el Paso 4. Si hay demora, error, expiración, reboot o incertidumbre, **STOP y reprogramar**: el bootstrap bloquea un reintento por \`BOOTSTRAP_ADMISSION_ALREADY_EXISTS\`/\`BOOTSTRAP_TARGET_ALREADY_EXISTS\`; nunca borrar, archivar, sobrescribir ni recrear admisión/árbol manualmente. Cualquier recuperación necesitará procedimiento **separado, revisado y aprobado**.
 
 **Paso 4 — Admisión A fresca; operador, solo después 0–3.** Confirmar `/etc/pmgm/qa525-bootstrap-admission.json`, `qa525-recovery-bootstrap-admission.json` y `qa525-launcher-replace.json` ausentes; comprobar que `/opt/centenario/qa525-root-source/$SHA` no existe y los cinco locks sin ocupación. Con raíz PRE-root *ya* autenticada por herramientas root independientes, proponer:
 ~~~sh
@@ -50,7 +90,7 @@ sudo /usr/bin/python3 -I -S -B \
 ~~~
 Salida esperada `QA525_SIGNED_SOURCES_PREPARED_NO_LAUNCHER_CHANGE`, 12 fuentes, admisión root0600 TTL 900 s. **No es permiso de instalar.** Cualquier `BLOCKED_ROOT_BOOTSTRAP`, expiración o fuente drift => ABORTAR. Ejecutar solo en la ventana tras dictamen de Claude y aprobación de Sponsor.
 
-**Paso 5 — Revalidar cinco locks y candidato/permiso launcher-only; operador + Sponsor.** Releer bloqueos bajo `flock` exclusivo del instalador, no confiar solo en `lslocks` histórico. Obtener `candidate_operator_sha256` desde preflight firmado, **NO inventarlo**. Sponsor prepara en privado `/etc/pmgm/qa525-launcher-replace.json`, root0600, con **exactamente**: `source_sha,release_asset_sha256,old_launcher_sha256,candidate_operator_sha256,scope,action,environment,operator,approved,issued_at,expires_at,nonce`. Contrato: `scope=QA525_LAUNCHER_ONLY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION`; `action=replace-root-launcher-supervised`; `environment=QA_GLMDCH_ONLY`; `operator=soporte@glmdch`; `approved=true`; nonce único SHA256-hex; `0<expires_at-issued_at<=900` y vigente al instante de swap. Nunca publicar el nonce ni JSON privado; nunca reusar el acta anterior. Si candado ocupado, baseline cambia, preflight no coincide o aprobación no cumple, ABORTAR.
+**Paso 5 — Revalidar cinco locks y aprobación launcher-only fresca; operador + Sponsor.** Releer bloqueos bajo `flock` exclusivo del instalador, no confiar solo en `lslocks` histórico. El `candidate_operator_sha256` debe estar calculado **antes del Paso 4** con el bloque de ZIP/manifiesto anterior y revalidado por el preflight firmado; **NO inventarlo**. Sponsor prepara en privado `/etc/pmgm/qa525-launcher-replace.json`, root0600, con **exactamente**: `source_sha,release_asset_sha256,old_launcher_sha256,candidate_operator_sha256,scope,action,environment,operator,approved,issued_at,expires_at,nonce`. Contrato: `scope=QA525_LAUNCHER_ONLY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION`; `action=replace-root-launcher-supervised`; `environment=QA_GLMDCH_ONLY`; `operator=soporte@glmdch`; `approved=true`; nonce único SHA256-hex; `0<expires_at-issued_at<=900` y vigente al instante de swap. Nunca publicar el nonce ni JSON privado; nunca reusar el acta anterior. Si candado ocupado, baseline cambia, preflight no coincide o aprobación no cumple, ABORTAR.
 
 **Paso 6 — Único reemplazo root A; operador, tras aprobación fresca.** Desde fuente nueva root retenida y con admisión A todavía vigente:
 ~~~sh
@@ -61,6 +101,8 @@ sudo /usr/bin/python3 -I -S -B \
 Exigir recibo durable `LAUNCHER_ATOMIC_SWAP_COMMITTED` y SHA launcher nuevo exactamente igual al del candidate aprobado; registrar hashes sin nonce. Si falla, **STOP manual reconciliation**; no relanzar, no ejecutar API/WEB, no rollback informal.
 
 **Paso 7 — Postflight; operador.** Inspección `sudo sha256sum /usr/local/sbin/pmgm-qa-update` (hash aprobado), existencia/propiedad de receipt root, ausencia de intent residual, estado journal de rollback B y cinco locks; revisar `/health/web`, `/health/ready`, OIDC, identidad y API/WEB intactos, sin llamar actualización de servicios. No declarar QA desplegado: máximo **LAUNCHER_REPLACED_ONLY** si todo PASS; después pedir autorización independiente para API+WEB.
+
+**Paso 7b — Archivado de prepared HISTÓRICO, solo después de launcher-only COMMITTED y postflight PASS.** En una ventana independiente, comprobar que el nuevo lanzador firmado expone \`--archive-expired-prepared\` y sus controles de elegibilidad (todos los locks, actas vencidas, ausencia de intent incompleto, identidades e imágenes sin drift). Requiere autorización separada del Sponsor para archivar sin deploy y recibo de archivo \`EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT\`. No ejecutar \`--archive-expired-prepared\` como parte automática del corte A ni adelantar API+WEB. Un preparado histórico legible **NO bloquea por sí mismo el reemplazo launcher-only**.
 
 **Paso 8 — Vuelta atrás B; solo si hay corte A COMMITTED y evidencia completa.** Necesita **admisión B firmada y distinta**, confirmación de receipt A y backup old hash, **autorización root0600 separada** `/etc/pmgm/qa525-launcher-rollback.json`, nonce nuevo B, cinco locks y pruebas del operador. No retroceder a mano ni reconstruir un registro. Estados de interrupción F2: (a) intent sin backup ⇒ preservar/abortar, conciliación manual; (b) backup válido + launcher viejo + intent ⇒ abortar sin reintento; (c) backup válido + launcher nuevo + intent sin receipt ⇒ posible swap, revisión manual, no afirmar éxito; (d) receipt B + intent B pendiente ⇒ `ROOT_RECOVERY_PENDING_MANUAL_RECONCILIATION`, manual; (e) receipt B e intent .superseded coherentes ⇒ rollback B finalizado, nonce consumido, no repetir. Claude revisa tabla F2 del runbook original.
 
