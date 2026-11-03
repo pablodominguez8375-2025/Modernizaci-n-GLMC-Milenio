@@ -20,6 +20,8 @@ public static class PrivacyEndpoints
         group.MapPost("/processing-activities", CreateProcessingActivityAsync);
         group.MapGet("/data-subject-requests", GetDataSubjectRequestsAsync);
         group.MapPost("/data-subject-requests", CreateDataSubjectRequestAsync);
+        group.MapGet("/data-subject-requests/me", GetOwnDataSubjectRequestsAsync);
+        group.MapPost("/data-subject-requests/me", CreateOwnDataSubjectRequestAsync);
 
         return endpoints;
     }
@@ -195,6 +197,94 @@ public static class PrivacyEndpoints
         return Results.Created($"/api/privacy/processing-activities/{entity.Id}", new { entity.Id });
     }
 
+    // Portal del titular, fase A (#471): no se admite PersonId ni MemberId
+    // suministrados por el navegador. Cada lectura resuelve issuer/sub en BD.
+    private static async Task<Guid?> ResolveOwnPrivacyPersonIdAsync(
+        HttpContext http, PmgmDbContext db,
+        IInstitutionalMemberContextResolver memberResolver, CancellationToken ct)
+    {
+        var member = await memberResolver.ResolveAsync(http.User, ct);
+        if (member is null) return null;
+        var personId = await db.Members.AsNoTracking()
+            .Where(x => x.Id == member.MemberId)
+            .Select(x => (Guid?)x.PersonId)
+            .SingleOrDefaultAsync(ct);
+        return personId is not null && personId != Guid.Empty ? personId : null;
+    }
+
+    private static async Task<IResult> GetOwnDataSubjectRequestsAsync(
+        HttpContext http, PmgmDbContext db,
+        IInstitutionalMemberContextResolver memberResolver,
+        IAuditService audit, CancellationToken ct)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        var personId = await ResolveOwnPrivacyPersonIdAsync(http, db, memberResolver, ct);
+        if (personId is null) return Results.NotFound();
+
+        var rows = await db.DataSubjectRequests.AsNoTracking()
+            .Where(x => x.PersonId == personId.Value)
+            .OrderByDescending(x => x.ReceivedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .Take(100)
+            .Select(x => new
+            {
+                x.Id, x.RequestType, x.Status, x.ReceivedAtUtc,
+                x.DueDate, x.ClosedAtUtc
+            })
+            .ToListAsync(ct);
+        audit.Add(http, "privacy.data_subject_request.self.listed",
+            nameof(DataSubjectRequest), "self", null,
+            AuditResults.Success, new { resultCount = rows.Count });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { total = rows.Count, items = rows });
+    }
+
+    private static async Task<IResult> CreateOwnDataSubjectRequestAsync(
+        CreateOwnDataSubjectRequest request,
+        HttpContext http, PmgmDbContext db,
+        IInstitutionalMemberContextResolver memberResolver,
+        IPrivacyLegalRuleResolver legalRuleResolver,
+        IAuditService audit, CancellationToken ct)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        var personId = await ResolveOwnPrivacyPersonIdAsync(http, db, memberResolver, ct);
+        if (personId is null) return Results.NotFound();
+        if (!PrivacyCodes.DataSubjectRight.IsValid(request.RequestType ?? string.Empty))
+            return Results.BadRequest(new { message = "El tipo de derecho solicitado no es válido." });
+
+        // La cuenta autenticada NO acredita por sí sola la identidad jurídica.
+        // Privacidad verificará identidad y resolución; no se recibe ni persiste
+        // evidencia libre del navegador. Nunca inventar fecha legal por defecto.
+        var receivedAt = DateTimeOffset.UtcNow;
+        var legalDeadline = await legalRuleResolver.ResolveDataSubjectRequestDeadlineAsync(
+            request.RequestType!, PrivacyDeadlineCalculator.ToChileDate(receivedAt), ct);
+        var entity = new DataSubjectRequest
+        {
+            PersonId = personId.Value,
+            RequestType = request.RequestType!,
+            ReceivedAtUtc = receivedAt,
+            Channel = "authenticated_portal",
+            IdentityVerified = false,
+            Status = PrivacyCodes.Status.UnderReview,
+            DueDate = legalDeadline?.DueDate
+        };
+        db.DataSubjectRequests.Add(entity);
+        audit.Add(http, "privacy.data_subject_request.self.created",
+            nameof(DataSubjectRequest), entity.Id.ToString(), null,
+            AuditResults.Success, new
+            {
+                entity.RequestType,
+                deadlineRuleConfigured = legalDeadline is not null,
+                deadlineRuleCode = legalDeadline?.RuleCode
+            });
+        await db.SaveChangesAsync(ct);
+        return Results.Created("/api/privacy/data-subject-requests/me", new
+        {
+            entity.Id, entity.RequestType, entity.Status,
+            entity.ReceivedAtUtc, entity.DueDate
+        });
+    }
+
     private static async Task<IResult> GetDataSubjectRequestsAsync(
         string? status,
         HttpContext httpContext,
@@ -356,6 +446,8 @@ public sealed record CreateProcessingActivityRequest(
     string Status,
     DateOnly EffectiveFrom,
     DateOnly? EffectiveTo);
+
+public sealed record CreateOwnDataSubjectRequest(string? RequestType);
 
 public sealed record CreateDataSubjectRequest(
     Guid? PersonId,
