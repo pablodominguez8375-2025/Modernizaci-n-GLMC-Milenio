@@ -36,15 +36,25 @@ Este archivo de script es un **borrador** (solo `bash -n` revisado en entorno de
   sudo test ! -L "$DST/qa525-signed-root-bootstrap-cfe4.py"
   # Esta promoción requiere exclusión operativa y verificación de rutas/ancestros.
   # No reutilizar como recuperador automático de fallos parciales.
-  sudo install -m 0600 -o root -g root -T -- "$SRC/qa-signed-$SHA.zip" "$DST/qa-signed-$SHA.zip"
-  sudo install -m 0600 -o root -g root -T -- "$SRC/qa525-signed-root-bootstrap-cfe4.py" "$DST/qa525-signed-root-bootstrap-cfe4.py"
+  # Herramientas previamente confiables del SO, sin ejecutar código del paquete.
+  # El shell root usa noclobber para no sobrescribir un archivo ya existente.
+  for item in "qa-signed-$SHA.zip" "qa525-signed-root-bootstrap-cfe4.py"; do
+    sudo /bin/sh -eu -c '
+      umask 077
+      set -C
+      source_file="$1"; target_file="$2"
+      test ! -e "$target_file" && test ! -L "$target_file"
+      cat -- "$source_file" > "$target_file"
+      test "$(stat -c "%u:%g %a %F %h" -- "$target_file")" = "0:0 600 regular file 1"
+    ' sh "$SRC/$item" "$DST/$item"
+  done
   printf '%s  %s\n%s  %s\n' \
     fab78644c2fe95d2f747794c0f85b21cb6ed438679bb11fd629e9a9e54b5d358 "$DST/qa-signed-$SHA.zip" \
     a5c76cfc0f94f0bf1c93fa2c83602bd1ead1ac61b65472f98f277042fa7f9769 "$DST/qa525-signed-root-bootstrap-cfe4.py" \
     | sudo sha256sum -c -
 )
 ~~~
-**ABORTAR** ante cualquier hash, ruta o modo inesperado. El uso de `install -T` no proporciona exclusión atómica `O_EXCL`: un revisor debe validar la custodia y protección frente a carreras/TOCTOU **antes** de aprobar este bloque. La shell externa no se cierra ante fallo, gracias al subshell. Nunca copiar ni ejecutar el bootstrap directamente de `/tmp` con `sudo python3`; el archivo antiguo `qa525-signed-root-bootstrap-prep.py` (SHA `c10037ac...`) debe permanecer idéntico.
+**ABORTAR** ante cualquier hash, ruta o modo inesperado. La copia usa `/bin/sh` del sistema bajo root, `set -C` (noclobber) y creación 0600 dentro de un directorio root0700: se rechaza un destino ya existente y no se ejecuta código descargado. Sigue siendo obligatorio validar ancestros, ausencia de symlinks, exclusión operativa y TOCTOU **antes** de aprobar este bloque. La shell externa no se cierra ante fallo, gracias al subshell. Nunca copiar ni ejecutar el bootstrap directamente de `/tmp` con `sudo python3`; el archivo antiguo `qa525-signed-root-bootstrap-prep.py` (SHA `c10037ac...`) debe permanecer idéntico.
 
 **Paso 2 — F1; operador bajo aprobación de PRE.** Validar que `/opt/centenario/qa525-launcher-recovery` no existe ni como symlink. Luego `sudo install -d -m 0700 -o root -g root -- /opt/centenario/qa525-launcher-recovery` y `sudo stat -c '%u:%g %a %F' -- /opt/centenario/qa525-launcher-recovery`: esperar `0:0 700 directory`, vacío. Si existe de modo inesperado o con entradas, **no chmod/chown/limpiar**, ABORTAR.
 
