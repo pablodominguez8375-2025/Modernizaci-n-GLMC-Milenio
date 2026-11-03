@@ -3,6 +3,8 @@
 # Autor: Claude. Revisor independiente requerido: ChatGPT. Autorización específica del Sponsor requerida.
 # Sin argumento: SOLO LECTURA (A0). Con EXECUTE_A1_A2: custodia bajo los 5 locks (A1) y un único intento (A2).
 # Ejecutar siempre como archivo: `bash archivo [EXECUTE_A1_A2]` (stop() hace exit 2).
+# Si tras A1 (custodia PASS) hay STOP por cuota/G6 antes de A2: el estado queda limpio y consistente (sin prepared ni journal,
+# runtime intacto) pero NO se reintenta a ciegas: se reporta y se decide un paso A2-solo revisado.
 set -Eeuo pipefail
 umask 077
 SRC=6eed4f00b7917da3cca36bbda70e16d16328648d
@@ -128,6 +130,7 @@ quota_ok() {
   printf 'QA525_GITHUB_ANON_QUOTA remaining=%s reset_utc=%s\n' "$rem" "$(date -u -d "@$rst" +%FT%TZ)"
   (( rem >= MIN_RL )) || stop GITHUB_QUOTA_LOW_WAIT_FOR_RESET_THEN_RERUN
 }
+g6_ok() { (( $(date -u +%s) < $(date -u -d '2026-11-04 10:45:00 UTC' +%s) )) || stop G6_TOO_CLOSE_TO_48H; }
 # <<< FUNCTIONS
 [[ "$#" -le 1 ]] || stop BAD_ARGUMENT
 MODE=${1:-READ_ONLY}
@@ -142,7 +145,7 @@ printf '%s  %s\n' 61e3f1f7e7dd561567e5fac415a6fa9695c2f74fa86adde21dd8ed0330d03c
 priv "$G6" || stop G6_REVIEW_MODE
 printf '%s  %s\n' 31100269647cc77c8d3daf37c260528ca9b136ccfcb889c46b82fd01e3783aea "$G6" | sudo sha256sum -c - >/dev/null || stop G6_REVIEW_HASH
 sudo jq -e '.g6_offhost_sha256_verified==true and .g6_archive_name=="centenario-qa-g6-CIFRADO-20261102T110545Z.tar.gz" and .g6_archive_sha256=="772a645f09823648ed25a287f837653aef4cced2ba95413422d8f20f65a9d915"' "$G6" >/dev/null || stop G6_REVIEW_CONTENT
-(( $(date -u +%s) < $(date -u -d '2026-11-04 10:45:00 UTC' +%s) )) || stop G6_TOO_CLOSE_TO_48H
+g6_ok
 quota_ok
 for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; done
 s=$(sudo "$L" --status) || stop STATUS
@@ -160,10 +163,14 @@ curl -fsS --max-time 20 --proto '=https' https://sistema.granlogiamixta.cl/qa-ve
 printf 'QA525_ROUTE_A_PREFLIGHT=PASS_PENDING_CFE4_BASELINE_INTACT\n'
 [[ "$MODE" == EXECUTE_A1_A2 ]] || { printf 'QA525_ROUTE_A=READ_ONLY_DONE_NOTHING_CHANGED\n'; exit 0; }
 # ---- A1 · custodia bajo los 5 locks (solo mueve evidencia; no toca runtime, BD ni Docker; nada se borra) ----
+# Cuota y vigencia G6 se re-exigen JUSTO antes de mover nada (A0 ya tardó) y de nuevo justo antes de A2.
+quota_ok
+g6_ok
 run_custody_locked
 s=$(sudo "$L" --status) || stop POST_CUSTODY_STATUS
 printf '%s\n' "$s" | jq -e '.services_running==true and .prepared_exists==false and .archive_reconciliation_required==false and .may_apply==false' >/dev/null || stop POST_CUSTODY_MISMATCH
 quota_ok
+g6_ok
 # ---- A2 · UN solo intento. Única orden que despliega. Sin reintento. ----------------------
 if result=$(sudo "$L" --review-and-run --source "$SRC" --digest "$DIGEST" --technical-review-reference "$REVIEW" --g6-review "$G6" --operator-name soporte@glmdch --schema-mode support00_postdb); then rc=0; else rc=$?; fi
 rl=$(curl -fsS --max-time 20 --proto '=https' https://api.github.com/rate_limit 2>/dev/null || :)

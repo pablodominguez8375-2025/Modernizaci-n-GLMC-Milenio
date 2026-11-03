@@ -353,6 +353,18 @@ class StaticAndGuards(unittest.TestCase):
         for token in ("run_custody_locked", "--review-and-run", "mkdir", "mv "):
             self.assertNotIn(token, head)
 
+    def test_quota_and_g6_rechecked_right_before_custody_and_before_attempt(self):
+        gate = TEXT.index('[[ "$MODE" == EXECUTE_A1_A2 ]] || {')
+        tail = TEXT[gate:]
+        call = tail.index("\nrun_custody_locked\n")
+        before, after = tail[:call], tail[call:]
+        self.assertIn("\nquota_ok\ng6_ok", before)  # justo antes de mover nada
+        a2 = after.index("--review-and-run")
+        self.assertIn("\nquota_ok\ng6_ok\n", after[:a2])  # justo antes del unico intento
+        head = TEXT[:gate]
+        self.assertIn("g6_ok\nquota_ok\n", head)  # fail-fast en A0
+        self.assertNotIn("11-04 11:", TEXT)
+
     def test_pins_and_no_retry_loop(self):
         for pin in ("6eed4f00b7917da3cca36bbda70e16d16328648d",
                     "sha256:9bdeaa217f09f5d0e19e50d214a4abb936a2b89246ebbcf71fb71178e5574af2",
