@@ -82,6 +82,9 @@ def reconcile(entry, modules, approval_path):
     marker = entry.STATE / MARKER
     require(not os.path.lexists(marker), "RECONCILE_INTERRUPTED_REQUIRES_REVIEW")
     review = entry.private_json(approval_path)
+    approval_hash = digest(approval_path)
+    spent = entry.STATE / ("reconciliation-consumed-" + approval_hash)
+    require(not os.path.lexists(spent), "RECONCILE_APPROVAL_ALREADY_CONSUMED")
     sha = review.get("source_sha")
     require(type(sha) is str and re.fullmatch(r"[a-f0-9]{40}", sha), "RECONCILE_SHA_INVALID")
     journal_path = entry.STATE / ("dual-" + sha + ".json")
@@ -132,11 +135,17 @@ def reconcile(entry, modules, approval_path):
             and old_sha != sha and entry.health(old_sha), "RECONCILE_OLD_HEALTH_FAILED")
     # Recheck all evidence and runtime immediately before archival.
     require(build.snapshot(adapter.docker) == baseline and adapter.metadata() == live
+            and digest(approval_path) == approval_hash
             and all(digest(p) == hashes[p.name] for p in paths),
             "RECONCILE_FINAL_DRIFT")
     require(int(time.time()) < review["expires_at"], "RECONCILE_APPROVAL_EXPIRED")
     archive = entry.STATE / ("pending-dual-archive-" + secrets.token_hex(12))
     archive.mkdir(mode=0o700)
+    # Consume the separate archival approval irreversibly before any evidence move.
+    # If marker creation fails, a new reviewed approval is required.
+    write_private(spent, {"status": "RECONCILIATION_APPROVAL_CONSUMED",
+                         "source_sha": sha, "approval_sha256": approval_hash})
+    sync_dir(entry.STATE)
     # Never roll back or remove this blocker automatically after an interrupted move.
     write_private(marker, {"status": "PENDING_DUAL_ARCHIVE_INCOMPLETE",
                   "source_sha": sha, "archive_name": archive.name, "files_sha256": hashes})
