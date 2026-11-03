@@ -1,21 +1,115 @@
 #!/usr/bin/env bash
 # QA525 · RUTA A · custodia de los 5 registros del intento cfe4 PENDING + UN solo intento de actualización a 6eed4.
 # Autor: Claude. Revisor independiente requerido: ChatGPT. Autorización específica del Sponsor requerida.
-# Sin argumento: SOLO LECTURA (A0). Con EXECUTE_A1_A2: custodia (A1) y un único intento de actualización (A2).
+# Sin argumento: SOLO LECTURA (A0). Con EXECUTE_A1_A2: custodia bajo los 5 locks (A1) y un único intento (A2).
 # Ejecutar siempre como archivo: `bash archivo [EXECUTE_A1_A2]` (stop() hace exit 2).
 set -Eeuo pipefail
 umask 077
 SRC=6eed4f00b7917da3cca36bbda70e16d16328648d
 DIGEST=sha256:9bdeaa217f09f5d0e19e50d214a4abb936a2b89246ebbcf71fb71178e5574af2
 PEND=cfe4e6573ece2ae81414cc252047d36cc56e5c73
+PENDDIGEST=sha256:fab78644c2fe95d2f747794c0f85b21cb6ed438679bb11fd629e9a9e54b5d358
 OLD=41d9c490d138419c7286445f37e7aeddf0d1b8d5
-REVIEW='__REVIEW_URL__'
+REVIEW='https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6604960072'
 G6=/etc/pmgm/qa525-g6-reviewed-20261102T110545Z.json
 L=/usr/local/sbin/pmgm-qa-update
 STATE=/opt/centenario/qa525-signed-prepare
+OWNER=0:0
 MIN_RL=58
+J="$STATE/dual-$PEND.json"; P="$STATE/prepared.json"; M="$STATE/expired-prepared-archive-pending.json"
+E="$STATE/dual-events.log"; CUT=/etc/pmgm/qa525-supervised-cut.json
+F=("$P" /etc/pmgm/qa525-sensitive-reviewed.json /etc/pmgm/qa525-single-operator-postdb-approved.json "$CUT" "$J")
+LOCKS=(/opt/centenario/qa-api-refresh/operation.lock /opt/centenario/qa-auto-lite/web-update.lock /run/lock/pmgm-master-qa-604.lock /run/lock/pmgm-qa754-web-hotfix.lock /run/lock/pmgm-qa754-api-activation.lock)
+# >>> FUNCTIONS (la prueba hermética carga exactamente este bloque)
 stop() { printf 'QA525_ROUTE_A=STOP_%s_NO_RETRY\n' "$1"; exit 2; }
-priv() { [[ "$(sudo stat -c '%u:%g %a %h' -- "$1" 2>/dev/null || :)" == '0:0 600 1' ]] && sudo test -f "$1" && sudo test ! -L "$1"; }
+priv() { [[ "$(sudo stat -c '%u:%g %a %h' -- "$1" 2>/dev/null || :)" == "$OWNER 600 1" ]] && sudo test -f "$1" && sudo test ! -L "$1"; }
+state_ok() {
+  local f name line cid img st pj sv nonce rc names
+  for f in "${F[@]}"; do priv "$f" || stop EVIDENCE_FILE_UNTRUSTED; done
+  sudo test ! -e "$J.next" && sudo test ! -L "$J.next" || stop JOURNAL_NEXT_PRESENT
+  [[ "$(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json' | wc -l)" == 1 ]] || stop OTHER_OR_NO_JOURNAL
+  sudo test ! -e "$M" && sudo test ! -L "$M" || stop ARCHIVE_MARKER_PRESENT
+  sudo jq -e --arg s "$PEND" '.status=="PENDING" and .source_sha==$s' "$J" >/dev/null || stop JOURNAL_NOT_PENDING
+  sudo jq -e --arg s "$PEND" --arg d "$PENDDIGEST" '.status=="PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT" and .source_sha==$s and .source_asset_sha256==$d and .schema_mode=="support00_postdb" and .review_mode=="single_operator_qa" and .may_apply==false and .images_built==true and .services_unchanged==true' "$P" >/dev/null || stop PREPARED_MISMATCH
+  sudo jq -e --arg s "$PEND" --arg d "$PENDDIGEST" '.source_sha==$s and .release_asset_sha256==$d' /etc/pmgm/qa525-sensitive-reviewed.json >/dev/null || stop SENSITIVE_REVIEW_MISMATCH
+  sudo jq -e --arg s "$PEND" --arg d "$PENDDIGEST" '.source_sha==$s and .release_asset_sha256==$d' /etc/pmgm/qa525-single-operator-postdb-approved.json >/dev/null || stop POSTDB_MISMATCH
+  sudo jq -e --arg s "$PEND" --arg d "$PENDDIGEST" '.target_sha==$s and .release_asset_sha256==$d' "$CUT" >/dev/null || stop CUT_MISMATCH
+  nonce=$(sudo jq -r '.nonce' "$CUT") || stop NONCE_READ
+  [[ "$nonce" =~ ^[a-f0-9]{64}$ ]] || stop NONCE_INVALID
+  priv "$STATE/approval-consumed-$nonce" || stop NONCE_MARKER_UNTRUSTED
+  [[ "$(sudo cat -- "$STATE/approval-consumed-$nonce")" == "$PEND" ]] || stop NONCE_NOT_CONSUMED_FOR_CUT
+  if sudo test -e "$E" || sudo test -L "$E"; then
+    priv "$E" || stop EVENTS_UNTRUSTED
+    rc=0; sudo grep -q " $PEND\$" "$E" || rc=$?
+    case "$rc" in 0) stop TARGET_EVENT_PRESENT;; 1) : ;; *) stop EVENTS_READ_ERROR;; esac
+  fi
+  mapfile -t names < <(sudo jq -r '.baseline|keys[]' "$P") || stop BASELINE_KEYS
+  [[ " ${names[*]} " == *" api "* && " ${names[*]} " == *" web "* ]] || stop BASELINE_API_WEB_MISSING
+  for name in "${names[@]}"; do
+    [[ "$name" =~ ^[a-z0-9_-]{1,40}$ ]] || stop BASELINE_NAME
+    line=$(sudo docker inspect --format '{{.Id}} {{.Image}} {{.State.Status}} {{index .Config.Labels "com.docker.compose.project"}} {{index .Config.Labels "com.docker.compose.service"}}' "centenario-qa-lab2-$name-1") || stop BASELINE_INSPECT
+    read -r cid img st pj sv <<<"$line"
+    [[ "$st" == running && "$pj" == centenario-qa-lab2 && "$sv" == "$name" ]] || stop BASELINE_STATE
+    sudo jq -e --arg n "$name" --arg c "$cid" --arg i "$img" '.baseline[$n].container_fingerprint==$c and .baseline[$n].image_id==$i' "$P" >/dev/null || stop BASELINE_DRIFT
+  done
+  for name in api web; do
+    sudo jq -e --arg n "$name" --slurpfile p "$P" '.old_images[$n]==$p[0].baseline[$n].image_id and .new_images[$n]==$p[0][$n+"_image_id"]' "$J" >/dev/null || stop JOURNAL_PREPARED_BINDING
+  done
+}
+custody() {
+  local A f b lh mh files
+  declare -A H
+  state_ok
+  A="$STATE/route-a-custody-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  mkdir -m 700 -- "$A" || stop ARCHIVE_DIR
+  for f in "${F[@]}"; do
+    b=${f##*/}; [[ -z "${H[$b]:-}" ]] || stop BASENAME_COLLISION
+    H[$b]=$(sha256sum -- "$f" | cut -d' ' -f1); [[ "${H[$b]}" =~ ^[a-f0-9]{64}$ ]] || stop HASH_BEFORE
+  done
+  files=$(for f in "${F[@]}"; do b=${f##*/}; printf '%s\t%s\t%s\n' "$b" "$f" "${H[$b]}"; done | jq -R -s -c 'split("\n")[:-1]|map(split("\t")|{name:.[0],from:.[1],sha256:.[2]})') || stop LEDGER_BUILD
+  ( set -C; jq -n -c --arg s "$PEND" --arg a "${A##*/}" --argjson f "$files" '{status:"ROUTE_A_CUSTODY_LEDGER",source_sha:$s,archive:$a,files:$f}' > "$A/ledger.json" ) || stop LEDGER_WRITE
+  priv "$A/ledger.json" || stop LEDGER_MODE
+  sync -f "$A/ledger.json"; sync -f "$A"; sync -f "$STATE"
+  lh=$(sha256sum -- "$A/ledger.json" | cut -d' ' -f1)
+  ( set -C; jq -n -c --arg s "$PEND" --arg a "${A##*/}" --arg l "$lh" '{status:"ROUTE_A_CUSTODY_INCOMPLETE",source_sha:$s,archive:$a,ledger_sha256:$l}' > "$M" ) || stop MARKER_CREATE
+  priv "$M" || stop MARKER_MODE
+  sync -f "$M"; sync -f "$STATE"
+  for f in "${F[@]}"; do
+    b=${f##*/}
+    mv -n -- "$f" "$A/$b" || stop MOVE
+    [[ ! -e "$f" && ! -L "$f" && -f "$A/$b" && ! -L "$A/$b" ]] || stop MOVE_VERIFY
+    [[ "$(sha256sum -- "$A/$b" | cut -d' ' -f1)" == "${H[$b]}" ]] || stop HASH_AFTER
+    sync -f "$A/$b"; sync -f "$A"; sync -f "${f%/*}"
+  done
+  ( set -C; jq -n -c --arg s "$PEND" --arg l "$lh" --argjson f "$files" '{status:"ROUTE_A_CUSTODY_COMPLETE_NO_DEPLOYMENT",source_sha:$s,ledger_sha256:$l,files:$f,nonce_remains_consumed:true}' > "$A/receipt.json" ) || stop RECEIPT_WRITE
+  priv "$A/receipt.json" || stop RECEIPT_MODE
+  jq -e '.status=="ROUTE_A_CUSTODY_COMPLETE_NO_DEPLOYMENT" and (.files|length)==5' "$A/receipt.json" >/dev/null || stop RECEIPT_FORMAT
+  sync -f "$A/receipt.json"; sync -f "$A"
+  mh=$(sha256sum -- "$M" | cut -d' ' -f1)
+  mv -n -- "$M" "$A/marker-cleared.json" || stop MARKER_CLEAR
+  [[ ! -e "$M" && ! -L "$M" && "$(sha256sum -- "$A/marker-cleared.json" | cut -d' ' -f1)" == "$mh" ]] || stop MARKER_CLEAR_VERIFY
+  sync -f "$A"; sync -f "$STATE"
+  for f in "${F[@]}"; do b=${f##*/}; [[ ! -e "$f" && ! -L "$f" ]] || stop POST_ABSENT; [[ "$(sha256sum -- "$A/$b" | cut -d' ' -f1)" == "${H[$b]}" ]] || stop POST_HASH; done
+  printf 'QA525_ROUTE_A_CUSTODY=PASS archive=%s\n' "${A##*/}"
+}
+run_custody_locked() {
+  local l body rc=0
+  for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; done
+  body="set -Eeuo pipefail; umask 077; $(declare -p PEND PENDDIGEST STATE OWNER J P M E CUT F); $(declare -f stop priv state_ok custody); sudo() { \"\$@\"; }; custody"
+  sudo flock -n -E 99 "${LOCKS[0]}" flock -n -E 99 "${LOCKS[1]}" flock -n -E 99 "${LOCKS[2]}" flock -n -E 99 "${LOCKS[3]}" flock -n -E 99 "${LOCKS[4]}" bash -c "$body" || rc=$?
+  [[ "$rc" != 99 ]] || stop LOCKS_BUSY_ANOTHER_OPERATOR
+  [[ "$rc" == 0 ]] || stop CUSTODY_FAILED_SEE_ABOVE_MARKER_MAY_REMAIN
+}
+quota_ok() {
+  local rl rem rst
+  rl=$(curl -fsS --max-time 20 --proto '=https' https://api.github.com/rate_limit) || stop RATE_LIMIT_READ
+  rem=$(printf '%s' "$rl" | jq -r '.resources.core.remaining'); rst=$(printf '%s' "$rl" | jq -r '.resources.core.reset')
+  [[ "$rem" =~ ^[0-9]+$ && "$rst" =~ ^[0-9]+$ ]] || stop RATE_LIMIT_PARSE
+  printf 'QA525_GITHUB_ANON_QUOTA remaining=%s reset_utc=%s\n' "$rem" "$(date -u -d "@$rst" +%FT%TZ)"
+  (( rem >= MIN_RL )) || stop GITHUB_QUOTA_LOW_WAIT_FOR_RESET_THEN_RERUN
+}
+# <<< FUNCTIONS
+[[ "$#" -le 1 ]] || stop BAD_ARGUMENT
 MODE=${1:-READ_ONLY}
 [[ "$MODE" == READ_ONLY || "$MODE" == EXECUTE_A1_A2 ]] || stop BAD_ARGUMENT
 [[ "$REVIEW" =~ ^https://github\.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-[1-9][0-9]*$ ]] || stop REVIEW_URL_NOT_SET
@@ -29,22 +123,11 @@ priv "$G6" || stop G6_REVIEW_MODE
 printf '%s  %s\n' 31100269647cc77c8d3daf37c260528ca9b136ccfcb889c46b82fd01e3783aea "$G6" | sudo sha256sum -c - >/dev/null || stop G6_REVIEW_HASH
 sudo jq -e '.g6_offhost_sha256_verified==true and .g6_archive_name=="centenario-qa-g6-CIFRADO-20261102T110545Z.tar.gz" and .g6_archive_sha256=="772a645f09823648ed25a287f837653aef4cced2ba95413422d8f20f65a9d915"' "$G6" >/dev/null || stop G6_REVIEW_CONTENT
 (( $(date -u +%s) < $(date -u -d '2026-11-04 10:45:00 UTC' +%s) )) || stop G6_TOO_CLOSE_TO_48H
-rl=$(curl -fsS --max-time 20 --proto '=https' https://api.github.com/rate_limit) || stop RATE_LIMIT_READ
-rem=$(printf '%s' "$rl" | jq -r '.resources.core.remaining'); rst=$(printf '%s' "$rl" | jq -r '.resources.core.reset')
-[[ "$rem" =~ ^[0-9]+$ && "$rst" =~ ^[0-9]+$ ]] || stop RATE_LIMIT_PARSE
-printf 'QA525_GITHUB_ANON_QUOTA remaining=%s reset_utc=%s\n' "$rem" "$(date -u -d "@$rst" +%FT%TZ)"
-(( rem >= MIN_RL )) || stop "GITHUB_QUOTA_LOW_WAIT_FOR_RESET_THEN_RERUN"
+quota_ok
+for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; done
 s=$(sudo "$L" --status) || stop STATUS
 printf '%s\n' "$s" | jq -e '.status=="QA525_UPDATE_STATUS_READ_ONLY" and .services_running==true and .prepared_exists==true and .archive_reconciliation_required==false and .may_apply==false' >/dev/null || stop STATUS_MISMATCH
-J="$STATE/dual-$PEND.json"; P="$STATE/prepared.json"
-F=("$STATE/prepared.json" /etc/pmgm/qa525-sensitive-reviewed.json /etc/pmgm/qa525-single-operator-postdb-approved.json /etc/pmgm/qa525-supervised-cut.json "$J")
-for f in "${F[@]}"; do priv "$f" || stop "EVIDENCE_FILE_UNTRUSTED"; done
-sudo test ! -e "$J.next" || stop JOURNAL_NEXT_PRESENT
-[[ "$(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json' | wc -l)" == 1 ]] || stop OTHER_OR_NO_JOURNAL
-sudo test ! -e "$STATE/expired-prepared-archive-pending.json" || stop ARCHIVE_MARKER_PRESENT
-sudo jq -e --arg s "$PEND" '.status=="PENDING" and .source_sha==$s' "$J" >/dev/null || stop JOURNAL_NOT_PENDING
-sudo jq -e --arg s "$PEND" '.status=="PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT" and .source_sha==$s and .may_apply==false' "$P" >/dev/null || stop PREPARED_MISMATCH
-if sudo test -e "$STATE/dual-events.log"; then ! sudo grep -q " $PEND\$" "$STATE/dual-events.log" || stop TARGET_EVENT_PRESENT; fi
+state_ok
 sql='BEGIN READ ONLY; SELECT count(*)::text || chr(124) || count(*) FILTER (WHERE "MigrationId" = '\''20261029120000_AddMemberHistoryProposals'\'')::text || chr(124) || count(*) FILTER (WHERE "MigrationId" = '\''20261030223000_SeedSupportWorkshop00'\'')::text FROM public."__EFMigrationsHistory"; COMMIT;'
 ef=$(sudo docker exec centenario-qa-lab2-postgres-1 sh -c 'exec psql -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d pmgm -c "$1"' qa525-readonly "$sql") || stop EF_READ
 [[ "$ef" == '100|1|1' ]] || stop EF_HISTORY_DRIFT
@@ -52,37 +135,15 @@ for name in api web; do
   ids=$(sudo docker ps --filter label=com.docker.compose.project=centenario-qa-lab2 --filter "label=com.docker.compose.service=$name" --format '{{.ID}}') || stop CONTAINER_LIST
   [[ "$ids" =~ ^[a-f0-9]{12,64}$ ]] || stop CONTAINER_CARDINALITY
   [[ "$(sudo docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$ids")" == "$OLD" ]] || stop BASELINE_DRIFT
-  img=$(sudo docker inspect --format '{{.Image}}' "$ids") || stop CONTAINER_INSPECT
-  sudo jq -e --arg n "$name" --arg i "$img" '.old_images[$n]==$i' "$J" >/dev/null || stop JOURNAL_IMAGE_MISMATCH
 done
 curl -fsS --max-time 20 --proto '=https' https://sistema.granlogiamixta.cl/qa-version.json | jq -e --arg o "$OLD" '.environment=="QA_SYNTHETIC" and .source_sha==$o' >/dev/null || stop PUBLIC_BASELINE_DRIFT
 printf 'QA525_ROUTE_A_PREFLIGHT=PASS_PENDING_CFE4_BASELINE_INTACT\n'
 [[ "$MODE" == EXECUTE_A1_A2 ]] || { printf 'QA525_ROUTE_A=READ_ONLY_DONE_NOTHING_CHANGED\n'; exit 0; }
-# ---- A1 · custodia (solo mueve evidencia; no toca runtime, BD ni Docker; nada se borra) ----
-M="$STATE/expired-prepared-archive-pending.json"
-sudo sh -c 'set -C; umask 077; printf "{\"status\":\"ROUTE_A_CUSTODY_INCOMPLETE\",\"source_sha\":\"%s\"}\n" "$1" > "$2"' sh "$PEND" "$M" || stop MARKER_CREATE
-A="$STATE/route-a-custody-$(date -u +%Y%m%dT%H%M%SZ)-$$"
-sudo mkdir -m 700 -- "$A" || stop ARCHIVE_DIR
-declare -A H
-for f in "${F[@]}"; do
-  b=$(basename "$f"); [[ -z "${H[$b]:-}" ]] || stop BASENAME_COLLISION
-  H[$b]=$(sudo sha256sum -- "$f" | cut -d' ' -f1) || stop HASH_BEFORE
-done
-sudo sync -f "$STATE"
-for f in "${F[@]}"; do
-  b=$(basename "$f")
-  sudo mv -n -- "$f" "$A/$b" || stop MOVE
-  sudo test ! -e "$f" && sudo test -f "$A/$b" || stop MOVE_VERIFY
-  [[ "$(sudo sha256sum -- "$A/$b" | cut -d' ' -f1)" == "${H[$b]}" ]] || stop HASH_AFTER
-  sudo sync -f "$A"; sudo sync -f "$(dirname "$f")"
-done
-{ printf '{"status":"ROUTE_A_CUSTODY_COMPLETE_NO_DEPLOYMENT","source_sha":"%s","files":{' "$PEND"
-  sep=''; for b in "${!H[@]}"; do printf '%s"%s":"%s"' "$sep" "$b" "${H[$b]}"; sep=','; done; printf '}}\n'; } | sudo tee "$A/receipt.json" >/dev/null || stop RECEIPT
-sudo mv -n -- "$M" "$A/marker-cleared.json" || stop MARKER_CLEAR
-sudo sync -f "$A"; sudo sync -f "$STATE"
+# ---- A1 · custodia bajo los 5 locks (solo mueve evidencia; no toca runtime, BD ni Docker; nada se borra) ----
+run_custody_locked
 s=$(sudo "$L" --status) || stop POST_CUSTODY_STATUS
 printf '%s\n' "$s" | jq -e '.services_running==true and .prepared_exists==false and .archive_reconciliation_required==false and .may_apply==false' >/dev/null || stop POST_CUSTODY_MISMATCH
-printf 'QA525_ROUTE_A_CUSTODY=PASS archive=%s\n' "$(basename "$A")"
+quota_ok
 # ---- A2 · UN solo intento. Única orden que despliega. Sin reintento. ----------------------
 if result=$(sudo "$L" --review-and-run --source "$SRC" --digest "$DIGEST" --technical-review-reference "$REVIEW" --g6-review "$G6" --operator-name soporte@glmdch --schema-mode support00_postdb); then rc=0; else rc=$?; fi
 rl=$(curl -fsS --max-time 20 --proto '=https' https://api.github.com/rate_limit 2>/dev/null || :)
