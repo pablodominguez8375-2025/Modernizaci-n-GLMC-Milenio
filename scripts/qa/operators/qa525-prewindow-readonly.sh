@@ -28,7 +28,22 @@ else out TEMPORARY_SOURCE TRUST_NOT_PROVEN; fi
 dir_mode /opt/centenario 755 && dir_mode /opt/centenario/qa525-root-source 700 && dir_mode /etc/pmgm 700 && out ROOT_PATH_METADATA PASS || out ROOT_PATH_METADATA BLOCKED
 file_mode /usr/local/sbin/pmgm-qa-update 700 && sum_eq /usr/local/sbin/pmgm-qa-update "$launcher_digest" && out HISTORICAL_LAUNCHER_SHA PASS || out HISTORICAL_LAUNCHER_SHA BLOCKED
 dir_mode /opt/centenario/qa525-launcher-recovery 700 && out F1_RECOVERY_0700 PASS || out F1_RECOVERY_0700 BLOCKED
-file_mode /opt/centenario/qa525-root-source/qa525-signed-root-bootstrap-prep.py 600 && sum_eq /opt/centenario/qa525-root-source/qa525-signed-root-bootstrap-prep.py "$boot_digest" && out NEW_BOOTSTRAP_ROOT_PIN PASS || out NEW_BOOTSTRAP_ROOT_PIN BLOCKED
+rs='/opt/centenario/qa525-root-source'
+newboot="$rs/qa525-signed-root-bootstrap-cfe4.py"
+newzip="$rs/qa-signed-$sha.zip"
+if is_absent "$newboot" && is_absent "$newzip"; then
+  out ROOT_SOURCE_PROMOTION NOT_YET_PROMOTED
+elif file_mode "$newboot" 600 && sum_eq "$newboot" "$boot_digest" && file_mode "$newzip" 600 && sum_eq "$newzip" "$zip_digest"; then
+  out ROOT_SOURCE_PROMOTION PASS
+else
+  out ROOT_SOURCE_PROMOTION BLOCKED
+fi
+file_mode "$rs/qa525-signed-root-bootstrap-prep.py" 600 && sum_eq "$rs/qa525-signed-root-bootstrap-prep.py" 'c10037aca5a1116ecb72e06c344efc4fbf953d1e9f3f1f7257b5e3a363bed1d8' && out OLD_BOOTSTRAP_INTACT PASS || out OLD_BOOTSTRAP_INTACT BLOCKED
+is_absent "$rs/$sha" && out ROOT_SOURCE_TARGET_ABSENT PASS || out ROOT_SOURCE_TARGET_ABSENT BLOCKED
+is_absent /etc/pmgm/qa525-launcher-rollback.json && out ROLLBACK_APPROVAL_ABSENT PASS || out ROLLBACK_APPROVAL_ABSENT BLOCKED
+if dir_mode /opt/centenario/qa525-launcher-recovery 700; then
+  [ "$(sudo find /opt/centenario/qa525-launcher-recovery -mindepth 1 -maxdepth 1 -printf x | wc -c)" -eq 0 ] && out F1_RECOVERY_EMPTY PASS || out F1_RECOVERY_EMPTY BLOCKED
+else out F1_RECOVERY_EMPTY NOT_PROVISIONED; fi
 locks_ok=true
 for p in /opt/centenario/qa-api-refresh/operation.lock /opt/centenario/qa-auto-lite/web-update.lock /run/lock/pmgm-master-qa-604.lock /run/lock/pmgm-qa754-web-hotfix.lock /run/lock/pmgm-qa754-api-activation.lock /opt/centenario/qa525-root-source/bootstrap.lock; do
   file_mode "$p" 600 || locks_ok=false
@@ -53,3 +68,4 @@ if sudo jq -e --arg sha "$sha" '(.source_sha != $sha) and (.status != null)' /op
 out FIRST_ROOT_EXECUTION_TRUST REQUIRES_INDEPENDENT_REVIEW
 out LAUNCHER_ONLY_AUTHORIZATION NOT_GRANTED
 out QA_PHYSICAL NO_GO
+if [ -f "$0" ]; then out SCRIPT_SHA256 "$(sha256sum "$0" | awk '{print $1}')"; else out SCRIPT_SHA256 UNAVAILABLE; fi
