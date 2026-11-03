@@ -27,6 +27,10 @@ def require(value, code):
 def public_error_code(exc):
     try:
         code = str(exc) if isinstance(exc, Blocked) else None
+        reconciliation = sys.modules.get('qa525_pending_reconciliation')
+        if (reconciliation is not None
+                and isinstance(exc, reconciliation.Blocked)):
+            code = str(exc)
         entry = sys.modules.get('qa525_update_entry')
         if code is None and entry is not None:
             code = entry.public_failure_code(exc)
@@ -168,9 +172,10 @@ def make_review_packet(entry, args, modules):
 
 def require_reconciled_archive(entry):
     """A process crash during archival never grants a clean update state."""
-    marker = entry.STATE / 'expired-prepared-archive-pending.json'
-    require(not marker.exists() and not marker.is_symlink(),
-            'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION')
+    for name in ('expired-prepared-archive-pending.json', 'pending-dual-reconciliation.json'):
+        marker = entry.STATE / name
+        require(not marker.exists() and not marker.is_symlink(),
+                'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION')
 
 
 def install_review_packet(entry, packet, modules, *, verified=None):
@@ -549,8 +554,10 @@ def main(argv=None):
     choice.add_argument('--apply-prepared', action='store_true')
     choice.add_argument('--archive-expired-prepared', action='store_true')
     choice.add_argument('--inspect-pending-archive', action='store_true')
+    choice.add_argument('--reconcile-pending-dual', action='store_true')
     choice.add_argument('--install-launcher', action='store_true')
     choice.add_argument('--review-and-run', action='store_true')
+    parser.add_argument('--reconciliation-review', type=Path)
     parser.add_argument('--source')
     parser.add_argument('--digest')
     parser.add_argument('--technical-review-reference')
@@ -583,8 +590,19 @@ def main(argv=None):
             return {'status': 'QA525_UPDATE_STATUS_READ_ONLY',
                 'services_running': all(live[n][2] == 'running' for n in modules[0].TARGETS),
                 'prepared_exists': (entry.STATE / 'prepared.json').exists(),
-                'archive_reconciliation_required': pending.exists() or pending.is_symlink(),
+                'archive_reconciliation_required': (pending.exists() or pending.is_symlink()
+                    or os.path.lexists(entry.STATE / 'pending-dual-reconciliation.json')),
                 'may_apply': False}
+    if args.reconcile_pending_dual:
+        require(args.reconciliation_review is not None
+                and args.reconciliation_review.is_absolute(),
+                'RECONCILE_EXPLICIT_APPROVAL_REQUIRED')
+        path = HERE / 'qa525-pending-dual-reconciliation.py'
+        entry.trusted(path)
+        module = entry.load('qa525_pending_reconciliation', path)
+        with build.exclusive():
+            require_reconciled_archive(entry)
+            return module.reconcile(entry, modules, args.reconciliation_review)
     if args.inspect_pending_archive:
         with build.exclusive():
             return inspect_pending_archive(entry, modules[2])
