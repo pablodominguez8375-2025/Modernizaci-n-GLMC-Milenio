@@ -108,6 +108,15 @@ class Contract(unittest.TestCase):
             with self.assertRaises(m.Blocked):
                 m.reconcile(entry, modules, approval)
 
+    def test_archival_approval_replay_rejected_without_moving(self):
+        with tempfile.TemporaryDirectory() as d:
+            entry, modules, approval, paths = self.fixture(Path(d))
+            spent = entry.STATE / ("reconciliation-consumed-" + m.digest(approval))
+            m.write_private(spent, {"status": "RECONCILIATION_APPROVAL_CONSUMED"})
+            with self.assertRaises(m.Blocked):
+                m.reconcile(entry, modules, approval)
+            self.assertTrue(all(p.exists() for p in paths))
+
     def test_changed_hash_does_not_move_records(self):
         with tempfile.TemporaryDirectory() as d:
             entry, modules, approval, paths = self.fixture(Path(d))
