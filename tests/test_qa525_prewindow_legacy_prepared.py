@@ -119,5 +119,55 @@ class LegacyPreparedDoesNotBlockLauncherOnlyTests(unittest.TestCase):
             swap.assert_not_called()
 
 
+class PrewindowEmptyLockMetadataTests(unittest.TestCase):
+    """Regression: GNU stat reports regular empty file for zero-byte locks."""
+
+    def test_empty_regular_lock_valid_but_symlink_mode_and_link_count_rejected(self):
+        import subprocess
+
+        script = (OPS / "qa525-prewindow-readonly.sh").read_text(encoding="utf-8")
+        matches = [line for line in script.splitlines()
+                   if line.startswith("file_mode() {")]
+        self.assertEqual(len(matches), 1)
+        fake_sudo = r'''
+sudo() {
+  local op="$1"
+  shift
+  case "$op" in
+    stat) command stat "$@" | sed -E 's/^[0-9]+:[0-9]+/0:0/' ;;
+    test) command test "$@" ;;
+    *) return 95 ;;
+  esac
+}
+'''
+        shell_script = fake_sudo + "\n" + matches[0] + '\nfile_mode "$1" 600\n'
+
+        def passes(path):
+            return subprocess.run(
+                ["bash", "-e", "-u", "-o", "pipefail", "-c",
+                 shell_script, "test", str(path)],
+                capture_output=True, text=True, check=False,
+            ).returncode == 0
+
+        with tempfile.TemporaryDirectory(prefix="qa525-lock-metadata-") as tmp:
+            root = Path(tmp)
+            lock = root / "operation.lock"
+            lock.write_bytes(b"")
+            lock.chmod(0o600)
+            self.assertTrue(passes(lock), "empty regular lock is valid")
+            lock.write_bytes(b"payload")
+            self.assertTrue(passes(lock), "nonempty regular lock is valid")
+            lock.chmod(0o644)
+            self.assertFalse(passes(lock), "incorrect mode must be denied")
+            lock.chmod(0o600)
+            alias = root / "alias.lock"
+            alias.symlink_to(lock)
+            self.assertFalse(passes(alias), "symlink must be denied")
+            hard = root / "hard.lock"
+            hard.hardlink_to(lock)
+            self.assertFalse(passes(lock), "multiple links must be denied")
+            self.assertFalse(passes(root), "directory must be denied")
+
+
 if __name__ == "__main__":
     unittest.main()
