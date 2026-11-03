@@ -88,7 +88,7 @@ class Fixture:
         (self.t / "fn.sh").write_text(block)
         return self.t / "fn.sh"
 
-    def run(self, call, env=None):
+    def run(self, call, env=None, hook=""):
         lock_arr = " ".join('"%s"' % x for x in self.locks)
         script = f'''set -Eeuo pipefail
 export PATH="{self.bin}:$PATH"
@@ -99,6 +99,7 @@ E="$STATE/dual-events.log"; CUT="{self.etc}/qa525-supervised-cut.json"
 F=("$P" "{self.etc}/qa525-sensitive-reviewed.json" "{self.etc}/qa525-single-operator-postdb-approved.json" "$CUT" "$J")
 LOCKS=({lock_arr})
 source "{self.functions()}"
+{hook}
 {call}
 '''
         e = dict(os.environ, **(env or {}))
@@ -107,6 +108,16 @@ source "{self.functions()}"
     def archive(self):
         dirs = sorted(self.state.glob("route-a-custody-*"))
         return dirs[0] if dirs else None
+
+
+def hook_for(fx, phase, idx, action):
+    lock = fx.locks[idx]
+    body = {
+        "swap": '/usr/bin/mv "$2" "$2.old"; : > "$2"; chmod 600 "$2"',
+        "delete": '/usr/bin/mv "$2" "$2.old"',
+        "symlink": '/usr/bin/mv "$2" "$2.old"; ln -s "$2.old" "$2"',
+    }[action]
+    return 'lock_hook() { if [[ "$1" == %s && "$2" == "%s" ]]; then %s; fi; }' % (phase, lock, body)
 
 
 class Custody(unittest.TestCase):
@@ -170,6 +181,39 @@ class Custody(unittest.TestCase):
                 self.assertIsNone(fx.archive())
                 for p in fx.five():
                     self.assertEqual(sha(p), fx.originals[p.name])
+
+
+    def test_lock_replaced_or_removed_between_validation_open_and_acquire(self):
+        cases = [("pre_open", "swap", "LOCK_IDENTITY_CHANGED"),
+                 ("pre_open", "delete", "LOCK_OPEN_FAILED_NOT_CREATED"),
+                 ("pre_open", "symlink", "LOCK_PATH_REPLACED"),
+                 ("pre_acquire", "swap", "LOCK_PATH_REPLACED"),
+                 ("pre_acquire", "delete", "LOCK_PATH_REPLACED"),
+                 ("post_acquire", "swap", "LOCK_PATH_REPLACED"),
+                 ("post_acquire", "delete", "LOCK_PATH_REPLACED"),
+                 ("post_acquire", "symlink", "LOCK_PATH_REPLACED")]
+        for phase, action, code in cases:
+            for idx in (0, 4):
+                with tempfile.TemporaryDirectory() as d:
+                    fx = Fixture(d)
+                    r = fx.run("run_custody_locked", hook=hook_for(fx, phase, idx, action))
+                    label = (phase, action, idx, r.stdout)
+                    self.assertNotEqual(r.returncode, 0, label)
+                    self.assertIn("STOP_" + code, r.stdout, label)
+                    self.assertIsNone(fx.archive(), label)
+                    for p in fx.five():
+                        self.assertEqual(sha(p), fx.originals[p.name], label)
+                    if action == "delete":  # a lock that vanished is never re-created
+                        self.assertFalse(fx.locks[idx].exists(), label)
+
+    def test_original_lock_held_elsewhere_while_path_is_replaced_never_passes(self):
+        fx = self.fx
+        with open(fx.locks[0], "r+") as held:  # the "other operator" keeps the original inode
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            r = fx.run("run_custody_locked", hook=hook_for(fx, "pre_open", 0, "swap"))
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertNotIn("QA525_ROUTE_A_CUSTODY=PASS", r.stdout)
+        self.assertIsNone(fx.archive())
 
     def test_missing_or_loose_lock_file_stops(self):
         self.fx.locks[2].unlink()

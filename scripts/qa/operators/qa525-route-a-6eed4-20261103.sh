@@ -92,12 +92,32 @@ custody() {
   for f in "${F[@]}"; do b=${f##*/}; [[ ! -e "$f" && ! -L "$f" ]] || stop POST_ABSENT; [[ "$(sha256sum -- "$A/$b" | cut -d' ' -f1)" == "${H[$b]}" ]] || stop POST_HASH; done
   printf 'QA525_ROUTE_A_CUSTODY=PASS archive=%s\n' "${A##*/}"
 }
+lock_hook() { :; }  # punto de inyección SOLO para pruebas herméticas; en producción no hace nada
+hold_locks() {
+  local l fd want got n=0
+  declare -gA WANT=()
+  for l in "${LOCKS[@]}"; do
+    [[ -f "$l" && ! -L "$l" && "$(stat -c '%u:%g %a %h' -- "$l")" == "$OWNER 600 1" ]] || stop LOCK_FILE_UNTRUSTED_OR_MISSING
+    WANT[$l]=$(stat -c '%d:%i' -- "$l") || stop LOCK_STAT
+  done
+  for l in "${LOCKS[@]}"; do
+    lock_hook pre_open "$l"
+    { exec {fd}<"$l"; } 2>/dev/null || stop LOCK_OPEN_FAILED_NOT_CREATED
+    lock_hook pre_acquire "$l"
+    flock -n "$fd" || stop LOCKS_BUSY_ANOTHER_OPERATOR
+    lock_hook post_acquire "$l"
+    got=$(stat -L -c '%d:%i %u:%g %a %h' "/proc/self/fd/$fd") || stop LOCK_FD_STAT
+    [[ "$got" == "${WANT[$l]} $OWNER 600 1" && -f "/proc/self/fd/$fd" ]] || stop LOCK_IDENTITY_CHANGED
+    [[ ! -L "$l" && "$(stat -c '%d:%i' -- "$l")" == "${WANT[$l]}" ]] || stop LOCK_PATH_REPLACED
+    n=$((n+1))
+  done
+  [[ "$n" == "${#LOCKS[@]}" ]] || stop LOCKS_NOT_ALL_HELD
+}
 run_custody_locked() {
   local l body rc=0
   for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; done
-  body="set -Eeuo pipefail; umask 077; $(declare -p PEND PENDDIGEST STATE OWNER J P M E CUT F); $(declare -f stop priv state_ok custody); sudo() { \"\$@\"; }; custody"
-  sudo flock -n -E 99 "${LOCKS[0]}" flock -n -E 99 "${LOCKS[1]}" flock -n -E 99 "${LOCKS[2]}" flock -n -E 99 "${LOCKS[3]}" flock -n -E 99 "${LOCKS[4]}" bash -c "$body" || rc=$?
-  [[ "$rc" != 99 ]] || stop LOCKS_BUSY_ANOTHER_OPERATOR
+  body="set -Eeuo pipefail; umask 077; $(declare -p PEND PENDDIGEST STATE OWNER J P M E CUT F LOCKS); $(declare -f stop priv state_ok custody lock_hook hold_locks); sudo() { \"\$@\"; }; hold_locks; custody"
+  sudo bash -c "$body" || rc=$?
   [[ "$rc" == 0 ]] || stop CUSTODY_FAILED_SEE_ABOVE_MARKER_MAY_REMAIN
 }
 quota_ok() {
