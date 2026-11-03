@@ -45,6 +45,8 @@ Revisión del nuevo corte, G6 vigente y restauración aislada, firma, aprobació
 
 ## Pruebas y límites
 
-20 pruebas locales: 9 de diagnóstico/errores y core real con transporte falso, 11 de conciliación incluyendo expiración, drift, hash, nonce, acción, estado y fallo en segundo rename. Un fixture inicial de rollback omitía status=running y fue corregido; 20/20 finales PASS. No hubo prueba física ni SSH; revisión adversarial y CI final pendientes.
+21 pruebas locales: 9 de diagnóstico/errores y core real con transporte falso, 12 de conciliación incluyendo expiración, drift, hash, nonce, acción, estado y fallo en segundo rename. Un fixture inicial de rollback omitía status=running y fue corregido; 21/21 finales PASS. No hubo prueba física ni SSH; revisión adversarial y CI final pendientes.
 
 La causa histórica del fallo sigue desconocida: la nueva instrumentación no recupera mensajes perdidos. Errores futuros llevan etapa PRE/ACTIVATION/POST y SOURCE/APPROVAL/REVIEW/DATABASE/G6; red solo expone vocabulario fijo, nunca mensajes privados.
+
+La aprobación específica de archivado también se consume irreversiblemente mediante un recibo root0600 identificado por su SHA256 antes del marcador y del primer movimiento. Si falla la creación del marcador, se exige aprobación nueva; el consumo no se borra ni reutiliza. Se prueba rechazo de replay sin mover archivos.
