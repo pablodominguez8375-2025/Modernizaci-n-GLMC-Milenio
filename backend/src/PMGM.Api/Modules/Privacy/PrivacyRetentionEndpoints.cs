@@ -464,6 +464,19 @@ public static class PrivacyRetentionEndpoints
                 return Results.NotFound(new { message = "La solicitud de derechos asociada a la evaluación ya no existe." });
             }
 
+            // Sin resolución y fecha de cierre formal no es seguro eliminar
+            // el vínculo con el titular: impedir pérdida de trazabilidad.
+            var requestClosure = RetentionExecutionPolicy.CanAnonymizeDataSubjectRequest(dataSubjectRequest);
+            if (!requestClosure.CanExecute)
+            {
+                return Results.Conflict(new
+                {
+                    code = "DATA_SUBJECT_REQUEST_NOT_FORMALLY_CLOSED",
+                    message = requestClosure.Reason,
+                    requiresManualReview = requestClosure.RequiresManualReview
+                });
+            }
+
             dataSubjectRequest.PersonId = null;
             dataSubjectRequest.ResponsibleSubject = null;
             dataSubjectRequest.Resolution = null;
