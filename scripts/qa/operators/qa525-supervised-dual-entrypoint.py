@@ -875,7 +875,25 @@ def main():
                              health=versioned_health, audit=audit)
 
 
+# Only fixed core rejection codes may cross the public error boundary.
+# Never return arbitrary exception text from another module or subprocess.
+PUBLIC_CORE_FAILURES = frozenset({
+    "SIGNED_G6_OR_APPROVAL_CHANGED",
+    "BASELINE_CHANGED_AT_ACTIVATION",
+    "TRANSACTION_ALREADY_EXISTS_OR_INCOMPLETE",
+    "DUAL_ROLLBACK_FAILED_MANUAL_RECOVERY_REQUIRED",
+    "POST_APPLY_INVARIANT_FAILED",
+    "POST_APPLY_HEALTH_FAILED",
+    "POST_APPLY_EVIDENCE_INVALID",
+})
+
+
 def public_failure_code(exc):
+    core = sys.modules.get("qa525_supervised_dual_core")
+    core_blocked = getattr(core, "Blocked", None)
+    if (isinstance(core_blocked, type) and isinstance(exc, core_blocked)
+            and str(exc) in PUBLIC_CORE_FAILURES):
+        return str(exc)
     if isinstance(exc, Blocked):
         return str(exc)
     code = str(exc)
