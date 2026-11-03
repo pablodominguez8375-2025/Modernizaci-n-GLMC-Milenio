@@ -356,7 +356,9 @@ class StaticAndGuards(unittest.TestCase):
     def test_pins_and_no_retry_loop(self):
         for pin in ("6eed4f00b7917da3cca36bbda70e16d16328648d",
                     "sha256:9bdeaa217f09f5d0e19e50d214a4abb936a2b89246ebbcf71fb71178e5574af2",
-                    "61e3f1f7e7dd561567e5fac415a6fa9695c2f74fa86adde21dd8ed0330d03cd3",
+                    "SIGNED_OPS_LAUNCHER_RECEIPT_REQUIRED",
+                    "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+                    "076bd7a931f577d36381fc484efeff81133fdb2a2a64225a7efb673ed5471ece",
                     "support00_postdb"):
             self.assertIn(pin, TEXT)
         self.assertNotRegex(TEXT.split("# ---- A2")[1], r'\b(while|until)\b')
