@@ -1,6 +1,7 @@
 """Hermetic tests for the quota-window wrapper (stubs only; no host, no network, no sudo)."""
 import hashlib
 import subprocess
+import time
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,7 @@ FAKE = '#!/usr/bin/env bash\necho "CHILD_ARGS=$*" >> "$LOG"\nexit "${CHILD_RC:-0
 
 
 class WaitRun(unittest.TestCase):
-    def run_wrap(self, quotas, args=(), host="glmdch", fake=FAKE, sha=None, deadline=None, child_rc=0):
+    def run_wrap(self, quotas, args=(), host="glmdch", fake=FAKE, sha=None, deadline=None, child_rc=0, reset_in=3600, launch_by=None):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             log = d / "calls.log"
@@ -32,15 +33,19 @@ class WaitRun(unittest.TestCase):
 case "$url" in
   *raw.githubusercontent.com*) out=""; prev=""; for a in "$@"; do [ "$prev" = -o ] && out="$a"; prev="$a"; done; cp "{d}/fake.sh" "$out";;
   *rate_limit*) n=$(head -1 "{d}/quota.txt"); tail -n +2 "{d}/quota.txt" > "{d}/q2" || true; [ -s "{d}/q2" ] && mv "{d}/q2" "{d}/quota.txt" || true
-     printf '{{"resources":{{"core":{{"remaining":%s,"reset":1793700000}}}}}}' "$n";;
+     printf '{{"resources":{{"core":{{"remaining":%s,"reset":%d}}}}}}' "$n" RESETVALUE;;
   *) exit 1;;
 esac''')
             body = TEXT.replace("/home/soporte/", str(d) + "/")
-            body = body.replace("SHA=63214566a641bb516c0a0bd1419b968e67a7988d02a1e2be4f0dc4d2b1096b51",
+            if launch_by:
+                body = body.replace("2026-11-04 10:10:00 UTC", launch_by)
+            body = body.replace("SHA=4fcbf2725b485aa42267dcb9b8ffa121e21a849f07461c9dfd6641fb3cf7c04b",
                                 "SHA=" + (sha or hashlib.sha256(fake.encode()).hexdigest()))
             if deadline:
                 body = body.replace("2026-11-04 10:15:00 UTC", deadline)
             (d / "w.sh").write_text(body)
+            cu = d / "bin" / "curl"
+            cu.write_text(cu.read_text().replace("RESETVALUE", str(int(time.time()) + reset_in)))
             env = {"PATH": f"{d}/bin:/usr/bin:/bin", "HOME": str(d), "LOG": str(log), "CHILD_RC": str(child_rc)}
             p = subprocess.run(["bash", str(d / "w.sh"), *args], capture_output=True, text=True, env=env)
             return p.returncode, p.stdout, log.read_text() if log.exists() else ""
@@ -86,6 +91,18 @@ esac''')
         self.assertIn("STOP_G6_DEADLINE_REACHED_RENEW_G6_NO_RETRY", out)
         self.assertNotIn("CHILD_ARGS", log)
 
+    def test_only_one_window_is_waited(self):
+        rc, out, log = self.run_wrap([10, 10, 10], reset_in=-600)
+        self.assertEqual(rc, 2)
+        self.assertIn("STOP_NO_FRESH_WINDOW_ONE_WINDOW_ONLY_NO_RETRY", out)
+        self.assertNotIn("CHILD_ARGS", log)
+
+    def test_not_launched_too_close_to_g6_deadline(self):
+        rc, out, log = self.run_wrap([60], launch_by="2020-01-01 00:00:00 UTC")
+        self.assertEqual(rc, 2)
+        self.assertIn("STOP_TOO_CLOSE_TO_G6_DEADLINE_NOT_LAUNCHING_NO_RETRY", out)
+        self.assertNotIn("CHILD_ARGS", log)
+
     def test_bad_argument(self):
         for args in (("--x",), ("READ_ONLY", "y")):
             rc, out, log = self.run_wrap([60], args)
@@ -93,8 +110,9 @@ esac''')
             self.assertIn("STOP_BAD_ARGUMENT_NO_RETRY", out)
 
     def test_static_pins_and_no_quota_spend_or_secrets(self):
-        self.assertIn("3db21f5d2768617b99184b2574fe735dba4ac6b2", TEXT)
-        self.assertIn("63214566a641bb516c0a0bd1419b968e67a7988d02a1e2be4f0dc4d2b1096b51", TEXT)
+        self.assertIn("08ae51d991b0a9abe9aa174384125a48a8e779da", TEXT)
+        self.assertIn("4fcbf2725b485aa42267dcb9b8ffa121e21a849f07461c9dfd6641fb3cf7c04b", TEXT)
+        self.assertNotIn("3db21f5d", TEXT)
         self.assertEqual(TEXT.count("api.github.com/"), 1)  # solo /rate_limit
         self.assertNotIn("Authorization", TEXT)
         self.assertNotIn(".pat", TEXT)
