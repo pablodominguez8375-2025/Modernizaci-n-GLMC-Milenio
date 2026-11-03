@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 """Fail-closed public GitHub readiness probe for synthetic glmdch QA.
 
-Read-only and intentionally NOT a deployment agent: no secrets, downloads,
-shell commands, Docker access, host changes or tokens are required here.
+Read-only and intentionally NOT a deployment agent. On glmdch it requires
+an independently provisioned root-only PAT. It never writes host state,
+launches commands, downloads artifacts, or changes Docker.
 """
 import json
+import os
+from pathlib import Path
 import re
+import socket
+import ssl
+import stat
 import sys
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import (HTTPRedirectHandler, HTTPSHandler, ProxyHandler,
+                            Request, build_opener, urlopen)
 
 REPO = "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
 API = "https://api.github.com/repos/" + REPO
@@ -28,15 +35,90 @@ class GateFailure(Exception):
     """Intentionally holds only public, fixed diagnostic codes."""
 
 
-def fetch_public(path):
-    if not path.startswith("/") or "//" in path or "@" in path:
-        raise GateFailure("INVALID_API_PATH")
-    req = Request(API + path, headers={
+# PAT is never accepted through CLI, URL, environment or user-visible logs.
+QA_PAT = Path("/etc/pmgm/qa525-github-readonly.pat")
+PAT_FORMAT = re.compile(r"github_pat_[A-Za-z0-9_]{20,250}\Z")
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _on_qa_host():
+    return socket.gethostname().split(".", 1)[0] == "glmdch"
+
+
+def _read_qa_pat():
+    """Root-only on glmdch; fail closed if the token source is unavailable."""
+    if not _on_qa_host():
+        return None
+    if os.geteuid() != 0:
+        raise GateFailure("QA_PAT_REQUIRES_ROOT")
+    try:
+        parent = QA_PAT.parent.lstat()
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or
+                parent.st_mode & 0o022):
+            raise GateFailure("QA_PAT_DIRECTORY_UNTRUSTED")
+        fd = os.open(QA_PAT, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        with os.fdopen(fd, "rb") as handle:
+            info = os.fstat(handle.fileno())
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or
+                    info.st_gid != 0 or info.st_nlink != 1 or
+                    stat.S_IMODE(info.st_mode) != 0o600 or
+                    not 20 <= info.st_size <= 300):
+                raise GateFailure("QA_PAT_FILE_UNTRUSTED")
+            raw = handle.read(301)
+            if len(raw) != info.st_size:
+                raise GateFailure("QA_PAT_FILE_CHANGED")
+        token = raw.decode("ascii").removesuffix("\n")
+        if PAT_FORMAT.fullmatch(token) is None:
+            raise GateFailure("QA_PAT_FORMAT_INVALID")
+        return token
+    except (OSError, UnicodeError):
+        raise GateFailure("QA_PAT_FILE_UNAVAILABLE") from None
+
+
+def _authenticated_api_get(url, token, *, timeout=12):
+    """Only this repository's GitHub HTTPS API can receive Authorization."""
+    if (type(url) is not str or not url.startswith(API + "/") or
+            "@" in url or "#" in url or "\\" in url or
+            any(ord(ch) < 32 or ord(ch) > 126 for ch in url)):
+        raise GateFailure("INVALID_AUTHENTICATED_API_URL")
+    req = Request(url, headers={
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "centenario-qa-readiness-v1",
+        "User-Agent": "centenario-qa-readiness-auth-v1",
+        "Authorization": "Bearer " + token,
     })
+    opener = build_opener(
+        ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()),
+        _NoRedirect())
+    with opener.open(req, timeout=timeout) as resp:
+        if resp.geturl() != url:
+            raise GateFailure("API_REDIRECT_FORBIDDEN")
+        data = resp.read(16_777_217)
+        if len(data) > 16_777_216:
+            raise GateFailure("GITHUB_API_RESPONSE_TOO_LARGE")
+        return json.loads(data)
+
+
+def fetch_public(path):
+    """Legacy public mode off-host; authenticated, fail-closed mode on QA."""
+    if (type(path) is not str or not path.startswith("/") or
+            "//" in path or "@" in path or "\\" in path or "#" in path or
+            any(ord(ch) < 32 or ord(ch) > 126 for ch in path)):
+        raise GateFailure("INVALID_API_PATH")
+    token = _read_qa_pat()
+    url = API + path
     try:
+        if token is not None:
+            return _authenticated_api_get(url, token)
+        req = Request(url, headers={
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "centenario-qa-readiness-v1",
+        })
         with urlopen(req, timeout=12) as resp:
             if resp.geturl().split("/", 3)[:3] != ["https:", "", "api.github.com"]:
                 raise GateFailure("API_REDIRECT_FORBIDDEN")
@@ -47,6 +129,8 @@ def fetch_public(path):
             raise GateFailure("GITHUB_API_RATE_LIMITED") from None
         if exc.code == 429 or headers.get("Retry-After"):
             raise GateFailure("GITHUB_API_RETRY_LATER") from None
+        if exc.code == 401:
+            raise GateFailure("GITHUB_API_TOKEN_REJECTED") from None
         raise GateFailure("GITHUB_API_HTTP_ERROR") from None
     except (URLError, OSError, ValueError):
         raise GateFailure("GITHUB_API_UNAVAILABLE") from None
