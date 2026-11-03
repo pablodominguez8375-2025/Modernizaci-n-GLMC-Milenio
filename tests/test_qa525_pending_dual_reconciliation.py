@@ -108,6 +108,22 @@ class Contract(unittest.TestCase):
             with self.assertRaises(m.Blocked):
                 m.reconcile(entry, modules, approval)
 
+    def test_duplicate_basename_rejected_before_archival(self):
+        with tempfile.TemporaryDirectory() as d:
+            entry, modules, approval, paths = self.fixture(Path(d))
+            duplicate = entry.REVIEW.with_name("prepared.json")
+            entry.REVIEW.rename(duplicate)
+            entry.REVIEW = duplicate
+            paths[1] = duplicate
+            before = {str(p): p.read_bytes() for p in paths}
+            with self.assertRaisesRegex(m.Blocked,
+                                        "^RECONCILE_ARCHIVE_BASENAME_COLLISION$"):
+                m.reconcile(entry, modules, approval)
+            self.assertEqual({str(p): p.read_bytes() for p in paths}, before)
+            self.assertFalse((entry.STATE / m.MARKER).exists())
+            self.assertEqual(list(entry.STATE.glob("pending-dual-archive-*")), [])
+            self.assertEqual(list(entry.STATE.glob("reconciliation-consumed-*")), [])
+
     def test_archival_approval_replay_rejected_without_moving(self):
         with tempfile.TemporaryDirectory() as d:
             entry, modules, approval, paths = self.fixture(Path(d))
