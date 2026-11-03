@@ -91,6 +91,8 @@ def reconcile(entry, modules, approval_path):
     paths = [entry.STATE / "prepared.json", entry.REVIEW, entry.SINGLE_OPERATOR_REVIEW,
              approval.APPROVAL, journal_path]
     require(len(set(paths + [approval_path])) == 6, "RECONCILE_PATH_COLLISION")
+    require(len({p.name for p in paths}) == len(paths),
+            "RECONCILE_ARCHIVE_BASENAME_COLLISION")
     records = [entry.private_json(p) for p in paths]
     prepared, sensitive, post, cut, journal = records
     require(not os.path.lexists(journal_path.with_name(journal_path.name + ".next")),
