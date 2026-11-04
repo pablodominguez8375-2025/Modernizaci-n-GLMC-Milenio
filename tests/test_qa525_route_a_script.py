@@ -261,7 +261,54 @@ class Custody(unittest.TestCase):
         self.expect_stop("BASELINE_STATE", lambda fx: write(fx.t / "containers" / "web", "%s %s exited centenario-qa-lab2 web" % ("2" * 64, fx.baseline["web"]["image_id"]), 0o644))
 
     def test_other_journal_or_marker_or_next(self):
-        self.expect_stop("OTHER_OR_NO_JOURNAL", lambda fx: write(fx.state / ("dual-%s.json" % ("1" * 40)), {"status": "APPLIED"}))
+        self.expect_stop("JOURNAL_OTHER_NOT_APPLIED", lambda fx: write(fx.state / ("dual-%s.json" % ("1" * 40)), {"status": "APPLIED"}))
+
+    def _hist(self, fx, sha40, **kw):
+        obj = {"status": "APPLIED", "source_sha": sha40}
+        obj.update(kw.pop("obj", {}))
+        write(fx.state / ("dual-%s.json" % sha40), obj, kw.get("mode", 0o600))
+
+    def test_historical_applied_journals_allowed_and_untouched(self):
+        hs = [self.fx.state / ("dual-%s.json" % (c * 40)) for c in "12"]
+        for c in "12":
+            self._hist(self.fx, c * 40)
+        before = {p.name: sha(p) for p in hs}
+        r = self.fx.run("run_custody_locked")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(before, {p.name: sha(p) for p in hs})
+        self.assertFalse(any((self.fx.archive() / p.name).exists() for p in hs))
+
+    def test_historical_other_pending(self):
+        self.expect_stop("JOURNAL_OTHER_NOT_APPLIED", lambda fx: self._hist(fx, "1" * 40, obj={"status": "PENDING"}))
+
+    def test_historical_source_mismatch(self):
+        self.expect_stop("JOURNAL_OTHER_NOT_APPLIED", lambda fx: self._hist(fx, "1" * 40, obj={"source_sha": "2" * 40}))
+
+    def test_historical_bad_filename(self):
+        self.expect_stop("JOURNAL_OTHER_NAME", lambda fx: write(fx.state / "dual-old.json", {"status": "APPLIED"}))
+
+    def test_historical_loose_mode(self):
+        self.expect_stop("JOURNAL_OTHER_UNTRUSTED", lambda fx: self._hist(fx, "1" * 40, mode=0o644))
+
+    def test_historical_symlink(self):
+        def m(fx):
+            write(fx.t / "elsewhere.json", {"status": "APPLIED", "source_sha": "1" * 40})
+            (fx.state / ("dual-%s.json" % ("1" * 40))).symlink_to(fx.t / "elsewhere.json")
+        self.expect_stop("JOURNAL_OTHER_UNTRUSTED", m)
+
+    def test_historical_not_dict(self):
+        self.expect_stop("JOURNAL_OTHER_NOT_APPLIED", lambda fx: write(fx.state / ("dual-%s.json" % ("1" * 40)), "[]"))
+
+    def test_historical_next_present(self):
+        def m(fx):
+            self._hist(fx, "1" * 40)
+            write(fx.state / ("dual-%s.json.next" % ("1" * 40)), "{}")
+        self.expect_stop("JOURNAL_NEXT_PRESENT", m)
+
+    def test_historical_next_symlink(self):
+        def m(fx):
+            (fx.state / ("dual-%s.json.next" % ("1" * 40))).symlink_to(fx.t / "nowhere")
+        self.expect_stop("JOURNAL_NEXT_PRESENT", m)
 
     def test_existing_blocker_marker(self):
         self.expect_stop("ARCHIVE_MARKER_PRESENT", lambda fx: write(fx.state / "expired-prepared-archive-pending.json", "{}"))

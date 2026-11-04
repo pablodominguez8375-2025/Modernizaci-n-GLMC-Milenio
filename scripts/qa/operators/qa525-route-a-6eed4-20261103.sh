@@ -26,10 +26,22 @@ LOCKS=(/opt/centenario/qa-api-refresh/operation.lock /opt/centenario/qa-auto-lit
 stop() { printf 'QA525_ROUTE_A=STOP_%s_NO_RETRY\n' "$1"; exit 2; }
 priv() { [[ "$(sudo stat -c '%u:%g %a %h' -- "$1" 2>/dev/null || :)" == "$OWNER 600 1" ]] && sudo test -f "$1" && sudo test ! -L "$1"; }
 state_ok() {
-  local f name line cid img st pj sv nonce rc names
+  local f name line cid img st pj sv nonce rc names js jn b
   for f in "${F[@]}"; do priv "$f" || stop EVIDENCE_FILE_UNTRUSTED; done
   sudo test ! -e "$J.next" && sudo test ! -L "$J.next" || stop JOURNAL_NEXT_PRESENT
-  [[ "$(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json' | wc -l)" == 1 ]] || stop OTHER_OR_NO_JOURNAL
+  mapfile -t jn < <(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json.next') || stop JOURNAL_NEXT_SCAN
+  [[ "${#jn[@]}" == 0 ]] || stop JOURNAL_NEXT_PRESENT
+  mapfile -t js < <(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json') || stop JOURNAL_SCAN
+  rc=0
+  for f in "${js[@]}"; do
+    if [[ "$f" == "$J" ]]; then rc=$((rc+1)); continue; fi
+    b=${f##*/}
+    [[ "$b" =~ ^dual-([a-f0-9]{40})\.json$ ]] || stop JOURNAL_OTHER_NAME
+    sv=${BASH_REMATCH[1]}
+    priv "$f" || stop JOURNAL_OTHER_UNTRUSTED
+    sudo jq -e --arg s "$sv" 'type=="object" and .status=="APPLIED" and .source_sha==$s' "$f" >/dev/null || stop JOURNAL_OTHER_NOT_APPLIED
+  done
+  [[ "$rc" == 1 ]] || stop OTHER_OR_NO_JOURNAL
   sudo test ! -e "$M" && sudo test ! -L "$M" || stop ARCHIVE_MARKER_PRESENT
   sudo jq -e --arg s "$PEND" '.status=="PENDING" and .source_sha==$s' "$J" >/dev/null || stop JOURNAL_NOT_PENDING
   sudo jq -e --arg s "$PEND" --arg d "$PENDDIGEST" '.status=="PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT" and .source_sha==$s and .source_asset_sha256==$d and .schema_mode=="support00_postdb" and .review_mode=="single_operator_qa" and .may_apply==false and .images_built==true and .services_unchanged==true' "$P" >/dev/null || stop PREPARED_MISMATCH
