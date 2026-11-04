@@ -244,6 +244,11 @@ class Recovery(unittest.TestCase):
             self.assertNotIn(bad, TEXT, bad)
         self.assertEqual(set(re.findall(r"docker (\w+)", TEXT)), {"inspect", "image", "events", "exec", "ps"})
 
+    def test_protected_custody_directory_checks_are_privileged(self):
+        self.assertIn('sudo test -d "$A"', TEXT)
+        self.assertIn('sudo test ! -L "$A"', TEXT)
+        self.assertNotIn('[[ -d "$A"', TEXT)
+
 
 if __name__ == "__main__":
     unittest.main()
