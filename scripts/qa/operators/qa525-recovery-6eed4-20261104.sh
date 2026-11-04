@@ -26,7 +26,7 @@ ev_has() { local rc=0; sudo grep -Eq "$1[: ]+$SRC\$" "$E" || rc=$?; case "$rc" i
 custody_ok() {
   local A="$STATE/$CUSTODY_DIR" f b h lh n
   [[ "$CUSTODY_DIR" =~ ^route-a-custody-[0-9TZ]+-[0-9]+$ ]] || stop CUSTODY_NAME
-  [[ -d "$A" && ! -L "$A" && "$(sudo stat -c '%u:%g %a' -- "$A")" == "$OWNER 700" ]] || stop CUSTODY_DIR_UNTRUSTED
+  sudo test -d "$A" && sudo test ! -L "$A" && [[ "$(sudo stat -c '%u:%g %a' -- "$A")" == "$OWNER 700" ]] || stop CUSTODY_DIR_UNTRUSTED
   for f in ledger.json receipt.json; do priv "$A/$f" || stop CUSTODY_RECORD_UNTRUSTED; done
   lh=$(sudo sha256sum -- "$A/ledger.json" | cut -d' ' -f1)
   sudo jq -e --arg s "$PEND" --arg l "$lh" '.status=="ROUTE_A_CUSTODY_COMPLETE_NO_DEPLOYMENT" and .source_sha==$s and .ledger_sha256==$l and (.files|length)==5' "$A/receipt.json" >/dev/null || stop CUSTODY_RECEIPT

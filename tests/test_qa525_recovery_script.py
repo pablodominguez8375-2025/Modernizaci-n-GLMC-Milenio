@@ -238,6 +238,25 @@ class Recovery(unittest.TestCase):
             (fx.bin / "grep").chmod(0o755)
         self.assertIn("STOP_EVENTS_READ_ERROR", self.codes(m))
 
+    def test_a0_functions_use_sudo_for_every_root_path_test(self):
+        """A0 corre como `soporte`: ningún test de archivo sobre rutas root puede ser sin sudo (falso negativo físico v1)."""
+        import re
+        block = TEXT.split("# >>> FUNCTIONS", 1)[1].split("# <<< FUNCTIONS", 1)[0]
+        for fn in ("priv", "ev_has", "custody_ok", "state_ok", "diag"):
+            body = re.search(r"^%s\(\) \{.*?^\}|^%s\(\) \{[^\n]*\}$" % (fn, fn), block, re.S | re.M)
+            self.assertIsNotNone(body, fn)
+            text = body.group(0)
+            self.assertIsNone(re.search(r"\[\[[^\]]*\s-[defLrwx]\s", text), fn + ": test de archivo sin sudo")
+            self.assertIsNone(re.search(r"(^|[;&|(]\s*)(stat|find|cat|ls|sha256sum|jq|tail|grep)\s", text.replace("sudo stat", "").replace("sudo find", "").replace("sudo cat", "").replace("sudo sha256sum", "").replace("sudo jq", "").replace("sudo tail", "").replace("sudo grep", "")) if fn in ("custody_ok",) else None, fn)
+
+    @unittest.skipIf(os.geteuid() == 0, "needs a non-root user to emulate a non-traversable root-only parent")
+    def test_parent_not_traversable_by_operator(self):
+        fx = self.fx
+        pre = 'sudo() { chmod 700 "$STATE"; "$@"; local r=$?; chmod 000 "$STATE"; return $r; }'
+        r = fx.run("chmod 000 \"$STATE\"; custody_ok; chmod 700 \"$STATE\"; echo CUSTODY_OK", hook=pre)
+        fx.state.chmod(0o700)
+        self.assertIn("CUSTODY_OK", r.stdout + r.stderr)
+
     def test_static_no_deploy_commands(self):
         import re
         for bad in ("--review-and-run", "docker compose", "compose up", "docker rm", "docker stop", "docker restart", "docker run", "docker kill", "docker start", "rm -", "rmdir", "unlink", "docker network", "docker volume"):
