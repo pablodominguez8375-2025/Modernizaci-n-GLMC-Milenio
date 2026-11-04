@@ -39,7 +39,7 @@ esac''')
             body = TEXT.replace("/home/soporte/", str(d) + "/")
             if launch_by:
                 body = body.replace("2026-11-04 10:10:00 UTC", launch_by)
-            body = body.replace("SHA=67e622ed375a45a416b0a31259c4446c9b34360cf09c702b7cf2c7d02323bbce",
+            body = body.replace("SHA=f92c75c5122beccc5d038352ffafe6b51f26474343f38a5eb7b89569678b3420",
                                 "SHA=" + (sha or hashlib.sha256(fake.encode()).hexdigest()))
             if deadline:
                 body = body.replace("2026-11-04 10:15:00 UTC", deadline)
@@ -110,8 +110,8 @@ esac''')
             self.assertIn("STOP_BAD_ARGUMENT_NO_RETRY", out)
 
     def test_static_pins_and_no_quota_spend_or_secrets(self):
-        self.assertIn("c41336c71bd1ecf8df33dac26a4414dddb8712ae", TEXT)
-        self.assertIn("67e622ed375a45a416b0a31259c4446c9b34360cf09c702b7cf2c7d02323bbce", TEXT)
+        self.assertIn("fccd660ad1c9faa7c9f13a7f4185adfd5471859b", TEXT)
+        self.assertIn("f92c75c5122beccc5d038352ffafe6b51f26474343f38a5eb7b89569678b3420", TEXT)
         self.assertNotIn("3db21f5d", TEXT)
         self.assertEqual(TEXT.count("api.github.com/"), 1)  # solo /rate_limit
         self.assertNotIn("Authorization", TEXT)

@@ -7,8 +7,8 @@
 #      bash archivo EXECUTE_A1_A2 -> espera ventana y ejecuta A0 + custodia + UN intento (requiere autorización específica del Sponsor)
 set -Eeuo pipefail
 umask 077
-COMMIT=c41336c71bd1ecf8df33dac26a4414dddb8712ae
-SHA=67e622ed375a45a416b0a31259c4446c9b34360cf09c702b7cf2c7d02323bbce
+COMMIT=fccd660ad1c9faa7c9f13a7f4185adfd5471859b
+SHA=f92c75c5122beccc5d038352ffafe6b51f26474343f38a5eb7b89569678b3420
 URL="https://raw.githubusercontent.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/$COMMIT/scripts/qa/operators/qa525-route-a-6eed4-20261103.sh"
 WAIT_MIN=59
 POLL=20
