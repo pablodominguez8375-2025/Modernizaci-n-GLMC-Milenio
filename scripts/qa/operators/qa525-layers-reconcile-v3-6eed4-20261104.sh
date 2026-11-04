@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# QA525 · CONCILIACIÓN DE CAPAS COMPOSE 6eed4 · v2 (journal durable por etapas, rollback verificado, recovery)
+# QA525 · CONCILIACIÓN DE CAPAS COMPOSE 6eed4 · v3 (v2 + oneshots verificados; journal durable por etapas, rollback verificado, recovery)
 # QA525 · CONCILIACIÓN DE CAPAS COMPOSE 6eed4 (residuo del rollback A2). Autor: Claude. Revisor independiente requerido: ChatGPT.
 # Causa (diagnóstico v2, I08): los contenedores api/web activos llevan en `com.docker.compose.project.config_files` la capa image-only
 # qa525-<svc>-6eed4…-<imagen>.json creada por el ROLLBACK de A2, pero su journal dual-6eed4….json fue archivado en la recuperación, por lo que
@@ -131,6 +131,12 @@ def main():
         req(re.fullmatch(r"[a-f0-9]{40}", s or ""), "WEB_PROVENANCE")
         return s
 
+    def oneshots():
+        rows = adapter.metadata()
+        for n in core.ONESHOTS:
+            req(n in rows, "ONESHOT_MISSING_" + n)
+        return {n: [rows[n][0], rows[n][1], rows[n][2], rows[n][11]] for n in core.ONESHOTS}
+
     def verify_state(j, files_expected):
         """Full postcondition: images of api/web == baseline, dependencies untouched, running, labels == expected, health."""
         base = j["baseline"]
@@ -140,6 +146,7 @@ def main():
             req(now[n]["image_id"] == base[n]["image_id"] and now[n]["running"] is True, "IMAGE_OR_STATE_CHANGED_" + n)
         for n in core.DEPENDENCIES:
             req(now[n] == base[n], "DEPENDENCY_CHANGED_" + n)
+        req(oneshots() == j["oneshots"], "ONESHOT_CHANGED")
         _l, nf = inventory()
         req(nf == files_expected, "LABELS_NOT_AS_EXPECTED")
         req(entry.health(j["web_sha"]), "HEALTH_FAILED")
@@ -168,7 +175,8 @@ def main():
             req(JOURNAL.exists() and not JOURNAL.is_symlink(), "NO_RECONCILE_JOURNAL")
             j = entry.private_json(JOURNAL)
             req(j.get("schema") == "qa525-layers-reconcile-v2" and j.get("source_sha") == SRC and type(j.get("original")) is dict
-                and type(j.get("cleaned")) is dict and type(j.get("baseline")) is dict, "JOURNAL_INVALID")
+                and type(j.get("cleaned")) is dict and type(j.get("baseline")) is dict
+                and type(j.get("oneshots")) is dict, "JOURNAL_INVALID")
             print("QA525_RECONCILE JOURNAL_STATUS=%s" % j.get("status"))
             if j["status"] in FINAL:
                 print("QA525_RECONCILE=JOURNAL_FINAL_NOTHING_TO_DO")
@@ -188,7 +196,7 @@ def main():
             return
         before = build.snapshot(adapter.docker)
         j = {"schema": "qa525-layers-reconcile-v2", "source_sha": SRC, "status": "PENDING", "created_at": int(time.time()),
-             "baseline": before, "original": files, "cleaned": cleaned, "web_sha": web_sha_of(live["web"][1])}
+             "baseline": before, "oneshots": oneshots(), "original": files, "cleaned": cleaned, "web_sha": web_sha_of(live["web"][1])}
         req(entry.health(j["web_sha"]), "HEALTH_BEFORE_FAILED")
         jwrite(j, create=True)  # durable ANTES de la primera recreación
         audit("LAYERS_RECONCILE_6EED4_STARTED")

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SCRIPT = REPO / "scripts/qa/operators/qa525-layers-reconcile-v2-6eed4-20261104.sh"
+SCRIPT = REPO / "scripts/qa/operators/qa525-layers-reconcile-v3-6eed4-20261104.sh"
 TEXT = SCRIPT.read_text()
 PY = TEXT.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
 HELPERS = PY.split("def main():", 1)[0]
@@ -121,7 +121,7 @@ def load_entry():
         for fs in records.values():
             if any(LAYER_SRC in f for f in fs): raise RuntimeError("COMPOSE_HISTORY_NOT_SUCCESSFULLY_APPLIED")
     e.reviewed_layers = reviewed_layers
-    core = types.SimpleNamespace(TARGETS=("api", "web"), DEPENDENCIES=("keycloak",), PROJECT="p", ENV_FILE="/e")
+    core = types.SimpleNamespace(TARGETS=("api", "web"), DEPENDENCIES=("keycloak",), ONESHOTS=("db-grants", "migrator", "minio-init"), PROJECT="p", ENV_FILE="/e")
     def docker(args, cwd=None, timeout=None):
         if args[0] == "image":
             return "a" * 40
@@ -134,12 +134,18 @@ def load_entry():
         live["labels"][svc] = files
         live["cid"][svc] += "x"
         if CFG.get("change_dep") and svc == "web" and not any(LAYER_SRC in f for f in files): live["dep"] += "z"
+        if CFG.get("change_oneshot") and svc == "web" and not any(LAYER_SRC in f for f in files): live["oneshot_changed"] = True
         save(); return ""
     build = types.SimpleNamespace(exclusive=lambda: contextlib.nullcontext(),
         snapshot=lambda d: {"api": {"container_fingerprint": live["cid"]["api"], "image_id": "sha256:" + "a" * 64, "running": True},
                             "web": {"container_fingerprint": live["cid"]["web"], "image_id": "sha256:" + "a" * 64, "running": True},
                             "keycloak": {"container_fingerprint": live["dep"], "image_id": "sha256:" + "d" * 64, "running": True}})
-    adapter = types.SimpleNamespace(docker=docker, metadata=lambda: {n: [None, "sha256:" + "a" * 64, "running", None, None, None, None, ",".join(live["labels"][n])] for n in ("api", "web")})
+    def metadata():
+        rows = {n: [None, "sha256:" + "a" * 64, "running", None, None, None, None, ",".join(live["labels"][n]), None, None, None, None] for n in ("api", "web")}
+        for n in core.ONESHOTS:
+            rows[n] = ["o" * 64 if not live.get("oneshot_changed") else "p" * 64, "sha256:" + "e" * 64, "exited", None, None, None, None, "", None, None, None, 0]
+        return rows
+    adapter = types.SimpleNamespace(docker=docker, metadata=metadata)
     mods = [core, build, None, None, None, adapter, None, None]
     e.load = lambda name, p: mods[int(str(p)[2:])] if str(p).startswith("/m") else None
     return e
@@ -232,3 +238,18 @@ class Behavior(unittest.TestCase):
         self.assertIn("A0=PASS", out)
         self.assertEqual(self.labels(), before)
         self.assertEqual(list(self.state.glob("layers-reconcile*")), [])
+
+    def test_oneshot_changed_blocks_pass_and_requires_recovery(self):
+        rc, out = self.run_py("EXECUTE_RECONCILE", change_oneshot=True)
+        self.assertEqual(rc, 3, out)
+        self.assertNotIn("RECONCILED_LABELS_CLEAN", out)
+        self.assertIn("ONESHOT_CHANGED", out)
+        self.assertIn("ROLLBACK_NOT_VERIFIED", out)  # el oneshot sigue distinto tras el rollback: nunca ROLLED_BACK
+        import json as _j
+        self.assertEqual(_j.loads((self.state / "layers-reconcile-6eed4.json").read_text())["status"], "RECOVERY_REQUIRED")
+
+    def test_journal_records_oneshot_baseline(self):
+        self.run_py("EXECUTE_RECONCILE")
+        import json as _j
+        j = _j.loads((self.state / "layers-reconcile-6eed4.json").read_text())
+        self.assertEqual(set(j["oneshots"]), {"db-grants", "migrator", "minio-init"})
