@@ -7,8 +7,8 @@
 #      bash archivo EXECUTE_OBSERVED_ATTEMPT -> espera ventana y ejecuta A0 + UN intento observado (requiere autorización específica del Sponsor)
 set -Eeuo pipefail
 umask 077
-COMMIT=c345e9eb350c6cb7cbd3d1188f6dc069a504acaf
-SHA=0e8e6d4e2a7f12f9fd9ec52574ac2a24a85500d17f73c5803fd08285a1b4012e
+COMMIT=eb5a764aef2bc6ad15c1a481c9516085a62aba93
+SHA=bbae5c80e708c574f262a1ea55940052e97f6b874eccbcb9c388aedb5026b957
 URL="https://raw.githubusercontent.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/$COMMIT/scripts/qa/operators/qa525-observed-attempt-6eed4-20261104.sh"
 WAIT_MIN=59
 POLL=20
