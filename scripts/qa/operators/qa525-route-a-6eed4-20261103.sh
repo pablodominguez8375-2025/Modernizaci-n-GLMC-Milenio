@@ -26,12 +26,14 @@ LOCKS=(/opt/centenario/qa-api-refresh/operation.lock /opt/centenario/qa-auto-lit
 stop() { printf 'QA525_ROUTE_A=STOP_%s_NO_RETRY\n' "$1"; exit 2; }
 priv() { [[ "$(sudo stat -c '%u:%g %a %h' -- "$1" 2>/dev/null || :)" == "$OWNER 600 1" ]] && sudo test -f "$1" && sudo test ! -L "$1"; }
 state_ok() {
-  local f name line cid img st pj sv nonce rc names js jn b
+  local f name line cid img st pj sv nonce rc names js jn b raw
   for f in "${F[@]}"; do priv "$f" || stop EVIDENCE_FILE_UNTRUSTED; done
   sudo test ! -e "$J.next" && sudo test ! -L "$J.next" || stop JOURNAL_NEXT_PRESENT
-  mapfile -t jn < <(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json.next') || stop JOURNAL_NEXT_SCAN
-  [[ "${#jn[@]}" == 0 ]] || stop JOURNAL_NEXT_PRESENT
-  mapfile -t js < <(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json') || stop JOURNAL_SCAN
+  jn=(); js=()
+  raw=$(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json.next') || stop JOURNAL_NEXT_SCAN
+  [[ -z "$raw" ]] || stop JOURNAL_NEXT_PRESENT
+  raw=$(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json') || stop JOURNAL_SCAN
+  [[ -z "$raw" ]] || mapfile -t js <<<"$raw"
   rc=0
   for f in "${js[@]}"; do
     if [[ "$f" == "$J" ]]; then rc=$((rc+1)); continue; fi

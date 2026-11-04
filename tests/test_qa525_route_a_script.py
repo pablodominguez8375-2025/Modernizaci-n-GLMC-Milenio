@@ -305,6 +305,17 @@ class Custody(unittest.TestCase):
             write(fx.state / ("dual-%s.json.next" % ("1" * 40)), "{}")
         self.expect_stop("JOURNAL_NEXT_PRESENT", m)
 
+    def _find_fails_for(self, fx, pattern):
+        p = fx.bin / "find"
+        p.write_text('#!/bin/bash\n[ "${@: -1}" = "%s" ] && exit 2\nexec /usr/bin/find "$@"\n' % pattern)
+        p.chmod(0o755)
+
+    def test_find_failure_for_next_scan_is_stop(self):
+        self.expect_stop("JOURNAL_NEXT_SCAN", lambda fx: self._find_fails_for(fx, "dual-*.json.next"))
+
+    def test_find_failure_for_journal_scan_is_stop(self):
+        self.expect_stop("JOURNAL_SCAN", lambda fx: self._find_fails_for(fx, "dual-*.json"))
+
     def test_historical_next_symlink(self):
         def m(fx):
             (fx.state / ("dual-%s.json.next" % ("1" * 40))).symlink_to(fx.t / "nowhere")
