@@ -42,7 +42,7 @@ class Fx:
         self.locks = [t / "locks" / n for n in ("a.lock", "b.lock", "c.lock", "d.lock", "e.lock")]
         for lk in self.locks:
             w(lk, "")
-        self.acta = self.etc / "qa525-g6-reviewed-20261104T120000Z.json"
+        self.acta = self.etc / "qa525-g6-reviewed-20261104T105358Z.json"
         w(self.acta, {"g6_offhost_sha256_verified": True, "g6_archive_name": ARCH, "g6_archive_sha256": ARCHSHA})
         import hashlib
         self.actasha = hashlib.sha256(self.acta.read_bytes()).hexdigest()
@@ -71,8 +71,12 @@ class Fx:
             body = body.replace(lk, str(self.locks[i]))
         import hashlib as h2
         body = body.replace("61e3f1f7e7dd561567e5fac415a6fa9695c2f74fa86adde21dd8ed0330d03cd3", h2.sha256((self.bin / "pmgm-qa-update").read_bytes()).hexdigest())
+        real_sha = "471a7cc5a4fca11b16ff0e187ae5a6406cbb8f78192419886be3010526de4cf8"
+        assert "G6SHA=" + real_sha in body and "G6=%s/qa525-g6-reviewed-20261104T105358Z.json" % self.etc in body
         if pins:
-            body = body.replace("G6=__G6_ACTA_PATH__", "G6=%s" % self.acta).replace("G6SHA=__G6_ACTA_SHA256__", "G6SHA=%s" % self.actasha)
+            body = body.replace(real_sha, self.actasha)
+        else:  # variante deliberada: pines ausentes
+            body = body.replace("G6=%s/qa525-g6-reviewed-20261104T105358Z.json" % self.etc, "G6=__G6_ACTA_PATH__").replace("G6SHA=" + real_sha, "G6SHA=__G6_ACTA_SHA256__")
         (t / "s.sh").write_text(body)
 
     def _stubs(self):
@@ -105,7 +109,7 @@ class Fx:
                                 '   echo \'{"status":"DUAL_API_WEB_APPLIED","source_sha":"@S@"}\'; exit 0;;\n'
                                 ' *) echo unexpected-launch >> @D@/launcher.calls; exit 3;;\nesac')
              .replace("@D@", D).replace("@ST@", str(self.state)).replace("@S@", SRC).replace("@OA@", OLDAPI).replace("@OW@", OLDWEB)
-             .replace("@BAD@", insp(BADAPI, "running", "unhealthy", 0, "HTTP 503 from /health/ready")).replace("@OK@", insp(OLDAPI)))
+             .replace("@BAD@", insp(BADAPI, "running", "unhealthy", 0, "HTTP 503 from /health/ready password=hunter2 server=db.internal ops@example.org eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9abcdef")).replace("@OK@", insp(OLDAPI)))
 
     def run(self, *args):
         env = dict(os.environ, PATH="%s:%s" % (self.bin, os.environ["PATH"]))
@@ -163,9 +167,17 @@ class Observed(unittest.TestCase):
         self.assertRegex(out, r'"h":"unhealthy"')
         self.assertIn("HTTP 503", out)
         self.assertIn("RECOVERY_MANUALLY_REQUIRED", out)
-        self.assertNotIn("hunter2", out)
-        self.assertNotIn("ops@example.org", out)
+        for secret in ("hunter2", "ops@example.org", "db.internal", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9abcdef"):
+            self.assertNotIn(secret, out)
         self.assertIn("[REDACTED]", out)
+        self.assertIn("[EMAIL]", out)
+        self.assertIn("[LONGTOKEN]", out)
+        pl = (next(iter(self.fx.obs.iterdir())) / "poll.log").read_text()
+        self.assertIn("hunter2", pl)  # el original solo vive en el directorio root 0600
+        self.assertRegex(out, r'"h":"unhealthy"[^\n]*HTTP 503')
+        anomaly = out.split("primera anomalia en un contenedor NUEVO ---")[1].splitlines()[1]
+        self.assertIn(BADAPI, anomaly)
+        json.loads(anomaly.split(" ", 2)[2])  # la línea redactada sigue siendo JSON válido
         d = [p for p in self.fx.obs.iterdir()]
         self.assertEqual(len(d), 1)
         self.assertEqual(stat.S_IMODE(d[0].stat().st_mode), 0o700)
@@ -244,7 +256,7 @@ class Observed(unittest.TestCase):
     def test_bad_argument_and_old_acta(self):
         self.stops("BAD_ARGUMENT", args=("EXECUTE_A1_A2",))
         s = self.fx.t / "s.sh"
-        s.write_text(s.read_text().replace("qa525-g6-reviewed-20261104T120000Z.json", "qa525-g6-reviewed-20261102T110545Z.json"))
+        s.write_text(s.read_text().replace("qa525-g6-reviewed-20261104T105358Z.json", "qa525-g6-reviewed-20261102T110545Z.json"))
         self.stops("G6_OLD_ACTA")
 
     def test_static_single_launch_and_ordering(self):

@@ -10,9 +10,9 @@ SRC=6eed4f00b7917da3cca36bbda70e16d16328648d
 DIGEST=sha256:9bdeaa217f09f5d0e19e50d214a4abb936a2b89246ebbcf71fb71178e5574af2
 OLD=41d9c490d138419c7286445f37e7aeddf0d1b8d5
 REVIEW='https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6604960072'
-# Pines del G6 NUEVO (los fija ChatGPT al cerrar el restore aislado; con los marcadores sin reemplazar el script NO ejecuta):
-G6=__G6_ACTA_PATH__
-G6SHA=__G6_ACTA_SHA256__
+# Pines del G6 NUEVO (acta emitida por ChatGPT tras el restore aislado PASS, #6629974172; con marcadores sin reemplazar el script NO ejecuta):
+G6=/etc/pmgm/qa525-g6-reviewed-20261104T105358Z.json
+G6SHA=471a7cc5a4fca11b16ff0e187ae5a6406cbb8f78192419886be3010526de4cf8
 G6_ARCHIVE=centenario-qa-g6-CIFRADO-20261104T105358Z.tar.gz
 G6_ARCHIVE_SHA=f7e2d142a62197323df5fb0efd936aaf96528aa85fe2aa7f3ec03bf4e65d9d9b
 G6_CUTOFF='2026-11-06 10:00:00 UTC'   # archivo 10:53:58Z + 48 h = 11-06 10:53:58Z, con margen
@@ -109,19 +109,22 @@ observe_stop() {
   sleep 1
   wait 2>/dev/null || :
 }
+redact() {   # filtro común de toda salida pública: secretos por clave, correos y cadenas largas tipo token
+  sed -E 's/(password|pwd|secret|token|apikey|api_key|authorization|bearer|connectionstring|conn[a-z]*|user id|username|host|server|key)[=: ]+[^ ,;"'\'']+/\1=[REDACTED]/Ig; s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/[EMAIL]/g; s/[A-Za-z0-9+\/=_-]{32,}/[LONGTOKEN]/g'
+}
 summarize() {
   printf 'QA525_OBSERVED_TIMELINE dir=%s\n' "$OBS"
   printf -- '--- docker events api/web (hora accion contenedor exit) ---\n'
   sudo grep -aE 'centenario-qa-lab2-(api|web)-1' "$OBS/events.log" 2>/dev/null | cut -c1-200 | head -80 || :
   printf -- '--- estado/salud (solo cambios) ---\n'
-  sudo cat "$OBS/poll.log" 2>/dev/null | cut -c1-330 | head -120 || :
+  sudo cat "$OBS/poll.log" 2>/dev/null | redact | cut -c1-330 | head -120 || :
   printf -- '--- journal final ---\n'
   sudo jq -c '{status,source_sha}' "$STATE/dual-$SRC.json" 2>/dev/null || printf 'sin journal\n'
   sudo tail -n 4 -- "$STATE/dual-events.log" 2>/dev/null | cut -c1-200 || :
   printf -- '--- lineas de error de los logs (filtradas y redactadas, max 60) ---\n'
-  sudo sh -c 'cat "$1"/logs-*.log 2>/dev/null' _ "$OBS" | grep -aiE 'fail|error|exception|crit|fatal|unhealthy|unable|refused|denied|migrat|timeout|pending' | sed -E 's/(password|pwd|secret|token|apikey|api_key|authorization|bearer|connectionstring|conn[a-z]*|user id|username|host|server|key)[=: ]+[^ ,;"'\'']+/\1=[REDACTED]/Ig; s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/[EMAIL]/g' | cut -c1-220 | head -60 || :
+  sudo sh -c 'cat "$1"/logs-*.log 2>/dev/null' _ "$OBS" | grep -aiE 'fail|error|exception|crit|fatal|unhealthy|unable|refused|denied|migrat|timeout|pending' | redact | cut -c1-220 | head -60 || :
   printf -- '--- primera anomalia en un contenedor NUEVO ---\n'
-  sudo awk -v old="$OLD_IDS" '$2 ~ /^(api|web)$/ { match($0, /"id":"[a-f0-9]+"/); id=substr($0, RSTART+6, RLENGTH-7); if (index(old, id)==0 && id!="" && ($0 ~ /"st":"(exited|dead|restarting)"/ || $0 ~ /"h":"unhealthy"/)) { print; found=1; exit } } END { if (!found) print "NO_NEW_CONTAINER_ANOMALY_SEEN" }' "$OBS/poll.log" 2>/dev/null || :
+  sudo awk -v old="$OLD_IDS" '$2 ~ /^(api|web)$/ { match($0, /"id":"[a-f0-9]+"/); id=substr($0, RSTART+6, RLENGTH-7); if (index(old, id)==0 && id!="" && ($0 ~ /"st":"(exited|dead|restarting)"/ || $0 ~ /"h":"unhealthy"/)) { print; found=1; exit } } END { if (!found) print "NO_NEW_CONTAINER_ANOMALY_SEEN" }' "$OBS/poll.log" 2>/dev/null | redact || :
 }
 # <<< FUNCTIONS
 [[ "$#" -le 1 ]] || stop BAD_ARGUMENT
