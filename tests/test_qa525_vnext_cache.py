@@ -1,4 +1,5 @@
 import argparse
+import base64
 import datetime as dt
 from email.message import Message
 import hashlib
@@ -51,6 +52,16 @@ def identity(path):
             "mtime_ns": info.st_mtime_ns}
 
 
+def synthetic_dsse_bundle(signed_bytes):
+    """Parser fixture only; never a valid cryptographic Sigstore signature."""
+    statement = {"_type": "https://in-toto.io/Statement/v1",
+                 "subject": [{"name": "synthetic-signed-installable.zip",
+                              "digest": {"sha256": hashlib.sha256(signed_bytes).hexdigest()}}]}
+    payload = base64.b64encode(json.dumps(statement, sort_keys=True).encode()).decode()
+    return (json.dumps({"mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+                        "dsseEnvelope": {"payload": payload}}, sort_keys=True) + "\n").encode()
+
+
 class AdmissionFixture:
     def __init__(self, root):
         self.root = Path(root)
@@ -67,10 +78,11 @@ class AdmissionFixture:
         # as authentic by these ADMISSION-only fixtures.
         self.signed_member = "Proyecto-Centenario-QA-srv01-" + APP[:12] + ".zip"
         self.signed_bytes = b"synthetic internal signed installable bytes"
+        self.bundle_bytes = synthetic_dsse_bundle(self.signed_bytes)
         outer = BytesIO()
         with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(self.signed_member, self.signed_bytes)
-            archive.writestr("installable-provenance.sigstore.json", b'{"bundle":"verified"}\n')
+            archive.writestr("installable-provenance.sigstore.json", self.bundle_bytes)
             archive.writestr(self.signed_member + ".verification.json", b'{"fixture":true}')
         write_private(self.cache / "artifact.zip", outer.getvalue())
         self.package = self.cache / "package"
@@ -88,7 +100,7 @@ class AdmissionFixture:
         manifest = "".join(hashlib.sha256(payload).hexdigest() + "  ./" + name + "\n"
                            for name, payload in sorted(files.items()))
         write_private(self.package / "MANIFEST.sha256", manifest.encode())
-        write_private(self.cache / "installable-provenance.sigstore.json", b'{"bundle":"verified"}\n')
+        write_private(self.cache / "installable-provenance.sigstore.json", self.bundle_bytes)
         for directory in (self.cache_root, self.cache, self.package,
                           self.package / "storage-bundle"):
             directory.chmod(0o700)
@@ -232,7 +244,7 @@ class OfflineAdmission(unittest.TestCase):
         outer = BytesIO()
         with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(self.fx.signed_member, b"tampered inner member")
-            archive.writestr("installable-provenance.sigstore.json", b'{"bundle":"verified"}\n')
+            archive.writestr("installable-provenance.sigstore.json", self.fx.bundle_bytes)
             archive.writestr(self.fx.signed_member + ".verification.json", b'{"fixture":true}')
         artifact = self.fx.cache / "artifact.zip"
         write_private(artifact, outer.getvalue())
@@ -241,8 +253,38 @@ class OfflineAdmission(unittest.TestCase):
         receipt["artifact_sha256"] = digest(artifact)
         receipt["artifact_identity"] = identity(artifact)
         write_private(receipt_path, receipt)
-        with self.assertRaisesRegex(MODULE.Stop, "CACHE_ATTESTATION_BINDING_CHANGED"):
+        with self.assertRaisesRegex(MODULE.Stop,
+                                    "SIGNED_DSSE_SUBJECT_MISMATCH|CACHE_ATTESTATION_BINDING_CHANGED"):
             MODULE.admit(self.fx.args())
+
+    def test_dsse_subject_mismatch_even_with_updated_bundle_receipt_fails_closed(self):
+        # An attacker changing both outer ZIP and cache metadata cannot silently
+        # bind a different subject from the signed internal ZIP.
+        wrong = synthetic_dsse_bundle(b"another subject entirely")
+        outer = BytesIO()
+        with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(self.fx.signed_member, self.fx.signed_bytes)
+            archive.writestr("installable-provenance.sigstore.json", wrong)
+            archive.writestr(self.fx.signed_member + ".verification.json", b'{"fixture":true}')
+        artifact = self.fx.cache / "artifact.zip"
+        bundle = self.fx.cache / "installable-provenance.sigstore.json"
+        write_private(artifact, outer.getvalue())
+        write_private(bundle, wrong)
+        cache_path = self.fx.cache / "cache.json"
+        receipt = json.loads(cache_path.read_text())
+        receipt.update({"artifact_sha256": digest(artifact),
+                        "artifact_identity": identity(artifact),
+                        "attestation_bundle_sha256": digest(bundle),
+                        "attestation_bundle_identity": identity(bundle)})
+        write_private(cache_path, receipt)
+        with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_MISMATCH"):
+            MODULE.admit(self.fx.args())
+
+    def test_invalid_dsse_payload_is_rejected_without_network(self):
+        bundle = self.fx.cache / "installable-provenance.sigstore.json"
+        write_private(bundle, b'{"dsseEnvelope":{"payload":"@@not-base64@@"}}')
+        with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_INVALID"):
+            MODULE.sigstore_dsse_subject_digest(bundle)
 
     def test_outer_zip_embedded_bundle_mismatch_blocks_admission(self):
         # The extracted bundle in cache must be byte-for-byte the same as the
