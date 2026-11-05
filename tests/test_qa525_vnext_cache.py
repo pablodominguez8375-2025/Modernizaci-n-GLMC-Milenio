@@ -45,8 +45,25 @@ class AdmissionFixture:
         artifact = b"signed artifact bytes\n"
         digest = "sha256:" + hashlib.sha256(artifact).hexdigest()
         write_private(self.cache / "artifact.zip", artifact)
+        package = self.cache / "package"
+        files = {
+            "BUILD-INFO.txt": ("SOURCE_SHA=" + APP + "\n" +
+                               "STORAGE=SIGNED_REBUILT_SILO_ARCHIVE_SYNTHETIC_QA\n").encode(),
+            "storage-bundle/project-provenance.sigstore.json": b"{}\n",
+            "storage-bundle/rebuild-report.json": b"{}\n",
+            "storage-bundle/server-fixed.openvex.json": b"{}\n",
+            "storage-bundle/server-cve-triage.json": b"{}\n",
+            "storage-bundle/silo-qa-review-only.tar": b"synthetic\n",
+        }
+        for name, payload in files.items():
+            write_private(package / name, payload)
+        manifest = "".join(hashlib.sha256(payload).hexdigest() + "  ./" + name + "\n"
+                           for name, payload in sorted(files.items()))
+        write_private(package / "MANIFEST.sha256", manifest.encode())
+        for directory in (self.cache_root, self.cache, package):
+            directory.chmod(0o700)
         write_private(self.cache / "cache.json", {
-            "schema": "qa525-cache-v2", "status": "SYNCED",
+            "schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
             "ops_source_sha": OPS, "app_source_sha": APP,
             "artifact_sha256": digest, "network_allowed_after_sync": False,
             "synced_at": "2026-11-05T11:55:00Z",
@@ -68,6 +85,7 @@ class AdmissionFixture:
             "cache_root": self.cache_root, "g6_receipt": self.g6,
             "approval": self.approval, "state_dir": self.state,
             "output": self.output, "g6_margin_seconds": 1800,
+            "staging": ROOT / "scripts" / "qa" / "qa-signed-staging.py",
         })()
 
 
@@ -108,6 +126,13 @@ class OfflineAdmission(unittest.TestCase):
         self.fx.cache.joinpath("artifact.zip").write_bytes(b"changed")
         self.fx.cache.joinpath("artifact.zip").chmod(0o600)
         with self.assertRaisesRegex(MODULE.Stop, "CACHE_ARTIFACT_CHANGED"):
+            MODULE.admit(self.fx.args())
+
+    def test_staged_package_manifest_is_reverified_offline(self):
+        target = self.fx.cache / "package" / "storage-bundle" / "rebuild-report.json"
+        target.write_text('{"tampered":true}\n')
+        target.chmod(0o600)
+        with self.assertRaisesRegex(MODULE.Stop, "CACHE_PACKAGE_INVALID"):
             MODULE.admit(self.fx.args())
 
     def test_expired_cache_fails_closed(self):
@@ -169,6 +194,19 @@ class OfflineAdmission(unittest.TestCase):
                 else:
                     target.chmod(0o644)
                 with self.assertRaisesRegex(MODULE.Stop, "FILE_(UNTRUSTED|UNAVAILABLE)"):
+                    MODULE.admit(fx.args())
+
+    def test_cache_root_symlink_or_loose_directory_is_rejected(self):
+        for case in ("symlink", "mode"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                fx = AdmissionFixture(directory)
+                if case == "symlink":
+                    real = fx.cache_root.with_name("cache-real")
+                    fx.cache_root.rename(real)
+                    fx.cache_root.symlink_to(real, target_is_directory=True)
+                else:
+                    fx.cache_root.chmod(0o755)
+                with self.assertRaisesRegex(MODULE.Stop, "CACHE_DIRECTORY_UNTRUSTED"):
                     MODULE.admit(fx.args())
 
 
