@@ -241,18 +241,22 @@ def signed_installable_digest(outer_path: Path, app_sha: str) -> tuple[str, str]
         raise Stop("SIGNED_MEMBER_INVALID") from None
 
 
-def sigstore_dsse_subject_digest(bundle_path: Path) -> str:
-    """Read the attested in-toto statement subject offline, not the signature.
+def sigstore_dsse_subject_digest(bundle_path: Path, app_sha: str,
+                                   signer_workflow: str) -> str:
+    """Bind the offline in-toto statement to the exact signed dev installable.
 
-    Signature, workflow, OIDC and source identity are verified online by
-    gh attestation verify during SYNC. This check merely binds the cached
-    DSSE payload's SHA-256 subject to the signed installable member.
+    This is *not* offline signature authentication. SYNC verifies the
+    Sigstore identity with gh first; the cached raw bundle is hash-pinned
+    and the DSSE payload is compared offline during ADMISSION.
     """
+    if (type(app_sha) is not str or SHA.fullmatch(app_sha) is None or
+            type(signer_workflow) is not str or
+            signer_workflow != "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/.github/workflows/qa-silo-rebuild.yml"):
+        raise Stop("SIGNED_DSSE_CONTEXT_INVALID")
     raw = trusted_file(bundle_path, max_size=8 * 1024 * 1024)
     try:
         obj = json.loads(raw)
-        # GitHub bundle-path normally contains one Sigstore bundle. Accept
-        # either that direct format or one GitHub API-style wrapper.
+        # Public gh attestation v3 bundle-path contains a single JSON bundle.
         if type(obj) is list and len(obj) == 1:
             obj = obj[0]
         if type(obj) is dict and "bundle" in obj and type(obj["bundle"]) is dict:
@@ -267,18 +271,39 @@ def sigstore_dsse_subject_digest(bundle_path: Path) -> str:
         if len(payload) > 2 * 1024 * 1024:
             raise ValueError("decoded size")
         statement = json.loads(payload)
+        expected_zip = "Proyecto-Centenario-QA-srv01-" + app_sha[:12] + ".zip"
         subjects = statement.get("subject")
         if (statement.get("_type") != "https://in-toto.io/Statement/v1" or
+                statement.get("predicateType") != "https://slsa.dev/provenance/v1" or
                 type(subjects) is not list or len(subjects) != 1 or
                 type(subjects[0]) is not dict or
+                subjects[0].get("name") != expected_zip or
                 type(subjects[0].get("digest")) is not dict):
             raise ValueError("statement")
         digest = subjects[0]["digest"].get("sha256")
         if type(digest) is not str or re.fullmatch(r"[a-f0-9]{64}", digest) is None:
             raise ValueError("digest")
+        predicate = statement["predicate"]
+        definition = predicate["buildDefinition"]
+        details = predicate["runDetails"]
+        workflow = definition["externalParameters"]["workflow"]
+        repo_url = "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
+        ref = "refs/heads/dev"
+        dependencies = definition["resolvedDependencies"]
+        expected_dependency = {"uri": "git+" + repo_url + "@" + ref,
+                               "digest": {"gitCommit": app_sha}}
+        if (definition.get("buildType") != "https://actions.github.io/buildtypes/workflow/v1" or
+                workflow.get("repository") != repo_url or
+                workflow.get("ref") != ref or
+                workflow.get("path") != ".github/workflows/qa-silo-validation.yml" or
+                details["builder"].get("id") != "https://github.com/" + signer_workflow + "@" + ref or
+                definition["internalParameters"]["github"].get("event_name") != "push" or
+                definition["internalParameters"]["github"].get("runner_environment") != "github-hosted" or
+                type(dependencies) is not list or dependencies != [expected_dependency]):
+            raise ValueError("workflow provenance")
         return "sha256:" + digest
-    except (ValueError, TypeError, KeyError, AttributeError, binascii.Error,
-            UnicodeDecodeError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError,
+            binascii.Error, UnicodeDecodeError):
         raise Stop("SIGNED_DSSE_SUBJECT_INVALID") from None
 
 
@@ -500,7 +525,7 @@ def sync(args) -> dict:
             bundle_sha, bundle_identity = trusted_digest(attestation)
             if embedded_bundle_sha != bundle_sha:
                 raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
-            if sigstore_dsse_subject_digest(attestation) != signed_member_sha:
+            if sigstore_dsse_subject_digest(attestation, app_sha, staging.WORKFLOW) != signed_member_sha:
                 raise Stop("SIGNED_DSSE_SUBJECT_MISMATCH")
             synced = now_utc()
             receipt = {"schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
@@ -657,7 +682,7 @@ def admit(args) -> dict:
     bundle_sha, bundle_identity = trusted_digest(cache_dir / "installable-provenance.sigstore.json")
     if embedded_bundle_sha != bundle_sha:
         raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
-    if sigstore_dsse_subject_digest(cache_dir / "installable-provenance.sigstore.json") != signed_member_sha:
+    if sigstore_dsse_subject_digest(cache_dir / "installable-provenance.sigstore.json", args.app_sha, staging.WORKFLOW) != signed_member_sha:
         raise Stop("SIGNED_DSSE_SUBJECT_MISMATCH")
     bindings = (("artifact_sha256", artifact_sha),
                 ("signed_installable_sha256", signed_member_sha),
