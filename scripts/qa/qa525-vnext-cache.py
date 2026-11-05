@@ -493,6 +493,8 @@ def sync(args) -> dict:
         raise Stop("ARTIFACT_DIGEST_INVALID")
     if type(artifact_id) is not int or artifact_id <= 0:
         raise Stop("ARTIFACT_ID_INVALID")
+    # Never create directories through unchecked ancestry as root.
+    require_trusted_ancestors(args.cache_root)
     args.cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     require_private_dir(args.cache_root, exact=True)
     lock = _cache_lock(args.cache_root)
@@ -722,6 +724,7 @@ def admit(args) -> dict:
         "nonce": args.nonce, "nonce_consumed": False, "nonce_consume_transition": "APPLYING",
         "admitted_at": format_time(current), "valid_until": format_time(valid_until),
         "g6_expires_at": format_time(g6_expiry), "network_allowed": False}
+    require_trusted_ancestors(args.state_dir)
     try:
         args.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     except OSError:
