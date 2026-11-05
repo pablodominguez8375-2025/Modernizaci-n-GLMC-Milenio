@@ -28,6 +28,7 @@ NONCE = re.compile(r"^[A-Za-z0-9_-]{24,96}$")
 G6_ARCHIVE = re.compile(r"^centenario-qa-g6-CIFRADO-([0-9]{8}T[0-9]{6})Z\.tar\.gz$")
 G6_RESTORE = re.compile(r"^isolated-restore-[0-9]{8}T[0-9]{6}Z\.report\.json$")
 DRIVE_ID = re.compile(r"^[A-Za-z0-9_-]{20,100}$")
+G6_REVIEW_NAME = re.compile(r"^qa525-g6-reviewed-[0-9]{8}T[0-9]{6}Z\.json$")
 
 HERE = Path(__file__).resolve().parent
 READINESS_MODULE = HERE / "qa-agent-readiness.py"
@@ -35,6 +36,7 @@ STAGING_MODULE = HERE / "qa-signed-staging.py"
 OPS_RECEIPT = Path("/etc/pmgm/qa525-vnext-ops.json")
 DEFAULT_CACHE_ROOT = Path("/var/lib/pmgm/qa525-cache")
 DEFAULT_STATE_DIR = Path("/var/lib/pmgm/qa525-state")
+G6_REVIEW_ROOT = Path("/etc/pmgm")
 G6_ARCHIVE_ROOT = Path("/home/soporte")
 G6_RECEIPT_PATH = Path("/opt/centenario/qa-g6/archive.receipt.json")
 G6_REPORT_ROOT = Path("/opt/centenario/qa-g6")
@@ -501,6 +503,10 @@ def admit(args) -> dict:
     require_root("ADMISSION_REQUIRES_ROOT")
     if not SHA.fullmatch(args.app_sha) or not NONCE.fullmatch(args.nonce):
         raise Stop("IDENTITY_INVALID")
+    # G6 is a versioned root-owned acta, not a caller-chosen JSON elsewhere.
+    if (not args.g6_receipt.is_absolute() or args.g6_receipt.parent != G6_REVIEW_ROOT or
+            G6_REVIEW_NAME.fullmatch(args.g6_receipt.name) is None):
+        raise Stop("G6_REVIEW_PATH_UNTRUSTED")
     ops, _, staging = load_verified_ops()
     cache_dir = args.cache_root / args.app_sha
     try:
