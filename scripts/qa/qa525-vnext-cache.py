@@ -69,28 +69,43 @@ def sha256_file(path: Path) -> str:
     return "sha256:" + digest.hexdigest()
 
 
-def require_private_dir(path: Path, *, exact: bool = False) -> None:
+def require_root(code: str) -> None:
+    if os.geteuid() != 0:
+        raise Stop(code)
+
+
+def require_private_dir(path: Path, *, exact: bool = False, owner: int | None = None,
+                        group: int | None = None) -> None:
+    if owner is None:
+        owner = os.geteuid()
+    if group is None:
+        group = os.getegid()
     try:
         info = path.lstat()
     except OSError:
         raise Stop("DIRECTORY_UNAVAILABLE") from None
     mode = stat.S_IMODE(info.st_mode)
-    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != owner or info.st_gid != group or
             mode & 0o022 or (exact and mode != 0o700)):
         raise Stop("DIRECTORY_UNTRUSTED")
 
 
-def trusted_file(path: Path, *, owner: int = 0, mode: int = 0o600, max_size: int | None = None) -> bytes:
+def trusted_file(path: Path, *, owner: int | None = None, group: int | None = None,
+                 mode: int = 0o600, max_size: int | None = None) -> bytes:
+    if owner is None:
+        owner = os.geteuid()
+    if group is None:
+        group = os.getegid()
     try:
         parent = path.parent.lstat()
         if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != owner or
-                parent.st_gid != owner or parent.st_mode & 0o022):
+                parent.st_gid != group or parent.st_mode & 0o022):
             raise Stop("PARENT_UNTRUSTED")
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
         with os.fdopen(fd, "rb") as handle:
             before = os.fstat(handle.fileno())
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != owner or
-                    before.st_gid != owner or before.st_nlink != 1 or
+                    before.st_gid != group or before.st_nlink != 1 or
                     stat.S_IMODE(before.st_mode) != mode):
                 raise Stop("FILE_UNTRUSTED")
             if max_size is not None and before.st_size > max_size:
@@ -185,8 +200,9 @@ def download_artifact(url: str, token: str, destination: Path) -> None:
 
 
 def sync(args) -> dict:
-    if os.geteuid() != 0 or socket.gethostname().split(".", 1)[0] != "glmdch":
-        raise Stop("SYNC_REQUIRES_ROOT_GLM DCH".replace(" ", ""))
+    require_root("SYNC_REQUIRES_ROOT_GLM DCH".replace(" ", ""))
+    if socket.gethostname().split(".", 1)[0] != "glmdch":
+        raise Stop("SYNC_REQUIRES_ROOT_GLMDCH")
     readiness = load_readiness(args.readiness)
     token = readiness._read_qa_pat()
     if token is None:
@@ -269,8 +285,7 @@ def load_json_trusted(path: Path) -> dict:
 
 
 def admit(args) -> dict:
-    if os.geteuid() != 0:
-        raise Stop("ADMISSION_REQUIRES_ROOT")
+    require_root("ADMISSION_REQUIRES_ROOT")
     if not SHA.fullmatch(args.app_sha) or not SHA.fullmatch(args.ops_sha) or not NONCE.fullmatch(args.nonce):
         raise Stop("IDENTITY_INVALID")
     cache_dir = args.cache_root / args.app_sha
@@ -338,8 +353,7 @@ def admit(args) -> dict:
 
 def postcheck(args) -> dict:
     """Validate APPLIED state without requiring prepared.json to be absent."""
-    if os.geteuid() != 0:
-        raise Stop("POSTCHECK_REQUIRES_ROOT")
+    require_root("POSTCHECK_REQUIRES_ROOT")
     if not SHA.fullmatch(args.app_sha):
         raise Stop("APP_SHA_INVALID")
     journal = load_json_trusted(args.journal)
