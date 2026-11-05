@@ -48,7 +48,7 @@ def canonical(doc):
 def approval_record(admission):
     return {
         "schema": "qa525-approval-anchor-v1",
-        "status": "REQUIRES_EXTERNAL_SIGNATURE_VERIFICATION",
+        "status": "BYTE_BINDING_INPUT_ONLY_NOT_VERIFIED_HERE",
         "scope": "API_WEB_QA_ONLY", "host": "glmdch",
         "environment": "QA_SYNTHETIC",
         "nonce": admission["nonce"],
@@ -64,7 +64,9 @@ def approval_record(admission):
         "artifact_identity": dict(admission["artifact_identity"]),
         "g6_review_sha256": G6,
         "sponsor_approval_sha256": SPONSOR,
-        "issued_at": "2026-11-05T18:00:00Z",
+        "g6_expires_at": admission["g6_expires_at"],
+        "silo_workflow_run": admission["silo_workflow_run"],
+        "issued_at": "2026-11-05T18:03:00Z",
         "expires_at": "2026-11-05T18:20:00Z",
     }
 
@@ -85,6 +87,7 @@ class TrustBindingContractTests(unittest.TestCase):
         self.assertEqual(r["status"],
                          "BYTE_BINDING_MATCH_ONLY_EXTERNAL_AUTH_NOT_VERIFIED")
         self.assertEqual(r["nonce"], "n" * 64)
+        self.assertTrue(r["external_anchor_sha256"].startswith("sha256:"))
         self.assertEqual(r["valid_until"], "2026-11-05T18:20:00Z")
         for k in ("signature_verified_here", "g6_verified_here",
                   "sponsor_approved_here", "may_apply", "may_install"):
@@ -111,6 +114,8 @@ class TrustBindingContractTests(unittest.TestCase):
             ("app_source_sha", SHA_O), ("ops_source_sha", SHA_A),
             ("artifact_id", 9), ("policy_hash", DIG_C),
             ("admission_sha256", DIG_A), ("manifest_sha256", DIG_A),
+            ("silo_workflow_run", 9876),
+            ("g6_expires_at", "2026-11-07T18:00:00Z"),
             ("signed_installable_sha256", DIG_D),
             ("attestation_bundle_sha256", DIG_B),
         ):
@@ -118,6 +123,35 @@ class TrustBindingContractTests(unittest.TestCase):
                 e = copy.deepcopy(self.anchor)
                 e[key] = value
                 self.evaluate(anchor=e)
+
+    def test_external_anchor_issued_after_admission_is_required(self):
+        self.assertEqual(self.evaluate()["nonce"], "n" * 64)
+        e = copy.deepcopy(self.anchor)
+        e["issued_at"] = "2026-11-05T18:01:00Z"
+        with self.assertRaisesRegex(binding.Stop, "BINDING_WINDOW_INVALID"):
+            self.evaluate(anchor=e)
+        e["issued_at"] = "2026-11-05T18:06:00Z"
+        with self.assertRaisesRegex(binding.Stop, "BINDING_WINDOW_INVALID"):
+            self.evaluate(anchor=e)
+
+    def test_anchor_types_cannot_masquerade_as_ints(self):
+        a = copy.deepcopy(self.admission)
+        a["artifact_id"] = 1
+        a_bytes = canonical(a)
+        e = approval_record(a)
+        for field, value in (("artifact_id", True), ("artifact_id", 1.0),
+                             ("silo_workflow_run", True),
+                             ("silo_workflow_run", float(a["silo_workflow_run"]))):
+            changed = copy.deepcopy(e)
+            changed[field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(binding.Stop):
+                binding.bind(a_bytes, canonical(changed),
+                             trusted_policy_hash=POLICY, now=NOW)
+        changed = copy.deepcopy(e)
+        changed["artifact_identity"]["device"] = 12.0
+        with self.assertRaises(binding.Stop):
+            binding.bind(a_bytes, canonical(changed),
+                         trusted_policy_hash=POLICY, now=NOW)
 
     def test_identity_changed_even_with_same_digest_is_rejected(self):
         for location in ("admission", "anchor"):
