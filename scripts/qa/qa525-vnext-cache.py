@@ -180,7 +180,7 @@ def trusted_digest(path: Path, *, mode: int = 0o600,
     return "sha256:" + digest.hexdigest(), identity
 
 
-def signed_installable_digest(outer_path: Path, app_sha: str) -> str:
+def signed_installable_digest(outer_path: Path, app_sha: str) -> tuple[str, str]:
     """Bind the attested internal ZIP to the external Actions ZIP, without network.
 
     The Sigstore verification in staging verifies exactly this inner member.
@@ -215,10 +215,24 @@ def signed_installable_digest(outer_path: Path, app_sha: str) -> str:
                         digest.update(chunk)
                 if total != info.file_size:
                     raise Stop("SIGNED_MEMBER_SIZE_CHANGED")
+                bundle_info = outer.getinfo("installable-provenance.sigstore.json")
+                if (bundle_info.is_dir() or not 0 < bundle_info.file_size <= 8 * 1024 * 1024 or
+                        stat.S_ISLNK(bundle_info.external_attr >> 16)):
+                    raise Stop("SIGNED_BUNDLE_SIZE_OR_TYPE_INVALID")
+                bundle = hashlib.sha256()
+                bundle_size = 0
+                with outer.open(bundle_info, "r") as embedded:
+                    for chunk in iter(lambda: embedded.read(1024 * 1024), b""):
+                        bundle_size += len(chunk)
+                        if bundle_size > bundle_info.file_size:
+                            raise Stop("SIGNED_BUNDLE_SIZE_CHANGED")
+                        bundle.update(chunk)
+                if bundle_size != bundle_info.file_size:
+                    raise Stop("SIGNED_BUNDLE_SIZE_CHANGED")
             after = os.fstat(handle.fileno())
         if not _same_file(before, after):
             raise Stop("SIGNED_MEMBER_OUTER_CHANGED")
-        return "sha256:" + digest.hexdigest()
+        return "sha256:" + digest.hexdigest(), "sha256:" + bundle.hexdigest()
     except Stop:
         raise
     except (OSError, ValueError, KeyError, zipfile.BadZipFile, RuntimeError):
@@ -438,9 +452,11 @@ def sync(args) -> dict:
                     staged.get("source_sha") != app_sha):
                 raise Stop("SIGNED_STAGING_INVALID")
             # gh already verified this inner ZIP's Sigstore attestation at SYNC.
-            signed_member_sha = signed_installable_digest(artifact, app_sha)
+            signed_member_sha, embedded_bundle_sha = signed_installable_digest(artifact, app_sha)
             manifest_sha, manifest_identity = trusted_digest(target / "package" / "MANIFEST.sha256")
             bundle_sha, bundle_identity = trusted_digest(attestation)
+            if embedded_bundle_sha != bundle_sha:
+                raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
             synced = now_utc()
             receipt = {"schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
                 "ops_source_sha": ops["ops_source_sha"], "policy_hash": POLICY_HASH,
@@ -590,9 +606,12 @@ def admit(args) -> dict:
     if type(receipt.get("artifact_id")) is not int or receipt["artifact_id"] <= 0:
         raise Stop("CACHE_BINDING_INVALID")
     artifact_sha, artifact_identity = trusted_digest(cache_dir / "artifact.zip", max_size=MAX_ARTIFACT)
-    signed_member_sha = signed_installable_digest(cache_dir / "artifact.zip", args.app_sha)
+    signed_member_sha, embedded_bundle_sha = signed_installable_digest(
+        cache_dir / "artifact.zip", args.app_sha)
     manifest_sha, manifest_identity = trusted_digest(cache_dir / "package" / "MANIFEST.sha256")
     bundle_sha, bundle_identity = trusted_digest(cache_dir / "installable-provenance.sigstore.json")
+    if embedded_bundle_sha != bundle_sha:
+        raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
     bindings = (("artifact_sha256", artifact_sha),
                 ("signed_installable_sha256", signed_member_sha),
                 ("manifest_sha256", manifest_sha),
