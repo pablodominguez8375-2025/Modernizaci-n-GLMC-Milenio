@@ -13,13 +13,13 @@ Estado: DRAFT; **prohibido instalar o desplegar a partir de este documento**. Is
 
 `scripts/qa/qa525-vnext-cache.py` separa tres comandos sin capacidad de despliegue:
 
-1. `sync`: usa obligatoriamente el PAT root-only y sin fallback anónimo, selecciona un SHA de `dev` completamente validado, descarga el artefacto firmado y crea caché privada ligada a `ops_source_sha`, `app_source_sha`, digest y caducidad.
-2. `admit`: trabaja sin red; valida caché, hashes, aprobación de corta duración, identidad OPS/APP, margen G6 antes de escribir estado y nonce de un solo uso.
-3. `postcheck`: valida journal `APPLIED`, runtime API/WEB y launcher cerrado. Acepta `prepared.json` retenido únicamente si está ligado al mismo APP SHA, `may_apply=false` y no existe `.next`.
+1. `sync`: usa obligatoriamente el PAT root-only y sin fallback anónimo, selecciona un SHA de `dev` completamente validado, descarga el artefacto firmado y crea caché privada ligada al recibo OPS verificado, `app_source_sha`, artifact ID, digest, bundle Sigstore, manifest, identidades de archivo y caducidad. Un lock exclusivo serializa SYNC y una caché expirada se rota sin destruir evidencia.
+2. `admit`: trabaja sin red; valida módulos desde rutas fijas y hashes del recibo OPS root0600, reverifica el bundle/manifest contra la evidencia de SYNC, deriva la vigencia G6 desde el timestamp real del archivo (48 h), exige aprobación máxima de 30 minutos ligada a artefacto/scope/environment/action/host y emite `valid_until`. La creación del recibo es exclusiva (`O_EXCL`); el nonce no se consume hasta la futura transición durable `APPLYING`.
+3. `postcheck`: valida journal `APPLIED`, runtime API/WEB y launcher cerrado. Acepta `prepared.json` retenido únicamente si está ligado al mismo APP SHA e imágenes, `may_apply=false` y no existe `.next`.
 
 El componente no contiene comando `apply`, no invoca Docker ni `pmgm-qa-update` y no autoriza instalación. La siguiente entrega debe conectar un motor APPLY offline con state machine durable y recovery por transición, bajo artefacto OPS firmado y revisión independiente.
 
-Pruebas locales: 74 pruebas del contrato `QA auto-agent readiness` PASS, incluidas 21 nuevas de SYNC/admisión/postcheck vNext. Los tests desacoplan explícitamente el gate root sin debilitarlo en producción; validan atestación Sigstore durante SYNC, reverificación offline del manifest, cero red en admisión, no reenvío del PAT al blob, rechazo de redirect no confiable, rechazo de caché por symlink/permisos débiles, G6, replay de nonce, TOCTOU básico de archivos, prepared retenido y drift de runtime.
+Pruebas locales: 81 pruebas del contrato `QA auto-agent readiness` PASS, incluidas 28 de SYNC/admisión/postcheck vNext. Los tests desacoplan explícitamente el gate root sin debilitarlo en producción; validan recibo OPS y módulos fijos, bundle Sigstore + manifest ligados para admisión offline, cero red, no reenvío del PAT al blob, redirect no confiable, aprobación/G6 reales, carrera concurrente del mismo nonce, rotación preservando caché expirada, digest streaming de memoria acotada, symlink/hardlink/permisos, `prepared.json` retenido y drift de runtime.
 
 ## Separación obligatoria
 
