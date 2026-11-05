@@ -242,7 +242,7 @@ def signed_installable_digest(outer_path: Path, app_sha: str) -> tuple[str, str]
 
 
 def sigstore_dsse_subject_digest(bundle_path: Path, app_sha: str,
-                                   signer_workflow: str) -> str:
+                                   signer_workflow: str, silo_workflow_run: int) -> str:
     """Bind the offline in-toto statement to the exact signed dev installable.
 
     This is *not* offline signature authentication. SYNC verifies the
@@ -251,7 +251,8 @@ def sigstore_dsse_subject_digest(bundle_path: Path, app_sha: str,
     """
     if (type(app_sha) is not str or SHA.fullmatch(app_sha) is None or
             type(signer_workflow) is not str or
-            signer_workflow != "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/.github/workflows/qa-silo-rebuild.yml"):
+            signer_workflow != "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/.github/workflows/qa-silo-rebuild.yml" or
+            type(silo_workflow_run) is not int or not 0 < silo_workflow_run < 2**63):
         raise Stop("SIGNED_DSSE_CONTEXT_INVALID")
     raw = trusted_file(bundle_path, max_size=8 * 1024 * 1024)
     try:
@@ -292,6 +293,11 @@ def sigstore_dsse_subject_digest(bundle_path: Path, app_sha: str,
         dependencies = definition["resolvedDependencies"]
         expected_dependency = {"uri": "git+" + repo_url + "@" + ref,
                                "digest": {"gitCommit": app_sha}}
+        invocation = details["metadata"]["invocationId"]
+        run_prefix = repo_url + "/actions/runs/" + str(silo_workflow_run) + "/attempts/"
+        if (type(invocation) is not str or
+                re.fullmatch(re.escape(run_prefix) + r"[1-9][0-9]*", invocation) is None):
+            raise ValueError("invocation id not equal to selected signed run")
         if (definition.get("buildType") != "https://actions.github.io/buildtypes/workflow/v1" or
                 workflow.get("repository") != repo_url or
                 workflow.get("ref") != ref or
@@ -524,6 +530,9 @@ def sync(args) -> dict:
     app_sha, artifact_digest, artifact_id = (result.get("source_sha"),
                                                 result.get("artifact_sha256"),
                                                 result.get("artifact_id"))
+    silo_workflow_run = result.get("silo_workflow_run")
+    if type(silo_workflow_run) is not int or not 0 < silo_workflow_run < 2**63:
+        raise Stop("SIGNED_SILO_RUN_INVALID")
     if not isinstance(app_sha, str) or not SHA.fullmatch(app_sha):
         raise Stop("APP_SHA_INVALID")
     if not isinstance(artifact_digest, str) or not DIGEST.fullmatch(artifact_digest):
@@ -565,7 +574,8 @@ def sync(args) -> dict:
             bundle_sha, bundle_identity = trusted_digest(attestation)
             if embedded_bundle_sha != bundle_sha:
                 raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
-            if sigstore_dsse_subject_digest(attestation, app_sha, staging.WORKFLOW) != signed_member_sha:
+            if sigstore_dsse_subject_digest(attestation, app_sha, staging.WORKFLOW,
+                                            silo_workflow_run) != signed_member_sha:
                 raise Stop("SIGNED_DSSE_SUBJECT_MISMATCH")
             synced = now_utc()
             receipt = {"schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
@@ -577,7 +587,7 @@ def sync(args) -> dict:
                 "attestation_bundle_sha256": bundle_sha,
                 "attestation_bundle_identity": bundle_identity,
                 "manifest_sha256": manifest_sha, "manifest_identity": manifest_identity,
-                "silo_workflow_run": result["silo_workflow_run"], "gates": result["gates"],
+                "silo_workflow_run": silo_workflow_run, "gates": result["gates"],
                 "synced_at": format_time(synced),
                 "cache_expires_at": format_time(synced + dt.timedelta(hours=args.ttl_hours)),
                 "network_allowed_after_sync": False}
@@ -713,7 +723,9 @@ def admit(args) -> dict:
         "network_allowed_after_sync": False, "attestation_signer_workflow": staging.WORKFLOW}
     if any(receipt.get(key) != value for key, value in expected.items()):
         raise Stop("CACHE_BINDING_INVALID")
-    if type(receipt.get("artifact_id")) is not int or receipt["artifact_id"] <= 0:
+    if (type(receipt.get("artifact_id")) is not int or receipt["artifact_id"] <= 0 or
+            type(receipt.get("silo_workflow_run")) is not int or
+            not 0 < receipt["silo_workflow_run"] < 2**63):
         raise Stop("CACHE_BINDING_INVALID")
     artifact_sha, artifact_identity = trusted_digest(cache_dir / "artifact.zip", max_size=MAX_ARTIFACT)
     signed_member_sha, embedded_bundle_sha = signed_installable_digest(
@@ -722,7 +734,9 @@ def admit(args) -> dict:
     bundle_sha, bundle_identity = trusted_digest(cache_dir / "installable-provenance.sigstore.json")
     if embedded_bundle_sha != bundle_sha:
         raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
-    if sigstore_dsse_subject_digest(cache_dir / "installable-provenance.sigstore.json", args.app_sha, staging.WORKFLOW) != signed_member_sha:
+    if sigstore_dsse_subject_digest(cache_dir / "installable-provenance.sigstore.json",
+                                    args.app_sha, staging.WORKFLOW,
+                                    receipt["silo_workflow_run"]) != signed_member_sha:
         raise Stop("SIGNED_DSSE_SUBJECT_MISMATCH")
     bindings = (("artifact_sha256", artifact_sha),
                 ("signed_installable_sha256", signed_member_sha),
@@ -756,6 +770,7 @@ def admit(args) -> dict:
     admitted = {"schema": "qa525-admission-v2", "status": "ADMITTED",
         "ops_source_sha": ops["ops_source_sha"], "app_source_sha": args.app_sha,
         "artifact_id": receipt["artifact_id"], "artifact_sha256": artifact_sha,
+        "silo_workflow_run": receipt["silo_workflow_run"],
         "signed_installable_sha256": signed_member_sha,
         "artifact_identity": artifact_identity, "manifest_sha256": manifest_sha,
         "attestation_bundle_sha256": bundle_sha, "policy_hash": POLICY_HASH,
