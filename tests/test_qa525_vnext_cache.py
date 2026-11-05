@@ -1,5 +1,6 @@
 import argparse
 import base64
+import copy
 import datetime as dt
 from email.message import Message
 import hashlib
@@ -33,6 +34,7 @@ APP = "6eed4f00b7917da3cca36bbda70e16d16328648d"
 OPS = "2e9d40a0be8a39e65e786673b23ab721c63e325b"
 NONCE = "qa525-vnext-admission-0001"
 NOW = dt.datetime(2026, 11, 5, 12, 0, tzinfo=dt.timezone.utc)
+REAL_DEV_PROVENANCE = json.loads((ROOT / "tests/fixtures/qa525-real-dev-6eed4-signed-statement.json").read_text())
 
 
 def write_private(path, value):
@@ -52,14 +54,18 @@ def identity(path):
             "mtime_ns": info.st_mtime_ns}
 
 
-def synthetic_dsse_bundle(signed_bytes):
-    """Parser fixture only; never a valid cryptographic Sigstore signature."""
-    statement = {"_type": "https://in-toto.io/Statement/v1",
-                 "subject": [{"name": "synthetic-signed-installable.zip",
-                              "digest": {"sha256": hashlib.sha256(signed_bytes).hexdigest()}}]}
+def dsse_from_statement(statement):
+    # Encodes a statement for parser tests, not a cryptographically signed bundle.
     payload = base64.b64encode(json.dumps(statement, sort_keys=True).encode()).decode()
     return (json.dumps({"mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
                         "dsseEnvelope": {"payload": payload}}, sort_keys=True) + "\n").encode()
+
+
+def synthetic_dsse_bundle(signed_bytes):
+    """Replay the structure of a real dev statement with synthetic subject bytes."""
+    statement = copy.deepcopy(REAL_DEV_PROVENANCE["statement"])
+    statement["subject"][0]["digest"]["sha256"] = hashlib.sha256(signed_bytes).hexdigest()
+    return dsse_from_statement(statement)
 
 
 class AdmissionFixture:
@@ -280,11 +286,43 @@ class OfflineAdmission(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_MISMATCH"):
             MODULE.admit(self.fx.args())
 
+    def test_real_dev_actions_statement_replays_exact_subject_and_provenance(self):
+        # Source is the genuine dev@6eed4 signed Actions ZIP and Sigstore
+        # bundle (run 41634409253). The fixture stores its decoded Statement,
+        # not a forged signature or private credential.
+        self.assertEqual(REAL_DEV_PROVENANCE["source_run_id"], 41634409253)
+        self.assertEqual(REAL_DEV_PROVENANCE["source_sha"], APP)
+        statement = copy.deepcopy(REAL_DEV_PROVENANCE["statement"])
+        bundle = self.fx.cache / "statement-from-real-bundle.json"
+        write_private(bundle, dsse_from_statement(statement))
+        actual = MODULE.sigstore_dsse_subject_digest(bundle, APP, STAGING_MODULE.WORKFLOW)
+        self.assertEqual(actual, "sha256:" + REAL_DEV_PROVENANCE["actual_signed_inner_zip_sha256"])
+        self.assertEqual(REAL_DEV_PROVENANCE["actual_bundle_sha256"],
+                         "966da0dd4c0ed476d68cf9659ba0f01df7872d5c8609dc8f46e99f198c0600ad")
+
+    def test_real_dev_statement_wrong_workflow_ref_name_or_commit_is_rejected(self):
+        changes = (
+            ("predicate_type", lambda s: s.__setitem__("predicateType", "not-slsa")),
+            ("subject_name", lambda s: s["subject"][0].__setitem__("name", "other.zip")),
+            ("ref", lambda s: s["predicate"]["buildDefinition"]["externalParameters"]["workflow"].__setitem__("ref", "refs/pull/845/merge")),
+            ("builder", lambda s: s["predicate"]["runDetails"]["builder"].__setitem__("id", "https://example.org/attacker")),
+            ("git_commit", lambda s: s["predicate"]["buildDefinition"]["resolvedDependencies"][0]["digest"].__setitem__("gitCommit", "f" * 40)),
+            ("entry_workflow", lambda s: s["predicate"]["buildDefinition"]["externalParameters"]["workflow"].__setitem__("path", ".github/workflows/other.yml")),
+        )
+        for label, change in changes:
+            with self.subTest(label=label):
+                statement = copy.deepcopy(REAL_DEV_PROVENANCE["statement"])
+                change(statement)
+                bundle = self.fx.cache / "tampered-statement.json"
+                write_private(bundle, dsse_from_statement(statement))
+                with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_INVALID"):
+                    MODULE.sigstore_dsse_subject_digest(bundle, APP, STAGING_MODULE.WORKFLOW)
+
     def test_invalid_dsse_payload_is_rejected_without_network(self):
         bundle = self.fx.cache / "installable-provenance.sigstore.json"
         write_private(bundle, b'{"dsseEnvelope":{"payload":"@@not-base64@@"}}')
         with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_INVALID"):
-            MODULE.sigstore_dsse_subject_digest(bundle)
+            MODULE.sigstore_dsse_subject_digest(bundle, APP, STAGING_MODULE.WORKFLOW)
 
     def test_outer_zip_embedded_bundle_mismatch_blocks_admission(self):
         # The extracted bundle in cache must be byte-for-byte the same as the
