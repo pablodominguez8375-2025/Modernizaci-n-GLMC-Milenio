@@ -8,11 +8,27 @@ This module only (a) builds the argv that would start a child in such a
 scope and (b) reads the cgroup to decide whether anything is still alive.
 It never starts, signals or kills a process; no subprocess/socket/Docker.
 
-Recovery rule: ``require_quiescent`` must pass before ``reconcile_after_crash``
+Recovery rule: ``require_quiescent`` AND ``require_settled`` must pass, and
+then ``verify`` must confirm the runtime, before ``reconcile_after_crash``
 classifies a crashed flight. Unreadable or ambiguous state is Indeterminate
 (a Stop), never "empty".
+
+Known limits (not closed by this module):
+* An empty cgroup only proves the *CLI* children are gone. The Docker daemon
+  lives outside that cgroup and may still be completing a request the dead
+  client made, hence the separate convergence gate ``require_settled``.
+* ``ABSENT`` does not prove a scope was ever created or used. The engine must
+  durably record the exact unit names BEFORE starting anything and treat a
+  failed or unconfirmed launch as fatal; ``require_quiescent`` therefore needs
+  that recorded set (``expected_units``) and refuses a missing or foreign unit.
+* The cgroup root and its ancestors are injectable here; a root-owned
+  installer must verify them on the host.
+* Only the compose "up" shape built by ``systemd_run_argv`` can be launched
+  through this module. Which project, directory, files and service may be
+  used is decided by a signed entrypoint, not here.
 """
 import hashlib
+import json
 import re
 import stat
 from pathlib import Path
@@ -20,9 +36,11 @@ from pathlib import Path
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 SLICE = "system.slice"
 UNIT = re.compile(r"^qa525-[a-f0-9]{16}-(?:api|web)\.scope$")
-SAFE_ARG = re.compile(r"^[A-Za-z0-9_@%+=:,./-]{1,512}$")
-MAX_ARGV = 64
-EXECUTABLES = frozenset({"/usr/bin/docker"})
+SAFE_PATH = re.compile(r"^/[A-Za-z0-9_@%+=:,./-]{0,510}$")
+PROJECT = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
+DOCKER = "/usr/bin/docker"
+MAX_FILES = 8
+MAX_EVENTS_BYTES = 4096
 
 
 class Stop(Exception):
@@ -41,23 +59,47 @@ def unit_name(nonce: str, service: str) -> str:
     return "qa525-%s-%s.scope" % (hashlib.sha256(nonce.encode()).hexdigest()[:16], service)
 
 
-def systemd_run_argv(unit: str, command: list) -> list:
-    """Argv (never a shell string) running ``command`` inside a transient scope.
+def _safe_path(value) -> str:
+    if (type(value) is not str or SAFE_PATH.fullmatch(value) is None
+            or ".." in value.split("/") or value.endswith("/")):
+        raise Stop("COMMAND_PATH_INVALID")
+    return value
 
-    --collect makes systemd remove the scope when it empties, so an ABSENT
-    scope later means "ended" only together with a readable parent cgroup.
+
+def compose_up_command(project: str, workdir: str, env_file: str, files: list,
+                       service: str) -> list:
+    """The ONLY command shape this module can launch: a forced, no-deps,
+    no-build, never-pull recreate of one service (api or web). Arbitrary
+    docker verbs (prune, rm, exec...) cannot be expressed."""
+    if type(project) is not str or PROJECT.fullmatch(project) is None:
+        raise Stop("COMMAND_PROJECT_INVALID")
+    if service not in ("api", "web"):
+        raise Stop("COMMAND_SERVICE_INVALID")
+    if type(files) is not list or not 1 <= len(files) <= MAX_FILES or len(set(files)) != len(files):
+        raise Stop("COMMAND_FILES_INVALID")
+    command = [DOCKER, "compose", "--project-name", project,
+               "--project-directory", _safe_path(workdir), "--env-file", _safe_path(env_file)]
+    for path in files:
+        command += ["--file", _safe_path(path)]
+    return command + ["up", "--detach", "--no-deps", "--no-build", "--pull", "never",
+                      "--force-recreate", "--wait", "--wait-timeout", "90", service]
+
+
+def systemd_run_argv(unit: str, project: str, workdir: str, env_file: str,
+                     files: list, service: str) -> list:
+    """Argv (never a shell string) running the fixed compose-up inside a scope.
+
+    The unit must belong to the same service it recreates. --collect makes
+    systemd remove the scope when it empties, so an ABSENT scope later means
+    "ended" only together with a readable parent cgroup AND a recorded unit.
     """
     if type(unit) is not str or UNIT.fullmatch(unit) is None:
         raise Stop("UNIT_INVALID")
-    if type(command) is not list or not 1 <= len(command) <= MAX_ARGV:
-        raise Stop("COMMAND_INVALID")
-    if command[0] not in EXECUTABLES:
-        raise Stop("EXECUTABLE_NOT_ALLOWED")
-    for arg in command:
-        if type(arg) is not str or SAFE_ARG.fullmatch(arg) is None:
-            raise Stop("COMMAND_ARG_INVALID")
+    if not unit.endswith("-" + str(service) + ".scope"):
+        raise Stop("UNIT_SERVICE_MISMATCH")
+    command = compose_up_command(project, workdir, env_file, files, service)
     return ["/usr/bin/systemd-run", "--scope", "--collect", "--quiet",
-            "--slice=" + SLICE, "--unit=" + unit, "--"] + list(command)
+            "--slice=" + SLICE, "--unit=" + unit, "--"] + command
 
 
 class CgroupScope:
@@ -100,7 +142,11 @@ class CgroupScope:
             st = events.lstat()
             if not stat.S_ISREG(st.st_mode):
                 raise Indeterminate("CGROUP_EVENTS_UNTRUSTED")
-            raw = events.read_bytes()[:4096].decode("ascii")
+            with events.open("rb") as handle:
+                data = handle.read(MAX_EVENTS_BYTES + 1)
+            if len(data) > MAX_EVENTS_BYTES:
+                raise Indeterminate("CGROUP_EVENTS_TOO_LARGE")
+            raw = data.decode("ascii")
         except Indeterminate:
             raise
         except (OSError, UnicodeDecodeError):
@@ -118,8 +164,9 @@ class CgroupScope:
         # populated=0 must agree with an empty cgroup.procs; disagreement is odd.
         procs = scope / "cgroup.procs"
         try:
-            if procs.read_bytes()[:64].strip():
-                raise Indeterminate("CGROUP_PROCS_DISAGREE")
+            with procs.open("rb") as handle:
+                if handle.read(64).strip():
+                    raise Indeterminate("CGROUP_PROCS_DISAGREE")
         except Indeterminate:
             raise
         except OSError:
@@ -127,11 +174,24 @@ class CgroupScope:
         return "EMPTY"
 
 
-def require_quiescent(scopes) -> None:
-    """Raise unless EVERY scope is provably empty/gone. Gate before recovery."""
+def require_quiescent(scopes, *, expected_units) -> None:
+    """Raise unless EVERY recorded scope is provably empty/gone.
+
+    ``expected_units`` is the set of unit names the engine durably recorded
+    before launching anything. The scopes passed must be exactly that set: a
+    missing or foreign unit is Indeterminate, so "I looked at the wrong unit"
+    can never read as quiet.
+    """
     scopes = list(scopes)
-    if not 1 <= len(scopes) <= 8 or any(not hasattr(s, "state") for s in scopes):
+    if not 1 <= len(scopes) <= 8 or any(not hasattr(s, "state") or not hasattr(s, "unit") for s in scopes):
         raise Stop("SCOPES_INVALID")
+    try:
+        expected = frozenset(expected_units)
+    except TypeError:
+        raise Stop("EXPECTED_UNITS_INVALID") from None
+    if (not expected or any(type(u) is not str or UNIT.fullmatch(u) is None for u in expected)
+            or len(scopes) != len({s.unit for s in scopes}) or {s.unit for s in scopes} != expected):
+        raise Indeterminate("SCOPE_SET_NOT_THE_RECORDED_ONE")
     live = False
     for scope in scopes:
         try:
@@ -146,3 +206,32 @@ def require_quiescent(scopes) -> None:
             raise Indeterminate("SCOPE_STATE_UNKNOWN")
     if live:
         raise Stop("CHILDREN_STILL_ALIVE")
+
+
+def require_settled(observe, settle, samples: int = 3) -> str:
+    """Convergence gate for the Docker daemon, which no cgroup of ours covers.
+
+    ``observe()`` returns any JSON-serializable runtime snapshot (e.g. the
+    reader's observation) and ``settle()`` waits between samples; both are
+    injected so this module never sleeps or touches the host. All samples
+    must be identical, otherwise the runtime is still changing. Returns the
+    snapshot digest for the evidence record.
+    """
+    if type(samples) is not int or not 2 <= samples <= 10 or not callable(observe) or not callable(settle):
+        raise Stop("SETTLE_INPUT_INVALID")
+    seen = None
+    for index in range(samples):
+        if index:
+            try:
+                settle()
+            except Exception:
+                raise Indeterminate("SETTLE_FAILED") from None
+        try:
+            snapshot = json.dumps(observe(), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except Exception:
+            raise Indeterminate("SETTLE_OBSERVE_FAILED") from None
+        if seen is None:
+            seen = snapshot
+        elif snapshot != seen:
+            raise Stop("RUNTIME_STILL_CHANGING")
+    return "sha256:" + hashlib.sha256(seen.encode()).hexdigest()
