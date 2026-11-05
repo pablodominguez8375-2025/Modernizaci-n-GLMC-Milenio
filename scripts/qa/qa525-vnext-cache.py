@@ -69,6 +69,17 @@ def sha256_file(path: Path) -> str:
     return "sha256:" + digest.hexdigest()
 
 
+def require_private_dir(path: Path, *, exact: bool = False) -> None:
+    try:
+        info = path.lstat()
+    except OSError:
+        raise Stop("DIRECTORY_UNAVAILABLE") from None
+    mode = stat.S_IMODE(info.st_mode)
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_gid != 0 or
+            mode & 0o022 or (exact and mode != 0o700)):
+        raise Stop("DIRECTORY_UNTRUSTED")
+
+
 def trusted_file(path: Path, *, owner: int = 0, mode: int = 0o600, max_size: int | None = None) -> bytes:
     try:
         parent = path.parent.lstat()
@@ -191,19 +202,19 @@ def sync(args) -> dict:
     if type(artifact_id) is not int:
         raise Stop("ARTIFACT_ID_INVALID")
     args.cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    root_info = args.cache_root.lstat()
-    if (not stat.S_ISDIR(root_info.st_mode) or root_info.st_uid != 0 or
-            root_info.st_gid != 0 or stat.S_IMODE(root_info.st_mode) != 0o700):
-        raise Stop("CACHE_ROOT_UNTRUSTED")
+    try:
+        require_private_dir(args.cache_root, exact=True)
+    except Stop:
+        raise Stop("CACHE_ROOT_UNTRUSTED") from None
     final_target = args.cache_root / app_sha
     if final_target.exists() or final_target.is_symlink():
         raise Stop("CACHE_ALREADY_EXISTS")
     target = Path(tempfile.mkdtemp(prefix="." + app_sha + ".sync-", dir=args.cache_root))
     os.chmod(target, 0o700)
-    target_info = target.lstat()
-    if (not stat.S_ISDIR(target_info.st_mode) or target_info.st_uid != 0 or
-            target_info.st_gid != 0 or stat.S_IMODE(target_info.st_mode) != 0o700):
-        raise Stop("CACHE_DIR_UNTRUSTED")
+    try:
+        require_private_dir(target, exact=True)
+    except Stop:
+        raise Stop("CACHE_DIR_UNTRUSTED") from None
     temporary = target / ".artifact.zip.partial"
     try:
         download_artifact(readiness.API + "/actions/artifacts/%d/zip" % artifact_id, token, temporary)
@@ -211,10 +222,18 @@ def sync(args) -> dict:
         if actual != artifact_digest:
             raise Stop("ARTIFACT_DIGEST_MISMATCH")
         os.replace(temporary, target / "artifact.zip")
+        staging = load_readiness(args.staging)
+        try:
+            staged = staging.stage(target / "artifact.zip", actual, app_sha,
+                                   target / "package", tokenless=True)
+        except Exception:
+            raise Stop("SIGNED_STAGING_FAILED") from None
+        if staged.get("status") != "SIGNED_CODE_STAGED_NOT_INSTALLED":
+            raise Stop("SIGNED_STAGING_INVALID")
         synced = now_utc()
         receipt = {
             "schema": "qa525-cache-v2",
-            "status": "SYNCED",
+            "status": "SYNCED_ATTESTED",
             "ops_source_sha": args.ops_sha,
             "app_source_sha": app_sha,
             "artifact_id": artifact_id,
@@ -255,11 +274,17 @@ def admit(args) -> dict:
     if not SHA.fullmatch(args.app_sha) or not SHA.fullmatch(args.ops_sha) or not NONCE.fullmatch(args.nonce):
         raise Stop("IDENTITY_INVALID")
     cache_dir = args.cache_root / args.app_sha
+    try:
+        require_private_dir(args.cache_root, exact=True)
+        require_private_dir(cache_dir, exact=True)
+        require_private_dir(cache_dir / "package", exact=True)
+    except Stop:
+        raise Stop("CACHE_DIRECTORY_UNTRUSTED") from None
     receipt = load_json_trusted(cache_dir / "cache.json")
     artifact = trusted_file(cache_dir / "artifact.zip", max_size=MAX_ARTIFACT)
     del artifact
     expected = {
-        "schema": "qa525-cache-v2", "status": "SYNCED",
+        "schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
         "app_source_sha": args.app_sha, "ops_source_sha": args.ops_sha,
         "network_allowed_after_sync": False,
     }
@@ -267,6 +292,11 @@ def admit(args) -> dict:
         raise Stop("CACHE_BINDING_INVALID")
     if sha256_file(cache_dir / "artifact.zip") != receipt.get("artifact_sha256"):
         raise Stop("CACHE_ARTIFACT_CHANGED")
+    staging = load_readiness(args.staging)
+    try:
+        staging.verify_manifest(cache_dir / "package", args.app_sha)
+    except Exception:
+        raise Stop("CACHE_PACKAGE_INVALID") from None
     current = now_utc()
     if parse_time(receipt.get("cache_expires_at")) <= current:
         raise Stop("CACHE_EXPIRED")
@@ -293,8 +323,13 @@ def admit(args) -> dict:
         "admitted_at": format_time(current), "g6_expires_at": format_time(g6_expiry),
         "network_allowed": False,
     }
-    args.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(args.state_dir, 0o700)
+    if args.output.parent != args.state_dir:
+        raise Stop("OUTPUT_OUTSIDE_STATE_DIR")
+    if args.state_dir.exists() or args.state_dir.is_symlink():
+        require_private_dir(args.state_dir, exact=True)
+    else:
+        args.state_dir.mkdir(mode=0o700, parents=True)
+        require_private_dir(args.state_dir, exact=True)
     atomic_write(args.output, (json.dumps(admitted, sort_keys=True) + "\n").encode())
     atomic_write(nonce_marker, (json.dumps({"status": "CONSUMED", "nonce": args.nonce,
                                            "app_source_sha": args.app_sha}, sort_keys=True) + "\n").encode())
@@ -355,6 +390,7 @@ def parser() -> argparse.ArgumentParser:
     s = sub.add_parser("sync")
     s.add_argument("--ops-sha", required=True, type=lambda v: v if SHA.fullmatch(v) else (_ for _ in ()).throw(argparse.ArgumentTypeError("sha")))
     s.add_argument("--readiness", type=Path, default=Path(__file__).with_name("qa-agent-readiness.py"))
+    s.add_argument("--staging", type=Path, default=Path(__file__).with_name("qa-signed-staging.py"))
     s.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
     s.add_argument("--ttl-hours", type=int, default=6, choices=range(1, 25))
     a = sub.add_parser("admit")
@@ -364,6 +400,7 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
     a.add_argument("--g6-receipt", type=Path, required=True)
     a.add_argument("--approval", type=Path, required=True)
+    a.add_argument("--staging", type=Path, default=Path(__file__).with_name("qa-signed-staging.py"))
     a.add_argument("--state-dir", type=Path, required=True)
     a.add_argument("--output", type=Path, required=True)
     a.add_argument("--g6-margin-seconds", type=int, default=MIN_G6_MARGIN)
