@@ -3,6 +3,8 @@ import datetime as dt
 import hashlib
 import importlib.util
 import json
+import os
+import signal
 from pathlib import Path
 import socket
 import stat
@@ -166,6 +168,36 @@ class DurableJournalContract(unittest.TestCase):
         # The consumed nonce fails closed even though the journal is ambiguous.
         with self.assertRaisesRegex(mod.Stop, "NONCE_ALREADY_CONSUMED"):
             self.fx.begin()
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires Linux fork")
+    def test_real_sigkill_child_at_durable_edges_reconciles_offline(self):
+        for phase in ("after_nonce_dirsync", "after_journal_link", "after_journal_dirsync"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                fx = JournalFixture(directory)
+                pid = os.fork()
+                if pid == 0:
+                    def kill_at(point):
+                        if point == phase:
+                            os.kill(os.getpid(), signal.SIGKILL)
+                    try:
+                        fx.begin(callback=kill_at)
+                    except BaseException:
+                        os._exit(91)
+                    os._exit(92)
+                _, status = os.waitpid(pid, 0)
+                self.assertTrue(os.WIFSIGNALED(status), status)
+                self.assertEqual(os.WTERMSIG(status), signal.SIGKILL)
+                self.assertIn(mod.inspect(fx.root, NONCE),
+                              ("APPLYING", "MARKER_ONLY_RECOVERY_REQUIRED"))
+                self.assertEqual(mod.reconcile_after_crash(fx.root, NONCE, NOW),
+                                 "RECOVERY_REQUIRED")
+                self.assertEqual(mod.inspect(fx.root, NONCE), "RECOVERY_REQUIRED")
+                with self.assertRaisesRegex(mod.Stop, "NONCE_ALREADY_CONSUMED"):
+                    fx.begin()
+                if phase == "after_journal_link":
+                    abandoned = list(fx.root.glob(".qa525-next-*"))
+                    self.assertEqual(len(abandoned), 1)
+                    self.assertEqual((fx.root / ("journal-" + NONCE + ".json")).stat().st_nlink, 2)
 
     def test_reconcile_never_deletes_orphaned_temp(self):
         def boom(phase):
