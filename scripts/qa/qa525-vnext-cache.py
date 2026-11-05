@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import calendar
 import datetime as dt
 import fcntl
@@ -239,6 +241,47 @@ def signed_installable_digest(outer_path: Path, app_sha: str) -> tuple[str, str]
         raise Stop("SIGNED_MEMBER_INVALID") from None
 
 
+def sigstore_dsse_subject_digest(bundle_path: Path) -> str:
+    """Read the attested in-toto statement subject offline, not the signature.
+
+    Signature, workflow, OIDC and source identity are verified online by
+    gh attestation verify during SYNC. This check merely binds the cached
+    DSSE payload's SHA-256 subject to the signed installable member.
+    """
+    raw = trusted_file(bundle_path, max_size=8 * 1024 * 1024)
+    try:
+        obj = json.loads(raw)
+        # GitHub bundle-path normally contains one Sigstore bundle. Accept
+        # either that direct format or one GitHub API-style wrapper.
+        if type(obj) is list and len(obj) == 1:
+            obj = obj[0]
+        if type(obj) is dict and "bundle" in obj and type(obj["bundle"]) is dict:
+            obj = obj["bundle"]
+        envelope = obj["dsseEnvelope"]
+        if type(envelope) is not dict or type(envelope.get("payload")) is not str:
+            raise ValueError("payload")
+        encoded = envelope["payload"]
+        if len(encoded) > 4 * 1024 * 1024:
+            raise ValueError("payload size")
+        payload = base64.b64decode(encoded, validate=True)
+        if len(payload) > 2 * 1024 * 1024:
+            raise ValueError("decoded size")
+        statement = json.loads(payload)
+        subjects = statement.get("subject")
+        if (statement.get("_type") != "https://in-toto.io/Statement/v1" or
+                type(subjects) is not list or len(subjects) != 1 or
+                type(subjects[0]) is not dict or
+                type(subjects[0].get("digest")) is not dict):
+            raise ValueError("statement")
+        digest = subjects[0]["digest"].get("sha256")
+        if type(digest) is not str or re.fullmatch(r"[a-f0-9]{64}", digest) is None:
+            raise ValueError("digest")
+        return "sha256:" + digest
+    except (ValueError, TypeError, KeyError, AttributeError, binascii.Error,
+            UnicodeDecodeError):
+        raise Stop("SIGNED_DSSE_SUBJECT_INVALID") from None
+
+
 def load_json_trusted(path: Path) -> dict:
     raw = trusted_file(path, max_size=MAX_JSON)
     try:
@@ -457,6 +500,8 @@ def sync(args) -> dict:
             bundle_sha, bundle_identity = trusted_digest(attestation)
             if embedded_bundle_sha != bundle_sha:
                 raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
+            if sigstore_dsse_subject_digest(attestation) != signed_member_sha:
+                raise Stop("SIGNED_DSSE_SUBJECT_MISMATCH")
             synced = now_utc()
             receipt = {"schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
                 "ops_source_sha": ops["ops_source_sha"], "policy_hash": POLICY_HASH,
@@ -612,6 +657,8 @@ def admit(args) -> dict:
     bundle_sha, bundle_identity = trusted_digest(cache_dir / "installable-provenance.sigstore.json")
     if embedded_bundle_sha != bundle_sha:
         raise Stop("SIGNED_BUNDLE_EXTRACT_MISMATCH")
+    if sigstore_dsse_subject_digest(cache_dir / "installable-provenance.sigstore.json") != signed_member_sha:
+        raise Stop("SIGNED_DSSE_SUBJECT_MISMATCH")
     bindings = (("artifact_sha256", artifact_sha),
                 ("signed_installable_sha256", signed_member_sha),
                 ("manifest_sha256", manifest_sha),
