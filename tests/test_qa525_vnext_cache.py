@@ -94,10 +94,13 @@ class OfflineAdmission(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.fx = AdmissionFixture(self.tmp.name)
         self.time = mock.patch.object(MODULE, "now_utc", return_value=NOW)
+        self.root_gate = mock.patch.object(MODULE, "require_root", return_value=None)
         self.time.start()
+        self.root_gate.start()
 
     def tearDown(self):
         self.time.stop()
+        self.root_gate.stop()
         self.tmp.cleanup()
 
     def test_happy_path_is_bound_and_consumes_nonce(self):
@@ -225,6 +228,11 @@ class StaticContract(unittest.TestCase):
         self.assertIn('"network_allowed": False', source)
         self.assertNotRegex(source, r"--review-and-run|docker\s+(compose|run|stop|restart)|pmgm-qa-update")
 
+    def test_root_gate_remains_fail_closed(self):
+        with mock.patch.object(MODULE.os, "geteuid", return_value=1000), \
+             self.assertRaisesRegex(MODULE.Stop, "ROOT_REQUIRED"):
+            MODULE.require_root("ROOT_REQUIRED")
+
 
 class SyncDownload(unittest.TestCase):
     class Response:
@@ -298,6 +306,8 @@ class AppliedPostcheck(unittest.TestCase):
         self.runtime = self.root / "runtime.json"
         self.api = "sha256:" + "a" * 64
         self.web = "sha256:" + "b" * 64
+        self.root_gate = mock.patch.object(MODULE, "require_root", return_value=None)
+        self.root_gate.start()
         write_private(self.prepared, {"source_sha": APP, "status": "PREPARED"})
         write_private(self.journal, {
             "source_sha": APP, "status": "APPLIED",
@@ -314,6 +324,7 @@ class AppliedPostcheck(unittest.TestCase):
         }})
 
     def tearDown(self):
+        self.root_gate.stop()
         self.tmp.cleanup()
 
     def args(self):
