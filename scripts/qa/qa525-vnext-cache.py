@@ -217,17 +217,24 @@ def exclusive_write(path: Path, payload: bytes) -> None:
         raise Stop("ADMISSION_WRITE_FAILED") from None
 
 
-def _load_module(name: str, path: Path):
+def _load_verified_module_bytes(name: str, path: Path, source: bytes):
+    """Execute exactly the bytes verified from the pinned, trusted descriptor.
+
+    Never re-open a module path through importlib's loader after hashing it.
+    """
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise Stop("OPS_MODULE_IMPORT")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        exec(compile(source, str(path), "exec"), module.__dict__)
+    except Exception:
+        raise Stop("OPS_MODULE_EXECUTION_FAILED") from None
     return module
 
 
 def load_verified_ops() -> tuple[dict, object, object]:
-    """Trust only fixed root-owned modules pinned by the signed OPS receipt."""
+    """Trust fixed OPS bytes pinned by a root-owned signed-source receipt."""
     receipt = load_json_trusted(OPS_RECEIPT)
     required = {"schema", "status", "ops_source_sha", "program_sha256",
                 "readiness_sha256", "staging_sha256", "policy_hash"}
@@ -237,14 +244,20 @@ def load_verified_ops() -> tuple[dict, object, object]:
             not SHA.fullmatch(receipt["ops_source_sha"]) or
             receipt.get("policy_hash") != POLICY_HASH):
         raise Stop("OPS_RECEIPT_INVALID")
+    verified = {}
     for path, field, mode in ((Path(__file__).resolve(), "program_sha256", 0o755),
                               (READINESS_MODULE, "readiness_sha256", 0o644),
                               (STAGING_MODULE, "staging_sha256", 0o644)):
-        actual, _ = trusted_digest(path, mode=mode, max_size=5 * 1024 * 1024)
+        source = trusted_file(path, mode=mode, max_size=5 * 1024 * 1024)
+        actual = "sha256:" + hashlib.sha256(source).hexdigest()
         if actual != receipt.get(field):
             raise Stop("OPS_SOURCE_HASH_MISMATCH")
-    return (receipt, _load_module("qa525_readiness_v2", READINESS_MODULE),
-            _load_module("qa525_staging_v2", STAGING_MODULE))
+        verified[field] = source
+    return (receipt,
+            _load_verified_module_bytes("qa525_readiness_v2", READINESS_MODULE,
+                                        verified["readiness_sha256"]),
+            _load_verified_module_bytes("qa525_staging_v2", STAGING_MODULE,
+                                        verified["staging_sha256"]))
 
 
 def download_artifact(url: str, token: str, destination: Path) -> None:
@@ -598,6 +611,17 @@ def postcheck(args) -> dict:
             "app_source_sha": args.app_sha, "prepared_retained": prepared_exists, "may_apply": False}
 
 
+def g6_margin_seconds(value: str) -> int:
+    """Bounded parser: no massive enumeration of 170,000 allowed choices."""
+    try:
+        number = int(value, 10)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("G6_MARGIN_NOT_INTEGER") from None
+    if not MIN_G6_MARGIN <= number < G6_LIFETIME:
+        raise argparse.ArgumentTypeError("G6_MARGIN_OUT_OF_RANGE")
+    return number
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     sub = root.add_subparsers(dest="command", required=True)
@@ -611,8 +635,8 @@ def parser() -> argparse.ArgumentParser:
     admission.add_argument("--g6-receipt", type=Path, required=True)
     admission.add_argument("--approval", type=Path, required=True)
     admission.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
-    admission.add_argument("--g6-margin-seconds", type=int, default=MIN_G6_MARGIN,
-                           choices=range(MIN_G6_MARGIN, G6_LIFETIME))
+    admission.add_argument("--g6-margin-seconds", type=g6_margin_seconds,
+                           default=MIN_G6_MARGIN)
     check = sub.add_parser("postcheck")
     check.add_argument("--app-sha", required=True)
     check.add_argument("--journal", type=Path, required=True)
