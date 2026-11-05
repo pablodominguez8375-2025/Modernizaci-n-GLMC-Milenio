@@ -125,7 +125,7 @@ def _write_exclusive(path: Path, obj: dict, checkpoint=None, label="") -> None:
 
 
 def _atomic_new(path: Path, obj: dict, checkpoint=None) -> None:
-    """Durable replacement into an absent pathname, preserving abandoned temps."""
+    """Atomically link into an absent pathname; never overwrite a live journal."""
     if path.exists() or path.is_symlink():
         raise Stop("JOURNAL_ALREADY_EXISTS")
     content = _canonical(obj)
@@ -142,11 +142,15 @@ def _atomic_new(path: Path, obj: dict, checkpoint=None) -> None:
             os.fsync(out.fileno())
         if checkpoint:
             checkpoint("after_journal_temp_fsync")
-        if path.exists() or path.is_symlink():
-            raise Stop("JOURNAL_ALREADY_EXISTS")
-        os.replace(name, path)
+        # os.link is NOREPLACE even if a non-cooperating process created path.
+        # os.replace could erase another journal between check and rename.
+        try:
+            os.link(name, path, follow_symlinks=False)
+        except FileExistsError:
+            raise Stop("JOURNAL_ALREADY_EXISTS") from None
         if checkpoint:
-            checkpoint("after_journal_replace")
+            checkpoint("after_journal_link")
+        os.unlink(name)
         _fsync_dir(path.parent)
         if checkpoint:
             checkpoint("after_journal_dirsync")
@@ -210,6 +214,37 @@ def _paths(directory: Path, nonce: str) -> tuple[Path, Path, Path]:
             directory / ("recovery-" + nonce + ".json"))
 
 
+def _guard_no_other_flights(root: Path, nonce: str) -> None:
+    """Fail closed if any prior vNext nonce or unfinished legacy dual exists.
+
+    This is only a mechanical interlock, NOT authentication of the legacy
+    journal or proof of an applied runtime. We intentionally do not permit
+    a second vNext nonce after any earlier one: there is no externally
+    verified terminal writer in the inactive journal library yet.
+    """
+    try:
+        entries = sorted(root.iterdir(), key=lambda item: item.name)
+    except OSError:
+        raise Stop("JOURNAL_SCAN_FAILED") from None
+    if len(entries) > 10000:
+        raise Stop("JOURNAL_SCAN_LIMIT")
+    for child in entries:
+        name = child.name
+        if re.fullmatch(r"(?:nonce-consumed|journal|recovery)-[A-Za-z0-9_-]{24,96}\.json", name):
+            raise Stop("PRIOR_NONCE_UNRESOLVED")
+        if any(name.startswith(part) and name.endswith(".json")
+               for part in ("nonce-consumed-", "journal-", "recovery-")):
+            raise Stop("JOURNAL_UNKNOWN_RESIDUE")
+        if name.startswith("dual-") and name.endswith(".json"):
+            if re.fullmatch(r"dual-[a-f0-9]{40}\.json", name) is None:
+                raise Stop("LEGACY_DUAL_NAME_INVALID")
+            legacy = _object(child)
+            if legacy.get("status") != "APPLIED":
+                raise Stop("LEGACY_DUAL_NOT_APPLIED")
+            # APPLIED here is a precondition for the mechanical guard only.
+            # An independent signed verify_state check is still required.
+
+
 def _check_admission(data: dict, now: dt.datetime) -> None:
     mandatory = {"schema": "qa525-admission-v2", "status": "ADMITTED",
                  "nonce_consumed": False, "nonce_consume_transition": "APPLYING",
@@ -262,6 +297,7 @@ def begin(root: Path, admission_path: Path, expected_sha256: str, now: dt.dateti
         if (marker.exists() or marker.is_symlink() or journal.exists() or journal.is_symlink()
                 or recovery.exists() or recovery.is_symlink()):
             raise Stop("NONCE_ALREADY_CONSUMED")
+        _guard_no_other_flights(root, nonce)
         payload = {"schema": "qa525-nonce-v1", "nonce": nonce,
                    "admission_sha256": actual, "journal_path": str(journal),
                    "ops_source_sha": data["ops_source_sha"],
