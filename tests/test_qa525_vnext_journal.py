@@ -91,7 +91,7 @@ class DurableJournalContract(unittest.TestCase):
         phases = (
             "before_nonce", "after_nonce_fsync", "after_nonce_dirsync",
             "before_journal", "after_journal_temp_fsync",
-            "after_journal_replace", "after_journal_dirsync",
+            "after_journal_link", "after_journal_dirsync",
         )
         for phase in phases:
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
@@ -111,10 +111,61 @@ class DurableJournalContract(unittest.TestCase):
                     with self.assertRaisesRegex(mod.Stop, "NONCE_ALREADY_CONSUMED"):
                         fx.begin()
                 leftovers = list(fx.root.glob(".qa525-next-*"))
-                if phase == "after_journal_temp_fsync":
+                if phase in ("after_journal_temp_fsync", "after_journal_link"):
                     self.assertEqual(len(leftovers), 1)
                 else:
                     self.assertEqual(len(leftovers), 0)
+
+    def test_second_nonce_is_blocked_after_prior_applying_and_recovery(self):
+        with self.fx.begin():
+            pass
+        other = fake_admission()
+        other["nonce"] = "another-qa525-vnext-nonce-20261105"
+        self.fx.put(other)
+        with self.assertRaisesRegex(mod.Stop, "PRIOR_NONCE_UNRESOLVED"):
+            self.fx.begin()
+        mod.reconcile_after_crash(self.fx.root, NONCE, NOW)
+        with self.assertRaisesRegex(mod.Stop, "PRIOR_NONCE_UNRESOLVED"):
+            self.fx.begin()
+        self.assertEqual(mod.inspect(self.fx.root, other["nonce"]), "NOT_STARTED")
+
+    def test_pending_legacy_dual_blocks_and_applied_does_not_prove_runtime(self):
+        legacy = self.fx.root / ("dual-" + "f"*40 + ".json")
+        legacy.write_text('{"status":"PENDING"}\n')
+        legacy.chmod(0o600)
+        with self.assertRaisesRegex(mod.Stop, "LEGACY_DUAL_NOT_APPLIED"):
+            self.fx.begin()
+        legacy.write_text('{"status":"RECOVERY_REQUIRED"}\n')
+        with self.assertRaisesRegex(mod.Stop, "LEGACY_DUAL_NOT_APPLIED"):
+            self.fx.begin()
+        legacy.write_text('{"status":"APPLIED"}\n')
+        # Legacy terminal status is not a substitute for verify_state.
+        with self.fx.begin():
+            self.assertEqual(mod.inspect(self.fx.root, NONCE), "APPLYING")
+
+    def test_unknown_legacy_and_vnext_journal_name_fail_closed(self):
+        for name in ("dual-unknown.json", "journal-not_a_nonce.json"):
+            with self.subTest(name=name):
+                path = self.fx.root / name
+                path.write_text('{"status":"APPLIED"}\n')
+                path.chmod(0o600)
+                with self.assertRaisesRegex(mod.Stop, "LEGACY_DUAL_NAME_INVALID|JOURNAL_UNKNOWN_RESIDUE"):
+                    self.fx.begin()
+                path.unlink()
+
+    def test_noncooperating_writer_cannot_be_overwritten_by_journal(self):
+        journal = self.fx.root / ("journal-" + NONCE + ".json")
+        def competing_writer(_source, dest, **_kwargs):
+            Path(dest).write_text("existing unrelated journal")
+            Path(dest).chmod(0o600)
+            raise FileExistsError()
+        with mock.patch.object(mod.os, "link", side_effect=competing_writer):
+            with self.assertRaisesRegex(mod.Stop, "JOURNAL_ALREADY_EXISTS"):
+                self.fx.begin()
+        self.assertEqual(journal.read_text(), "existing unrelated journal")
+        # The consumed nonce fails closed even though the journal is ambiguous.
+        with self.assertRaisesRegex(mod.Stop, "NONCE_ALREADY_CONSUMED"):
+            self.fx.begin()
 
     def test_reconcile_never_deletes_orphaned_temp(self):
         def boom(phase):
