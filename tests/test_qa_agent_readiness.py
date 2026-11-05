@@ -13,6 +13,7 @@ from test_qa525_vnext_cache import (  # noqa: F401
     OfflineAdmission,
     StaticContract,
     SyncDownload,
+    TrustedOpsAndCache,
 )
 from test_qa525_route_a_pat_script import Custody, StaticAndGuards  # noqa: F401
 
