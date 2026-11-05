@@ -35,6 +35,9 @@ STAGING_MODULE = HERE / "qa-signed-staging.py"
 OPS_RECEIPT = Path("/etc/pmgm/qa525-vnext-ops.json")
 DEFAULT_CACHE_ROOT = Path("/var/lib/pmgm/qa525-cache")
 DEFAULT_STATE_DIR = Path("/var/lib/pmgm/qa525-state")
+G6_ARCHIVE_ROOT = Path("/home/soporte")
+G6_RECEIPT_PATH = Path("/opt/centenario/qa-g6/archive.receipt.json")
+G6_REPORT_ROOT = Path("/opt/centenario/qa-g6")
 MAX_ARTIFACT = 4 * 1024 * 1024 * 1024
 MAX_JSON = 1024 * 1024
 MIN_G6_MARGIN = 30 * 60
@@ -388,29 +391,76 @@ def _validate_identity(recorded: object, actual: dict) -> bool:
 
 
 def _g6_expiry(g6: dict, current: dt.datetime, margin: int) -> dt.datetime:
-    required = {"reviewed_at", "g6_archive_name", "g6_archive_sha256", "g6_drive_file_id",
+    """Check the same local G6 evidence as the supervised launcher, offline.
+
+    The off-host Drive attestation remains a trusted reviewed claim, not
+    cryptographic proof of disaster recovery. Fail closed if any local
+    archive, receipt, or isolated-restore evidence is absent or altered.
+    """
+    required = {"g6_archive_name", "g6_archive_sha256", "g6_drive_file_id",
                 "g6_offhost_sha256_verified", "g6_restore_report_name"}
-    if not required.issubset(g6):
+    if type(g6) is not dict or set(g6) not in (required, required | {"reviewed_at"}):
         raise Stop("G6_FIELDS_INVALID")
-    match = G6_ARCHIVE.fullmatch(g6.get("g6_archive_name", ""))
-    if (match is None or not re.fullmatch(r"[a-f0-9]{64}", g6.get("g6_archive_sha256", "")) or
-            DRIVE_ID.fullmatch(g6.get("g6_drive_file_id", "")) is None or
-            G6_RESTORE.fullmatch(g6.get("g6_restore_report_name", "")) is None):
+    if "reviewed_at" in g6:
+        reviewed = g6["reviewed_at"]
+        if type(reviewed) is not int or reviewed > int(current.timestamp()) or reviewed < 0:
+            raise Stop("G6_REVIEW_TIMESTAMP_INVALID")
+    name, recorded = g6["g6_archive_name"], g6["g6_archive_sha256"]
+    match = G6_ARCHIVE.fullmatch(name) if type(name) is str else None
+    if (match is None or type(recorded) is not str or
+            re.fullmatch(r"[a-f0-9]{64}", recorded) is None or
+            type(g6["g6_drive_file_id"]) is not str or
+            DRIVE_ID.fullmatch(g6["g6_drive_file_id"]) is None or
+            type(g6["g6_restore_report_name"]) is not str or
+            G6_RESTORE.fullmatch(g6["g6_restore_report_name"]) is None):
         raise Stop("G6_REFERENCE_INVALID")
-    if g6.get("g6_offhost_sha256_verified") is not True:
+    if g6["g6_offhost_sha256_verified"] is not True:
         raise Stop("G6_NOT_VERIFIED")
-    reviewed, now_epoch = g6.get("reviewed_at"), int(current.timestamp())
-    if type(reviewed) is not int or not 0 <= now_epoch - reviewed <= MAX_APPROVAL_LIFETIME:
-        raise Stop("G6_REVIEW_TOO_OLD")
     try:
         archive_epoch = calendar.timegm(time.strptime(match.group(1), "%Y%m%dT%H%M%S"))
     except ValueError:
         raise Stop("G6_REFERENCE_INVALID") from None
-    expiry = dt.datetime.fromtimestamp(archive_epoch + G6_LIFETIME, dt.timezone.utc)
-    if not 0 <= now_epoch - archive_epoch < G6_LIFETIME:
+    age = int(current.timestamp()) - archive_epoch
+    if not 0 <= age < G6_LIFETIME:
         raise Stop("G6_CHECKPOINT_TOO_OLD")
+    expiry = dt.datetime.fromtimestamp(archive_epoch + G6_LIFETIME, dt.timezone.utc)
     if (expiry - current).total_seconds() < margin:
         raise Stop("G6_MARGIN_LOW")
+
+    archive = G6_ARCHIVE_ROOT / name
+    try:
+        fd = os.open(archive, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        with os.fdopen(fd, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size <= 0 or before.st_nlink != 1:
+                raise Stop("G6_LOCAL_ARCHIVE_INVALID")
+            checksum = hashlib.sha256()
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                checksum.update(chunk)
+            after = os.fstat(stream.fileno())
+        if not _same_file(before, after):
+            raise Stop("G6_LOCAL_ARCHIVE_CHANGED")
+    except Stop:
+        raise
+    except OSError:
+        raise Stop("G6_LOCAL_ARCHIVE_MISSING") from None
+    if checksum.hexdigest() != recorded:
+        raise Stop("G6_LOCAL_ARCHIVE_HASH_CHANGED")
+
+    receipt = load_json_trusted(G6_RECEIPT_PATH)
+    if (receipt.get("archive_name") != name or receipt.get("sha256") != recorded or
+            receipt.get("status") != "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING"):
+        raise Stop("G6_LOCAL_RECEIPT_MISMATCH")
+    restore = load_json_trusted(G6_REPORT_ROOT / g6["g6_restore_report_name"])
+    tables = restore.get("postgres_tables_by_database")
+    if (restore.get("result") != "G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY" or
+            restore.get("archive_filename") != name or
+            restore.get("archive_sha256") != recorded or
+            type(tables) is not dict or set(tables) != {"pmgm", "pmgm_keycloak"} or
+            not all(type(v) is int and v > 0 for v in tables.values()) or
+            type(restore.get("silo_objects_verified")) is not int or
+            restore.get("production_touched") is not False):
+        raise Stop("G6_RESTORATION_UNVERIFIED")
     return expiry
 
 
@@ -527,10 +577,12 @@ def postcheck(args) -> dict:
     prepared_exists = launcher.get("prepared_exists") is True
     if prepared_exists:
         prepared = load_json_trusted(args.prepared)
-        bound_sha = prepared.get("source_sha", prepared.get("app_source_sha"))
-        if (bound_sha != args.app_sha or prepared.get("status") not in
-                {"PREPARED", "APPLIED_EVIDENCE_RETAINED"} or
-                prepared.get("may_apply") is not False or prepared.get("new_images") != images):
+        if (prepared.get("source_sha") != args.app_sha or
+                prepared.get("status") != "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT" or
+                prepared.get("may_apply") is not False or
+                prepared.get("services_unchanged") is not True or
+                any(prepared.get(service + "_image_id") != images[service]
+                    for service in ("api", "web"))):
             raise Stop("PREPARED_NOT_BOUND_TO_APPLIED")
     elif args.prepared.exists() or args.prepared.is_symlink():
         raise Stop("PREPARED_STATUS_DRIFT")
