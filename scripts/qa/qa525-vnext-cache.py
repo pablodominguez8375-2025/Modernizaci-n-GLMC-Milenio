@@ -457,22 +457,59 @@ def _cache_lock(cache_root: Path):
     return fd
 
 
+def _evidence_move(source: Path, prefix: str, current: dt.datetime) -> Path:
+    """Preserve a bad or expired root-only cache instead of deleting evidence."""
+    if type(prefix) is not str or prefix not in {"expired", "invalid", "orphaned"}:
+        raise Stop("CACHE_EVIDENCE_PREFIX_INVALID")
+    require_private_dir(source, exact=True)
+    target = source.parent / (
+        prefix + "-" + source.name.lstrip(".") + "-" + current.strftime("%Y%m%dT%H%M%SZ"))
+    if target.exists() or target.is_symlink():
+        raise Stop("CACHE_EVIDENCE_COLLISION")
+    try:
+        os.rename(source, target)
+        _fsync_dir(source.parent)
+    except OSError:
+        raise Stop("CACHE_EVIDENCE_PRESERVE_FAILED") from None
+    return target
+
+
+def _sweep_stale_sync_orphans(cache_root: Path, current: dt.datetime) -> list[str]:
+    """Move crashed .SHA.sync-* working dirs under the lock, never delete."""
+    require_private_dir(cache_root, exact=True)
+    quarantined = []
+    try:
+        entries = sorted(cache_root.iterdir(), key=lambda path: path.name)
+    except OSError:
+        raise Stop("CACHE_SCAN_FAILED") from None
+    if len(entries) > 10000:
+        raise Stop("CACHE_SCAN_LIMIT")
+    for child in entries:
+        if re.fullmatch(r"\.[0-9a-f]{40}\.sync-[A-Za-z0-9_-]+", child.name):
+            # An orphaned symlink or weak mode is suspicious; stop without
+            # moving it. A good orphan is moved atomically and retained.
+            try:
+                require_private_dir(child, exact=True)
+            except Stop:
+                raise Stop("CACHE_ORPHAN_UNTRUSTED") from None
+            quarantined.append(_evidence_move(child, "orphaned", current).name)
+    return quarantined
+
+
 def _rotate_expired(final_target: Path, current: dt.datetime) -> None:
     if not (final_target.exists() or final_target.is_symlink()):
         return
+    require_private_dir(final_target, exact=True)
     try:
-        require_private_dir(final_target, exact=True)
         expiry = parse_time(load_json_trusted(final_target / "cache.json").get("cache_expires_at"))
     except Stop:
-        raise Stop("CACHE_EXISTING_INVALID") from None
+        # Only preserve a root-only directory; never silently trust its
+        # receipt or erase the material that caused the fail-closed result.
+        _evidence_move(final_target, "invalid", current)
+        return
     if expiry > current:
         raise Stop("CACHE_ALREADY_VALID")
-    rotated = final_target.parent / ("expired-" + final_target.name + "-" +
-                                     current.strftime("%Y%m%dT%H%M%SZ"))
-    if rotated.exists() or rotated.is_symlink():
-        raise Stop("CACHE_ROTATION_COLLISION")
-    os.rename(final_target, rotated)
-    _fsync_dir(final_target.parent)
+    _evidence_move(final_target, "expired", current)
 
 
 def sync(args) -> dict:
@@ -500,6 +537,7 @@ def sync(args) -> dict:
     lock = _cache_lock(args.cache_root)
     try:
         current = now_utc()
+        _sweep_stale_sync_orphans(args.cache_root, current)
         final_target = args.cache_root / app_sha
         _rotate_expired(final_target, current)
         target = Path(tempfile.mkdtemp(prefix="." + app_sha + ".sync-", dir=args.cache_root))
