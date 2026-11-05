@@ -87,7 +87,22 @@ def require_root(code: str) -> None:
         raise Stop(code)
 
 
+def require_trusted_ancestors(path: Path) -> None:
+    """Reject symlinked, non-root-owned or writable ancestors before root I/O."""
+    if not path.is_absolute() or ".." in path.parts:
+        raise Stop("UNTRUSTED_PATH")
+    for ancestor in path.parents:
+        try:
+            st = ancestor.lstat()
+        except OSError:
+            raise Stop("UNTRUSTED_ANCESTOR_MISSING") from None
+        if (not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or
+                stat.S_IMODE(st.st_mode) & 0o022):
+            raise Stop("UNTRUSTED_ANCESTOR")
+
+
 def require_private_dir(path: Path, *, exact: bool = False) -> None:
+    require_trusted_ancestors(path)
     try:
         info = path.lstat()
     except OSError:
@@ -99,6 +114,7 @@ def require_private_dir(path: Path, *, exact: bool = False) -> None:
 
 
 def _trusted_fd(path: Path, *, mode: int, max_size: int | None = None) -> tuple[int, os.stat_result]:
+    require_trusted_ancestors(path)
     try:
         parent = path.parent.lstat()
         if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid() or
