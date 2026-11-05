@@ -1,3 +1,4 @@
+import argparse
 import datetime as dt
 from email.message import Message
 import hashlib
@@ -357,6 +358,57 @@ class TrustedOpsAndCache(unittest.TestCase):
             readiness.chmod(0o644)
             with self.assertRaisesRegex(MODULE.Stop, "OPS_SOURCE_HASH_MISMATCH"):
                 MODULE.load_verified_ops()
+
+    def test_ops_module_runs_verified_bytes_after_path_replacement(self):
+        program, readiness, staging = (self.root / "program.py", self.root / "readiness.py",
+                                       self.root / "staging.py")
+        for source, target, mode in ((SCRIPT, program, 0o755), (READINESS, readiness, 0o644),
+                                     (STAGING, staging, 0o644)):
+            shutil.copyfile(source, target)
+            target.chmod(mode)
+        receipt = self.root / "ops.json"
+        write_private(receipt, {"schema": "qa525-ops-v2", "status": "OPS_SIGNED_VERIFIED",
+            "ops_source_sha": OPS, "program_sha256": digest(program),
+            "readiness_sha256": digest(readiness), "staging_sha256": digest(staging),
+            "policy_hash": MODULE.POLICY_HASH})
+        original = MODULE.trusted_file
+        changed = []
+
+        def mutate_after_read(path, **kw):
+            payload = original(path, **kw)
+            if Path(path) == readiness:
+                # Simulate a file replacement immediately after verified read.
+                readiness.write_text('raise RuntimeError("TOCTOU executed")\\n')
+                readiness.chmod(0o644)
+                changed.append(True)
+            return payload
+
+        with mock.patch.object(MODULE, "__file__", str(program)), \
+             mock.patch.object(MODULE, "READINESS_MODULE", readiness), \
+             mock.patch.object(MODULE, "STAGING_MODULE", staging), \
+             mock.patch.object(MODULE, "OPS_RECEIPT", receipt):
+            with mock.patch.object(MODULE, "trusted_file", side_effect=mutate_after_read):
+                ops, verified_readiness, verified_staging = MODULE.load_verified_ops()
+            self.assertTrue(changed)
+            self.assertEqual(ops["ops_source_sha"], OPS)
+            self.assertTrue(hasattr(verified_readiness, "evaluate_latest_validated"))
+            self.assertTrue(hasattr(verified_staging, "verify_manifest"))
+            with self.assertRaisesRegex(MODULE.Stop, "OPS_SOURCE_HASH_MISMATCH"):
+                MODULE.load_verified_ops()
+
+    def test_g6_margin_type_enforces_bounds_without_large_choices(self):
+        self.assertEqual(MODULE.g6_margin_seconds("1800"), 1800)
+        self.assertEqual(MODULE.g6_margin_seconds(str(MODULE.G6_LIFETIME - 1)),
+                         MODULE.G6_LIFETIME - 1)
+        for bad in ("0", "1799", str(MODULE.G6_LIFETIME), "not-a-number"):
+            with self.subTest(bad=bad), self.assertRaises(argparse.ArgumentTypeError):
+                MODULE.g6_margin_seconds(bad)
+        admission_parser = next(
+            action for action in MODULE.parser()._subparsers._group_actions
+            if action.dest == "command").choices["admit"]
+        margin_option = next(action for action in admission_parser._actions
+                             if action.dest == "g6_margin_seconds")
+        self.assertIsNone(margin_option.choices)
 
     def test_expired_cache_is_rotated_and_preserved(self):
         cache_root = self.root / "cache"
