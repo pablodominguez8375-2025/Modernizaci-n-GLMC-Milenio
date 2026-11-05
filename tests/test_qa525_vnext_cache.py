@@ -223,7 +223,7 @@ class OfflineAdmission(unittest.TestCase):
                 fx = AdmissionFixture(directory)
                 write_private(fx.cache / relative, b"changed")
                 with self.assertRaisesRegex(MODULE.Stop,
-                                            "CACHE_ATTESTATION_BINDING_CHANGED|SIGNED_MEMBER_INVALID"):
+                                            "CACHE_ATTESTATION_BINDING_CHANGED|SIGNED_MEMBER_INVALID|SIGNED_BUNDLE_EXTRACT_MISMATCH"):
                     self.admit_fixture(fx)
 
     def test_internal_signed_member_changed_but_outer_receipt_rewritten_is_rejected(self):
