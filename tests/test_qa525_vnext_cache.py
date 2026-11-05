@@ -70,7 +70,7 @@ class AdmissionFixture:
         outer = BytesIO()
         with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(self.signed_member, self.signed_bytes)
-            archive.writestr("installable-provenance.sigstore.json", b'{"fixture":true}')
+            archive.writestr("installable-provenance.sigstore.json", b'{"bundle":"verified"}\n')
             archive.writestr(self.signed_member + ".verification.json", b'{"fixture":true}')
         write_private(self.cache / "artifact.zip", outer.getvalue())
         self.package = self.cache / "package"
@@ -232,7 +232,7 @@ class OfflineAdmission(unittest.TestCase):
         outer = BytesIO()
         with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(self.fx.signed_member, b"tampered inner member")
-            archive.writestr("installable-provenance.sigstore.json", b'{"fixture":true}')
+            archive.writestr("installable-provenance.sigstore.json", b'{"bundle":"verified"}\n')
             archive.writestr(self.fx.signed_member + ".verification.json", b'{"fixture":true}')
         artifact = self.fx.cache / "artifact.zip"
         write_private(artifact, outer.getvalue())
@@ -242,6 +242,24 @@ class OfflineAdmission(unittest.TestCase):
         receipt["artifact_identity"] = identity(artifact)
         write_private(receipt_path, receipt)
         with self.assertRaisesRegex(MODULE.Stop, "CACHE_ATTESTATION_BINDING_CHANGED"):
+            MODULE.admit(self.fx.args())
+
+    def test_outer_zip_embedded_bundle_mismatch_blocks_admission(self):
+        # The extracted bundle in cache must be byte-for-byte the same as the
+        # attestation member of the pinned external Actions artifact.
+        outer = BytesIO()
+        with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(self.fx.signed_member, self.fx.signed_bytes)
+            archive.writestr("installable-provenance.sigstore.json", b'{"malicious":true}')
+            archive.writestr(self.fx.signed_member + ".verification.json", b'{"fixture":true}')
+        artifact = self.fx.cache / "artifact.zip"
+        write_private(artifact, outer.getvalue())
+        receipt_path = self.fx.cache / "cache.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt["artifact_sha256"] = digest(artifact)
+        receipt["artifact_identity"] = identity(artifact)
+        write_private(receipt_path, receipt)
+        with self.assertRaisesRegex(MODULE.Stop, "SIGNED_BUNDLE_EXTRACT_MISMATCH"):
             MODULE.admit(self.fx.args())
 
     def test_signed_member_requires_exact_three_outer_members(self):
