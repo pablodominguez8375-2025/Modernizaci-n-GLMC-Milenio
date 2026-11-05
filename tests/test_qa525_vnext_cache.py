@@ -55,6 +55,9 @@ class AdmissionFixture:
         self.cache = self.cache_root / APP
         self.state = self.root / "state"
         self.g6 = self.root / "g6.json"
+        self.archive_root = self.root / "archives"
+        self.report_root = self.root / "reports"
+        self.archive_receipt = self.report_root / "archive.receipt.json"
         self.approval = self.root / "approval.json"
         artifact = b"signed artifact bytes\n"
         write_private(self.cache / "artifact.zip", artifact)
@@ -94,14 +97,24 @@ class AdmissionFixture:
             "network_allowed_after_sync": False, "synced_at": "2026-11-05T11:55:00Z",
             "cache_expires_at": "2026-11-05T18:00:00Z",
         })
+        archive_name = "centenario-qa-g6-CIFRADO-20261104T130000Z.tar.gz"
+        report_name = "isolated-restore-20261104T130000Z.report.json"
+        archive = self.archive_root / archive_name
+        write_private(archive, b"synthetic encrypted local backup")
+        sha = hashlib.sha256(archive.read_bytes()).hexdigest()
         write_private(self.g6, {
-            "reviewed_at": int(NOW.timestamp()) - 300,
-            "g6_archive_name": "centenario-qa-g6-CIFRADO-20261104T130000Z.tar.gz",
-            "g6_archive_sha256": "a" * 64,
+            "g6_archive_name": archive_name, "g6_archive_sha256": sha,
             "g6_drive_file_id": "drive_file_id_1234567890",
             "g6_offhost_sha256_verified": True,
-            "g6_restore_report_name": "isolated-restore-20261104T130000Z.report.json",
-        })
+            "g6_restore_report_name": report_name})
+        write_private(self.archive_receipt, {
+            "status": "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING",
+            "archive_name": archive_name, "sha256": sha})
+        write_private(self.report_root / report_name, {
+            "result": "G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY",
+            "archive_filename": archive_name, "archive_sha256": sha,
+            "postgres_tables_by_database": {"pmgm": 2, "pmgm_keycloak": 2},
+            "silo_objects_verified": 1, "production_touched": False})
         write_private(self.approval, {
             "status": "APPROVED", "nonce": NONCE, "ops_source_sha": OPS,
             "app_source_sha": APP, "artifact_id": 525001,
@@ -127,6 +140,9 @@ class OfflineAdmission(unittest.TestCase):
             mock.patch.object(MODULE, "require_root", return_value=None),
             mock.patch.object(MODULE, "load_verified_ops",
                               return_value=({"ops_source_sha": OPS}, object(), STAGING_MODULE)),
+            mock.patch.object(MODULE, "G6_ARCHIVE_ROOT", self.fx.archive_root),
+            mock.patch.object(MODULE, "G6_RECEIPT_PATH", self.fx.archive_receipt),
+            mock.patch.object(MODULE, "G6_REPORT_ROOT", self.fx.report_root),
         ]
         for patch in self.patches:
             patch.start()
@@ -135,6 +151,12 @@ class OfflineAdmission(unittest.TestCase):
         for patch in reversed(self.patches):
             patch.stop()
         self.tmp.cleanup()
+
+    def admit_fixture(self, fx):
+        with mock.patch.object(MODULE, "G6_ARCHIVE_ROOT", fx.archive_root), \
+             mock.patch.object(MODULE, "G6_RECEIPT_PATH", fx.archive_receipt), \
+             mock.patch.object(MODULE, "G6_REPORT_ROOT", fx.report_root):
+            return MODULE.admit(fx.args())
 
     def test_happy_path_is_fully_bound_but_nonce_not_consumed(self):
         result = MODULE.admit(self.fx.args())
@@ -183,7 +205,7 @@ class OfflineAdmission(unittest.TestCase):
                 fx = AdmissionFixture(directory)
                 write_private(fx.cache / relative, b"changed")
                 with self.assertRaisesRegex(MODULE.Stop, "CACHE_ATTESTATION_BINDING_CHANGED"):
-                    MODULE.admit(fx.args())
+                    self.admit_fixture(fx)
 
     def test_staged_manifest_change_fails_closed(self):
         write_private(self.fx.package / "storage-bundle/rebuild-report.json", b'{"tampered":true}\n')
@@ -212,19 +234,38 @@ class OfflineAdmission(unittest.TestCase):
                 record["g6_archive_name"] = archive
                 write_private(fx.g6, record)
                 with self.assertRaisesRegex(MODULE.Stop, code):
-                    MODULE.admit(fx.args())
+                    self.admit_fixture(fx)
                 self.assertFalse(fx.state.exists())
 
-    def test_g6_offhost_and_review_freshness_are_required(self):
-        for field, value, code in (("g6_offhost_sha256_verified", False, "G6_NOT_VERIFIED"),
-                                   ("reviewed_at", int(NOW.timestamp()) - 1801, "G6_REVIEW_TOO_OLD")):
-            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+    def test_g6_review_is_optional_and_not_the_backup_age(self):
+        record = json.loads(self.fx.g6.read_text())
+        self.assertNotIn("reviewed_at", record)
+        record["reviewed_at"] = int(NOW.timestamp()) - 8 * 3600
+        write_private(self.fx.g6, record)
+        self.assertEqual(MODULE.admit(self.fx.args())["status"], "ADMITTED")
+
+    def test_g6_local_evidence_fail_closed(self):
+        for kind, error in (("offhost", "G6_NOT_VERIFIED"),
+                            ("missing", "G6_LOCAL_ARCHIVE_MISSING"),
+                            ("changed", "G6_LOCAL_ARCHIVE_HASH_CHANGED"),
+                            ("receipt", "G6_LOCAL_RECEIPT_MISMATCH"),
+                            ("restore", "G6_RESTORATION_UNVERIFIED")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
                 fx = AdmissionFixture(directory)
-                record = json.loads(fx.g6.read_text())
-                record[field] = value
-                write_private(fx.g6, record)
-                with self.assertRaisesRegex(MODULE.Stop, code):
-                    MODULE.admit(fx.args())
+                g6 = json.loads(fx.g6.read_text())
+                if kind == "offhost":
+                    g6["g6_offhost_sha256_verified"] = False
+                    write_private(fx.g6, g6)
+                elif kind == "missing":
+                    (fx.archive_root / g6["g6_archive_name"]).unlink()
+                elif kind == "changed":
+                    write_private(fx.archive_root / g6["g6_archive_name"], b"modified")
+                elif kind == "receipt":
+                    write_private(fx.archive_receipt, {"status": "FAILED"})
+                else:
+                    write_private(fx.report_root / g6["g6_restore_report_name"], {"result": "FAILED"})
+                with self.assertRaisesRegex(MODULE.Stop, error):
+                    self.admit_fixture(fx)
 
     def test_approval_binds_every_security_dimension(self):
         cases = (("ops_source_sha", "0" * 40), ("app_source_sha", "1" * 40),
@@ -238,7 +279,7 @@ class OfflineAdmission(unittest.TestCase):
                 approval[field] = value
                 write_private(fx.approval, approval)
                 with self.assertRaisesRegex(MODULE.Stop, "APPROVAL_BINDING_INVALID"):
-                    MODULE.admit(fx.args())
+                    self.admit_fixture(fx)
 
     def test_approval_lifetime_is_capped_at_30_minutes(self):
         approval = json.loads(self.fx.approval.read_text())
@@ -270,7 +311,7 @@ class OfflineAdmission(unittest.TestCase):
                 else:
                     target.chmod(0o644)
                 with self.assertRaisesRegex(MODULE.Stop, "FILE_(UNTRUSTED|UNAVAILABLE)"):
-                    MODULE.admit(fx.args())
+                    self.admit_fixture(fx)
 
     def test_cache_root_symlink_or_loose_directory_is_rejected(self):
         for case in ("symlink", "mode"):
@@ -283,7 +324,7 @@ class OfflineAdmission(unittest.TestCase):
                 else:
                     fx.cache_root.chmod(0o755)
                 with self.assertRaisesRegex(MODULE.Stop, "CACHE_DIRECTORY_UNTRUSTED"):
-                    MODULE.admit(fx.args())
+                    self.admit_fixture(fx)
 
 
 class TrustedOpsAndCache(unittest.TestCase):
@@ -446,8 +487,10 @@ class AppliedPostcheck(unittest.TestCase):
         self.images = {"api": self.api, "web": self.web}
         self.root_gate = mock.patch.object(MODULE, "require_root", return_value=None)
         self.root_gate.start()
-        write_private(self.prepared, {"source_sha": APP, "status": "PREPARED",
-                                      "may_apply": False, "new_images": self.images})
+        write_private(self.prepared, {"source_sha": APP,
+            "status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT",
+            "may_apply": False, "services_unchanged": True,
+            "api_image_id": self.api, "web_image_id": self.web})
         write_private(self.journal, {"source_sha": APP, "status": "APPLIED", "new_images": self.images})
         write_private(self.launcher, {"status": "QA525_UPDATE_STATUS_READ_ONLY",
             "services_running": True, "prepared_exists": True,
@@ -470,15 +513,25 @@ class AppliedPostcheck(unittest.TestCase):
         self.assertTrue(result["prepared_retained"])
         self.assertFalse(result["may_apply"])
 
-    def test_retained_prepared_requires_sha_images_and_may_apply_false(self):
-        for field, value in (("source_sha", "0" * 40), ("new_images", {}), ("may_apply", True)):
+    def test_retained_prepared_requires_real_launcher_schema(self):
+        original = json.loads(self.prepared.read_text())
+        for field, value in (("source_sha", "0" * 40), ("status", "PREPARED"),
+                             ("api_image_id", "sha256:" + "c" * 64),
+                             ("web_image_id", "sha256:" + "d" * 64),
+                             ("services_unchanged", False), ("may_apply", True)):
             with self.subTest(field=field):
-                prepared = {"source_sha": APP, "status": "PREPARED",
-                            "may_apply": False, "new_images": self.images}
-                prepared[field] = value
-                write_private(self.prepared, prepared)
+                record = dict(original)
+                record[field] = value
+                write_private(self.prepared, record)
                 with self.assertRaisesRegex(MODULE.Stop, "PREPARED_NOT_BOUND_TO_APPLIED"):
                     MODULE.postcheck(self.args())
+        write_private(self.prepared, original)
+
+    def test_fabricated_old_fixture_is_rejected(self):
+        write_private(self.prepared, {"source_sha": APP, "status": "PREPARED",
+            "may_apply": False, "new_images": self.images})
+        with self.assertRaisesRegex(MODULE.Stop, "PREPARED_NOT_BOUND_TO_APPLIED"):
+            MODULE.postcheck(self.args())
 
     def test_runtime_and_next_drift_are_rejected(self):
         runtime = json.loads(self.runtime.read_text())
