@@ -14,8 +14,8 @@ from test_qa525_vnext_cache import (  # noqa: F401
     StaticContract,
     SyncDownload,
     TrustedOpsAndCache,
+    TrustedAncestorContract,
 )
-from test_qa525_route_a_pat_script import Custody, StaticAndGuards  # noqa: F401
 
 FILE = Path(__file__).resolve().parents[1] / "scripts/qa/qa-agent-readiness.py"
 spec = importlib.util.spec_from_file_location("qa_agent_readiness", FILE)
