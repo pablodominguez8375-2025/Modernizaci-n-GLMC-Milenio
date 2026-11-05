@@ -12,6 +12,7 @@ import socket
 import stat
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -139,6 +140,7 @@ class OfflineAdmission(unittest.TestCase):
         self.patches = [
             mock.patch.object(MODULE, "now_utc", return_value=NOW),
             mock.patch.object(MODULE, "require_root", return_value=None),
+            mock.patch.object(MODULE, "require_trusted_ancestors", return_value=None),
             mock.patch.object(MODULE, "load_verified_ops",
                               return_value=({"ops_source_sha": OPS}, object(), STAGING_MODULE)),
             mock.patch.object(MODULE, "G6_REVIEW_ROOT", self.fx.root),
@@ -341,12 +343,44 @@ class OfflineAdmission(unittest.TestCase):
                     self.admit_fixture(fx)
 
 
+class TrustedAncestorContract(unittest.TestCase):
+    def test_all_parents_are_checked_and_writable_or_symlink_rejected(self):
+        path = Path("/var/lib/pmgm/qa525-cache/packet.json")
+        folders = {"/": 0o755, "/var": 0o755, "/var/lib": 0o755,
+                   "/var/lib/pmgm": 0o700, "/var/lib/pmgm/qa525-cache": 0o700}
+        original_lstat = Path.lstat
+
+        def fake_lstat(p, *args, **kwargs):
+            key = str(p)
+            if key not in folders:
+                return original_lstat(p, *args, **kwargs)
+            return SimpleNamespace(st_uid=0, st_mode=stat.S_IFDIR | folders[key])
+
+        with mock.patch.object(Path, "lstat", autospec=True, side_effect=fake_lstat):
+            MODULE.require_trusted_ancestors(path)
+            folders["/var/lib"] = 0o777
+            with self.assertRaisesRegex(MODULE.Stop, "UNTRUSTED_ANCESTOR"):
+                MODULE.require_trusted_ancestors(path)
+            folders["/var/lib"] = 0o755
+            folders["/var/lib/pmgm"] = stat.S_IFLNK | 0o777
+            with self.assertRaisesRegex(MODULE.Stop, "UNTRUSTED_ANCESTOR"):
+                MODULE.require_trusted_ancestors(path)
+
+    def test_dotdot_and_relative_path_are_rejected(self):
+        for p in (Path("relative/file.json"), Path("/var/lib/../etc/pmgm/a")):
+            with self.subTest(path=str(p)), self.assertRaisesRegex(MODULE.Stop, "UNTRUSTED_PATH"):
+                MODULE.require_trusted_ancestors(p)
+
+
 class TrustedOpsAndCache(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
+        self.chain_patch = mock.patch.object(MODULE, "require_trusted_ancestors", return_value=None)
+        self.chain_patch.start()
 
     def tearDown(self):
+        self.chain_patch.stop()
         self.tmp.cleanup()
 
     def test_fixed_ops_receipt_pins_program_and_both_modules(self):
@@ -552,6 +586,8 @@ class AppliedPostcheck(unittest.TestCase):
         self.images = {"api": self.api, "web": self.web}
         self.root_gate = mock.patch.object(MODULE, "require_root", return_value=None)
         self.root_gate.start()
+        self.chain_patch = mock.patch.object(MODULE, "require_trusted_ancestors", return_value=None)
+        self.chain_patch.start()
         write_private(self.prepared, {"source_sha": APP,
             "status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT",
             "may_apply": False, "services_unchanged": True,
@@ -566,6 +602,7 @@ class AppliedPostcheck(unittest.TestCase):
 
     def tearDown(self):
         self.root_gate.stop()
+        self.chain_patch.stop()
         self.tmp.cleanup()
 
     def args(self):
