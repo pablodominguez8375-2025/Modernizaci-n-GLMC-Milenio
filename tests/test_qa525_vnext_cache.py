@@ -120,6 +120,7 @@ class AdmissionFixture:
             "app_source_sha": APP, "attestation_source_sha": APP,
             "attestation_signer_workflow": STAGING_MODULE.WORKFLOW,
             "artifact_id": 525001, "artifact_sha256": self.artifact_digest,
+            "silo_workflow_run": REAL_DEV_PROVENANCE["source_run_id"],
             "artifact_identity": identity(artifact_path),
             "signed_installable_sha256": "sha256:" + hashlib.sha256(self.signed_bytes).hexdigest(),
             "manifest_sha256": digest(manifest_path), "manifest_identity": identity(manifest_path),
@@ -196,6 +197,7 @@ class OfflineAdmission(unittest.TestCase):
         result = MODULE.admit(self.fx.args())
         self.assertEqual(result["status"], "ADMITTED")
         self.assertEqual(result["artifact_id"], 525001)
+        self.assertEqual(result["silo_workflow_run"], REAL_DEV_PROVENANCE["source_run_id"])
         self.assertEqual(result["signed_installable_sha256"],
                          "sha256:" + hashlib.sha256(self.fx.signed_bytes).hexdigest())
         self.assertEqual(result["policy_hash"], MODULE.POLICY_HASH)
@@ -304,7 +306,8 @@ class OfflineAdmission(unittest.TestCase):
         statement = copy.deepcopy(REAL_DEV_PROVENANCE["statement"])
         bundle = self.fx.cache / "statement-from-real-bundle.json"
         write_private(bundle, dsse_from_statement(statement))
-        actual = MODULE.sigstore_dsse_subject_digest(bundle, APP, STAGING_MODULE.WORKFLOW)
+        actual = MODULE.sigstore_dsse_subject_digest(
+                bundle, APP, STAGING_MODULE.WORKFLOW, REAL_DEV_PROVENANCE["source_run_id"])
         self.assertEqual(actual, "sha256:" + REAL_DEV_PROVENANCE["actual_signed_inner_zip_sha256"])
         self.assertEqual(REAL_DEV_PROVENANCE["actual_bundle_sha256"],
                          "966da0dd4c0ed476d68cf9659ba0f01df7872d5c8609dc8f46e99f198c0600ad")
@@ -325,13 +328,46 @@ class OfflineAdmission(unittest.TestCase):
                 bundle = self.fx.cache / "tampered-statement.json"
                 write_private(bundle, dsse_from_statement(statement))
                 with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_INVALID"):
-                    MODULE.sigstore_dsse_subject_digest(bundle, APP, STAGING_MODULE.WORKFLOW)
+                    MODULE.sigstore_dsse_subject_digest(
+                bundle, APP, STAGING_MODULE.WORKFLOW, REAL_DEV_PROVENANCE["source_run_id"])
+
+    def test_real_dev_invocation_is_bound_to_exact_selected_silo_run(self):
+        statement = copy.deepcopy(REAL_DEV_PROVENANCE["statement"])
+        path = self.fx.cache / "invocation-id-synthetic.json"
+        write_private(path, dsse_from_statement(statement))
+        valid_id = REAL_DEV_PROVENANCE["source_run_id"]
+        self.assertEqual(
+            MODULE.sigstore_dsse_subject_digest(path, APP, STAGING_MODULE.WORKFLOW, valid_id),
+            "sha256:" + REAL_DEV_PROVENANCE["actual_signed_inner_zip_sha256"])
+        for other in (valid_id + 1, valid_id - 1, 0, -1, True, None):
+            with self.subTest(other=other), self.assertRaisesRegex(
+                    MODULE.Stop, "SIGNED_DSSE_CONTEXT_INVALID|SIGNED_DSSE_SUBJECT_INVALID"):
+                MODULE.sigstore_dsse_subject_digest(path, APP, STAGING_MODULE.WORKFLOW, other)
+        for suffix in ("/attempts/0", "/attempts/00", "/attempts/1?redirect=1", "/attempts/1/extra"):
+            with self.subTest(suffix=suffix):
+                statement = copy.deepcopy(REAL_DEV_PROVENANCE["statement"])
+                statement["predicate"]["runDetails"]["metadata"]["invocationId"] = (
+                    "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/actions/runs/"
+                    + str(valid_id) + suffix)
+                write_private(path, dsse_from_statement(statement))
+                with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_INVALID"):
+                    MODULE.sigstore_dsse_subject_digest(
+                        path, APP, STAGING_MODULE.WORKFLOW, valid_id)
+
+    def test_cache_run_binding_rejects_tampered_run_even_if_receipt_updated(self):
+        receipt_path = self.fx.cache / "cache.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt["silo_workflow_run"] = REAL_DEV_PROVENANCE["source_run_id"] + 12
+        write_private(receipt_path, receipt)
+        with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_INVALID"):
+            MODULE.admit(self.fx.args())
 
     def test_invalid_dsse_payload_is_rejected_without_network(self):
         bundle = self.fx.cache / "installable-provenance.sigstore.json"
         write_private(bundle, b'{"dsseEnvelope":{"payload":"@@not-base64@@"}}')
         with self.assertRaisesRegex(MODULE.Stop, "SIGNED_DSSE_SUBJECT_INVALID"):
-            MODULE.sigstore_dsse_subject_digest(bundle, APP, STAGING_MODULE.WORKFLOW)
+            MODULE.sigstore_dsse_subject_digest(
+                bundle, APP, STAGING_MODULE.WORKFLOW, REAL_DEV_PROVENANCE["source_run_id"])
 
     def test_outer_zip_embedded_bundle_mismatch_blocks_admission(self):
         # The extracted bundle in cache must be byte-for-byte the same as the
