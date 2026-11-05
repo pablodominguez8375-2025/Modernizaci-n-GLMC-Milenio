@@ -20,13 +20,13 @@ REPO = "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
 STATE = Path("/opt/centenario/qa-auto-lite")
 PINNED_CODE = {
     "check-public-readiness.py": "490a3b03004ce8ef54888046de3d255c93aee9c3b6287edf22753cb6893a1857",
-    "qa-agent-readiness.py": "a652918767877d25e91dfd0364ce95932803c9bfb3281418f09d2addca10750c",
+    "qa-agent-readiness.py": "076bd7a931f577d36381fc484efeff81133fdb2a2a64225a7efb673ed5471ece",
     "qa-lite-compose-adapter.py": "5fa03db393159a49c3606276635248467f6cada8ffdbd5ccaded5afb8b68ed7d",
     "qa-lite-install.py": "0162384605473b15ded3602207be5a978d9ddbcb0bfd59aa5de7bfd8f6551388",
     "qa-lite-web-build.py": "299aa40b12df1ae615a8aaa1cbc6437effc2fd0bf1d83211b5a97550084c1aef",
     "qa-lite-web-transaction.py": "a06fd6faec00e3a58e5ecd9f3b4fa3f26e7ab869b7afe8b1402e73cd974ddae5",
     "qa-public-release-download.py": "3fbce9e62961dd23619f320fd5b592b48ea2f04f6aeb35fc48cf4c3e5f5574b5",
-    "qa-signed-staging.py": "ebc9acd2845b4185f8362a81d3eb1657e9a83b1c2cd3d53e4d3dc739fd911e88"
+    "qa-signed-staging.py": "dd9696a5e98be043789963db95ab0eefd6e87c7d32a961ba4665defa6891ee7b"
 }
 
 

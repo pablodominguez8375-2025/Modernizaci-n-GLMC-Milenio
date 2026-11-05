@@ -6,6 +6,17 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 from email.message import Message
 
+# Ensure QA PAT regressions run in the existing protected readiness CI job.
+from test_qa525_pat_auth import PatClientTests  # noqa: F401
+from test_qa525_vnext_cache import (  # noqa: F401
+    AppliedPostcheck,
+    OfflineAdmission,
+    StaticContract,
+    SyncDownload,
+    TrustedOpsAndCache,
+    TrustedAncestorContract,
+)
+
 FILE = Path(__file__).resolve().parents[1] / "scripts/qa/qa-agent-readiness.py"
 spec = importlib.util.spec_from_file_location("qa_agent_readiness", FILE)
 agent = importlib.util.module_from_spec(spec)
