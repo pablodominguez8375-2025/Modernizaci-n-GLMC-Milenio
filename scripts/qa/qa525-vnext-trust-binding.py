@@ -34,12 +34,14 @@ ANCHOR_FIELDS = frozenset({
     "signed_installable_sha256", "manifest_sha256",
     "attestation_bundle_sha256", "artifact_identity",
     "g6_review_sha256", "sponsor_approval_sha256",
+    "silo_workflow_run", "g6_expires_at",
     "issued_at", "expires_at",
 })
 SAME_FIELDS = (
     "nonce", "ops_source_sha", "app_source_sha", "policy_hash",
     "artifact_id", "artifact_sha256", "signed_installable_sha256",
     "manifest_sha256", "attestation_bundle_sha256", "artifact_identity",
+    "silo_workflow_run", "g6_expires_at",
 )
 IDENTITY_FIELDS = {"device", "inode", "size", "mtime_ns"}
 
@@ -137,7 +139,7 @@ def bind(admission_bytes: bytes, external_approval_bytes: bytes, *,
             raise Stop("BINDING_ADMISSION_STATE_INVALID")
     for key, expected in {
         "schema": "qa525-approval-anchor-v1",
-        "status": "REQUIRES_EXTERNAL_SIGNATURE_VERIFICATION",
+        "status": "BYTE_BINDING_INPUT_ONLY_NOT_VERIFIED_HERE",
         "scope": "API_WEB_QA_ONLY", "host": "glmdch",
         "environment": "QA_SYNTHETIC",
     }.items():
@@ -163,7 +165,10 @@ def bind(admission_bytes: bytes, external_approval_bytes: bytes, *,
         raise Stop("BINDING_ANCHOR_DIGEST_INVALID")
     if not hmac.compare_digest(admission["policy_hash"], trusted_policy_hash):
         raise Stop("BINDING_POLICY_MISMATCH")
-    if any(anchor[key] != admission[key] for key in SAME_FIELDS):
+    if (not _identity(anchor["artifact_identity"])
+            or type(anchor["silo_workflow_run"]) is not int
+            or any(type(anchor[key]) is not type(admission[key])
+                   or anchor[key] != admission[key] for key in SAME_FIELDS)):
         raise Stop("BINDING_CUT_MISMATCH")
     digest = "sha256:" + hashlib.sha256(admission_bytes).hexdigest()
     if not hmac.compare_digest(anchor["admission_sha256"], digest):
@@ -174,7 +179,7 @@ def bind(admission_bytes: bytes, external_approval_bytes: bytes, *,
     issued = _utc(anchor["issued_at"], "BINDING_APPROVAL_TIME_INVALID")
     expiry = _utc(anchor["expires_at"], "BINDING_APPROVAL_TIME_INVALID")
     if (not admitted <= current < min(until, g6, expiry)
-            or not issued <= current or issued > admitted
+            or not admitted <= issued <= current
             or until - admitted > dt.timedelta(minutes=30)
             or expiry - issued > dt.timedelta(minutes=30)
             or expiry <= issued):
@@ -182,6 +187,7 @@ def bind(admission_bytes: bytes, external_approval_bytes: bytes, *,
     return {
         "status": "BYTE_BINDING_MATCH_ONLY_EXTERNAL_AUTH_NOT_VERIFIED",
         "admission_sha256": digest,
+        "external_anchor_sha256": "sha256:" + hashlib.sha256(external_approval_bytes).hexdigest(),
         "nonce": admission["nonce"],
         "app_source_sha": admission["app_source_sha"],
         "ops_source_sha": admission["ops_source_sha"],
