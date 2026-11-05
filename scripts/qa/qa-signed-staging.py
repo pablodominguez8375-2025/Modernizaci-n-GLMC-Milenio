@@ -129,7 +129,8 @@ def verify_manifest(package, source_sha):
         raise Blocked("SIGNED_SILO_EVIDENCE_MISSING")
 
 
-def stage(artifact, expected_sha256, source_sha, output, *, tokenless=False):
+def stage(artifact, expected_sha256, source_sha, output, *, tokenless=False,
+          attestation_output=None):
     if not SHA.fullmatch(source_sha):
         raise Blocked("INVALID_SOURCE_SHA")
     parsed = DIGEST.fullmatch(expected_sha256)
@@ -176,6 +177,17 @@ def stage(artifact, expected_sha256, source_sha, output, *, tokenless=False):
                            stderr=subprocess.DEVNULL, timeout=120, **options)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             raise Blocked("INSTALLABLE_ATTESTATION_FAILED") from None
+        if attestation_output is not None:
+            attestation_output = Path(attestation_output)
+            if (attestation_output.exists() or attestation_output.is_symlink() or
+                    attestation_output.parent != output.parent):
+                raise Blocked("ATTESTATION_OUTPUT_INVALID")
+            fd = os.open(attestation_output,
+                         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "wb") as destination, bundle.open("rb") as source:
+                shutil.copyfileobj(source, destination, 1024 * 1024)
+                destination.flush()
+                os.fsync(destination.fileno())
         destination = tmp / "package"
         destination.mkdir(mode=0o700)
         with zipfile.ZipFile(signed) as inner:
