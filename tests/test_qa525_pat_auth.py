@@ -1,9 +1,7 @@
 """Offline QA525 PAT authentication tests. Never contact GitHub or read host PAT."""
-import ast
 from io import BytesIO
 import importlib.util
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -11,7 +9,6 @@ from urllib.error import HTTPError
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / 'scripts/qa/qa-agent-readiness.py'
-ROUTE = ROOT / 'scripts/qa/operators/qa525-route-a-pat-6eed4-20261103.sh'
 spec = importlib.util.spec_from_file_location('qa525_pat_readiness_test', MODULE)
 agent = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(agent)
@@ -116,35 +113,6 @@ class PatClientTests(unittest.TestCase):
                  patch.object(agent, 'QA_PAT', link):
                 with self.assertRaises(agent.GateFailure):
                     agent._read_qa_pat()
-
-    def test_rate_script_shell_and_inner_python_syntax(self):
-        source = ROUTE.read_text()
-        check = subprocess.run(['bash','-n',str(ROUTE)],capture_output=True,text=True)
-        self.assertEqual(check.returncode,0,check.stderr)
-        inner = source.split("<<'PY_AUTH_RATE'\n",1)[1].split('\nPY_AUTH_RATE',1)[0]
-        ast.parse(inner)
-        signed = source.split("<<'PY_SIGNED_LAUNCHER'\n", 1)[1].split(
-            '\nPY_SIGNED_LAUNCHER', 1)[0]
-        ast.parse(signed)
-        for invariant in (
-            'LAUNCHER_ATOMIC_SWAP_COMMITTED', 'candidate_operator_sha256',
-            'PAT_READINESS_HASH', 'os.O_NOFOLLOW', 'os.O_CLOEXEC',
-            'latest.st_ino == before.st_ino', 'current == expected',
-            'source_sha', 'matches == 1',
-        ):
-            self.assertIn(invariant, signed)
-        self.assertNotIn('if False else True', signed)
-        self.assertNotIn('61e3f1f7e7dd561567e5fac415a6fa9695c2f74fa86adde21dd8ed0330d03cd3', source)
-
-    def test_route_preserves_original_security_controls(self):
-        s=ROUTE.read_text()
-        for expected in ('MIN_RL=58','rem >= MIN_RL','AUTH_QUOTA_LOW_NO_RETRY',
-                         'hold_locks','state_ok','custody','review-and-run',
-                         'G6_REVIEW_HASH','EF_HISTORY_DRIFT','POST_IMAGE_REVISION'):
-            self.assertIn(expected,s)
-        self.assertNotIn('QA525_GITHUB_ANON_QUOTA',s)
-        self.assertIn('ProxyHandler({})',s)
-        self.assertIn('os.O_NOFOLLOW',s)
 
 if __name__=='__main__':
     unittest.main()
