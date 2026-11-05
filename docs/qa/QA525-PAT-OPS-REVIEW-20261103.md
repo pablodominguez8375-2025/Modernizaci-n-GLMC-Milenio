@@ -19,15 +19,26 @@ Estado: DRAFT; **prohibido instalar o desplegar a partir de este documento**. Is
 
 El componente no contiene comando `apply`, no invoca Docker ni `pmgm-qa-update` y no autoriza instalación. La siguiente entrega debe conectar un motor APPLY offline con state machine durable y recovery por transición, bajo artefacto OPS firmado y revisión independiente.
 
-Pruebas locales: 81 pruebas del contrato `QA auto-agent readiness` PASS, incluidas 28 de SYNC/admisión/postcheck vNext. Los tests desacoplan explícitamente el gate root sin debilitarlo en producción; validan recibo OPS y módulos fijos, bundle Sigstore + manifest ligados para admisión offline, cero red, no reenvío del PAT al blob, redirect no confiable, aprobación/G6 reales, carrera concurrente del mismo nonce, rotación preservando caché expirada, digest streaming de memoria acotada, symlink/hardlink/permisos, `prepared.json` retenido y drift de runtime.
+Pruebas históricas del contrato: 81/81 PASS al corte `b7658a5a`. Nuevos HEAD de revisión posteriores deben evaluar su CI exacto (sin extrapolar 81/81). La suite añadió casos sobre el acta G6 real, prepared y seguridad de módulos. Los tests desacoplan explícitamente el gate root sin debilitarlo en producción; validan recibo OPS y módulos fijos, bundle Sigstore + manifest ligados para admisión offline, cero red, no reenvío del PAT al blob, redirect no confiable, aprobación/G6 reales, carrera concurrente del mismo nonce, rotación preservando caché expirada, digest streaming de memoria acotada, symlink/hardlink/permisos, `prepared.json` retenido y drift de runtime.
 
 ## Separación obligatoria
 
-- **Corte de aplicación inmóvil:** `app_source_sha=6eed4f00b7917da3cca36bbda70e16d16328648d`, `app_digest=sha256:9bdeaa217f09f5d0e19e50d214a4abb936a2b89246ebbcf71fb71178e5574af2`. El gate QA525 compara SHA con HEAD vivo de `dev`: NO fusionar esta rama a `dev` antes de completar ese corte.
+- **Corte de aplicación ya completado:** `app_source_sha=6eed4f00b7917da3cca36bbda70e16d16328648d` está `APPLIED` en QA según el cierre físico #525. Su digest histórico de release es `sha256:9bdeaa217f09f5d0e19e50d214a4abb936a2b89246ebbcf71fb71178e5574af2`. Claude dio GO el 05-11 para integrar este código **inactivo** a `dev` (HEAD revisado `d7e3a14`), pero ello no autoriza operar QA. Si `dev` avanza, jamás inferir que el nuevo SHA fue desplegado: el APP físico permanece `6eed4` hasta evidencia posterior.
 - **Corte de operación firmado (pendiente):** no heredar autorización de la firma del corte de aplicación. El bootstrap debe validar identidad Sigstore, manifest, conjunto completo de fuentes y hashes, nonce/acta root0600, cinco locks y reversión. El instalador #822 incluye `qa-agent-readiness.py` en `SOURCES`; reemplazar únicamente el launcher o editar el árbol signed-stage rompe la cadena de confianza.
 - **Lectura de PAT:** únicamente root/glmdch, archivo regular 0600 root:root de un solo enlace, sin seguir symlinks y sin caída a consulta anónima. HTTPS fijo `api.github.com`, sin proxy/redirección, errores HTTP fail-closed y sin filtrar valor de token.
 - **Cuota:** solo pertenece a `SYNC/CACHE`. ADMISSION y el futuro APPLY no consultan GitHub ni dependen de cuota.
 - **Autorizaciones diferentes:** instalar operador ≠ archivar los cinco registros `cfe4` ≠ un intento A2 API+WEB. Cada cambio físico requiere el procedimiento y aprobación correspondientes.
+
+## Revisión adversarial y pendientes de instalación (05-11-2026)
+
+Dictamen Claude en PR #845 comentario [6655297963](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/845#issuecomment-6655297963): **0 P0, 0 P1**, 11 workflows principales SUCCESS sobre `d7e3a14`; GO para merge a `dev` como código **inactivo**, NO-GO instalación. Tras esa revisión se añadieron mejoras en la rama: carga OPS desde los mismos bytes verificados (P2 hash/exec); validador acotado de margen G6; ruta de acta anclada a `/etc/pmgm/qa525-g6-reviewed-<timestamp>.json` con pruebas de rechazo. Toda modificación de HEAD invalida la aprobación exact-head hasta nueva revisión; no presentar un CI parcial como GO.
+
+Pendientes que no deben confundirse con la autorización de código:
+- Fijar/verificar procedencia firmada del recibo OPS y dependencias transitivas del comando externo `gh attestation verify`; impedir recibos root autoafirmados como autorización.
+- Aclarar el digest Sigstore: `qa-signed-staging.py` verifica el **ZIP instalable interno firmado**, mientras `artifact_sha256` corresponde al **ZIP externo de Actions**. No comparar ambos digests como si fueran el mismo objeto; comprobar el subject contra el hash del miembro interno firmado y ligar ese miembro al artefacto externo guardado.
+- Completar validación de ancestros root/no-symlink, rotación segura de cachés inválidas, referencia verificable de Sponsor y semántica de los dos planos de estado.
+- G6: la ruta del último acta verificada en #525 fue `/etc/pmgm/qa525-g6-reviewed-20261104T105358Z.json` (SHA del archivo registrada en el issue); el nombre demuestra ruta, **no** demuestra sus claves internas. Las claves exactas aún requieren evidencia física sin valores secretos, si se amplía el esquema.
+- State machine futura: `CACHED_VERIFIED -> ADMITTED -> APPLYING -> APPLIED | ROLLED_BACK | RECOVERY_REQUIRED`; nonce O_EXCL solo en APPLYING, journal root0600 y fsync; revalidar baseline/G6/TTL/identidad antes de aplicar; APPLY sin red y crash-injection, recovery no automático de estados ambiguos. Sin implementación APPLY en el código actual.
 
 ## Definition of Done
 
