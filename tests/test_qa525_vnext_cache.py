@@ -55,7 +55,7 @@ class AdmissionFixture:
         self.cache_root = self.root / "cache"
         self.cache = self.cache_root / APP
         self.state = self.root / "state"
-        self.g6 = self.root / "g6.json"
+        self.g6 = self.root / "qa525-g6-reviewed-20261104T130000Z.json"
         self.archive_root = self.root / "archives"
         self.report_root = self.root / "reports"
         self.archive_receipt = self.report_root / "archive.receipt.json"
@@ -141,6 +141,7 @@ class OfflineAdmission(unittest.TestCase):
             mock.patch.object(MODULE, "require_root", return_value=None),
             mock.patch.object(MODULE, "load_verified_ops",
                               return_value=({"ops_source_sha": OPS}, object(), STAGING_MODULE)),
+            mock.patch.object(MODULE, "G6_REVIEW_ROOT", self.fx.root),
             mock.patch.object(MODULE, "G6_ARCHIVE_ROOT", self.fx.archive_root),
             mock.patch.object(MODULE, "G6_RECEIPT_PATH", self.fx.archive_receipt),
             mock.patch.object(MODULE, "G6_REPORT_ROOT", self.fx.report_root),
@@ -154,7 +155,8 @@ class OfflineAdmission(unittest.TestCase):
         self.tmp.cleanup()
 
     def admit_fixture(self, fx):
-        with mock.patch.object(MODULE, "G6_ARCHIVE_ROOT", fx.archive_root), \
+        with mock.patch.object(MODULE, "G6_REVIEW_ROOT", fx.root), \
+             mock.patch.object(MODULE, "G6_ARCHIVE_ROOT", fx.archive_root), \
              mock.patch.object(MODULE, "G6_RECEIPT_PATH", fx.archive_receipt), \
              mock.patch.object(MODULE, "G6_REPORT_ROOT", fx.report_root):
             return MODULE.admit(fx.args())
@@ -237,6 +239,17 @@ class OfflineAdmission(unittest.TestCase):
                 with self.assertRaisesRegex(MODULE.Stop, code):
                     self.admit_fixture(fx)
                 self.assertFalse(fx.state.exists())
+
+    def test_arbitrary_root_g6_acta_location_is_rejected(self):
+        for path in (self.fx.root / "g6.json",
+                     self.fx.root / "subdir" / self.fx.g6.name,
+                     Path("/var/tmp") / self.fx.g6.name):
+            with self.subTest(path=str(path)):
+                args = self.fx.args()
+                args.g6_receipt = path
+                with self.assertRaisesRegex(MODULE.Stop, "G6_REVIEW_PATH_UNTRUSTED"):
+                    MODULE.admit(args)
+        self.assertEqual(MODULE.admit(self.fx.args())["status"], "ADMITTED")
 
     def test_g6_review_is_optional_and_not_the_backup_age(self):
         record = json.loads(self.fx.g6.read_text())
