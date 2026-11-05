@@ -55,7 +55,8 @@ def _root(directory: Path) -> None:
         st = directory.lstat()
     except OSError:
         raise Stop("JOURNAL_ROOT_MISSING") from None
-    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or stat.S_IMODE(st.st_mode) != 0o700:
+    if (not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid()
+            or st.st_gid != os.getegid() or stat.S_IMODE(st.st_mode) != 0o700):
         raise Stop("JOURNAL_ROOT_UNTRUSTED")
 
 
@@ -70,13 +71,43 @@ def _fsync_dir(directory: Path) -> None:
         raise Stop("JOURNAL_DIRECTORY_FSYNC_FAILED") from None
 
 
+def _abandoned_journal_link_is_trusted(path: Path, st: os.stat_result) -> bool:
+    """Recognize exactly one crash-left temporary link to the same journal.
+
+    os.link(NOREPLACE) followed by unlink(temp) leaves nlink=2 if abruptly
+    interrupted between those calls. The second name must be a private
+    .qa525-next-* entry in the same locked root directory.
+    """
+    if not path.name.startswith("journal-") or st.st_nlink != 2:
+        return False
+    try:
+        entries = list(path.parent.iterdir())
+        if len(entries) > 10000:
+            return False
+        copies = []
+        for candidate in entries:
+            if candidate.name.startswith(".qa525-next-"):
+                copy = candidate.lstat()
+                if (stat.S_ISREG(copy.st_mode) and
+                        copy.st_dev == st.st_dev and copy.st_ino == st.st_ino and
+                        copy.st_uid == st.st_uid and copy.st_gid == st.st_gid and
+                        stat.S_IMODE(copy.st_mode) == 0o600):
+                    copies.append(candidate)
+        return len(copies) == 1
+    except OSError:
+        return False
+
+
 def _read_private(path: Path) -> bytes:
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
         with os.fdopen(fd, "rb") as file:
             before = os.fstat(file.fileno())
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
-                    or stat.S_IMODE(before.st_mode) != 0o600 or before.st_nlink != 1
+                    or before.st_gid != os.getegid()
+                    or stat.S_IMODE(before.st_mode) != 0o600
+                    or (before.st_nlink != 1 and
+                        not _abandoned_journal_link_is_trusted(path, before))
                     or not 0 < before.st_size <= MAX_JSON):
                 raise Stop("JOURNAL_FILE_UNTRUSTED")
             raw = file.read(MAX_JSON + 1)
@@ -235,6 +266,8 @@ def _guard_no_other_flights(root: Path, nonce: str) -> None:
         if any(name.startswith(part) and name.endswith(".json")
                for part in ("nonce-consumed-", "journal-", "recovery-")):
             raise Stop("JOURNAL_UNKNOWN_RESIDUE")
+        if name.startswith(".qa525-next-"):
+            raise Stop("JOURNAL_ORPHAN_TEMP_UNRESOLVED")
         if name.startswith("dual-") and name.endswith(".json"):
             if re.fullmatch(r"dual-[a-f0-9]{40}\.json", name) is None:
                 raise Stop("LEGACY_DUAL_NAME_INVALID")
