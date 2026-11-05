@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""QA525 vNext: authenticated SYNC/CACHE and offline ADMISSION.
-
-This program never applies a release.  ``sync`` is the only command allowed to
-use the network; ``admit`` consumes a root-owned immutable cache and emits a
-short-lived admission receipt for a separate, offline apply engine.
-"""
+"""QA525 vNext authenticated cache and offline admission (never APPLY)."""
 from __future__ import annotations
 
 import argparse
+import calendar
 import datetime as dt
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -17,21 +14,38 @@ from pathlib import Path
 import re
 import shutil
 import socket
+import ssl
 import stat
 import sys
 import tempfile
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
-import ssl
-
 
 SHA = re.compile(r"^[a-f0-9]{40}$")
 DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 NONCE = re.compile(r"^[A-Za-z0-9_-]{24,96}$")
+G6_ARCHIVE = re.compile(r"^centenario-qa-g6-CIFRADO-([0-9]{8}T[0-9]{6})Z\.tar\.gz$")
+G6_RESTORE = re.compile(r"^isolated-restore-[0-9]{8}T[0-9]{6}Z\.report\.json$")
+DRIVE_ID = re.compile(r"^[A-Za-z0-9_-]{20,100}$")
+
+HERE = Path(__file__).resolve().parent
+READINESS_MODULE = HERE / "qa-agent-readiness.py"
+STAGING_MODULE = HERE / "qa-signed-staging.py"
+OPS_RECEIPT = Path("/etc/pmgm/qa525-vnext-ops.json")
 DEFAULT_CACHE_ROOT = Path("/var/lib/pmgm/qa525-cache")
-DEFAULT_PAT = Path("/etc/pmgm/qa525-github-readonly.pat")
+DEFAULT_STATE_DIR = Path("/var/lib/pmgm/qa525-state")
 MAX_ARTIFACT = 4 * 1024 * 1024 * 1024
+MAX_JSON = 1024 * 1024
 MIN_G6_MARGIN = 30 * 60
+MAX_APPROVAL_LIFETIME = 30 * 60
+MAX_ADMISSION_LIFETIME = 30 * 60
+G6_LIFETIME = 48 * 60 * 60
+POLICY = {"action": "ADMIT_OFFLINE_APPLY", "environment": "QA_SYNTHETIC",
+          "host": "glmdch", "scope": "API_WEB_QA_ONLY", "network_allowed": False,
+          "nonce_consumed_at": "APPLYING"}
+POLICY_HASH = "sha256:" + hashlib.sha256(
+    json.dumps(POLICY, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 class Stop(Exception):
@@ -54,6 +68,8 @@ def parse_time(value: str) -> dt.datetime:
         parsed = dt.datetime.fromisoformat(value[:-1] + "+00:00")
     except ValueError:
         raise Stop("TIME_INVALID") from None
+    if parsed.utcoffset() != dt.timedelta(0):
+        raise Stop("TIME_INVALID")
     return parsed
 
 
@@ -61,65 +77,104 @@ def format_time(value: dt.datetime) -> str:
     return value.astimezone(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return "sha256:" + digest.hexdigest()
-
-
 def require_root(code: str) -> None:
     if os.geteuid() != 0:
         raise Stop(code)
 
 
-def require_private_dir(path: Path, *, exact: bool = False, owner: int | None = None,
-                        group: int | None = None) -> None:
-    if owner is None:
-        owner = os.geteuid()
-    if group is None:
-        group = os.getegid()
+def require_private_dir(path: Path, *, exact: bool = False) -> None:
     try:
         info = path.lstat()
     except OSError:
         raise Stop("DIRECTORY_UNAVAILABLE") from None
     mode = stat.S_IMODE(info.st_mode)
-    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != owner or info.st_gid != group or
-            mode & 0o022 or (exact and mode != 0o700)):
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or
+            info.st_gid != os.getegid() or mode & 0o022 or (exact and mode != 0o700)):
         raise Stop("DIRECTORY_UNTRUSTED")
 
 
-def trusted_file(path: Path, *, owner: int | None = None, group: int | None = None,
-                 mode: int = 0o600, max_size: int | None = None) -> bytes:
-    if owner is None:
-        owner = os.geteuid()
-    if group is None:
-        group = os.getegid()
+def _trusted_fd(path: Path, *, mode: int, max_size: int | None = None) -> tuple[int, os.stat_result]:
     try:
         parent = path.parent.lstat()
-        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != owner or
-                parent.st_gid != group or parent.st_mode & 0o022):
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid() or
+                parent.st_gid != os.getegid() or parent.st_mode & 0o022):
             raise Stop("PARENT_UNTRUSTED")
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
-        with os.fdopen(fd, "rb") as handle:
-            before = os.fstat(handle.fileno())
-            if (not stat.S_ISREG(before.st_mode) or before.st_uid != owner or
-                    before.st_gid != group or before.st_nlink != 1 or
-                    stat.S_IMODE(before.st_mode) != mode):
-                raise Stop("FILE_UNTRUSTED")
-            if max_size is not None and before.st_size > max_size:
-                raise Stop("FILE_TOO_LARGE")
-            data = handle.read((max_size + 1) if max_size is not None else -1)
-            after = os.fstat(handle.fileno())
-            if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
-                    after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
-                raise Stop("FILE_CHANGED")
-            if len(data) != before.st_size:
-                raise Stop("FILE_CHANGED")
-            return data
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or
+                info.st_gid != os.getegid() or info.st_nlink != 1 or
+                stat.S_IMODE(info.st_mode) != mode):
+            os.close(fd)
+            raise Stop("FILE_UNTRUSTED")
+        if max_size is not None and info.st_size > max_size:
+            os.close(fd)
+            raise Stop("FILE_TOO_LARGE")
+        return fd, info
+    except Stop:
+        raise
     except OSError:
         raise Stop("FILE_UNAVAILABLE") from None
+
+
+def _same_file(before: os.stat_result, after: os.stat_result) -> bool:
+    return (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns,
+            before.st_ctime_ns) == (after.st_dev, after.st_ino, after.st_size,
+                                    after.st_mtime_ns, after.st_ctime_ns)
+
+
+def trusted_file(path: Path, *, mode: int = 0o600, max_size: int | None = None) -> bytes:
+    fd, before = _trusted_fd(path, mode=mode, max_size=max_size)
+    try:
+        with os.fdopen(fd, "rb") as handle:
+            data = handle.read((max_size + 1) if max_size is not None else -1)
+            after = os.fstat(handle.fileno())
+        if not _same_file(before, after) or len(data) != before.st_size:
+            raise Stop("FILE_CHANGED")
+        return data
+    except Stop:
+        raise
+    except OSError:
+        raise Stop("FILE_UNAVAILABLE") from None
+
+
+def trusted_digest(path: Path, *, mode: int = 0o600,
+                   max_size: int | None = None) -> tuple[str, dict]:
+    """Hash a potentially multi-GiB file in bounded memory using one descriptor."""
+    fd, before = _trusted_fd(path, mode=mode, max_size=max_size)
+    digest = hashlib.sha256()
+    try:
+        with os.fdopen(fd, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+            after = os.fstat(handle.fileno())
+        if not _same_file(before, after):
+            raise Stop("FILE_CHANGED")
+    except Stop:
+        raise
+    except OSError:
+        raise Stop("FILE_UNAVAILABLE") from None
+    identity = {"device": before.st_dev, "inode": before.st_ino, "size": before.st_size,
+                "mtime_ns": before.st_mtime_ns}
+    return "sha256:" + digest.hexdigest(), identity
+
+
+def load_json_trusted(path: Path) -> dict:
+    raw = trusted_file(path, max_size=MAX_JSON)
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise Stop("JSON_INVALID") from None
+    if type(value) is not dict:
+        raise Stop("JSON_INVALID")
+    return value
+
+
+def _fsync_dir(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def atomic_write(path: Path, payload: bytes) -> None:
@@ -133,11 +188,7 @@ def atomic_write(path: Path, payload: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        _fsync_dir(path.parent)
     finally:
         try:
             os.unlink(temporary)
@@ -145,25 +196,61 @@ def atomic_write(path: Path, payload: bytes) -> None:
             pass
 
 
-def load_readiness(path: Path):
-    spec = importlib.util.spec_from_file_location("qa525_readiness", path)
+def exclusive_write(path: Path, payload: bytes) -> None:
+    """Reserve the admission name atomically; a partial crash remains fail-closed."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except FileExistsError:
+        raise Stop("NONCE_ALREADY_ADMITTED") from None
+    except OSError:
+        raise Stop("ADMISSION_CREATE_FAILED") from None
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _fsync_dir(path.parent)
+    except Exception:
+        raise Stop("ADMISSION_WRITE_FAILED") from None
+
+
+def _load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise Stop("READINESS_IMPORT")
+        raise Stop("OPS_MODULE_IMPORT")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_verified_ops() -> tuple[dict, object, object]:
+    """Trust only fixed root-owned modules pinned by the signed OPS receipt."""
+    receipt = load_json_trusted(OPS_RECEIPT)
+    required = {"schema", "status", "ops_source_sha", "program_sha256",
+                "readiness_sha256", "staging_sha256", "policy_hash"}
+    if (set(receipt) != required or receipt.get("schema") != "qa525-ops-v2" or
+            receipt.get("status") != "OPS_SIGNED_VERIFIED" or
+            not isinstance(receipt.get("ops_source_sha"), str) or
+            not SHA.fullmatch(receipt["ops_source_sha"]) or
+            receipt.get("policy_hash") != POLICY_HASH):
+        raise Stop("OPS_RECEIPT_INVALID")
+    for path, field, mode in ((Path(__file__).resolve(), "program_sha256", 0o755),
+                              (READINESS_MODULE, "readiness_sha256", 0o644),
+                              (STAGING_MODULE, "staging_sha256", 0o644)):
+        actual, _ = trusted_digest(path, mode=mode, max_size=5 * 1024 * 1024)
+        if actual != receipt.get(field):
+            raise Stop("OPS_SOURCE_HASH_MISMATCH")
+    return (receipt, _load_module("qa525_readiness_v2", READINESS_MODULE),
+            _load_module("qa525_staging_v2", STAGING_MODULE))
 
 
 def download_artifact(url: str, token: str, destination: Path) -> None:
     prefix = "https://api.github.com/repos/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/actions/artifacts/"
     if not url.startswith(prefix) or not url.endswith("/zip"):
         raise Stop("ARTIFACT_URL_INVALID")
-    request = Request(url, headers={
-        "Accept": "application/vnd.github+json",
-        "Authorization": "Bearer " + token,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "centenario-qa525-sync-v2",
-    })
+    request = Request(url, headers={"Accept": "application/vnd.github+json",
+        "Authorization": "Bearer " + token, "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "centenario-qa525-sync-v2"})
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
     try:
         opener.open(request, timeout=20)
@@ -182,8 +269,8 @@ def download_artifact(url: str, token: str, destination: Path) -> None:
         declared = response.headers.get("Content-Length")
         if declared is not None and (not declared.isdigit() or int(declared) > MAX_ARTIFACT):
             raise Stop("ARTIFACT_TOO_LARGE")
-        with destination.open("xb") as handle:
-            os.chmod(destination, 0o600)
+        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "wb") as handle:
             total = 0
             while True:
                 chunk = response.read(1024 * 1024)
@@ -195,99 +282,163 @@ def download_artifact(url: str, token: str, destination: Path) -> None:
                 handle.write(chunk)
             handle.flush()
             os.fsync(handle.fileno())
+    except Stop:
+        raise
     except (HTTPError, URLError, OSError):
         raise Stop("ARTIFACT_DOWNLOAD_FAILED") from None
 
 
+def _cache_lock(cache_root: Path):
+    fd = os.open(cache_root / ".sync.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    os.fchmod(fd, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def _rotate_expired(final_target: Path, current: dt.datetime) -> None:
+    if not (final_target.exists() or final_target.is_symlink()):
+        return
+    try:
+        require_private_dir(final_target, exact=True)
+        expiry = parse_time(load_json_trusted(final_target / "cache.json").get("cache_expires_at"))
+    except Stop:
+        raise Stop("CACHE_EXISTING_INVALID") from None
+    if expiry > current:
+        raise Stop("CACHE_ALREADY_VALID")
+    rotated = final_target.parent / ("expired-" + final_target.name + "-" +
+                                     current.strftime("%Y%m%dT%H%M%SZ"))
+    if rotated.exists() or rotated.is_symlink():
+        raise Stop("CACHE_ROTATION_COLLISION")
+    os.rename(final_target, rotated)
+    _fsync_dir(final_target.parent)
+
+
 def sync(args) -> dict:
-    require_root("SYNC_REQUIRES_ROOT_GLM DCH".replace(" ", ""))
+    require_root("SYNC_REQUIRES_ROOT_GLMDCH")
     if socket.gethostname().split(".", 1)[0] != "glmdch":
         raise Stop("SYNC_REQUIRES_ROOT_GLMDCH")
-    readiness = load_readiness(args.readiness)
+    ops, readiness, staging = load_verified_ops()
     token = readiness._read_qa_pat()
     if token is None:
         raise Stop("PAT_REQUIRED_NO_ANONYMOUS_FALLBACK")
     result = readiness.evaluate_latest_validated(readiness.fetch_public)
-    app_sha = result.get("source_sha")
-    artifact_digest = result.get("artifact_sha256")
-    artifact_id = result.get("artifact_id")
+    app_sha, artifact_digest, artifact_id = (result.get("source_sha"),
+                                                result.get("artifact_sha256"),
+                                                result.get("artifact_id"))
     if not isinstance(app_sha, str) or not SHA.fullmatch(app_sha):
         raise Stop("APP_SHA_INVALID")
     if not isinstance(artifact_digest, str) or not DIGEST.fullmatch(artifact_digest):
         raise Stop("ARTIFACT_DIGEST_INVALID")
-    if type(artifact_id) is not int:
+    if type(artifact_id) is not int or artifact_id <= 0:
         raise Stop("ARTIFACT_ID_INVALID")
     args.cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    require_private_dir(args.cache_root, exact=True)
+    lock = _cache_lock(args.cache_root)
     try:
-        require_private_dir(args.cache_root, exact=True)
-    except Stop:
-        raise Stop("CACHE_ROOT_UNTRUSTED") from None
-    final_target = args.cache_root / app_sha
-    if final_target.exists() or final_target.is_symlink():
-        raise Stop("CACHE_ALREADY_EXISTS")
-    target = Path(tempfile.mkdtemp(prefix="." + app_sha + ".sync-", dir=args.cache_root))
-    os.chmod(target, 0o700)
-    try:
-        require_private_dir(target, exact=True)
-    except Stop:
-        raise Stop("CACHE_DIR_UNTRUSTED") from None
-    temporary = target / ".artifact.zip.partial"
-    try:
-        download_artifact(readiness.API + "/actions/artifacts/%d/zip" % artifact_id, token, temporary)
-        actual = sha256_file(temporary)
-        if actual != artifact_digest:
-            raise Stop("ARTIFACT_DIGEST_MISMATCH")
-        os.replace(temporary, target / "artifact.zip")
-        staging = load_readiness(args.staging)
+        current = now_utc()
+        final_target = args.cache_root / app_sha
+        _rotate_expired(final_target, current)
+        target = Path(tempfile.mkdtemp(prefix="." + app_sha + ".sync-", dir=args.cache_root))
+        os.chmod(target, 0o700)
+        temporary = target / ".artifact.zip.partial"
         try:
-            staged = staging.stage(target / "artifact.zip", actual, app_sha,
-                                   target / "package", tokenless=True)
+            download_artifact(readiness.API + "/actions/artifacts/%d/zip" % artifact_id, token, temporary)
+            actual, artifact_identity = trusted_digest(temporary, max_size=MAX_ARTIFACT)
+            if actual != artifact_digest:
+                raise Stop("ARTIFACT_DIGEST_MISMATCH")
+            artifact = target / "artifact.zip"
+            os.replace(temporary, artifact)
+            attestation = target / "installable-provenance.sigstore.json"
+            try:
+                staged = staging.stage(artifact, actual, app_sha, target / "package",
+                                       tokenless=True, attestation_output=attestation)
+            except Exception:
+                raise Stop("SIGNED_STAGING_FAILED") from None
+            if (staged.get("status") != "SIGNED_CODE_STAGED_NOT_INSTALLED" or
+                    staged.get("source_sha") != app_sha):
+                raise Stop("SIGNED_STAGING_INVALID")
+            manifest_sha, manifest_identity = trusted_digest(target / "package" / "MANIFEST.sha256")
+            bundle_sha, bundle_identity = trusted_digest(attestation)
+            synced = now_utc()
+            receipt = {"schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
+                "ops_source_sha": ops["ops_source_sha"], "policy_hash": POLICY_HASH,
+                "app_source_sha": app_sha, "attestation_source_sha": app_sha,
+                "attestation_signer_workflow": staging.WORKFLOW, "artifact_id": artifact_id,
+                "artifact_sha256": actual, "artifact_identity": artifact_identity,
+                "attestation_bundle_sha256": bundle_sha,
+                "attestation_bundle_identity": bundle_identity,
+                "manifest_sha256": manifest_sha, "manifest_identity": manifest_identity,
+                "silo_workflow_run": result["silo_workflow_run"], "gates": result["gates"],
+                "synced_at": format_time(synced),
+                "cache_expires_at": format_time(synced + dt.timedelta(hours=args.ttl_hours)),
+                "network_allowed_after_sync": False}
+            atomic_write(target / "cache.json", (json.dumps(receipt, sort_keys=True) + "\n").encode())
+            os.rename(target, final_target)
+            _fsync_dir(args.cache_root)
+            return receipt
         except Exception:
-            raise Stop("SIGNED_STAGING_FAILED") from None
-        if staged.get("status") != "SIGNED_CODE_STAGED_NOT_INSTALLED":
-            raise Stop("SIGNED_STAGING_INVALID")
-        synced = now_utc()
-        receipt = {
-            "schema": "qa525-cache-v2",
-            "status": "SYNCED_ATTESTED",
-            "ops_source_sha": args.ops_sha,
-            "app_source_sha": app_sha,
-            "artifact_id": artifact_id,
-            "artifact_sha256": actual,
-            "silo_workflow_run": result["silo_workflow_run"],
-            "gates": result["gates"],
-            "synced_at": format_time(synced),
-            "cache_expires_at": format_time(synced + dt.timedelta(hours=args.ttl_hours)),
-            "network_allowed_after_sync": False,
-        }
-        atomic_write(target / "cache.json", (json.dumps(receipt, sort_keys=True) + "\n").encode())
-        os.rename(target, final_target)
-        directory = os.open(args.cache_root, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
-        return receipt
-    except Exception:
-        shutil.rmtree(target, ignore_errors=True)
-        raise
+            shutil.rmtree(target, ignore_errors=True)
+            raise
+    finally:
+        os.close(lock)
 
 
-def load_json_trusted(path: Path) -> dict:
-    raw = trusted_file(path, max_size=1024 * 1024)
+def _validate_identity(recorded: object, actual: dict) -> bool:
+    return type(recorded) is dict and all(recorded.get(key) == value for key, value in actual.items())
+
+
+def _g6_expiry(g6: dict, current: dt.datetime, margin: int) -> dt.datetime:
+    required = {"reviewed_at", "g6_archive_name", "g6_archive_sha256", "g6_drive_file_id",
+                "g6_offhost_sha256_verified", "g6_restore_report_name"}
+    if not required.issubset(g6):
+        raise Stop("G6_FIELDS_INVALID")
+    match = G6_ARCHIVE.fullmatch(g6.get("g6_archive_name", ""))
+    if (match is None or not re.fullmatch(r"[a-f0-9]{64}", g6.get("g6_archive_sha256", "")) or
+            DRIVE_ID.fullmatch(g6.get("g6_drive_file_id", "")) is None or
+            G6_RESTORE.fullmatch(g6.get("g6_restore_report_name", "")) is None):
+        raise Stop("G6_REFERENCE_INVALID")
+    if g6.get("g6_offhost_sha256_verified") is not True:
+        raise Stop("G6_NOT_VERIFIED")
+    reviewed, now_epoch = g6.get("reviewed_at"), int(current.timestamp())
+    if type(reviewed) is not int or not 0 <= now_epoch - reviewed <= MAX_APPROVAL_LIFETIME:
+        raise Stop("G6_REVIEW_TOO_OLD")
     try:
-        value = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        raise Stop("JSON_INVALID") from None
-    if type(value) is not dict:
-        raise Stop("JSON_INVALID")
-    return value
+        archive_epoch = calendar.timegm(time.strptime(match.group(1), "%Y%m%dT%H%M%S"))
+    except ValueError:
+        raise Stop("G6_REFERENCE_INVALID") from None
+    expiry = dt.datetime.fromtimestamp(archive_epoch + G6_LIFETIME, dt.timezone.utc)
+    if not 0 <= now_epoch - archive_epoch < G6_LIFETIME:
+        raise Stop("G6_CHECKPOINT_TOO_OLD")
+    if (expiry - current).total_seconds() < margin:
+        raise Stop("G6_MARGIN_LOW")
+    return expiry
+
+
+def _approval_expiry(approval: dict, *, nonce: str, ops_sha: str, app_sha: str,
+                     artifact_id: int, artifact_sha: str, current: dt.datetime) -> dt.datetime:
+    expected_keys = {"status", "nonce", "ops_source_sha", "app_source_sha", "artifact_id",
+                     "artifact_sha256", "scope", "environment", "action", "host",
+                     "issued_at", "expires_at"}
+    expected = {"status": "APPROVED", "nonce": nonce, "ops_source_sha": ops_sha,
+        "app_source_sha": app_sha, "artifact_id": artifact_id, "artifact_sha256": artifact_sha,
+        "scope": POLICY["scope"], "environment": POLICY["environment"],
+        "action": POLICY["action"], "host": POLICY["host"]}
+    if set(approval) != expected_keys or any(approval.get(k) != v for k, v in expected.items()):
+        raise Stop("APPROVAL_BINDING_INVALID")
+    issued, expiry = parse_time(approval.get("issued_at")), parse_time(approval.get("expires_at"))
+    lifetime, age = (expiry - issued).total_seconds(), (current - issued).total_seconds()
+    if not 0 < lifetime <= MAX_APPROVAL_LIFETIME or not 0 <= age <= MAX_APPROVAL_LIFETIME:
+        raise Stop("APPROVAL_LIFETIME_INVALID")
+    if expiry <= current:
+        raise Stop("APPROVAL_EXPIRED")
+    return expiry
 
 
 def admit(args) -> dict:
     require_root("ADMISSION_REQUIRES_ROOT")
-    if not SHA.fullmatch(args.app_sha) or not SHA.fullmatch(args.ops_sha) or not NONCE.fullmatch(args.nonce):
+    if not SHA.fullmatch(args.app_sha) or not NONCE.fullmatch(args.nonce):
         raise Stop("IDENTITY_INVALID")
+    ops, _, staging = load_verified_ops()
     cache_dir = args.cache_root / args.app_sha
     try:
         require_private_dir(args.cache_root, exact=True)
@@ -296,69 +447,69 @@ def admit(args) -> dict:
     except Stop:
         raise Stop("CACHE_DIRECTORY_UNTRUSTED") from None
     receipt = load_json_trusted(cache_dir / "cache.json")
-    artifact = trusted_file(cache_dir / "artifact.zip", max_size=MAX_ARTIFACT)
-    del artifact
-    expected = {
-        "schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
-        "app_source_sha": args.app_sha, "ops_source_sha": args.ops_sha,
-        "network_allowed_after_sync": False,
-    }
+    expected = {"schema": "qa525-cache-v2", "status": "SYNCED_ATTESTED",
+        "app_source_sha": args.app_sha, "attestation_source_sha": args.app_sha,
+        "ops_source_sha": ops["ops_source_sha"], "policy_hash": POLICY_HASH,
+        "network_allowed_after_sync": False, "attestation_signer_workflow": staging.WORKFLOW}
     if any(receipt.get(key) != value for key, value in expected.items()):
         raise Stop("CACHE_BINDING_INVALID")
-    if sha256_file(cache_dir / "artifact.zip") != receipt.get("artifact_sha256"):
-        raise Stop("CACHE_ARTIFACT_CHANGED")
-    staging = load_readiness(args.staging)
+    if type(receipt.get("artifact_id")) is not int or receipt["artifact_id"] <= 0:
+        raise Stop("CACHE_BINDING_INVALID")
+    artifact_sha, artifact_identity = trusted_digest(cache_dir / "artifact.zip", max_size=MAX_ARTIFACT)
+    manifest_sha, manifest_identity = trusted_digest(cache_dir / "package" / "MANIFEST.sha256")
+    bundle_sha, bundle_identity = trusted_digest(cache_dir / "installable-provenance.sigstore.json")
+    bindings = (("artifact_sha256", artifact_sha), ("manifest_sha256", manifest_sha),
+                ("attestation_bundle_sha256", bundle_sha))
+    identities = (("artifact_identity", artifact_identity), ("manifest_identity", manifest_identity),
+                  ("attestation_bundle_identity", bundle_identity))
+    if any(receipt.get(field) != value for field, value in bindings) or any(
+            not _validate_identity(receipt.get(field), value) for field, value in identities):
+        raise Stop("CACHE_ATTESTATION_BINDING_CHANGED")
     try:
         staging.verify_manifest(cache_dir / "package", args.app_sha)
     except Exception:
         raise Stop("CACHE_PACKAGE_INVALID") from None
+    if (trusted_digest(cache_dir / "package" / "MANIFEST.sha256")[0] != manifest_sha or
+            trusted_digest(cache_dir / "installable-provenance.sigstore.json")[0] != bundle_sha):
+        raise Stop("CACHE_PACKAGE_CHANGED")
     current = now_utc()
-    if parse_time(receipt.get("cache_expires_at")) <= current:
+    cache_expiry = parse_time(receipt.get("cache_expires_at"))
+    if cache_expiry <= current:
         raise Stop("CACHE_EXPIRED")
-    g6 = load_json_trusted(args.g6_receipt)
-    if g6.get("g6_offhost_sha256_verified") is not True:
-        raise Stop("G6_NOT_VERIFIED")
-    g6_expiry = parse_time(g6.get("expires_at"))
-    if (g6_expiry - current).total_seconds() < args.g6_margin_seconds:
-        raise Stop("G6_MARGIN_LOW")
-    approval = load_json_trusted(args.approval)
-    if (approval.get("status") != "APPROVED" or approval.get("nonce") != args.nonce or
-            approval.get("app_source_sha") != args.app_sha or
-            approval.get("ops_source_sha") != args.ops_sha):
-        raise Stop("APPROVAL_BINDING_INVALID")
-    if parse_time(approval.get("expires_at")) <= current:
-        raise Stop("APPROVAL_EXPIRED")
-    nonce_marker = args.state_dir / ("nonce-consumed-" + args.nonce + ".json")
-    if nonce_marker.exists() or nonce_marker.is_symlink():
-        raise Stop("NONCE_REPLAY")
-    admitted = {
-        "schema": "qa525-admission-v2", "status": "ADMITTED",
-        "ops_source_sha": args.ops_sha, "app_source_sha": args.app_sha,
-        "artifact_sha256": receipt["artifact_sha256"], "nonce": args.nonce,
-        "admitted_at": format_time(current), "g6_expires_at": format_time(g6_expiry),
-        "network_allowed": False,
-    }
-    if args.output.parent != args.state_dir:
-        raise Stop("OUTPUT_OUTSIDE_STATE_DIR")
-    if args.state_dir.exists() or args.state_dir.is_symlink():
-        require_private_dir(args.state_dir, exact=True)
-    else:
-        args.state_dir.mkdir(mode=0o700, parents=True)
-        require_private_dir(args.state_dir, exact=True)
-    atomic_write(args.output, (json.dumps(admitted, sort_keys=True) + "\n").encode())
-    atomic_write(nonce_marker, (json.dumps({"status": "CONSUMED", "nonce": args.nonce,
-                                           "app_source_sha": args.app_sha}, sort_keys=True) + "\n").encode())
+    g6_expiry = _g6_expiry(load_json_trusted(args.g6_receipt), current, args.g6_margin_seconds)
+    approval_expiry = _approval_expiry(load_json_trusted(args.approval), nonce=args.nonce,
+        ops_sha=ops["ops_source_sha"], app_sha=args.app_sha, artifact_id=receipt["artifact_id"],
+        artifact_sha=artifact_sha, current=current)
+    valid_until = min(cache_expiry, approval_expiry,
+                      g6_expiry - dt.timedelta(seconds=args.g6_margin_seconds),
+                      current + dt.timedelta(seconds=MAX_ADMISSION_LIFETIME))
+    if valid_until <= current:
+        raise Stop("ADMISSION_WINDOW_EMPTY")
+    admitted = {"schema": "qa525-admission-v2", "status": "ADMITTED",
+        "ops_source_sha": ops["ops_source_sha"], "app_source_sha": args.app_sha,
+        "artifact_id": receipt["artifact_id"], "artifact_sha256": artifact_sha,
+        "artifact_identity": artifact_identity, "manifest_sha256": manifest_sha,
+        "attestation_bundle_sha256": bundle_sha, "policy_hash": POLICY_HASH,
+        "nonce": args.nonce, "nonce_consumed": False, "nonce_consume_transition": "APPLYING",
+        "admitted_at": format_time(current), "valid_until": format_time(valid_until),
+        "g6_expires_at": format_time(g6_expiry), "network_allowed": False}
+    try:
+        args.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    except OSError:
+        raise Stop("STATE_DIRECTORY_UNAVAILABLE") from None
+    require_private_dir(args.state_dir, exact=True)
+    output = args.state_dir / ("admission-" + args.nonce + ".json")
+    exclusive_write(output, (json.dumps(admitted, sort_keys=True) + "\n").encode())
     return admitted
 
 
 def postcheck(args) -> dict:
-    """Validate APPLIED state without requiring prepared.json to be absent."""
     require_root("POSTCHECK_REQUIRES_ROOT")
     if not SHA.fullmatch(args.app_sha):
         raise Stop("APP_SHA_INVALID")
-    journal = load_json_trusted(args.journal)
-    launcher = load_json_trusted(args.launcher_status)
-    runtime = load_json_trusted(args.runtime)
+    journal, launcher, runtime = (load_json_trusted(args.journal),
+                                  load_json_trusted(args.launcher_status),
+                                  load_json_trusted(args.runtime))
     if (journal.get("status") != "APPLIED" or journal.get("source_sha") != args.app_sha or
             type(journal.get("new_images")) is not dict):
         raise Stop("JOURNAL_NOT_APPLIED")
@@ -370,15 +521,16 @@ def postcheck(args) -> dict:
     if next_path.exists() or next_path.is_symlink():
         raise Stop("JOURNAL_NEXT_PRESENT")
     if (launcher.get("status") != "QA525_UPDATE_STATUS_READ_ONLY" or
-            launcher.get("services_running") is not True or
-            launcher.get("may_apply") is not False or
+            launcher.get("services_running") is not True or launcher.get("may_apply") is not False or
             launcher.get("archive_reconciliation_required") is not False):
         raise Stop("LAUNCHER_NOT_CLOSED")
     prepared_exists = launcher.get("prepared_exists") is True
     if prepared_exists:
         prepared = load_json_trusted(args.prepared)
         bound_sha = prepared.get("source_sha", prepared.get("app_source_sha"))
-        if bound_sha != args.app_sha:
+        if (bound_sha != args.app_sha or prepared.get("status") not in
+                {"PREPARED", "APPLIED_EVIDENCE_RETAINED"} or
+                prepared.get("may_apply") is not False or prepared.get("new_images") != images):
             raise Stop("PREPARED_NOT_BOUND_TO_APPLIED")
     elif args.prepared.exists() or args.prepared.is_symlink():
         raise Stop("PREPARED_STATUS_DRIFT")
@@ -390,56 +542,45 @@ def postcheck(args) -> dict:
         if (type(value) is not dict or value.get("status") != "running" or
                 value.get("revision") != args.app_sha or value.get("image") != images[service]):
             raise Stop("RUNTIME_MISMATCH_" + service.upper())
-    return {
-        "schema": "qa525-postcheck-v2", "status": "PASS_APPLIED",
-        "app_source_sha": args.app_sha,
-        "prepared_retained": prepared_exists,
-        "may_apply": False,
-    }
+    return {"schema": "qa525-postcheck-v2", "status": "PASS_APPLIED",
+            "app_source_sha": args.app_sha, "prepared_retained": prepared_exists, "may_apply": False}
 
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     sub = root.add_subparsers(dest="command", required=True)
-    s = sub.add_parser("sync")
-    s.add_argument("--ops-sha", required=True, type=lambda v: v if SHA.fullmatch(v) else (_ for _ in ()).throw(argparse.ArgumentTypeError("sha")))
-    s.add_argument("--readiness", type=Path, default=Path(__file__).with_name("qa-agent-readiness.py"))
-    s.add_argument("--staging", type=Path, default=Path(__file__).with_name("qa-signed-staging.py"))
-    s.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
-    s.add_argument("--ttl-hours", type=int, default=6, choices=range(1, 25))
-    a = sub.add_parser("admit")
-    a.add_argument("--ops-sha", required=True)
-    a.add_argument("--app-sha", required=True)
-    a.add_argument("--nonce", required=True)
-    a.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
-    a.add_argument("--g6-receipt", type=Path, required=True)
-    a.add_argument("--approval", type=Path, required=True)
-    a.add_argument("--staging", type=Path, default=Path(__file__).with_name("qa-signed-staging.py"))
-    a.add_argument("--state-dir", type=Path, required=True)
-    a.add_argument("--output", type=Path, required=True)
-    a.add_argument("--g6-margin-seconds", type=int, default=MIN_G6_MARGIN)
-    p = sub.add_parser("postcheck")
-    p.add_argument("--app-sha", required=True)
-    p.add_argument("--journal", type=Path, required=True)
-    p.add_argument("--prepared", type=Path, required=True)
-    p.add_argument("--launcher-status", type=Path, required=True)
-    p.add_argument("--runtime", type=Path, required=True)
+    sync_parser = sub.add_parser("sync")
+    sync_parser.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
+    sync_parser.add_argument("--ttl-hours", type=int, default=6, choices=range(1, 25))
+    admission = sub.add_parser("admit")
+    admission.add_argument("--app-sha", required=True)
+    admission.add_argument("--nonce", required=True)
+    admission.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
+    admission.add_argument("--g6-receipt", type=Path, required=True)
+    admission.add_argument("--approval", type=Path, required=True)
+    admission.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
+    admission.add_argument("--g6-margin-seconds", type=int, default=MIN_G6_MARGIN,
+                           choices=range(MIN_G6_MARGIN, G6_LIFETIME))
+    check = sub.add_parser("postcheck")
+    check.add_argument("--app-sha", required=True)
+    check.add_argument("--journal", type=Path, required=True)
+    check.add_argument("--prepared", type=Path, required=True)
+    check.add_argument("--launcher-status", type=Path, required=True)
+    check.add_argument("--runtime", type=Path, required=True)
     return root
 
 
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
     try:
-        if args.command == "sync":
-            result = sync(args)
-        elif args.command == "admit":
-            result = admit(args)
-        else:
-            result = postcheck(args)
+        result = sync(args) if args.command == "sync" else admit(args) if args.command == "admit" else postcheck(args)
         print(json.dumps(result, sort_keys=True))
         return 0
     except Stop as exc:
         print(json.dumps({"status": "STOP", "code": str(exc)}, sort_keys=True))
+        return 2
+    except Exception:
+        print(json.dumps({"status": "STOP", "code": "INTERNAL_FAIL_CLOSED"}, sort_keys=True))
         return 2
 
 
