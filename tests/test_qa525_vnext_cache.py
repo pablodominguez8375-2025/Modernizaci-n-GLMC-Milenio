@@ -15,6 +15,7 @@ import threading
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "qa" / "qa525-vnext-cache.py"
@@ -61,8 +62,17 @@ class AdmissionFixture:
         self.report_root = self.root / "reports"
         self.archive_receipt = self.report_root / "archive.receipt.json"
         self.approval = self.root / "approval.json"
-        artifact = b"signed artifact bytes\n"
-        write_private(self.cache / "artifact.zip", artifact)
+        # Synthetic outer Actions ZIP contains the exact inner signed member.
+        # The real Sigstore signature is verified by staging at SYNC, not mocked
+        # as authentic by these ADMISSION-only fixtures.
+        self.signed_member = "Proyecto-Centenario-QA-srv01-" + APP[:12] + ".zip"
+        self.signed_bytes = b"synthetic internal signed installable bytes"
+        outer = BytesIO()
+        with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(self.signed_member, self.signed_bytes)
+            archive.writestr("installable-provenance.sigstore.json", b'{"fixture":true}')
+            archive.writestr(self.signed_member + ".verification.json", b'{"fixture":true}')
+        write_private(self.cache / "artifact.zip", outer.getvalue())
         self.package = self.cache / "package"
         files = {
             "BUILD-INFO.txt": ("SOURCE_SHA=" + APP + "\n" +
@@ -93,6 +103,7 @@ class AdmissionFixture:
             "attestation_signer_workflow": STAGING_MODULE.WORKFLOW,
             "artifact_id": 525001, "artifact_sha256": self.artifact_digest,
             "artifact_identity": identity(artifact_path),
+            "signed_installable_sha256": "sha256:" + hashlib.sha256(self.signed_bytes).hexdigest(),
             "manifest_sha256": digest(manifest_path), "manifest_identity": identity(manifest_path),
             "attestation_bundle_sha256": digest(bundle_path),
             "attestation_bundle_identity": identity(bundle_path),
@@ -167,6 +178,8 @@ class OfflineAdmission(unittest.TestCase):
         result = MODULE.admit(self.fx.args())
         self.assertEqual(result["status"], "ADMITTED")
         self.assertEqual(result["artifact_id"], 525001)
+        self.assertEqual(result["signed_installable_sha256"],
+                         "sha256:" + hashlib.sha256(self.fx.signed_bytes).hexdigest())
         self.assertEqual(result["policy_hash"], MODULE.POLICY_HASH)
         self.assertEqual(result["valid_until"], "2026-11-05T12:25:00Z")
         self.assertFalse(result["nonce_consumed"])
@@ -209,8 +222,35 @@ class OfflineAdmission(unittest.TestCase):
             with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
                 fx = AdmissionFixture(directory)
                 write_private(fx.cache / relative, b"changed")
-                with self.assertRaisesRegex(MODULE.Stop, "CACHE_ATTESTATION_BINDING_CHANGED"):
+                with self.assertRaisesRegex(MODULE.Stop,
+                                            "CACHE_ATTESTATION_BINDING_CHANGED|SIGNED_MEMBER_INVALID"):
                     self.admit_fixture(fx)
+
+    def test_internal_signed_member_changed_but_outer_receipt_rewritten_is_rejected(self):
+        # Even if the metadata for the outer Actions ZIP were rewritten,
+        # the previously attested inner-member pin must not silently change.
+        outer = BytesIO()
+        with zipfile.ZipFile(outer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(self.fx.signed_member, b"tampered inner member")
+            archive.writestr("installable-provenance.sigstore.json", b'{"fixture":true}')
+            archive.writestr(self.fx.signed_member + ".verification.json", b'{"fixture":true}')
+        artifact = self.fx.cache / "artifact.zip"
+        write_private(artifact, outer.getvalue())
+        receipt_path = self.fx.cache / "cache.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt["artifact_sha256"] = digest(artifact)
+        receipt["artifact_identity"] = identity(artifact)
+        write_private(receipt_path, receipt)
+        with self.assertRaisesRegex(MODULE.Stop, "CACHE_ATTESTATION_BINDING_CHANGED"):
+            MODULE.admit(self.fx.args())
+
+    def test_signed_member_requires_exact_three_outer_members(self):
+        artifact = self.fx.cache / "artifact.zip"
+        with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(self.fx.signed_member, self.fx.signed_bytes)
+            archive.writestr("extra.txt", "unexpected")
+        with self.assertRaisesRegex(MODULE.Stop, "SIGNED_MEMBER_OUTER_SET_INVALID"):
+            MODULE.signed_installable_digest(artifact, APP)
 
     def test_staged_manifest_change_fails_closed(self):
         write_private(self.fx.package / "storage-bundle/rebuild-report.json", b'{"tampered":true}\n')
