@@ -8,12 +8,24 @@ imported or touched here. A future engine supplies a real adapter; a terminal
 journal writer must accept only a result that passes ``require_ok`` for the
 same baseline hash and kind.
 
+Integrity, not authenticity: ``result_checksum_sha256`` is a PUBLIC checksum
+that detects accidental corruption of the structure. It is not a signature
+and does not prove who measured what. A terminal writer must hold the
+transaction locks and invoke ``verify`` itself through a trusted adapter; it
+must never accept a result JSON handed to it by another component.
+
+``health`` in an observation is whatever the future adapter reports. That
+adapter must check API and WEB health, OIDC, and the image/dependency/one-shot
+state itself; two back-to-back samples here are not a soak period and nothing
+in this module is physical evidence about any host.
+
 Fail-closed: any adapter error, malformed observation, unstable sample,
 missing/extra service, truthy-but-not-True flag or unexpected layer is a
 non-OK result. This module never writes state and never declares success from
 a status field written by someone else.
 """
 import hashlib
+import hmac
 import json
 import re
 
@@ -24,6 +36,12 @@ TARGETS = ("api", "web")
 KINDS = ("APPLIED", "ROLLED_BACK")
 MAX_SERVICES = 32
 MAX_LAYERS = 64
+RUNTIME_CODES = frozenset(
+    ["OK", "OBSERVATION_INVALID", "VERIFY_INDETERMINATE", "UNSTABLE_BETWEEN_SAMPLES",
+     "DEPENDENCY_CHANGED", "ONESHOT_CHANGED", "HEALTH_FAILED",
+     "LAYERS_MISMATCH_API", "LAYERS_MISMATCH_WEB",
+     "IMAGE_MISMATCH_API", "IMAGE_MISMATCH_WEB",
+     "SERVICE_NOT_RUNNING_API", "SERVICE_NOT_RUNNING_WEB"])
 
 
 class Stop(Exception):
@@ -124,7 +142,10 @@ def validate_target(baseline: dict, kind: str, target: dict) -> dict:
 
 def _observation(adapter) -> dict:
     """One strict observation. Every field must have the exact type."""
-    obs = adapter.observe()
+    try:
+        obs = adapter.observe()
+    except Exception:  # any adapter exception, even a Stop it raises, is untrusted text
+        raise Stop("VERIFY_INDETERMINATE") from None
     _exact(obs, dict, "OBSERVATION_INVALID")
     if set(obs) != {"images", "running", "dependencies", "oneshots", "layers", "health"}:
         raise Stop("OBSERVATION_INVALID")
@@ -173,7 +194,7 @@ def _compare(baseline: dict, expect: dict, obs: dict) -> None:
 
 
 def verify(adapter, baseline: dict, kind: str, target: dict = None, samples: int = 2) -> dict:
-    """Return a sealed result dict; ok=False on any problem (never raises on
+    """Return a result dict (public checksum, not a signature); ok=False on any problem (never raises on
     runtime evidence). Programming errors in baseline/target still raise Stop
     because the caller must not proceed on a malformed contract."""
     baseline_sha = validate_baseline(baseline)
@@ -194,29 +215,53 @@ def verify(adapter, baseline: dict, kind: str, target: dict = None, samples: int
         evidence = digest(first)
     except Stop as exc:
         code = str(exc)
-    except Exception:  # adapter failure: indeterminate, never success
+    except Exception:  # unexpected failure: indeterminate, never success
+        code = "VERIFY_INDETERMINATE"
+    if code not in RUNTIME_CODES:  # never let outside text reach a report
         code = "VERIFY_INDETERMINATE"
     body = {"schema": "qa525-verify-result-v1", "kind": kind, "ok": code == "OK",
             "code": code, "baseline_sha256": baseline_sha,
             "target_sha256": digest(expect), "evidence_sha256": evidence}
-    body["result_sha256"] = digest(body)
+    body["result_checksum_sha256"] = digest(body)
     return body
 
 
-def require_ok(result: dict, baseline_sha256: str, kind: str) -> dict:
-    """Gate for a future terminal writer: re-derive the seal and bind it."""
+def expected_target_sha256(baseline: dict, kind: str, target: dict = None) -> str:
+    """Digest of the exact expectation the caller wants verified.
+
+    For ROLLED_BACK it is derived from the (trusted) baseline alone; for
+    APPLIED it is derived from the explicit target the caller approved.
+    """
+    validate_baseline(baseline)
+    return digest(validate_target(baseline, kind, target))
+
+
+def _same(left, right) -> bool:
+    return (type(left) is str and type(right) is str
+            and hmac.compare_digest(left.encode(), right.encode()))
+
+
+def require_ok(result: dict, baseline_sha256: str, kind: str, expected_target: str) -> dict:
+    """Structural gate for a future terminal writer (NOT authentication).
+
+    Re-derives the public checksum, then binds the result to the baseline,
+    the kind AND the exact target the caller expects, so an OK result for a
+    different target of the same baseline cannot be reused.
+    """
     _exact(result, dict, "RESULT_INVALID")
     fields = {"schema", "kind", "ok", "code", "baseline_sha256", "target_sha256",
-              "evidence_sha256", "result_sha256"}
+              "evidence_sha256", "result_checksum_sha256"}
     if set(result) != fields or result["schema"] != "qa525-verify-result-v1":
         raise Stop("RESULT_INVALID")
-    body = {key: value for key, value in result.items() if key != "result_sha256"}
-    if digest(body) != result["result_sha256"]:
-        raise Stop("RESULT_SEAL_INVALID")
+    body = {key: value for key, value in result.items() if key != "result_checksum_sha256"}
+    if not _same(digest(body), result["result_checksum_sha256"]):
+        raise Stop("RESULT_CHECKSUM_INVALID")
     if kind not in KINDS or result["kind"] != kind:
         raise Stop("RESULT_KIND_MISMATCH")
-    if result["baseline_sha256"] != baseline_sha256:
+    if not _same(result["baseline_sha256"], baseline_sha256):
         raise Stop("RESULT_BASELINE_MISMATCH")
+    if not _same(result["target_sha256"], expected_target):
+        raise Stop("RESULT_TARGET_MISMATCH")
     if result["ok"] is not True or result["code"] != "OK" or result["evidence_sha256"] is None:
         raise Stop("RESULT_NOT_OK")
     return result

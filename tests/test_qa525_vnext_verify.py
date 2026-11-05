@@ -61,11 +61,11 @@ class VerifierTests(unittest.TestCase):
         base_sha = mod.validate_baseline(baseline())
         ok = mod.verify(Fake(observation()), baseline(), "APPLIED", target())
         self.assertTrue(ok["ok"], ok)
-        mod.require_ok(ok, base_sha, "APPLIED")
+        mod.require_ok(ok, base_sha, "APPLIED", mod.expected_target_sha256(baseline(), "APPLIED", target()))
         rolled = mod.verify(Fake(observation("ROLLED_BACK")), baseline(), "ROLLED_BACK")
         self.assertTrue(rolled["ok"], rolled)
-        mod.require_ok(rolled, base_sha, "ROLLED_BACK")
-        self.assertNotEqual(ok["result_sha256"], rolled["result_sha256"])
+        mod.require_ok(rolled, base_sha, "ROLLED_BACK", mod.expected_target_sha256(baseline(), "ROLLED_BACK"))
+        self.assertNotEqual(ok["result_checksum_sha256"], rolled["result_checksum_sha256"])
 
     def test_each_runtime_divergence_is_not_ok(self):
         cases = {
@@ -85,7 +85,8 @@ class VerifierTests(unittest.TestCase):
                 self.assertFalse(result["ok"])
                 self.assertEqual(result["code"], code)
                 with self.assertRaises(mod.Stop):
-                    mod.require_ok(result, mod.validate_baseline(baseline()), "APPLIED")
+                    mod.require_ok(result, mod.validate_baseline(baseline()), "APPLIED",
+                                   mod.expected_target_sha256(baseline(), "APPLIED", target()))
 
     def test_health_for_wrong_revision_and_oneshot_missing_fail(self):
         self.assertEqual(self.applied(health={"ok": True, "web_sha": OLD_SHA})["code"], "HEALTH_FAILED")
@@ -143,24 +144,65 @@ class VerifierTests(unittest.TestCase):
         # An unchanged baseline can never be reported as APPLIED.
         self.assertFalse(mod.verify(Fake(observation("ROLLED_BACK")), baseline(), "APPLIED", target())["ok"])
 
-    def test_result_seal_cannot_be_forged_or_replayed(self):
+    def test_result_checksum_detects_accidents_and_binds_baseline_kind_and_target(self):
         base_sha = mod.validate_baseline(baseline())
+        want = mod.expected_target_sha256(baseline(), "APPLIED", target())
         ok = mod.verify(Fake(observation()), baseline(), "APPLIED", target())
-        forged = dict(ok, ok=True, code="OK")
-        forged["evidence_sha256"] = "sha256:" + "0" * 64
-        with self.assertRaisesRegex(mod.Stop, "RESULT_SEAL_INVALID"):
-            mod.require_ok(forged, base_sha, "APPLIED")
+        self.assertEqual(mod.require_ok(ok, base_sha, "APPLIED", want), ok)
+        forged = dict(ok, evidence_sha256="sha256:" + "0" * 64)  # edited, checksum stale
+        with self.assertRaisesRegex(mod.Stop, "RESULT_CHECKSUM_INVALID"):
+            mod.require_ok(forged, base_sha, "APPLIED", want)
         with self.assertRaisesRegex(mod.Stop, "RESULT_KIND_MISMATCH"):
-            mod.require_ok(ok, base_sha, "ROLLED_BACK")
+            mod.require_ok(ok, base_sha, "ROLLED_BACK", want)
         changed = baseline()
         changed["web_sha"] = "c" * 40
         with self.assertRaisesRegex(mod.Stop, "RESULT_BASELINE_MISMATCH"):
-            mod.require_ok(ok, mod.validate_baseline(changed), "APPLIED")
+            mod.require_ok(ok, mod.validate_baseline(changed), "APPLIED", want)
         failed = self.applied(health={"ok": False, "web_sha": NEW_SHA})
         with self.assertRaisesRegex(mod.Stop, "RESULT_NOT_OK"):
-            mod.require_ok(failed, base_sha, "APPLIED")
+            mod.require_ok(failed, base_sha, "APPLIED", mod.expected_target_sha256(baseline(), "APPLIED", target()))
         with self.assertRaises(mod.Stop):
-            mod.require_ok(dict(ok, extra=1), base_sha, "APPLIED")
+            mod.require_ok(dict(ok, extra=1), base_sha, "APPLIED", want)
+        with self.assertRaises(mod.Stop):  # old field name is gone
+            mod.require_ok(dict(ok, result_sha256=ok["result_checksum_sha256"]), base_sha, "APPLIED", want)
+
+    def test_ok_result_for_another_target_cannot_be_reused(self):
+        base_sha = mod.validate_baseline(baseline())
+        other = target()
+        other["images"] = {"api": "sha256:" + "7" * 64, "web": "sha256:" + "8" * 64}
+        other_obs = observation()
+        other_obs["images"] = dict(other["images"])
+        other_ok = mod.verify(Fake(other_obs), baseline(), "APPLIED", other)
+        self.assertTrue(other_ok["ok"])
+        wanted = mod.expected_target_sha256(baseline(), "APPLIED", target())
+        with self.assertRaisesRegex(mod.Stop, "RESULT_TARGET_MISMATCH"):
+            mod.require_ok(other_ok, base_sha, "APPLIED", wanted)
+        # A different compose layer set or web revision is a different target too.
+        layers = target()
+        layers["layers"]["api"] = ["/w/base.yml", "/w/dual-other.json"]
+        self.assertNotEqual(mod.expected_target_sha256(baseline(), "APPLIED", layers), wanted)
+        web = target()
+        web["web_sha"] = "c" * 40
+        self.assertNotEqual(mod.expected_target_sha256(baseline(), "APPLIED", web), wanted)
+        # Rollback expectation comes only from the baseline.
+        rolled = mod.verify(Fake(observation("ROLLED_BACK")), baseline(), "ROLLED_BACK")
+        mod.require_ok(rolled, base_sha, "ROLLED_BACK", mod.expected_target_sha256(baseline(), "ROLLED_BACK"))
+        with self.assertRaisesRegex(mod.Stop, "RESULT_TARGET_MISMATCH"):
+            mod.require_ok(rolled, base_sha, "ROLLED_BACK", wanted)
+        with self.assertRaises(mod.Stop):
+            mod.expected_target_sha256(baseline(), "ROLLED_BACK", target())
+
+    def test_adapter_text_never_reaches_the_report(self):
+        class Leaky:
+            def observe(self):
+                raise mod.Stop("SECRET_IN_ERROR_TOKEN")
+        for adapter in (Leaky(), Fake(error=mod.Stop("SECRET_IN_ERROR_TOKEN")),
+                        Fake(error=RuntimeError("password=hunter2"))):
+            with self.subTest(adapter=type(adapter).__name__):
+                result = mod.verify(adapter, baseline(), "APPLIED", target())
+                self.assertEqual(result["code"], "VERIFY_INDETERMINATE")
+                self.assertNotIn("SECRET", repr(result))
+        self.assertTrue(set(mod.RUNTIME_CODES) >= {"OK", "VERIFY_INDETERMINATE"})
 
     def test_malformed_baseline_and_sample_count_fail_closed(self):
         for change in (lambda b: b.pop("web_sha"), lambda b: b["images"].update(api="latest"),
