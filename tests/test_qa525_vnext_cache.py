@@ -207,6 +207,15 @@ class OfflineAdmission(unittest.TestCase):
         self.assertFalse(any(self.fx.state.glob("nonce-consumed-*")))
         self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
 
+    def test_state_directory_is_never_created_through_untrusted_ancestors(self):
+        def precreate_guard(path):
+            if path == self.fx.state:
+                raise MODULE.Stop("UNTRUSTED_ANCESTOR")
+        with mock.patch.object(MODULE, "require_trusted_ancestors", side_effect=precreate_guard):
+            with self.assertRaisesRegex(MODULE.Stop, "UNTRUSTED_ANCESTOR"):
+                MODULE.admit(self.fx.args())
+        self.assertFalse(self.fx.state.exists())
+
     def test_admission_performs_zero_network_including_staging_import(self):
         with mock.patch.object(socket, "create_connection", side_effect=AssertionError("network")), \
              mock.patch.object(socket.socket, "connect", side_effect=AssertionError("network")):
@@ -605,6 +614,41 @@ class TrustedOpsAndCache(unittest.TestCase):
         rotated = cache_root / ("expired-" + APP + "-20261105T120000Z")
         self.assertFalse(target.exists())
         self.assertTrue(rotated.joinpath("cache.json").exists())
+
+    def test_invalid_cache_is_preserved_for_auditable_retry(self):
+        root = self.root / "cache"
+        target = root / APP
+        write_private(target / "cache.json", b"{not valid JSON\n")
+        root.chmod(0o700)
+        target.chmod(0o700)
+        MODULE._rotate_expired(target, NOW)
+        preserved = root / ("invalid-" + APP + "-20261105T120000Z")
+        self.assertFalse(target.exists())
+        self.assertEqual(preserved.joinpath("cache.json").read_bytes(), b"{not valid JSON\n")
+
+    def test_crashed_sync_orphans_are_preserved_without_deletion(self):
+        root = self.root / "cache"
+        orphan = root / ("." + APP + ".sync-crash123")
+        write_private(orphan / "partial.zip", b"partial evidence")
+        root.chmod(0o700)
+        orphan.chmod(0o700)
+        names = MODULE._sweep_stale_sync_orphans(root, NOW)
+        self.assertEqual(names, ["orphaned-" + APP + ".sync-crash123-20261105T120000Z"])
+        self.assertFalse(orphan.exists())
+        retained = root / names[0] / "partial.zip"
+        self.assertEqual(retained.read_bytes(), b"partial evidence")
+
+    def test_untrusted_orphan_symlink_blocks_without_erasing(self):
+        root = self.root / "cache"
+        root.mkdir(mode=0o700)
+        foreign = self.root / "foreign"
+        foreign.mkdir(mode=0o700)
+        orphan = root / ("." + APP + ".sync-symlink")
+        orphan.symlink_to(foreign, target_is_directory=True)
+        with self.assertRaisesRegex(MODULE.Stop, "CACHE_ORPHAN_UNTRUSTED"):
+            MODULE._sweep_stale_sync_orphans(root, NOW)
+        self.assertTrue(orphan.is_symlink())
+        self.assertTrue(foreign.exists())
 
     def test_valid_cache_is_not_replaced(self):
         cache_root = self.root / "cache"
