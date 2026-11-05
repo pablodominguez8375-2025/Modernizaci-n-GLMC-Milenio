@@ -1,0 +1,56 @@
+{
+  "purpose": "Snapshot of in-toto Statement decoded from genuine public Actions Sigstore bundle; intentionally not a full signature or authentication fixture",
+  "source_run_id": 41634409253,
+  "source_artifact_id": 13229844386,
+  "source_sha": "6eed4f00b7917da3cca36bbda70e16d16328648d",
+  "actual_bundle_sha256": "966da0dd4c0ed476d68cf9659ba0f01df7872d5c8609dc8f46e99f198c0600ad",
+  "actual_signed_inner_zip_sha256": "53a0bcfba37e0a26e26f927874c1973debd3906de35a4ed5bb04d62b264b58d2",
+  "statement": {
+    "_type": "https://in-toto.io/Statement/v1",
+    "predicate": {
+      "buildDefinition": {
+        "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+        "externalParameters": {
+          "workflow": {
+            "path": ".github/workflows/qa-silo-validation.yml",
+            "ref": "refs/heads/dev",
+            "repository": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
+          }
+        },
+        "internalParameters": {
+          "github": {
+            "event_name": "push",
+            "repository_id": "1356543647",
+            "repository_owner_id": "252089135",
+            "runner_environment": "github-hosted"
+          }
+        },
+        "resolvedDependencies": [
+          {
+            "digest": {
+              "gitCommit": "6eed4f00b7917da3cca36bbda70e16d16328648d"
+            },
+            "uri": "git+https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio@refs/heads/dev"
+          }
+        ]
+      },
+      "runDetails": {
+        "builder": {
+          "id": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/.github/workflows/qa-silo-rebuild.yml@refs/heads/dev"
+        },
+        "metadata": {
+          "invocationId": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/actions/runs/41634409253/attempts/1"
+        }
+      }
+    },
+    "predicateType": "https://slsa.dev/provenance/v1",
+    "subject": [
+      {
+        "digest": {
+          "sha256": "53a0bcfba37e0a26e26f927874c1973debd3906de35a4ed5bb04d62b264b58d2"
+        },
+        "name": "Proyecto-Centenario-QA-srv01-6eed4f00b791.zip"
+      }
+    ]
+  }
+}
