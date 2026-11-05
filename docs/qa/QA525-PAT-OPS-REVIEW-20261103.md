@@ -19,7 +19,7 @@ Estado: DRAFT; **prohibido instalar o desplegar a partir de este documento**. Is
 
 El componente no contiene comando `apply`, no invoca Docker ni `pmgm-qa-update` y no autoriza instalación. La siguiente entrega debe conectar un motor APPLY offline con state machine durable y recovery por transición, bajo artefacto OPS firmado y revisión independiente.
 
-Pruebas locales: 73 pruebas del contrato `QA auto-agent readiness` PASS, incluidas 20 nuevas de SYNC/admisión/postcheck vNext, atestación Sigstore durante SYNC, reverificación offline del manifest, cero red en admisión, no reenvío del PAT al blob, rechazo de redirect no confiable, rechazo de caché por symlink/permisos débiles, G6, replay de nonce, TOCTOU básico de archivos, prepared retenido y drift de runtime.
+Pruebas locales: 74 pruebas del contrato `QA auto-agent readiness` PASS, incluidas 21 nuevas de SYNC/admisión/postcheck vNext. Los tests desacoplan explícitamente el gate root sin debilitarlo en producción; validan atestación Sigstore durante SYNC, reverificación offline del manifest, cero red en admisión, no reenvío del PAT al blob, rechazo de redirect no confiable, rechazo de caché por symlink/permisos débiles, G6, replay de nonce, TOCTOU básico de archivos, prepared retenido y drift de runtime.
 
 ## Separación obligatoria
 
