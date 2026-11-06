@@ -101,7 +101,7 @@ class BaselinePlanTests(unittest.TestCase):
         for stage in ("WEB_SWITCHING", "WEB_VERIFIED", "VERIFYING",
                       "APPLYING", "APPLIED", "ROLLED_BACK", 1, None):
             with self.subTest(stage=stage), self.assertRaises(mod.Stop):
-                mod.advance(p, stage, evidence(p, stage))
+                mod.advance(p, stage, evidence(p, "API_SWITCHING"))
         first = mod.advance(p, "API_SWITCHING", evidence(p, "API_SWITCHING"))
         with self.assertRaises(mod.Stop):
             mod.advance(first, "API_SWITCHING", evidence(first, "API_SWITCHING"))
