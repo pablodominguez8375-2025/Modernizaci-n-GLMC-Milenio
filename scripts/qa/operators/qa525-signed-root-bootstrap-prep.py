@@ -156,6 +156,8 @@ def locked_bootstrap():
         require(LOCK.lstat().st_ino == current.st_ino
                 and LOCK.lstat().st_dev == current.st_dev,
                 "BOOTSTRAP_LOCK_PATH_CHANGED")
+        require(not os.path.lexists(STORE / "admission-archive-pending.json"),
+                "ADMISSION_ARCHIVE_PENDING_MANUAL_RECONCILIATION")
         yield
     finally:
         os.close(fd)
@@ -728,6 +730,164 @@ def prepare(envelope, sha, expected, verifier_sha, *, now=None,
                                now=now, verify=verify)
 
 
+
+ARCHIVE_INSTALLER_SHA256 = "dbfa762030b9ae45cfa64cb2ae72b65c4faff8fb28ec49072e0ea3c77eead65c"
+
+
+def archive_admission_contract(act, packet, receipt, *, now, admission_hash,
+                               receipt_hash, launcher_hash, next_sha, next_digest):
+    """Pure decision; old admission remains history, never fresh authority."""
+    fields = {"schema", "action", "source_sha", "next_source_sha",
+              "next_release_asset_sha256", "admission_sha256", "receipt_sha256",
+              "launcher_sha256", "cut_nonce", "nonce", "issued_at", "expires_at",
+              "operator", "operator_reviewed", "sponsor_reference", "technical_reference"}
+    require(type(act) is dict and set(act) == fields
+            and act["schema"] == "qa525-admission-archive-v1"
+            and act["action"] == "ARCHIVE_EXPIRED_BOOTSTRAP_ADMISSION_ONLY"
+            and act["operator"] == "soporte@glmdch"
+            and act["operator_reviewed"] is True, "ADMISSION_ARCHIVE_APPROVAL_INVALID")
+    require(type(act["issued_at"]) is int and type(act["expires_at"]) is int
+            and 0 <= now - act["issued_at"] < 900
+            and act["issued_at"] < act["expires_at"] <= act["issued_at"] + 900
+            and now < act["expires_at"], "ADMISSION_ARCHIVE_APPROVAL_EXPIRED")
+    for key in ("sponsor_reference", "technical_reference"):
+        require(type(act[key]) is str and re.fullmatch(
+            r"https://github\.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/(525|822)#issuecomment-[1-9][0-9]*",
+            act[key]), "ADMISSION_ARCHIVE_REFERENCE_INVALID")
+    require(packet.get("status") == "EXTERNAL_SIGSTORE_BOOTSTRAP_ADMISSION_ONLY"
+            and type(packet.get("issued_at")) is int
+            and type(packet.get("expires_at")) is int
+            and packet["issued_at"] < packet["expires_at"] <= packet["issued_at"] + 900
+            and now >= packet["expires_at"], "ADMISSION_ARCHIVE_NOT_EXPIRED")
+    old = packet.get("source_sha")
+    require(type(old) is str and SHA40.fullmatch(old)
+            and type(next_sha) is str and SHA40.fullmatch(next_sha)
+            and next_sha != old
+            and act["source_sha"] == old and act["next_source_sha"] == next_sha
+            and act["next_release_asset_sha256"] == "sha256:" + next_digest,
+            "ADMISSION_ARCHIVE_SOURCE_MISMATCH")
+    require(receipt.get("status") == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+            and receipt.get("source_sha") == old
+            and receipt.get("release_asset_sha256") == packet.get("release_asset_sha256")
+            and receipt.get("new_launcher_sha256") == launcher_hash
+            and act["launcher_sha256"] == launcher_hash
+            and act["admission_sha256"] == admission_hash
+            and act["receipt_sha256"] == receipt_hash
+            and act["cut_nonce"] == receipt.get("nonce"),
+            "ADMISSION_ARCHIVE_BINDING_MISMATCH")
+    require(type(act["nonce"]) is str and SHA64.fullmatch(act["nonce"])
+            and act["nonce"] != act["cut_nonce"], "ADMISSION_ARCHIVE_NONCE_INVALID")
+    return True
+
+
+def _archive_sync(directory):
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _archive_write(path, raw):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        write_all(fd, raw)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def load_archive_installer():
+    path = Path(__file__).with_name("qa525-launcher-supervised-root-install.py")
+    root_owned(path, mode=0o600)
+    require(digest_file(path, maximum=200_000) == ARCHIVE_INSTALLER_SHA256,
+            "ADMISSION_ARCHIVE_INSTALLER_CHANGED")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("qa525_archive_installer", path)
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    return installer
+
+
+def archive_expired_admission(envelope, sha, expected, verifier_sha, approval_path):
+    """Separate archive only. Does not prepare, install, recover or deploy."""
+    require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
+            "BOOTSTRAP_ROOT_GLMDCH_ONLY")
+    require_isolated_root_python()
+    root_owned(Path(__file__))
+    require(digest_file(Path(__file__), maximum=200_000) == verifier_sha,
+            "BOOTSTRAP_TRUSTED_VERIFIER_HASH_MISMATCH")
+    require(type(sha) is str and SHA40.fullmatch(sha)
+            and type(expected) is str and SHA64.fullmatch(expected),
+            "BOOTSTRAP_IDENTITY_INVALID")
+    with locked_bootstrap():
+        require_recovery_state_provisioned()
+        # Authenticate next signed sources before allowing old-admission archival.
+        with tempfile.TemporaryDirectory(prefix=".qa525-admission-verify-", dir=STORE) as td:
+            verify_zip_and_prepare(Path(envelope), sha, expected,
+                                   Path(td) / "verified-next-sources")
+        installer = load_archive_installer()
+        with installer.all_five_locks(read_only=True):
+            used_cut_nonces = installer.scan_history(verify_recovery=True)
+            raw = read_historical_private(ADMISSION)
+            packet = json.loads(raw, object_pairs_hook=unique_fields)
+            approved_raw = read_historical_private(Path(approval_path))
+            act = json.loads(approved_raw, object_pairs_hook=unique_fields)
+            cut_nonce = act.get("cut_nonce")
+            require(type(cut_nonce) is str and SHA64.fullmatch(cut_nonce),
+                    "ADMISSION_ARCHIVE_CUT_NONCE_INVALID")
+            receipt_path = PENDING_STATE / ("receipt-" + cut_nonce + ".json")
+            receipt_raw = read_historical_private(receipt_path)
+            receipt = json.loads(receipt_raw, object_pairs_hook=unique_fields)
+            live = read_historical_private(LAUNCHER, mode=0o700, limit=4096)
+            now = int(time.time())
+            archive_admission_contract(act, packet, receipt, now=now,
+                admission_hash=hashlib.sha256(raw).hexdigest(),
+                receipt_hash=hashlib.sha256(receipt_raw).hexdigest(),
+                launcher_hash=hashlib.sha256(live).hexdigest(),
+                next_sha=sha, next_digest=expected)
+            require(not RECOVERY_ADMISSION.exists() and not RECOVERY_ADMISSION.is_symlink(),
+                    "ADMISSION_ARCHIVE_RECOVERY_ADMISSION_PRESENT")
+            nonce = act["nonce"]
+            require(nonce not in used_cut_nonces, "ADMISSION_ARCHIVE_CROSS_NONCE_REPLAY")
+            spent = STORE / ("admission-archive-consumed-" + nonce)
+            archive = STORE / ("admission-history-" + nonce)
+            marker = STORE / "admission-archive-pending.json"
+            require(not os.path.lexists(spent) and not os.path.lexists(archive),
+                    "ADMISSION_ARCHIVE_REPLAY")
+            require(read_historical_private(ADMISSION) == raw
+                    and read_historical_private(Path(approval_path)) == approved_raw
+                    and read_historical_private(receipt_path) == receipt_raw
+                    and read_historical_private(LAUNCHER, mode=0o700, limit=4096) == live
+                    and int(time.time()) < act["expires_at"],
+                    "ADMISSION_ARCHIVE_FINAL_DRIFT")
+            archive.mkdir(mode=0o700)
+            _archive_write(archive / "approval.json", approved_raw)
+            _archive_write(spent, (sha + "\n").encode())
+            _archive_sync(archive)
+            _archive_sync(STORE)
+            record = {"status": "EXPIRED_ADMISSION_ARCHIVE_INCOMPLETE",
+                      "source_sha": packet["source_sha"], "next_source_sha": sha,
+                      "admission_sha256": hashlib.sha256(raw).hexdigest(),
+                      "archive_name": archive.name}
+            _archive_write(marker, (json.dumps(record, sort_keys=True) + "\n").encode())
+            _archive_sync(STORE)
+            # Preserve old bytes and timestamps; no replacement or TTL editing.
+            ADMISSION.rename(archive / "admission.json")
+            _archive_sync(ADMISSION.parent)
+            _archive_sync(archive)
+            record["status"] = "EXPIRED_BOOTSTRAP_ADMISSION_ARCHIVED_NO_AUTHORITY"
+            _archive_write(archive / "receipt.json",
+                           (json.dumps(record, sort_keys=True) + "\n").encode())
+            _archive_sync(archive)
+            _archive_sync(STORE)
+            marker.unlink()
+            _archive_sync(STORE)
+            return {"status": record["status"], "source_sha": packet["source_sha"],
+                    "may_install": False, "may_apply": False,
+                    "launcher_replaced": False, "api_web_changed": False}
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--verified-envelope", type=Path, required=True)
@@ -735,12 +895,20 @@ def main(argv=None):
     p.add_argument("--expected-zip-sha256", required=True)
     p.add_argument("--trusted-bootstrap-sha256", required=True)
     modes = p.add_mutually_exclusive_group()
+    modes.add_argument("--archive-expired-admission", action="store_true")
     modes.add_argument("--prepare-recovery-b", action="store_true")
     modes.add_argument("--prepare-committed-recovery-b", action="store_true")
+    p.add_argument("--archive-approval", type=Path)
     p.add_argument("--cut-nonce")
     args = p.parse_args(argv)
     try:
-        if args.prepare_recovery_b or args.prepare_committed_recovery_b:
+        if args.archive_expired_admission:
+            require(args.archive_approval is not None and args.archive_approval.is_absolute()
+                    and args.cut_nonce is None, "ADMISSION_ARCHIVE_APPROVAL_REQUIRED")
+            report = archive_expired_admission(args.verified_envelope, args.source_sha,
+                args.expected_zip_sha256, args.trusted_bootstrap_sha256,
+                args.archive_approval)
+        elif args.prepare_recovery_b or args.prepare_committed_recovery_b:
             require(args.cut_nonce is not None,
                     "RECOVERY_BOOTSTRAP_CUT_NONCE_REQUIRED")
             action = (prepare_committed_recovery if
