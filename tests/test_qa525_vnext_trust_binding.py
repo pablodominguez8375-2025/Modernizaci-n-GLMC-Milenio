@@ -207,6 +207,19 @@ class TrustBindingContractTests(unittest.TestCase):
             binding.bind(a, b'{"nonce":"x","nonce":"y"}',
                          trusted_policy_hash=POLICY, now=NOW)
 
+    def test_overflow_exponent_normalizes_to_noncanonical_stop(self):
+        # parse_constant rejects literal Infinity; JSON exponent overflow
+        # reaches json.dumps(allow_nan=False), which must not leak ValueError.
+        original = canonical(self.admission)
+        anchor = canonical(self.anchor)
+        for number in (b"1e999", b"-1e999", b"1E999"):
+            with self.subTest(number=number), self.assertRaisesRegex(
+                    binding.Stop, "^BINDING_ADMISSION_NONCANONICAL$"):
+                changed = original.replace(b'"artifact_id": 56',
+                                           b'"artifact_id": ' + number, 1)
+                binding.bind(changed, anchor,
+                             trusted_policy_hash=POLICY, now=NOW)
+
     def test_strict_flags_schema_and_identity(self):
         for key, value in (
             ("nonce_consumed", True), ("network_allowed", True),
