@@ -3,10 +3,18 @@
 FROM docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62 AS vendor
 FROM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS go-build
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+# CVE-2026-78661: upgrade isolated Go build copies only, preserving the
+# reviewed Git source commits and authenticated vendor rootfs. New Go binaries
+# invalidate their previously reviewed SHA256 and VEX pins until re-attested;
+# never bypass scanner findings or accept them as preapproved.
 FROM go-build AS mcli-build
 WORKDIR /source
 COPY --from=mcli_source . .
 RUN test "$(go env GOVERSION)" = go1.27.3 && \
+    test "$(go env GOSUMDB)" = sum.golang.org && \
+    go get golang.org/x/net@v0.62.0 && \
+    go mod verify && \
+    test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = v0.62.0 && \
     go build -mod=readonly -trimpath -buildvcs=false -o /out/mcli . && \
     go version -m /out/mcli > /out/mcli-buildinfo.txt
 
@@ -17,6 +25,10 @@ COPY --from=silo_source . .
 # Retain ELF symbols and stamp the exact source pseudo-version: Trivy can then
 # identify the main module with -trimpath instead of silently scanning (devel).
 RUN test "$(go env GOVERSION)" = go1.27.3 && \
+    test "$(go env GOSUMDB)" = sum.golang.org && \
+    go get golang.org/x/net@v0.62.0 && \
+    go mod verify && \
+    test "$(go list -m -f '{{.Version}}' golang.org/x/net)" = v0.62.0 && \
     go build -mod=readonly -trimpath -buildvcs=false -tags=kqueue \
       -ldflags='-X github.com/minio/minio/cmd.Version=v0.0.0-20261027000322-dd905b29f45d -X github.com/minio/minio/cmd.CommitID=dd905b29f45d29bcef6aa894acef10f8071eb602 -X github.com/minio/minio/cmd.ShortCommitID=dd905b29f45d' \
       -o /out/silo . && \
