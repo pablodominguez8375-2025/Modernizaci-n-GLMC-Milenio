@@ -3,6 +3,7 @@
 Only disposable temp files; the real host and sudo are NEVER used.
 """
 import hashlib
+from contextlib import nullcontext
 import importlib.util
 import io
 import json
@@ -24,6 +25,7 @@ m = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = m
 spec.loader.exec_module(m)
 SHA = "a" * 40
+ORIGINAL_ARCHIVE_LOADER = m.load_archive_installer
 ORIGINAL_ISOLATION = m.require_isolated_root_python
 BOOTSTRAP_HASH = hashlib.sha256(FILE.read_bytes()).hexdigest()
 
@@ -111,6 +113,226 @@ class RootBootstrapTests(unittest.TestCase):
         expected = digest or hashlib.sha256(data).hexdigest()
         return m.prepare(self.envelope, SHA, expected, BOOTSTRAP_HASH,
                          now=1_800_000_000, verify=fake), fake
+
+
+    def archive_fixture(self):
+        self.verify(build_release())
+        root = self.stage.parent
+        history = root / "replacement"
+        history.mkdir(mode=0o700)
+        launcher = root / "launcher"
+        launcher.write_bytes(b"synthetic launcher")
+        launcher.chmod(0o700)
+        recovery_admission = root / "recovery-admission.json"
+        for p in (patch.object(m, "PENDING_STATE", history),
+                  patch.object(m, "LAUNCHER", launcher),
+                  patch.object(m, "RECOVERY_ADMISSION", recovery_admission),
+                  patch.object(m.time, "time", return_value=1_800_001_000)):
+            p.start()
+            self.addCleanup(p.stop)
+        packet = json.loads(self.admission.read_bytes())
+        nonce = "c" * 64
+        receipt = dict(status="LAUNCHER_ATOMIC_SWAP_COMMITTED", source_sha=SHA,
+            release_asset_sha256=packet["release_asset_sha256"], nonce=nonce,
+            new_launcher_sha256=hashlib.sha256(launcher.read_bytes()).hexdigest())
+        receipt_path = history / ("receipt-" + nonce + ".json")
+        receipt_path.write_text(json.dumps(receipt))
+        receipt_path.chmod(0o600)
+        self.next_sha = "b" * 40
+        self.envelope.write_bytes(build_release(source_sha=self.next_sha))
+        self.next_digest = hashlib.sha256(self.envelope.read_bytes()).hexdigest()
+        self.act = dict(schema="qa525-admission-archive-v1",
+            action="ARCHIVE_EXPIRED_BOOTSTRAP_ADMISSION_ONLY",
+            source_sha=SHA, next_source_sha=self.next_sha,
+            next_release_asset_sha256="sha256:" + self.next_digest,
+            admission_sha256=hashlib.sha256(self.admission.read_bytes()).hexdigest(),
+            receipt_sha256=hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            launcher_sha256=receipt["new_launcher_sha256"], cut_nonce=nonce,
+            nonce="d" * 64, issued_at=1_800_001_000, expires_at=1_800_001_800,
+            operator="soporte@glmdch", operator_reviewed=True,
+            sponsor_reference="https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-1",
+            technical_reference="https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/822#issuecomment-2")
+        self.act_path = root / "archive-approval.json"
+        self.save_archive_act()
+        self.helper = SimpleNamespace(all_five_locks=lambda **kw: nullcontext(),
+                                      scan_history=Mock(return_value=set()))
+        p = patch.object(m, "load_archive_installer", return_value=self.helper)
+        p.start()
+        self.addCleanup(p.stop)
+        return packet, receipt, launcher
+
+    def save_archive_act(self):
+        self.act_path.write_text(json.dumps(self.act))
+        self.act_path.chmod(0o600)
+
+    def archive(self, verify=None):
+        return m.archive_expired_admission(self.envelope, self.next_sha,
+            self.next_digest, BOOTSTRAP_HASH, self.act_path)
+
+    def test_complete_first_archive_second_preparation(self):
+        packet, receipt, launcher = self.archive_fixture()
+        old_bytes = self.admission.read_bytes()
+        old_launcher = launcher.read_bytes()
+        # Real ZIP/manifest/hash verification with only Sigstore transport mocked.
+        real = m.verify_zip_and_prepare
+        with patch.object(m, "verify_zip_and_prepare", wraps=real) as checked:
+            # Subprocess default is captured; patch its runner explicitly through adapter.
+            checked.side_effect = lambda *a, **kw: real(*a, **kw, verify=Mock())
+            result = self.archive()
+        self.assertFalse(result["may_install"])
+        self.assertFalse(result["may_apply"])
+        self.assertFalse(self.admission.exists())
+        archived = next(self.stage.glob("admission-history-*"))
+        self.assertEqual(old_bytes, (archived / "admission.json").read_bytes())
+        self.assertEqual(old_launcher, launcher.read_bytes())
+        self.assertFalse((self.stage / "admission-archive-pending.json").exists())
+        self.assertFalse((self.stage / self.next_sha).exists())
+        answer = m.prepare(self.envelope, self.next_sha, self.next_digest,
+                           BOOTSTRAP_HASH, now=1_800_001_001, verify=Mock())
+        fresh = json.loads(self.admission.read_bytes())
+        self.assertEqual(self.next_sha, fresh["source_sha"])
+        self.assertNotEqual(packet["issued_at"], fresh["issued_at"])
+        self.assertEqual(old_bytes, (archived / "admission.json").read_bytes())
+        self.assertFalse(answer["may_install"])
+
+    def test_archive_cross_nonce_replay_rejected(self):
+        self.archive_fixture()
+        self.helper.scan_history.return_value = {self.act["nonce"]}
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare"), self.assertRaisesRegex(
+                m.Blocked, "ADMISSION_ARCHIVE_CROSS_NONCE_REPLAY"):
+            self.archive()
+        self.assertEqual(before, self.admission.read_bytes())
+
+    def test_archive_helper_hash_pin_rejects_unreviewed_installer(self):
+        self.archive_fixture()
+        with patch.object(m, "ARCHIVE_INSTALLER_SHA256", "0" * 64):
+            with self.assertRaisesRegex(m.Blocked, "ADMISSION_ARCHIVE_INSTALLER_CHANGED"):
+                ORIGINAL_ARCHIVE_LOADER()
+
+    def test_archive_signature_failure_keeps_old_admission(self):
+        self.archive_fixture()
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare",
+                          side_effect=m.Blocked("BOOTSTRAP_ATTESTATION_FAILED")):
+            with self.assertRaises(m.Blocked):
+                self.archive()
+        self.assertEqual(before, self.admission.read_bytes())
+        self.assertEqual([], list(self.stage.glob("admission-history-*")))
+
+    def test_archive_rejects_expired_approval_and_wrong_binding(self):
+        packet, receipt, launcher = self.archive_fixture()
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare"):
+            for key, wrong in (("expires_at", 1_800_000_999),
+                               ("admission_sha256", "0" * 64),
+                               ("receipt_sha256", "0" * 64),
+                               ("launcher_sha256", "0" * 64),
+                               ("nonce", self.act["cut_nonce"])):
+                original = self.act[key]
+                self.act[key] = wrong
+                self.save_archive_act()
+                with self.subTest(key=key), self.assertRaises(m.Blocked):
+                    self.archive()
+                self.assertEqual(before, self.admission.read_bytes())
+                self.act[key] = original
+            self.save_archive_act()
+
+    def test_archive_interruption_blocks_new_prepare_without_losing_old_bytes(self):
+        self.archive_fixture()
+        old = self.admission.read_bytes()
+        original_write = m._archive_write
+        def fail_receipt(path, raw):
+            if path.name == "receipt.json":
+                raise OSError("synthetic crash after move")
+            return original_write(path, raw)
+        with patch.object(m, "verify_zip_and_prepare"), \
+             patch.object(m, "_archive_write", side_effect=fail_receipt):
+            with self.assertRaises(OSError):
+                self.archive()
+        self.assertFalse(self.admission.exists())
+        self.assertEqual(old, next(self.stage.glob("admission-history-*")).joinpath(
+            "admission.json").read_bytes())
+        self.assertTrue((self.stage / "admission-archive-pending.json").exists())
+        with self.assertRaisesRegex(m.Blocked,
+                    "ADMISSION_ARCHIVE_PENDING_MANUAL_RECONCILIATION"):
+            m.prepare(self.envelope, self.next_sha, self.next_digest,
+                      BOOTSTRAP_HASH, verify=Mock())
+
+    def _rewrite_admission(self, **changes):
+        packet = json.loads(self.admission.read_bytes())
+        packet.update(changes)
+        self.admission.write_bytes(json.dumps(packet).encode())
+        self.act["admission_sha256"] = hashlib.sha256(self.admission.read_bytes()).hexdigest()
+        self.save_archive_act()
+
+    def _assert_archive_blocked(self, code):
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare"), \
+                self.assertRaisesRegex(m.Blocked, "^" + code + "$"):
+            self.archive()
+        self.assertEqual(before, self.admission.read_bytes())
+        self.assertEqual([], list(self.stage.glob("admission-history-*")))
+        self.assertFalse((self.stage / "admission-archive-pending.json").exists())
+
+    def test_archive_refuses_an_admission_that_has_not_expired(self):
+        self.archive_fixture()
+        now = 1_800_001_000
+        self._rewrite_admission(issued_at=now - 100, expires_at=now + 300)
+        self._assert_archive_blocked("ADMISSION_ARCHIVE_NOT_EXPIRED")
+
+    def test_archive_refuses_an_unexpected_operator(self):
+        self.archive_fixture()
+        self.act["operator"] = "otro@host"
+        self.save_archive_act()
+        self._assert_archive_blocked("ADMISSION_ARCHIVE_APPROVAL_INVALID")
+
+    def test_archive_refuses_a_receipt_whose_internal_nonce_differs_from_cut_nonce(self):
+        _packet, receipt, _launcher = self.archive_fixture()
+        path = self.act_path.parent / "replacement" / ("receipt-" + self.act["cut_nonce"] + ".json")
+        receipt["nonce"] = "e" * 64
+        path.write_text(json.dumps(receipt))
+        path.chmod(0o600)
+        self.act["receipt_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.save_archive_act()
+        self._assert_archive_blocked("ADMISSION_ARCHIVE_BINDING_MISMATCH")
+
+    def _assert_final_guard_denies_drift(self, target):
+        _packet, _receipt, launcher = self.archive_fixture()
+        watched = self.admission if target == "admission" else launcher
+        real = m.read_historical_private
+        seen = {"count": 0}
+        def drifting(path, *a, **kw):
+            raw = real(path, *a, **kw)
+            if Path(path) == watched:
+                seen["count"] += 1
+                if seen["count"] >= 2:
+                    return raw + b" "
+            return raw
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare"), \
+                patch.object(m, "read_historical_private", side_effect=drifting), \
+                self.assertRaisesRegex(m.Blocked, "^ADMISSION_ARCHIVE_FINAL_DRIFT$"):
+            self.archive()
+        self.assertEqual(before, self.admission.read_bytes())
+        self.assertEqual([], list(self.stage.glob("admission-history-*")))
+
+    def test_archive_final_guard_denies_admission_drift(self):
+        self._assert_final_guard_denies_drift("admission")
+
+    def test_archive_final_guard_denies_launcher_drift(self):
+        self._assert_final_guard_denies_drift("launcher")
+
+    def test_archive_replay_rejected_before_history_creation(self):
+        self.archive_fixture()
+        (self.stage / ("admission-archive-consumed-" + self.act["nonce"])).write_bytes(b"used")
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare"), self.assertRaisesRegex(
+                m.Blocked, "ADMISSION_ARCHIVE_REPLAY"):
+            self.archive()
+        self.assertEqual(before, self.admission.read_bytes())
+        self.assertEqual([], list(self.stage.glob("admission-history-*")))
+
 
     def test_root_bootstrap_requires_isolated_python_before_staging(self):
         for isolated, no_site in ((0, 0), (1, 0), (0, 1)):
