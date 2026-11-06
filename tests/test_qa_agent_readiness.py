@@ -18,6 +18,10 @@ from test_qa525_vnext_cache import (  # noqa: F401
 )
 from test_qa525_vnext_journal import DurableJournalContract  # noqa: F401
 from test_qa525_single_plane_contract import SinglePlaneContractTests  # noqa: F401
+from test_qa525_vnext_trust_binding import TrustBindingContractTests  # noqa: F401
+from test_qa525_vnext_baseline_plan import BaselinePlanTests  # noqa: F401
+from test_qa525_vnext_verify import VerifierTests  # noqa: F401
+from test_qa525_vnext_containment import ContainmentTests, DeniedNetworkTests  # noqa: F401
 
 FILE = Path(__file__).resolve().parents[1] / "scripts/qa/qa-agent-readiness.py"
 spec = importlib.util.spec_from_file_location("qa_agent_readiness", FILE)
