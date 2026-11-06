@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/qa/qa-agent-readiness.py'
       - 'tests/test_qa_agent_readiness.py'
+      - 'scripts/qa/qa525-vnext-*.py'
+      - 'tests/test_qa525_vnext_*.py'
       - 'docs/qa/QA-AUTO-DEPLOY-READINESS.md'
       - '.github/workflows/qa-auto-agent-readiness.yml'
   push:
@@ -12,6 +14,8 @@ on:
     paths:
       - 'scripts/qa/qa-agent-readiness.py'
       - 'tests/test_qa_agent_readiness.py'
+      - 'scripts/qa/qa525-vnext-*.py'
+      - 'tests/test_qa525_vnext_*.py'
       - '.github/workflows/qa-auto-agent-readiness.yml'
 permissions:
   contents: read
