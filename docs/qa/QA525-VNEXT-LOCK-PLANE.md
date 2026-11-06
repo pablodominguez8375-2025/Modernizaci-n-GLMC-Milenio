@@ -9,3 +9,5 @@ Fuente del requisito: `docs/qa/qa525-single-plane-v1.json`, función `all_five_l
 **Peligros que no resuelve:** flock es advisory; el viejo entrypoint debe estar realmente deshabilitado después de validar la conmutación, sin segundo escritor; el cgroup del controlador no prueba detención de Docker daemon. El módulo no autentica baseline, no ejecuta Compose, no reintenta APPLY, no modifica Keycloak ni base de datos. El nivel de verificación físico requiere además backup G6 offhost reciente + restauración aislada, guardas de identidad y rollback, autorización separada y revisión de la versión firmada en el host.
 
 **Gates:** PR draft, tests herméticos inactivos y CI exact-head; revisión adversarial independiente, merge únicamente a dev. Prohibido promover main o desplegar en glmdch. 
+
+**Límite sintético reforzado:** `synthetic_lock_dir`, raíz autoritativa del journal y `admission.json` deben ser hijos directos con nombres fijos del mismo directorio privado root0700 del fixture. Cualquier raíz o admisión ajena se rechaza antes de validar o invocar `journal.begin`. Esto impide combinar locks temporales con un plano de estado externo y no crea una ruta física.
