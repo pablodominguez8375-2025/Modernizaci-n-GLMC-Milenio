@@ -75,8 +75,9 @@ def replay(planner, verifier, baseline, target, initial_plan,
 
     'apply' requires 2 synthetic samples each for api, web and final.
     'rollback' requires 2 samples for api and rollback. Execution-intent
-    proofs (API/WEB switching, rolling back) are supplied; verification stages
-    are derived from the verifier result and never from a supplied claim. Proofs are supplied, never created or authenticated by this module.
+    proofs (API/WEB switching, rolling back) are supplied, never created or
+    authenticated by this module; verification stages are derived from the
+    verifier result and never from a supplied claim.
     All external inputs remain non-authoritative, including successful
     verifier checksums. No APPLIED/ROLLED_BACK journal record is ever made.
     """
