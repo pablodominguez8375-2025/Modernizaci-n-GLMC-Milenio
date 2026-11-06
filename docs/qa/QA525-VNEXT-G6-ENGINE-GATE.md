@@ -4,7 +4,7 @@
 
 ## Contrato
 
-El motor ensamblado recibe g6_evidence como un diccionario de nueve campos exactos: review_bytes, receipt_bytes, restore_bytes, pinned_admission_sha256, pinned_approval_sha256, pinned_review_sha256, pinned_receipt_sha256, pinned_restore_sha256 y observed_archive_sha256. No admite omisiones, booleanos ni un resultado PASS precalculado. Todos los pins siguen siendo datos de origen no autenticado hasta que un bootstrap root firmado los obtenga de descriptores protegidos.
+El motor ensamblado recibe g6_evidence como un diccionario de nueve campos exactos: review_bytes, receipt_bytes, restore_bytes, pinned_admission_sha256, pinned_approval_sha256, pinned_review_sha256, pinned_receipt_sha256, pinned_restore_sha256 y observed_archive_sha256. No admite omisiones, booleanos ni un resultado PASS precalculado. La entrada se copia de inmediato en un diccionario privado de bytes y strings inmutables, expuesto solo al motor mediante MappingProxyType. Se comprueba que el diccionario original no cambió antes y después de la validación: si cambia, STOP sin habilitar avance. Todos los pins siguen siendo datos de origen no autenticado hasta que un bootstrap root firmado los obtenga de descriptores protegidos.
 
 Tras retener cinco locks sintéticos y el lease raíz, run_synthetic relee clock() y ejecuta g6_anchor.compare con los bytes crudos de la admisión/ancla y revisión G6. Exige coincidencia con nonce, digest de admisión, digest de aprobación y flags may_apply=false/may_install=false. Si falla, se niega ANTES de invocar factory, capturar baseline, escribir scopes o usar runner.
 
@@ -16,7 +16,7 @@ Cuando G6 caduca entre las dos etapas, la etapa forward se deniega. ROLLING_BACK
 
 ## Pruebas
 
-Tests herméticos: presencia y forma de evidencias, digest alterado antes del factory/baseline, clock() fresco tras locks, adulteración durante gate API, expiración antes de WEB y rollback verificado, llamadas repetidas en API y WEB. La suite general y 7/7 workflows CI se verifican sobre el HEAD exacto del PR; se requiere revisión independiente antes de integrar dev.
+Tests herméticos: presencia y forma de evidencias, rechazo de bytearray/memoryview/list y pins no string, mutación durante compare con bytes congelados y STOP, digest alterado antes del factory/baseline, clock() fresco tras locks, adulteración durante gate API, expiración antes de WEB y rollback verificado, mutación de G6 durante ROLLING_BACK sin impedir restauración bajo external_gate, llamadas repetidas en API y WEB. La ventana mínima entre gate e intent persiste y requiere control privilegiado del futuro bootstrap. La suite general y 7/7 workflows CI se verifican sobre el HEAD exacto del PR; se requiere revisión independiente antes de integrar dev.
 
 ## Barreras de operación
 
