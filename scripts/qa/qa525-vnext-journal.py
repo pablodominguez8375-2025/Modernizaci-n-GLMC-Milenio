@@ -4,8 +4,10 @@
 This module has no CLI, network, Docker, or host-action integration.
 The caller MUST separately validate OPS provenance, G6, Sponsor approval,
 API/WEB baseline and dual-runtime rollback before using it for any real QA.
-It never declares APPLIED or ROLLED_BACK; only a trusted external runtime
-verifier may implement such transitions in a separately reviewed change.
+It never WRITES APPLIED or ROLLED_BACK. A terminal record may only be created
+by the separate ``qa525-vnext-terminal.py`` after a verifier result; here it is
+only READ (``inspect``/``reconcile_after_crash``) so that a finished flight is
+never mistaken for a crashed one.
 """
 import datetime as dt
 import fcntl
@@ -78,7 +80,7 @@ def _abandoned_journal_link_is_trusted(path: Path, st: os.stat_result) -> bool:
     interrupted between those calls. The second name must be a private
     .qa525-next-* entry in the same locked root directory.
     """
-    if not path.name.startswith("journal-") or st.st_nlink != 2:
+    if not path.name.startswith(("journal-", "terminal-")) or st.st_nlink != 2:
         return False
     try:
         entries = list(path.parent.iterdir())
@@ -245,6 +247,28 @@ def _paths(directory: Path, nonce: str) -> tuple[Path, Path, Path]:
             directory / ("recovery-" + nonce + ".json"))
 
 
+def _terminal_path(directory: Path, nonce: str) -> Path:
+    _paths(directory, nonce)  # validates the nonce shape
+    return directory / ("terminal-" + nonce + ".json")
+
+
+def _terminal_status(nonce: str, marker: Path, journal: Path, recovery: Path,
+                     terminal: Path) -> str:
+    """Strict read of a terminal record; contradictions fail closed."""
+    if recovery.exists() or recovery.is_symlink():
+        raise Stop("TERMINAL_AND_RECOVERY_CONFLICT")
+    if not (marker.exists() and journal.exists()) or marker.is_symlink() or journal.is_symlink():
+        raise Stop("TERMINAL_WITHOUT_FLIGHT")
+    m, j, t = _object(marker), _object(journal), _object(terminal)
+    if (t.get("schema") != "qa525-terminal-v1" or t.get("status") not in ("APPLIED", "ROLLED_BACK")
+            or t.get("nonce") != nonce or m.get("nonce") != nonce
+            or j.get("status") != "APPLYING"
+            or t.get("admission_sha256") != m.get("admission_sha256")
+            or j.get("admission_sha256") != m.get("admission_sha256")):
+        raise Stop("TERMINAL_RECORD_INVALID")
+    return t["status"]
+
+
 def _guard_no_other_flights(root: Path, nonce: str) -> None:
     """Fail closed if any prior vNext nonce or unfinished legacy dual exists.
 
@@ -261,10 +285,10 @@ def _guard_no_other_flights(root: Path, nonce: str) -> None:
         raise Stop("JOURNAL_SCAN_LIMIT")
     for child in entries:
         name = child.name
-        if re.fullmatch(r"(?:nonce-consumed|journal|recovery)-[A-Za-z0-9_-]{24,96}\.json", name):
+        if re.fullmatch(r"(?:nonce-consumed|journal|recovery|terminal)-[A-Za-z0-9_-]{24,96}\.json", name):
             raise Stop("PRIOR_NONCE_UNRESOLVED")
         if any(name.startswith(part) and name.endswith(".json")
-               for part in ("nonce-consumed-", "journal-", "recovery-")):
+               for part in ("nonce-consumed-", "journal-", "recovery-", "terminal-")):
             raise Stop("JOURNAL_UNKNOWN_RESIDUE")
         if name.startswith(".qa525-next-"):
             raise Stop("JOURNAL_ORPHAN_TEMP_UNRESOLVED")
@@ -356,6 +380,9 @@ def inspect(root: Path, nonce: str) -> str:
     """Read-only classification; a live APPLYING session is NOT success."""
     _root(root)
     marker, journal, recovery = _paths(root, nonce)
+    terminal = _terminal_path(root, nonce)
+    if terminal.exists() or terminal.is_symlink():
+        return _terminal_status(nonce, marker, journal, recovery, terminal)
     if recovery.exists() or recovery.is_symlink():
         state = _object(recovery)
         if state.get("status") != "RECOVERY_REQUIRED":
@@ -391,8 +418,8 @@ def reconcile_after_crash(root: Path, nonce: str, now: dt.datetime) -> str:
         status = inspect(root, nonce)
         if status == "NOT_STARTED":
             return "NOT_STARTED"
-        if status == "RECOVERY_REQUIRED":
-            return status
+        if status in {"RECOVERY_REQUIRED", "APPLIED", "ROLLED_BACK"}:
+            return status  # a finished flight is never rewritten as a crash
         if status not in {"APPLYING", "MARKER_ONLY_RECOVERY_REQUIRED"}:
             raise Stop("RECOVERY_STATE_INVALID")
         m = _object(marker)
@@ -408,5 +435,5 @@ def reconcile_after_crash(root: Path, nonce: str, now: dt.datetime) -> str:
         os.close(fd)
 
 
-# There is deliberately NO APPLIED / ROLLED_BACK writer, network client, CLI,
+# There is deliberately NO APPLIED / ROLLED_BACK writer here (see qa525-vnext-terminal.py), no network client, CLI,
 # Docker API, SSH, systemctl or shell command in this module.
