@@ -109,6 +109,21 @@ const demoCollection: DocumentCollection = {
   organizationId: null,
   status: 'active',
 }
+/** Colección de un Taller para la demo de la Secretaría del Taller (datos ficticios). */
+const demoLodgeCollection: DocumentCollection = {
+  id: 'dddddddd-2222-2222-2222-222222222222',
+  code: 'SEC-ACTAS',
+  name: 'Actas y planchas firmadas',
+  description: 'Originales firmados en PDF del Taller demostrativo',
+  scope: 'organization',
+  organizationId: '11111111-1111-1111-1111-111111111111',
+  status: 'active',
+}
+const demoLodgeDocument: InstitutionalDocument = {
+  id: 'dddddddd-3333-3333-3333-333333333333', collectionId: demoLodgeCollection.id, collectionCode: demoLodgeCollection.code, organizationId: demoLodgeCollection.organizationId,
+  title: 'Acta de Tenida ordinaria · ejemplo', documentType: 'acta', classification: 'internal', accessPolicy: 'organization_authenticated', status: 'active', publishedVersionId: null, publishedAtUtc: null,
+  versions: [{ id: 'dddddddd-4444-4444-4444-444444444444', documentId: 'dddddddd-3333-3333-3333-333333333333', versionNumber: 1, originalFileName: 'acta-tenida-ejemplo.pdf', contentType: 'application/pdf', sizeBytes: 482_000, processingStatus: 'available', hasIntegrityHash: true, scanEvidenceRecorded: true, createdAtUtc: '2026-10-14T23:10:00Z' }],
+}
 const demoLibrary: LibraryDocument[] = [
   {
     id: 'eeeeeeee-1111-1111-1111-111111111111',
@@ -173,8 +188,8 @@ export class DocumentApiClient {
   private readonly getAccessToken?: DocumentAccessTokenProvider
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
-  private readonly mockCollections: DocumentCollection[] = [{ ...demoCollection }]
-  private readonly mockDocuments = new Map<string, InstitutionalDocument>()
+  private readonly mockCollections: DocumentCollection[] = [{ ...demoCollection }, { ...demoLodgeCollection }]
+  private readonly mockDocuments = new Map<string, InstitutionalDocument>([[demoLodgeDocument.id, cloneDocument(demoLodgeDocument)]])
   private readonly mockLibrary: LibraryDocument[] = demoLibrary.map(item => ({ ...item }))
   private readonly mockWorkPapers: MemberWorkPaper[] = [{
     id: 'demo-own-work-paper-1', title: 'El trabajo interior del Aprendiz', shortDescription: 'Una reflexión demostrativa sobre disciplina y constancia.', minimumDegreeRequired: 1, status: 'published', publishedVersionId: 'demo-own-work-paper-version-1', reviewStatus: 'approved',
