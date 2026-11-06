@@ -116,8 +116,10 @@ class FlightWithSwitcherTests(unittest.TestCase):
         self.denied = {"WEB_SWITCHING"}
         result = self.fly()
         self.assertEqual(result["status"], "ROLLED_BACK")
-        self.assertNotIn(("web", "target"), self.runs)
+        self.assertEqual(self.runs, [("api", "target"), ("web", "baseline"),
+                                     ("api", "baseline")])
         self.assertEqual(self.world, {"api": "baseline", "web": "baseline"})
+        self.assertEqual(self.terminal(), "ROLLED_BACK")
 
     def test_rollback_command_failure_requires_recovery_and_stops(self):
         self.fail_runner[("web", "target")] = 1
