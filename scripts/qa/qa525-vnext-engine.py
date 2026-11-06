@@ -45,6 +45,7 @@ G6_EVIDENCE_FIELDS = frozenset({
 })
 G6_BYTE_FIELDS = frozenset({"review_bytes", "receipt_bytes", "restore_bytes"})
 G6_DIGEST_FIELDS = G6_EVIDENCE_FIELDS - G6_BYTE_FIELDS
+G6_FORWARD_STAGES = frozenset({"API_SWITCHING", "WEB_SWITCHING"})
 
 # One journal module owns every lease consumer.
 scopes.journal = flight.journal
@@ -92,6 +93,10 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
     """
     if not callable(clock) or (runner is None) == (runner_factory is None):
         raise Stop("ENGINE_ADAPTER_INVALID")
+    # No newly added execution intent may silently bypass the G6 check.
+    if (frozenset(stage for stage, kind in flight.plan_mod.PROOF_KINDS.items()
+                  if kind == "EXECUTION_INTENT") != G6_FORWARD_STAGES):
+        raise Stop("ENGINE_FORWARD_STAGES_MISMATCH")
     if type(g6_evidence) is not dict or set(g6_evidence) != G6_EVIDENCE_FIELDS:
         raise Stop("ENGINE_G6_EVIDENCE_INVALID")
     # Capture only immutable native types. A caller's mutable dict must not
@@ -192,7 +197,7 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                         return False
                     # Read time AFTER the external gate, nearest to the next
                     # durable forward intent. No expiry check on rollback.
-                    if stage in ("API_SWITCHING", "WEB_SWITCHING"):
+                    if stage in G6_FORWARD_STAGES:
                         check_held_g6()
                     plane.assert_held()
                     return True

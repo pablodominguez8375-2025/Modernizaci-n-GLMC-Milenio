@@ -23,3 +23,7 @@ Tests herméticos: presencia y forma de evidencias, rechazo de bytearray/memoryv
 NO-GO glmdch hasta autenticación y firma OPS/APP/Sigstore antes del primer byte root, aprobación Sponsor independiente, G6 cifrado real y custodia offhost verificada, restauración aislada de dos BD y validación fuera del host cuando aplique, reloj confiable, locks/cgroup físicos, salud HTTPS/OIDC, rollback dual, UAT y acta firmada. Este PR no instala, no despliega, no habilita main ni modifica BD, identidad, Compose o producción.
 
 Fuente de coordinación: GitHub Issue #525 y Documento Estado Maestro Operativo en Google Drive.
+
+## Cobertura ante nuevas etapas forward
+
+El motor contrasta todas las etapas `EXECUTION_INTENT` de `flight.plan_mod.PROOF_KINDS` con la enumeración explícita `{API_SWITCHING, WEB_SWITCHING}`. Una etapa nueva sin revisor y verificador G6 específico provoca `ENGINE_FORWARD_STAGES_MISMATCH` ANTES de adquirir journal o ejecutar callbacks. Test de mutación agrega una etapa ficticia y verifica STOP sin scopes/runner. No autoriza el host; el gate→intent sigue sin ser atómico y requiere entrada root revisada si alguna vez se activa un runner físico.

@@ -426,6 +426,16 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(self.world, {"api": "baseline", "web": "baseline"})
         self.assertEqual(self.terminal(), "ROLLED_BACK")
 
+    def test_new_execution_intent_must_not_bypass_held_g6(self):
+        with mock.patch.dict(engine.flight.plan_mod.PROOF_KINDS,
+                             {"FUTURE_SWITCHING": "EXECUTION_INTENT"}):
+            with self.assertRaisesRegex(
+                    engine.Stop, "^ENGINE_FORWARD_STAGES_MISMATCH$"):
+                self.fly()
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
+        self.assertFalse((self.fx.root / ("scopes-" + self.nonce + ".json")).exists())
+
     def test_no_physical_or_shell_entrypoint_exists(self):
         raw = PATH.read_text(encoding="utf-8")
         for token in ("import subprocess", "import socket", "urllib", "requests",
