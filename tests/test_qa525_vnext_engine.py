@@ -8,6 +8,7 @@ import unittest
 
 import test_qa525_vnext_baseline_plan as bp
 import test_qa525_vnext_journal as jt
+import test_qa525_vnext_trust_binding as trust
 from test_qa525_vnext_integration_contract import observation
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +49,10 @@ class EngineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.fx = jt.JournalFixture(self.tmp.name)
+        self.record = trust.admission_record()
+        self.fx.put(self.record)
+        self.nonce = self.record["nonce"]
+        self.approval = trust.canonical(trust.approval_record(self.record))
         self.lockdir = Path(self.tmp.name) / "locks"
         self.lockdir.mkdir(mode=0o700)
         self.lockdir.chmod(0o700)
@@ -77,14 +82,16 @@ class EngineTests(unittest.TestCase):
     def fly(self, gate=lambda _stage: True):
         return engine.run_synthetic(
             root=self.fx.root, admission=self.fx.admission,
-            admission_sha256=self.fx.digest, now=jt.NOW,
+            admission_sha256=self.fx.digest, now=trust.NOW,
+            admission_bytes=trust.canonical(self.record),
+            approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
             synthetic_lock_dir=self.lockdir, reader=self.reader,
             target=self.target, project="centenario", workdir="/opt/centenario",
             env_file="/etc/pmgm/qa.env", runner=self.runner,
             scope_factory=Scope, settle=lambda: None, external_gate=gate)
 
     def terminal(self):
-        path = self.fx.root / ("terminal-" + jt.NONCE + ".json")
+        path = self.fx.root / ("terminal-" + self.nonce + ".json")
         return json.loads(path.read_text())["status"] if path.exists() else None
 
     def test_happy_path_records_scopes_then_applies_under_all_locks(self):
@@ -92,7 +99,7 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(result["status"], "APPLIED")
         self.assertEqual(self.runs, [("api", "target"), ("web", "target")])
         self.assertEqual(self.terminal(), "APPLIED")
-        manifest = self.fx.root / ("scopes-" + jt.NONCE + ".json")
+        manifest = self.fx.root / ("scopes-" + self.nonce + ".json")
         self.assertTrue(manifest.exists())
         self.assertEqual(len(json.loads(manifest.read_text())["units"]), 2)
 
@@ -120,6 +127,71 @@ class EngineTests(unittest.TestCase):
             self.fly(gate)
         self.assertEqual(self.runs, [])
         self.assertIsNone(self.terminal())
+
+    def test_truthy_but_not_true_gate_answer_is_a_denial(self):
+        for answer in (1, "yes", object(), None):
+            with self.subTest(answer=answer):
+                with self.assertRaisesRegex(engine.flight.Stop, "^FLIGHT_GATE_DENIED$"):
+                    self.fly(lambda _stage, a=answer: a)
+                self.assertEqual(self.runs, [])
+                self.tearDown()
+                self.setUp()
+
+    def test_unbound_or_stale_approval_never_reaches_a_runner(self):
+        bad = trust.approval_record(self.record)
+        bad["g6_review_sha256"] = "sha256:" + "0" * 63  # malformed digest
+        self.approval = trust.canonical(bad)
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_PLANE_DENIED$"):
+            self.fly()
+        self.assertEqual(self.runs, [])
+        self.assertFalse((self.fx.root / ("scopes-" + self.nonce + ".json")).exists())
+
+    def test_wrong_policy_is_denied_before_nonce_or_runner(self):
+        def fly_with_policy():
+            return engine.run_synthetic(
+                root=self.fx.root, admission=self.fx.admission,
+                admission_sha256=self.fx.digest, now=trust.NOW,
+                admission_bytes=trust.canonical(self.record),
+                approval_bytes=self.approval,
+                trusted_policy_hash="sha256:" + "9" * 64,
+                synthetic_lock_dir=self.lockdir, reader=self.reader,
+                target=self.target, project="centenario", workdir="/opt/centenario",
+                env_file="/etc/pmgm/qa.env", runner=self.runner,
+                scope_factory=Scope, settle=lambda: None,
+                external_gate=lambda _s: True)
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_PLANE_DENIED$"):
+            fly_with_policy()
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
+
+    def test_window_closed_after_locks_were_taken_is_denied(self):
+        late = trust.NOW.replace(hour=19)
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_PLANE_DENIED$"):
+            engine.run_synthetic(
+                root=self.fx.root, admission=self.fx.admission,
+                admission_sha256=self.fx.digest, now=late,
+                admission_bytes=trust.canonical(self.record),
+                approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+                synthetic_lock_dir=self.lockdir, reader=self.reader,
+                target=self.target, project="centenario", workdir="/opt/centenario",
+                env_file="/etc/pmgm/qa.env", runner=self.runner,
+                scope_factory=Scope, settle=lambda: None,
+                external_gate=lambda _s: True)
+        self.assertEqual(self.runs, [])
+
+    def test_caller_digest_that_differs_from_the_bound_one_is_denied(self):
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_PLANE_DENIED$"):
+            engine.run_synthetic(
+                root=self.fx.root, admission=self.fx.admission,
+                admission_sha256="sha256:" + "0" * 64, now=trust.NOW,
+                admission_bytes=trust.canonical(self.record),
+                approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+                synthetic_lock_dir=self.lockdir, reader=self.reader,
+                target=self.target, project="centenario", workdir="/opt/centenario",
+                env_file="/etc/pmgm/qa.env", runner=self.runner,
+                scope_factory=Scope, settle=lambda: None,
+                external_gate=lambda _s: True)
+        self.assertEqual(self.runs, [])
 
     def test_no_physical_or_shell_entrypoint_exists(self):
         raw = PATH.read_text(encoding="utf-8")

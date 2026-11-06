@@ -173,6 +173,39 @@ class LockPlaneTests(unittest.TestCase):
                 finally:
                     os.close(fd)
 
+    def test_failed_root_lease_close_still_releases_all_legacy_locks(self):
+        real = jt.mod
+
+        class BadClose:
+            def __init__(self, lease):
+                self._lease = lease
+
+            def close(self):
+                self._lease.close()
+                raise OSError("simulated close failure")
+
+            def __getattr__(self, name):
+                return getattr(self._lease, name)
+
+        class Journal:
+            @staticmethod
+            def begin(*args):
+                return BadClose(real.begin(*args))
+
+            @staticmethod
+            def lease_is_held(lease):
+                return real.lease_is_held(lease._lease)
+
+        with self.assertRaisesRegex(plane.Stop, "^PLANE_JOURNAL_CLOSE_FAILED$"):
+            with self.attempt(Journal):
+                pass
+        for name in plane.SYNTHETIC_NAMES:
+            fd = os.open(self.dir / name, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(fd)
+
     def test_foreign_module_without_lease_checks_rejected(self):
         with self.assertRaisesRegex(plane.Stop, "^PLANE_JOURNAL_INVALID$"):
             with self.attempt(journal=object()):
