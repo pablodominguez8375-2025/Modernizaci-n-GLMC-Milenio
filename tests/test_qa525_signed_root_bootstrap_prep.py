@@ -259,6 +259,70 @@ class RootBootstrapTests(unittest.TestCase):
             m.prepare(self.envelope, self.next_sha, self.next_digest,
                       BOOTSTRAP_HASH, verify=Mock())
 
+    def _rewrite_admission(self, **changes):
+        packet = json.loads(self.admission.read_bytes())
+        packet.update(changes)
+        self.admission.write_bytes(json.dumps(packet).encode())
+        self.act["admission_sha256"] = hashlib.sha256(self.admission.read_bytes()).hexdigest()
+        self.save_archive_act()
+
+    def _assert_archive_blocked(self, code):
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare"), \
+                self.assertRaisesRegex(m.Blocked, "^" + code + "$"):
+            self.archive()
+        self.assertEqual(before, self.admission.read_bytes())
+        self.assertEqual([], list(self.stage.glob("admission-history-*")))
+        self.assertFalse((self.stage / "admission-archive-pending.json").exists())
+
+    def test_archive_refuses_an_admission_that_has_not_expired(self):
+        self.archive_fixture()
+        now = 1_800_001_000
+        self._rewrite_admission(issued_at=now - 100, expires_at=now + 300)
+        self._assert_archive_blocked("ADMISSION_ARCHIVE_NOT_EXPIRED")
+
+    def test_archive_refuses_an_unexpected_operator(self):
+        self.archive_fixture()
+        self.act["operator"] = "otro@host"
+        self.save_archive_act()
+        self._assert_archive_blocked("ADMISSION_ARCHIVE_APPROVAL_INVALID")
+
+    def test_archive_refuses_a_receipt_whose_internal_nonce_differs_from_cut_nonce(self):
+        _packet, receipt, _launcher = self.archive_fixture()
+        path = self.act_path.parent / "replacement" / ("receipt-" + self.act["cut_nonce"] + ".json")
+        receipt["nonce"] = "e" * 64
+        path.write_text(json.dumps(receipt))
+        path.chmod(0o600)
+        self.act["receipt_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.save_archive_act()
+        self._assert_archive_blocked("ADMISSION_ARCHIVE_BINDING_MISMATCH")
+
+    def _assert_final_guard_denies_drift(self, target):
+        _packet, _receipt, launcher = self.archive_fixture()
+        watched = self.admission if target == "admission" else launcher
+        real = m.read_historical_private
+        seen = {"count": 0}
+        def drifting(path, *a, **kw):
+            raw = real(path, *a, **kw)
+            if Path(path) == watched:
+                seen["count"] += 1
+                if seen["count"] >= 2:
+                    return raw + b" "
+            return raw
+        before = self.admission.read_bytes()
+        with patch.object(m, "verify_zip_and_prepare"), \
+                patch.object(m, "read_historical_private", side_effect=drifting), \
+                self.assertRaisesRegex(m.Blocked, "^ADMISSION_ARCHIVE_FINAL_DRIFT$"):
+            self.archive()
+        self.assertEqual(before, self.admission.read_bytes())
+        self.assertEqual([], list(self.stage.glob("admission-history-*")))
+
+    def test_archive_final_guard_denies_admission_drift(self):
+        self._assert_final_guard_denies_drift("admission")
+
+    def test_archive_final_guard_denies_launcher_drift(self):
+        self._assert_final_guard_denies_drift("launcher")
+
     def test_archive_replay_rejected_before_history_creation(self):
         self.archive_fixture()
         (self.stage / ("admission-archive-consumed-" + self.act["nonce"])).write_bytes(b"used")
