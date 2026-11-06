@@ -98,7 +98,7 @@ class ScopeStoreTests(unittest.TestCase):
         original = self.path.read_bytes()
         variants = (
             b" " + original,
-            original.rstrip(b"\\n"),
+            original.rstrip(bytes([10])),
             original.replace(b",", b", ", 1),
             original.replace(b'"may_apply":false', b'"may_apply":NaN'),
             original.replace(b'"may_apply":false', b'"may_apply":1e999'),
