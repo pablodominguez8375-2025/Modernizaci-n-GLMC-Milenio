@@ -1,0 +1,28 @@
+name: QA525 prewindow review (offline)
+on:
+  pull_request:
+    paths:
+      - 'docs/runbooks/qa525-window-20261103-review.md'
+      - 'scripts/qa/operators/qa525-prewindow-readonly.sh'
+      - 'tests/test_qa525_prewindow_legacy_prepared.py'
+      - '.github/workflows/qa525-prewindow-review.yml'
+  push:
+    branches:
+      - 'docs/qa525-prewindow-single-runbook-20261102'
+    paths:
+      - 'docs/runbooks/qa525-window-20261103-review.md'
+      - 'scripts/qa/operators/qa525-prewindow-readonly.sh'
+      - 'tests/test_qa525_prewindow_legacy_prepared.py'
+      - '.github/workflows/qa525-prewindow-review.yml'
+permissions:
+  contents: read
+jobs:
+  prewindow-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check read-only script syntax
+        run: bash -n scripts/qa/operators/qa525-prewindow-readonly.sh
+      - name: Test expired prepared path in isolated sandbox
+        run: python3 -I -S -B -m unittest discover -s tests -p test_qa525_prewindow_legacy_prepared.py -v
