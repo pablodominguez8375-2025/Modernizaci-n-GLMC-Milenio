@@ -351,14 +351,54 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(self.runs, [])
         self.assertIsNone(self.terminal())
 
-    def test_g6_evidence_swapped_during_api_gate_is_denied_before_mutation(self):
+    def test_caller_mutation_after_entry_does_not_change_sealed_g6(self):
         tampered = self._raw(dict(self.review, g6_archive_sha256="b" * 64))
         def gate(stage):
             if stage == "API_SWITCHING":
+                # Mutate the caller's original dict, not the engine's snapshot.
                 self.g6_evidence["review_bytes"] = tampered
             return True
-        with self.assertRaisesRegex(engine.flight.Stop, "^FLIGHT_GATE_DENIED$"):
-            self.fly(gate)
+        with mock.patch.object(
+                engine.g6_anchor, "compare",
+                wraps=engine.g6_anchor.compare) as compare:
+            result = self.fly(gate)
+        self.assertEqual(result["status"], "APPLIED")
+        self.assertEqual(self.g6_evidence["review_bytes"], tampered)
+        self.assertEqual(self.runs, [("api", "target"), ("web", "target")])
+        self.assertGreaterEqual(compare.call_count, 3)
+        self.assertTrue(all(call.kwargs["review_bytes"] == self.review_bytes
+                            for call in compare.call_args_list))
+
+    def test_mutable_or_custom_evidence_types_fail_before_journal(self):
+        # Bytearray, list or subclasses could change after a prior check.
+        class FakeSHA(str):
+            pass
+        cases = (
+            ("review_bytes", bytearray(self.review_bytes)),
+            ("receipt_bytes", memoryview(self.receipt_bytes)),
+            ("restore_bytes", list(self.restore_bytes)),
+            ("pinned_review_sha256",
+             FakeSHA(self.g6_evidence["pinned_review_sha256"])),
+            ("observed_archive_sha256",
+             bytearray(self.g6_evidence["observed_archive_sha256"], "ascii")),
+        )
+        for field, value in cases:
+            with self.subTest(field=field):
+                bad = dict(self.g6_evidence, **{field: value})
+                with self.assertRaisesRegex(engine.Stop,
+                                            "^ENGINE_G6_EVIDENCE_INVALID$"):
+                    self.fly(evidence=bad)
+                self.assertEqual(self.runs, [])
+                self.assertIsNone(self.terminal())
+
+    def test_new_execution_intent_stage_fails_closed_before_journal(self):
+        # If flight adds a future forward intent, the engine must not
+        # silently skip its held-lock G6 check.
+        with mock.patch.dict(engine.flight.plan_mod.PROOF_KINDS,
+                             {"FUTURE_SWITCHING": "EXECUTION_INTENT"}):
+            with self.assertRaisesRegex(
+                    engine.Stop, "^ENGINE_FORWARD_STAGES_MISMATCH$"):
+                self.fly()
         self.assertEqual(self.runs, [])
         self.assertIsNone(self.terminal())
 

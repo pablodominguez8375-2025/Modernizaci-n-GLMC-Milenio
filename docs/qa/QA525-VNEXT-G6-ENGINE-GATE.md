@@ -4,7 +4,7 @@
 
 ## Contrato
 
-El motor ensamblado recibe g6_evidence como un diccionario de nueve campos exactos: review_bytes, receipt_bytes, restore_bytes, pinned_admission_sha256, pinned_approval_sha256, pinned_review_sha256, pinned_receipt_sha256, pinned_restore_sha256 y observed_archive_sha256. No admite omisiones, booleanos ni un resultado PASS precalculado. Todos los pins siguen siendo datos de origen no autenticado hasta que un bootstrap root firmado los obtenga de descriptores protegidos.
+El motor ensamblado **copia al ingreso** `g6_evidence` y exige tres valores `bytes` exactos y seis pines/SHAs de tipo `str` exacto. La copia privada impide que un callback modifique la evidencia usada durante el vuelo, aunque el llamador altere después su diccionario. No se aceptan `bytearray`, `memoryview`, listas ni subclases personalizadas. `g6_evidence` sigue siendo un diccionario de nueve campos exactos: review_bytes, receipt_bytes, restore_bytes, pinned_admission_sha256, pinned_approval_sha256, pinned_review_sha256, pinned_receipt_sha256, pinned_restore_sha256 y observed_archive_sha256. No admite omisiones, booleanos ni un resultado PASS precalculado. Todos los pins siguen siendo datos de origen no autenticado hasta que un bootstrap root firmado los obtenga de descriptores protegidos.
 
 Tras retener cinco locks sintéticos y el lease raíz, run_synthetic relee clock() y ejecuta g6_anchor.compare con los bytes crudos de la admisión/ancla y revisión G6. Exige coincidencia con nonce, digest de admisión, digest de aprobación y flags may_apply=false/may_install=false. Si falla, se niega ANTES de invocar factory, capturar baseline, escribir scopes o usar runner.
 
@@ -23,3 +23,9 @@ Tests herméticos: presencia y forma de evidencias, digest alterado antes del fa
 NO-GO glmdch hasta autenticación y firma OPS/APP/Sigstore antes del primer byte root, aprobación Sponsor independiente, G6 cifrado real y custodia offhost verificada, restauración aislada de dos BD y validación fuera del host cuando aplique, reloj confiable, locks/cgroup físicos, salud HTTPS/OIDC, rollback dual, UAT y acta firmada. Este PR no instala, no despliega, no habilita main ni modifica BD, identidad, Compose o producción.
 
 Fuente de coordinación: GitHub Issue #525 y Documento Estado Maestro Operativo en Google Drive.
+
+## Endurecimiento de la entrada (posterior a #889)
+
+El motor valida que las etapas `EXECUTION_INTENT` de `flight.plan_mod.PROOF_KINDS` sean exactamente `API_SWITCHING` y `WEB_SWITCHING`. Si aparece una etapa de avance sin cobertura explícita G6, rechaza con `ENGINE_FORWARD_STAGES_MISMATCH` antes del journal, sin efectuar runner ni escribir scopes. Una prueba agrega un stage forward sintético y exige ese fallo cerrado. Los tests verifican además que alterar el dict del llamador durante `external_gate` no altera el snapshot congelado del vuelo y que los tipos mutables son denegados antes de iniciar.
+
+El intervalo entre evaluación del gate y persistencia del intent sigue siendo mínimo, pero NO atómico, y debe rediseñarse si se introduce un ejecutor físico. `ROLLING_BACK` queda fuera de la comprobación de vencimiento G6 para facilitar la reversión, aunque exige locks/lease y `external_gate`. Congelar bytes y pines no autentica sus fuentes; necesita bootstrap OPS/APP/Sigstore, clock y descriptores confiables, custodia G6 real y autorización Sponsor.

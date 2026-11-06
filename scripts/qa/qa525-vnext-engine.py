@@ -36,12 +36,13 @@ bridge = _load("qa525_vnext_admission_bridge_for_engine", "qa525-vnext-admission
 g6_anchor = _load("qa525_vnext_g6_anchor_for_engine", "qa525-vnext-g6-anchor.py")
 
 # Exact raw-evidence schema. Precomputed PASS/boolean is never an input.
-G6_EVIDENCE_FIELDS = frozenset({
-    "review_bytes", "receipt_bytes", "restore_bytes",
+G6_RAW_FIELDS = frozenset({"review_bytes", "receipt_bytes", "restore_bytes"})
+G6_EVIDENCE_FIELDS = G6_RAW_FIELDS | frozenset({
     "pinned_admission_sha256", "pinned_approval_sha256",
     "pinned_review_sha256", "pinned_receipt_sha256",
     "pinned_restore_sha256", "observed_archive_sha256",
 })
+G6_FORWARD_STAGES = frozenset({"API_SWITCHING", "WEB_SWITCHING"})
 
 # One journal module owns every lease consumer.
 scopes.journal = flight.journal
@@ -75,7 +76,9 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
     only run while the locks and lease are held.
 
     g6_evidence carries raw review/receipt/restore bytes and the exact SHA
-    pins and observed archive SHA. It is rechecked with a freshly read clock
+    pins and observed archive SHA. Its nine immutable values are copied at
+    entry; a caller mutating its original dict after entry cannot change the
+    evidence used within the flight. It is rechecked with a freshly read clock
     inside the held synthetic five-lock + root-lease plane before any factory,
     baseline or runner and before each forward API/WEB intent. Rollback stays
     guarded by locks and external_gate, not by G6 expiry. No authentication
@@ -87,7 +90,20 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
     """
     if not callable(clock) or (runner is None) == (runner_factory is None):
         raise Stop("ENGINE_ADAPTER_INVALID")
-    if type(g6_evidence) is not dict or set(g6_evidence) != G6_EVIDENCE_FIELDS:
+    # A newly added forward execution intent must not silently bypass G6.
+    # Keep this contract aligned with the independently reviewed flight plan.
+    if (frozenset(stage for stage, kind in flight.plan_mod.PROOF_KINDS.items()
+                  if kind == "EXECUTION_INTENT") != G6_FORWARD_STAGES):
+        raise Stop("ENGINE_FORWARD_STAGES_MISMATCH")
+    if type(g6_evidence) is not dict:
+        raise Stop("ENGINE_G6_EVIDENCE_INVALID")
+    # Copy before inspecting: do not read the caller's mutable dict again.
+    # Exact bytes/str types rule out mutable bytearray/list or custom values.
+    g6_evidence = g6_evidence.copy()
+    if (set(g6_evidence) != G6_EVIDENCE_FIELDS
+            or any(type(g6_evidence[k]) is not bytes for k in G6_RAW_FIELDS)
+            or any(type(g6_evidence[k]) is not str
+                   for k in G6_EVIDENCE_FIELDS - G6_RAW_FIELDS)):
         raise Stop("ENGINE_G6_EVIDENCE_INVALID")
     for adapter in (runner or runner_factory, scope_factory, settle, external_gate):
         if not callable(adapter):
@@ -169,7 +185,7 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                         return False
                     # Read time AFTER the external gate, nearest to the next
                     # durable forward intent. No expiry check on rollback.
-                    if stage in ("API_SWITCHING", "WEB_SWITCHING"):
+                    if stage in G6_FORWARD_STAGES:
                         check_held_g6()
                     plane.assert_held()
                     return True
