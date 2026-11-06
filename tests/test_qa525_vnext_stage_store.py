@@ -246,6 +246,13 @@ class DurableStageStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(store.Stop, "^STAGE_LEASE_NOT_HELD$"):
             store.inspect(self.lease)
 
+    def test_ci_readiness_is_triggered_for_new_vnext_modules_and_suites(self):
+        workflow = (ROOT / ".github/workflows/qa-auto-agent-readiness.yml").read_text()
+        self.assertEqual(workflow.count("'scripts/qa/qa525-vnext-*.py'"), 2)
+        self.assertEqual(workflow.count("'tests/test_qa525_vnext_*.py'"), 2)
+        self.assertIn("unittest discover -s tests -p test_qa_agent_readiness.py",
+                      workflow)
+
     def test_module_is_library_only_without_execute_or_authorization(self):
         raw = SCRIPT.read_text()
         for absent in ("import subprocess", "import socket", "docker compose",
