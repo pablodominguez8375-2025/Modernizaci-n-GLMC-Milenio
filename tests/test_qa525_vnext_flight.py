@@ -162,6 +162,60 @@ class FlightTests(unittest.TestCase):
             self.run_flight()
         self.assertEqual(self.stored_stage(), "RECOVERY_REQUIRED")
 
+    def test_rollback_denied_by_gate_is_never_executed(self):
+        self.fail_obs = {"API_SWITCHED"}
+        self.denied = {"ROLLING_BACK"}
+        with self.assertRaisesRegex(fl.Stop, "^FLIGHT_RECOVERY_REQUIRED$"):
+            self.run_flight()
+        self.assertNotIn("rollback", self.calls)
+        self.assertIn("gate:ROLLING_BACK", self.calls)
+        self.assertEqual(self.stored_stage(), "RECOVERY_REQUIRED")
+        self.assertIsNone(self.terminal_status())
+
+    def test_ambiguous_durable_write_runs_nothing_and_keeps_evidence(self):
+        seen = {"dirsync": 0}
+        def explode_after_second_record(label):
+            if label == "after_journal_dirsync":
+                seen["dirsync"] += 1
+                if seen["dirsync"] == 2:  # 1st = initialize, 2nd = API_SWITCHING
+                    raise RuntimeError("late failure after link and fsync")
+        with self.assertRaisesRegex(fl.Stop, "^FLIGHT_RECOVERY_REQUIRED$"):
+            self.run_flight(checkpoint=explode_after_second_record)
+        for name in ("api", "web", "rollback"):
+            self.assertNotIn(name, self.calls)
+        # the intent snapshot that DID land is retained, followed by the STOP one
+        self.assertTrue((self.fx.root / ("stage-" + jt.NONCE + "-0001.json")).exists())
+        self.assertEqual(self.stored_stage(), "RECOVERY_REQUIRED")
+        self.assertIsNone(self.terminal_status())
+
+    def test_confirmed_failed_write_before_any_intent_is_a_plain_stop(self):
+        def explode_before_link(label):
+            if label == "after_journal_temp_fsync":
+                raise RuntimeError("fails before the link")
+        # initialize uses the same hook: make only the 2nd write fail pre-link
+        state = {"n": 0}
+        def second_pre_link(label):
+            if label == "after_journal_temp_fsync":
+                state["n"] += 1
+                if state["n"] == 2:
+                    explode_before_link(label)
+        with self.assertRaises(fl.Stop) as caught:
+            self.run_flight(checkpoint=second_pre_link)
+        self.assertIn(str(caught.exception),
+                      ("FLIGHT_PERSIST_FAILED", "FLIGHT_RECOVERY_REQUIRED_UNPERSISTED"))
+        for name in ("api", "web", "rollback"):
+            self.assertNotIn(name, self.calls)
+
+    def test_terminal_failure_after_verified_rollback_keeps_the_evidence(self):
+        self.fail_obs = {"API_SWITCHED"}
+        naive = dt.datetime(2026, 11, 5, 13, 0)
+        with self.assertRaisesRegex(
+                fl.Stop, "^FLIGHT_ROLLBACK_VERIFIED_TERMINAL_UNRECORDED$"):
+            self.run_flight(now=naive)
+        self.assertEqual(self.calls.count("rollback"), 1)
+        self.assertEqual(self.stored_stage(), "ROLLBACK_VERIFYING")
+        self.assertIsNone(self.terminal_status())
+
     def test_terminal_failure_never_rolls_back_a_verified_flight(self):
         naive = dt.datetime(2026, 11, 5, 13, 0)  # clock rejected by the terminal writer
         with self.assertRaisesRegex(fl.Stop, "^FLIGHT_RECOVERY_REQUIRED$"):

@@ -21,6 +21,16 @@ Rules enforced here:
   verified rollback; if that cannot be proven it persists RECOVERY_REQUIRED
   and stops. It never retries an action and never rolls back a flight whose
   only failure is the terminal write.
+* EVERY mutation, rollback included, needs ``gate(stage)`` to return True. A
+  denied rollback is never executed: RECOVERY_REQUIRED is persisted instead.
+* An in-memory stage is never trusted to say whether a durable write happened:
+  after any failed write the chain is re-read under the lease. If the durable
+  tip is not exactly the previous plan the outcome is AMBIGUOUS and the engine
+  persists RECOVERY_REQUIRED (when it still can) without running anything.
+* If the terminal record cannot be written after a verified rollback, the
+  plan stays at ROLLBACK_VERIFYING (the plan has no successor there) and the
+  engine raises FLIGHT_ROLLBACK_VERIFIED_TERMINAL_UNRECORDED: the durable
+  evidence is retained and the operator reconciles; nothing more is executed.
 Exceptions are replaced by fixed codes; external text is never echoed.
 """
 import copy
@@ -73,28 +83,40 @@ def _intent_proof(plan: dict, stage: str) -> dict:
     }
 
 
-def _persist(lease, plan, checkpoint):
+def _tip_is(lease, plan):
+    """True only if the durable chain ends exactly at ``plan``."""
+    try:
+        _root, _nonce, _admission, rows = store._chain(lease)
+        return (bool(rows) and rows[-1][0]["plan"]["chain_sha256"] == plan["chain_sha256"]
+                and len(rows) == len(plan["events"]) + 1)
+    except Exception:
+        return False
+
+
+def _persist(lease, plan, checkpoint, prior):
     try:
         store.append(lease, plan, checkpoint)
     except Exception:
-        raise Stop("FLIGHT_PERSIST_FAILED") from None
+        # Never infer "nothing was written" from memory: re-read the chain.
+        if _tip_is(lease, prior):
+            raise Stop("FLIGHT_PERSIST_FAILED") from None
+        raise Stop("FLIGHT_PERSIST_AMBIGUOUS") from None
     return plan
 
 
 def _intent(lease, plan, stage, gate, checkpoint):
     """gate -> advance -> durable write. The action may run only afterwards."""
-    if gate is not None:
-        try:
-            allowed = gate(stage)
-        except Exception:
-            raise Stop("FLIGHT_GATE_DENIED") from None
-        if allowed is not True:
-            raise Stop("FLIGHT_GATE_DENIED")
+    try:
+        allowed = gate(stage)
+    except Exception:
+        raise Stop("FLIGHT_GATE_DENIED") from None
+    if allowed is not True:
+        raise Stop("FLIGHT_GATE_DENIED")
     try:
         nxt = plan_mod.advance(plan, stage, _intent_proof(plan, stage))
     except Exception:
         raise Stop("FLIGHT_STAGE_REJECTED") from None
-    return _persist(lease, nxt, checkpoint)
+    return _persist(lease, nxt, checkpoint, plan)
 
 
 def _verified(lease, plan, stage, report, checkpoint):
@@ -102,7 +124,7 @@ def _verified(lease, plan, stage, report, checkpoint):
         nxt = evidence.advance_with_verification(plan, stage, report)
     except Exception:
         raise Stop("FLIGHT_VERIFICATION_REJECTED") from None
-    return _persist(lease, nxt, checkpoint)
+    return _persist(lease, nxt, checkpoint, plan)
 
 
 def _call(function, code):
@@ -135,8 +157,11 @@ def _finish(lease, plan, kind, report, final_stage, now):
 
 def _stop(lease, plan, checkpoint):
     """Persist RECOVERY_REQUIRED when possible, then stop. Never retries."""
+    if plan["stage"] == "ROLLBACK_VERIFYING":
+        # The plan has no successor here: keep the durable evidence as it is.
+        raise Stop("FLIGHT_ROLLBACK_VERIFIED_TERMINAL_UNRECORDED")
     try:
-        if plan["stage"] not in ("RECOVERY_REQUIRED", "ROLLBACK_VERIFYING"):
+        if plan["stage"] != "RECOVERY_REQUIRED":
             nxt = plan_mod.advance(plan, "RECOVERY_REQUIRED",
                                    _intent_proof(plan, "RECOVERY_REQUIRED"))
             store.append(lease, nxt, checkpoint)
@@ -156,8 +181,8 @@ def _result(plan, status, cause=None):
     }
 
 
-def _rollback(lease, plan, rollback, observe, now, checkpoint):
-    plan = _intent(lease, plan, "ROLLING_BACK", None, checkpoint)
+def _rollback(lease, plan, rollback, observe, gate, now, checkpoint):
+    plan = _intent(lease, plan, "ROLLING_BACK", gate, checkpoint)
     _call(rollback, "FLIGHT_ROLLBACK_FAILED")
     report = _observe(observe, "ROLLED_BACK")
     plan = _verified(lease, plan, "ROLLBACK_VERIFYING", report, checkpoint)
@@ -193,10 +218,13 @@ def run_apply(lease, plan, *, switch_api, switch_web, rollback, observe,
         current = _verified(lease, current, "VERIFYING", report, checkpoint)
     except Stop as exc:
         cause = str(exc)
+        if cause == "FLIGHT_PERSIST_AMBIGUOUS":
+            # A durable write may or may not have happened: run NOTHING more.
+            _stop(lease, _latest(lease, current), checkpoint)
         if current["stage"] == "APPLYING":
             raise  # nothing mutated: no rollback, no recovery marker
         try:
-            final = _rollback(lease, current, rollback, observe, now, checkpoint)
+            final = _rollback(lease, current, rollback, observe, gate, now, checkpoint)
         except Exception:
             _stop(lease, _latest(lease, current), checkpoint)
         return _result(final, "ROLLED_BACK", cause)
