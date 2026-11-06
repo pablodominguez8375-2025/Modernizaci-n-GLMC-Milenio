@@ -203,13 +203,20 @@ def synthetic_flight(journal, root, admission, admission_sha256, now, *,
     finally:
         if plane is not None:
             plane._active = False
+        close_failed = False
         if lease is not None:
-            lease.close()
+            try:
+                lease.close()
+            except Exception:
+                close_failed = True
+        # Legacy locks are ALWAYS released, even if the root lease close failed.
         for _, fd, _ in reversed(held):
             try:
                 os.close(fd)
             except OSError:
                 pass
+        if close_failed:
+            raise Stop("PLANE_JOURNAL_CLOSE_FAILED")
 
 
 if __name__ == "__main__":
