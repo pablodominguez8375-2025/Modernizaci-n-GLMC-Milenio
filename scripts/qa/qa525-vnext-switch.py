@@ -48,7 +48,15 @@ class ServiceSwitcher:
         for item in (runner, scope_factory, record_unit, observe, settle):
             if not callable(item):
                 raise Stop("SWITCH_ADAPTER_INVALID")
-        self._cfg = (nonce, project, workdir, env_file, list(files))
+        # ``files``: one list for both services, or {"api": [...], "web": [...]}
+        # (the baseline/target layers of the plan are per service).
+        if type(files) is dict:
+            if set(files) != {"api", "web"}:
+                raise Stop("SWITCH_COMMAND_INVALID")
+            files = {name: list(files[name]) for name in ("api", "web")}
+        else:
+            files = list(files)
+        self._cfg = (nonce, project, workdir, env_file, files)
         self._runner, self._scope_factory = runner, scope_factory
         self._record_unit, self._observe, self._settle = record_unit, observe, settle
         self._samples = samples
@@ -56,8 +64,26 @@ class ServiceSwitcher:
         for service in ("api", "web"):
             self._argv(service)
 
+    @classmethod
+    def for_plan(cls, plan, which, **kwargs):
+        """Switcher over the plan's own per-service layers.
+
+        ``which="target"`` is the forward switch; ``which="baseline"`` is the
+        rollback, so rolling back always re-applies the layers the baseline
+        was observed with, never a caller-chosen list."""
+        if which not in ("baseline", "target") or type(plan) is not dict:
+            raise Stop("SWITCH_PLAN_INVALID")
+        try:
+            layers = plan[which]["layers"]
+            files = {name: list(layers[name]) for name in ("api", "web")}
+        except (KeyError, TypeError):
+            raise Stop("SWITCH_PLAN_INVALID") from None
+        return cls(files=files, **kwargs)
+
     def _argv(self, service):
         nonce, project, workdir, env_file, files = self._cfg
+        if type(files) is dict:
+            files = files.get(service)
         try:
             unit = containment.unit_name(nonce, service)
             return unit, containment.systemd_run_argv(

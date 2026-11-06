@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import unittest
 
+import test_qa525_vnext_baseline_plan as bp
+
 PATH = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-switch.py"
 spec = importlib.util.spec_from_file_location("qa525_switch_contract", PATH)
 sw = importlib.util.module_from_spec(spec)
@@ -66,6 +68,44 @@ class SwitchTests(unittest.TestCase):
         self.assertEqual(result["unit"], unit)
         for flag in ("may_apply", "signature_verified_here", "physical_runtime_verified"):
             self.assertIs(result[flag], False)
+
+    def test_per_service_layers_are_used_for_each_service(self):
+        layers = {"api": ["/opt/centenario/base.json", "/opt/centenario/api.json"],
+                  "web": ["/opt/centenario/base.json", "/opt/centenario/web.json"]}
+        switcher = self.make(files=layers)
+        switcher.switch_all()
+        by_service = {argv[-1]: argv for _, argv in self.runs()}
+        self.assertIn("/opt/centenario/web.json", by_service["web"])
+        self.assertNotIn("/opt/centenario/api.json", by_service["web"])
+        self.assertIn("/opt/centenario/api.json", by_service["api"])
+        self.assertNotIn("/opt/centenario/web.json", by_service["api"])
+        for bad in ({"api": FILES}, {"api": FILES, "web": FILES, "db": FILES},
+                    {"api": FILES, "web": []}):
+            with self.subTest(files=bad), \
+                    self.assertRaisesRegex(sw.Stop, "^SWITCH_COMMAND_INVALID$"):
+                self.make(files=bad)
+
+    def test_for_plan_rollback_uses_the_baseline_layers_not_the_target(self):
+        plan = bp.make_plan()
+        kwargs = dict(nonce=NONCE, project="centenario", workdir="/opt/centenario",
+                      env_file="/etc/pmgm/qa.env",
+                      runner=lambda argv: self.log.append(("run", argv)) or 0,
+                      scope_factory=lambda unit: FakeScope(unit, self.log, ["ABSENT"]),
+                      record_unit=lambda unit: None, observe=lambda: {"a": 1},
+                      settle=lambda: None)
+        sw.ServiceSwitcher.for_plan(plan, "baseline", **kwargs).switch_all()
+        used = [item for _, argv in self.runs() for item in argv if item.endswith(".json")]
+        for path in plan["baseline"]["layers"]["api"] + plan["baseline"]["layers"]["web"]:
+            self.assertIn(path, used)
+        for path in plan["target"]["layers"]["api"] + plan["target"]["layers"]["web"]:
+            if path not in plan["baseline"]["layers"]["api"] + plan["baseline"]["layers"]["web"]:
+                self.assertNotIn(path, used)
+        for bad in ("current", None):
+            with self.subTest(which=bad), \
+                    self.assertRaisesRegex(sw.Stop, "^SWITCH_PLAN_INVALID$"):
+                sw.ServiceSwitcher.for_plan(plan, bad, **kwargs)
+        with self.assertRaisesRegex(sw.Stop, "^SWITCH_PLAN_INVALID$"):
+            sw.ServiceSwitcher.for_plan({}, "baseline", **kwargs)
 
     def test_unit_is_recorded_before_the_runner_starts(self):
         self.make().switch("web")
