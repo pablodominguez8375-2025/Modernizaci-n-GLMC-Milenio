@@ -129,14 +129,22 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(self.runs, [])
         self.assertIsNone(self.terminal())
 
-    def test_truthy_but_not_true_gate_answer_is_a_denial(self):
-        for answer in (1, "yes", object(), None):
-            with self.subTest(answer=answer):
-                with self.assertRaisesRegex(engine.flight.Stop, "^FLIGHT_GATE_DENIED$"):
-                    self.fly(lambda _stage, a=answer: a)
-                self.assertEqual(self.runs, [])
-                self.tearDown()
-                self.setUp()
+    def _assert_gate_answer_denied(self, answer):
+        with self.assertRaisesRegex(engine.flight.Stop, "^FLIGHT_GATE_DENIED$"):
+            self.fly(lambda _stage: answer)
+        self.assertEqual(self.runs, [])
+
+    def test_truthy_one_gate_answer_is_a_denial(self):
+        self._assert_gate_answer_denied(1)
+
+    def test_truthy_string_gate_answer_is_a_denial(self):
+        self._assert_gate_answer_denied("yes")
+
+    def test_truthy_object_gate_answer_is_a_denial(self):
+        self._assert_gate_answer_denied(object())
+
+    def test_none_gate_answer_is_a_denial(self):
+        self._assert_gate_answer_denied(None)
 
     def test_unbound_or_stale_approval_never_reaches_a_runner(self):
         bad = trust.approval_record(self.record)
@@ -209,22 +217,24 @@ class EngineTests(unittest.TestCase):
                 external_gate=lambda _s: True)
         self.assertEqual(self.runs, [])
 
-    def test_failed_close_after_a_completed_flight_names_the_real_outcome(self):
+    def _assert_close_failure_names(self, expected, fail=None):
         real = engine.flight.journal.Lease.close
         def broken(lease):
             real(lease)
             raise OSError("boom")
-        for fail, expected in ((None, "APPLIED"), (("web", "target"), "ROLLED_BACK")):
-            with self.subTest(expected=expected):
-                self.setUp()
-                if fail:
-                    self.fail.add(fail)
-                with mock.patch.object(engine.flight.journal.Lease, "close", broken):
-                    with self.assertRaisesRegex(
-                            engine.Stop, "^ENGINE_CLOSE_FAILED_AFTER_" + expected + "$"):
-                        self.fly()
-                self.assertEqual(self.terminal(), expected)
-                self.tearDown()
+        if fail:
+            self.fail.add(fail)
+        with mock.patch.object(engine.flight.journal.Lease, "close", broken):
+            with self.assertRaisesRegex(
+                    engine.Stop, "^ENGINE_CLOSE_FAILED_AFTER_" + expected + "$"):
+                self.fly()
+        self.assertEqual(self.terminal(), expected)
+
+    def test_failed_close_after_applied_names_applied(self):
+        self._assert_close_failure_names("APPLIED")
+
+    def test_failed_close_after_rollback_names_rolled_back(self):
+        self._assert_close_failure_names("ROLLED_BACK", ("web", "target"))
 
     def test_runner_factory_receives_the_held_plane(self):
         seen = []
