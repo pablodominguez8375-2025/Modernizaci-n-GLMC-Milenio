@@ -48,6 +48,9 @@ def _row(rows: dict, name: str) -> list:
 
 
 def _check_rows(rows, config) -> None:
+    # The only QA host has a FIXED 2+5+3 service set; a caller can never relax it.
+    if config != default_config():
+        raise Stop("CONFIG_NOT_DEFAULT")
     if type(rows) is not dict:
         raise Stop("ROWS_NOT_OBJECT")
     expected = set(config["targets"] + config["dependencies"] + config["oneshots"])
@@ -63,7 +66,8 @@ def _layers(row: list, name: str) -> list:
     if not 0 < len(paths) <= MAX_LAYERS or len(set(paths)) != len(paths):
         raise Stop("LAYERS_INVALID_" + name.upper())
     for path in paths:
-        if not path.startswith("/") or ".." in path.split("/") or path.endswith("/"):
+        if (not path.startswith("/") or "\0" in path
+                or any(part in ("", ".", "..") for part in path[1:].split("/"))):
             raise Stop("LAYERS_INVALID_" + name.upper())
     return paths
 
@@ -81,7 +85,7 @@ def web_revision_label(label_value) -> str:
 
 def baseline_from_rows(rows: dict, web_sha: str, config: dict = None) -> dict:
     """Baseline for the verifier. Targets must be running; one-shots exited 0."""
-    config = config or default_config()
+    config = default_config() if config is None else config
     _check_rows(rows, config)
     images, layers, deps, ones = {}, {}, {}, {}
     for name in config["targets"]:
@@ -91,7 +95,10 @@ def baseline_from_rows(rows: dict, web_sha: str, config: dict = None) -> dict:
         images[name] = row[1]
         layers[name] = _layers(row, name)
     for name in config["dependencies"]:
-        deps[name] = _row(rows, name)[0]
+        row = _row(rows, name)
+        if row[2] != "running":
+            raise Stop("BASELINE_DEPENDENCY_NOT_RUNNING_" + name.upper())
+        deps[name] = row[0]
     for name in config["oneshots"]:
         row = _row(rows, name)
         if row[2] != "exited" or row[11] != 0:
@@ -103,7 +110,7 @@ def baseline_from_rows(rows: dict, web_sha: str, config: dict = None) -> dict:
 
 def observation_from_rows(rows: dict, health: dict, config: dict = None) -> dict:
     """Observation for the verifier. ``running`` is exactly state == 'running'."""
-    config = config or default_config()
+    config = default_config() if config is None else config
     _check_rows(rows, config)
     images, running, layers, deps, ones = {}, {}, {}, {}, {}
     for name in config["targets"]:
@@ -112,9 +119,14 @@ def observation_from_rows(rows: dict, health: dict, config: dict = None) -> dict
         running[name] = row[2] == "running"
         layers[name] = _layers(row, name)
     for name in config["dependencies"]:
-        deps[name] = _row(rows, name)[0]
+        row = _row(rows, name)
+        if row[2] != "running":  # same id but stopped/restarting is NOT healthy
+            raise Stop("DEPENDENCY_NOT_RUNNING_" + name.upper())
+        deps[name] = row[0]
     for name in config["oneshots"]:
         row = _row(rows, name)
+        if row[2] != "exited":  # a one-shot that is running again is not terminal
+            raise Stop("ONESHOT_NOT_EXITED_" + name.upper())
         ones[name] = {"id": row[0], "exit_code": row[11]}
     if (type(health) is not dict or set(health) != {"ok", "web_sha"}
             or type(health["ok"]) is not bool or type(health["web_sha"]) is not str):
@@ -137,7 +149,9 @@ class StateReader:
         if not (callable(metadata) and callable(web_revision) and callable(health)):
             raise Stop("PROVIDERS_INVALID")
         self._metadata, self._web_revision, self._health = metadata, web_revision, health
-        self._config = config or default_config()
+        self._config = default_config() if config is None else config
+        if self._config != default_config():
+            raise Stop("CONFIG_NOT_DEFAULT")
 
     def capture_baseline(self) -> dict:
         return baseline_from_rows(self._metadata(), self._web_revision(), self._config)

@@ -54,6 +54,54 @@ def make(state, web_sha=WEB_OLD, healthy=True):
 
 
 class StateReaderTests(unittest.TestCase):
+    def test_stopped_dependency_with_same_id_is_never_healthy(self):
+        for name in reader.DEPENDENCIES:
+            for state in ("exited", "restarting", "paused", "created"):
+                with self.subTest(name=name, state=state):
+                    stopped = rows(**{name: row(name, rows()[name][0][0], rows()[name][1][7], state)})
+                    with self.assertRaisesRegex(reader.Stop, "BASELINE_DEPENDENCY_NOT_RUNNING_"):
+                        reader.baseline_from_rows(stopped, WEB_OLD)
+                    with self.assertRaisesRegex(reader.Stop, "^DEPENDENCY_NOT_RUNNING_"):
+                        reader.observation_from_rows(stopped, {"ok": True, "web_sha": WEB_OLD})
+                    # Through the verifier an adapter Stop is INDETERMINATE, never OK.
+                    live = {"rows": rows()}
+                    base = make(live).capture_baseline()
+                    live["rows"] = stopped
+                    result = verify.verify(make(live), base, "ROLLED_BACK")
+                    self.assertFalse(result["ok"])
+                    self.assertEqual(result["code"], "VERIFY_INDETERMINATE")
+
+    def test_oneshot_running_again_with_same_id_and_zero_exit_is_not_terminal(self):
+        for name in reader.ONESHOTS:
+            with self.subTest(name=name):
+                again = rows(**{name: row(name, rows()[name][0][0], rows()[name][1][7], "running")})
+                with self.assertRaisesRegex(reader.Stop, "^ONESHOT_NOT_EXITED_"):
+                    reader.observation_from_rows(again, {"ok": True, "web_sha": WEB_OLD})
+                live = {"rows": rows()}
+                base = make(live).capture_baseline()
+                live["rows"] = again
+                self.assertEqual(verify.verify(make(live), base, "ROLLED_BACK")["code"], "VERIFY_INDETERMINATE")
+
+    def test_service_set_is_fixed_and_cannot_be_relaxed_by_the_caller(self):
+        relaxed = {"targets": ("api", "web"), "dependencies": ("postgres",), "oneshots": ("migrator",)}
+        subset = {k: v for k, v in rows().items() if k in ("api", "web", "postgres", "migrator")}
+        with self.assertRaisesRegex(reader.Stop, "CONFIG_NOT_DEFAULT"):
+            reader.baseline_from_rows(subset, WEB_OLD, relaxed)
+        with self.assertRaisesRegex(reader.Stop, "CONFIG_NOT_DEFAULT"):
+            reader.observation_from_rows(subset, {"ok": True, "web_sha": WEB_OLD}, relaxed)
+        with self.assertRaisesRegex(reader.Stop, "CONFIG_NOT_DEFAULT"):
+            reader.StateReader(lambda: {}, lambda: WEB_OLD, lambda: {}, relaxed)
+        dup = dict(reader.default_config(), dependencies=reader.DEPENDENCIES + ("postgres",))
+        with self.assertRaisesRegex(reader.Stop, "CONFIG_NOT_DEFAULT"):
+            reader.baseline_from_rows(rows(), WEB_OLD, dup)
+        with self.assertRaisesRegex(reader.Stop, "PROJECT_CONTAINER_SET_CHANGED"):  # missing/extra rows
+            reader.baseline_from_rows(subset, WEB_OLD)
+
+    def test_layer_paths_reject_dot_double_slash_and_nul(self):
+        for bad in ("/w/./base.yml", "/w//base.yml", "/w/base.yml/", "/w/../base.yml", "/w/ba\0se.yml", "/"):
+            with self.subTest(bad=bad), self.assertRaisesRegex(reader.Stop, "^LAYERS_INVALID_"):
+                reader.baseline_from_rows(rows(api=row("api", "1", "1", layers=bad)), WEB_OLD)
+
     def test_baseline_feeds_the_verifier_for_applied_and_rolled_back(self):
         state = {"rows": rows()}
         baseline = make(state).capture_baseline()
