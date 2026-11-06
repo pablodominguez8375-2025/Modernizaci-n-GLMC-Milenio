@@ -32,3 +32,14 @@ Antes de un instalador host son obligatorios, en una revisión separada:
 
 CI o pruebas sintéticas no sustituyen esos controles ni autorizan `glmdch`,
 `main`, base de datos, identidad o producción.
+
+## Follow-up: clock, close outcome, runner factory
+
+* `run_synthetic` takes `clock` (a callable) instead of a fixed `now`. The bridge
+  reads it again at `begin`, after the five locks are held, so a window that
+  closed while waiting for the locks is denied.
+* Exactly one of `runner` / `runner_factory` is required. The factory receives
+  the held plane, so `held_runner(plane, run)` of the host adapters can be used.
+* A failing `Lease.close()` after the flight ended raises
+  `ENGINE_CLOSE_FAILED_AFTER_APPLIED`, `..._ROLLED_BACK` or `..._FLIGHT_STOP`;
+  the durable journal stays the source of truth. Still inactive, synthetic only.

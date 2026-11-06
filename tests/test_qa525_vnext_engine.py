@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 import json
+from unittest import mock
 from pathlib import Path
 import tempfile
 import unittest
@@ -82,7 +83,7 @@ class EngineTests(unittest.TestCase):
     def fly(self, gate=lambda _stage: True):
         return engine.run_synthetic(
             root=self.fx.root, admission=self.fx.admission,
-            admission_sha256=self.fx.digest, now=trust.NOW,
+            admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
             admission_bytes=trust.canonical(self.record),
             approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
             synthetic_lock_dir=self.lockdir, reader=self.reader,
@@ -150,7 +151,7 @@ class EngineTests(unittest.TestCase):
         def fly_with_policy():
             return engine.run_synthetic(
                 root=self.fx.root, admission=self.fx.admission,
-                admission_sha256=self.fx.digest, now=trust.NOW,
+                admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
                 admission_bytes=trust.canonical(self.record),
                 approval_bytes=self.approval,
                 trusted_policy_hash="sha256:" + "9" * 64,
@@ -169,7 +170,7 @@ class EngineTests(unittest.TestCase):
         with self.assertRaisesRegex(engine.Stop, "^ENGINE_PLANE_DENIED$"):
             engine.run_synthetic(
                 root=self.fx.root, admission=self.fx.admission,
-                admission_sha256=self.fx.digest, now=late,
+                admission_sha256=self.fx.digest, clock=lambda: late,
                 admission_bytes=trust.canonical(self.record),
                 approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
                 synthetic_lock_dir=self.lockdir, reader=self.reader,
@@ -183,7 +184,7 @@ class EngineTests(unittest.TestCase):
         with self.assertRaisesRegex(engine.Stop, "^ENGINE_PLANE_DENIED$"):
             engine.run_synthetic(
                 root=self.fx.root, admission=self.fx.admission,
-                admission_sha256="sha256:" + "0" * 64, now=trust.NOW,
+                admission_sha256="sha256:" + "0" * 64, clock=lambda: trust.NOW,
                 admission_bytes=trust.canonical(self.record),
                 approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
                 synthetic_lock_dir=self.lockdir, reader=self.reader,
@@ -191,6 +192,71 @@ class EngineTests(unittest.TestCase):
                 env_file="/etc/pmgm/qa.env", runner=self.runner,
                 scope_factory=Scope, settle=lambda: None,
                 external_gate=lambda _s: True)
+        self.assertEqual(self.runs, [])
+
+    def test_clock_that_advances_while_locks_are_taken_is_denied(self):
+        ticks = iter([trust.NOW, trust.NOW.replace(hour=19), trust.NOW.replace(hour=19)])
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_PLANE_DENIED$"):
+            engine.run_synthetic(
+                root=self.fx.root, admission=self.fx.admission,
+                admission_sha256=self.fx.digest, clock=lambda: next(ticks),
+                admission_bytes=trust.canonical(self.record),
+                approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+                synthetic_lock_dir=self.lockdir, reader=self.reader,
+                target=self.target, project="centenario", workdir="/opt/centenario",
+                env_file="/etc/pmgm/qa.env", runner=self.runner,
+                scope_factory=Scope, settle=lambda: None,
+                external_gate=lambda _s: True)
+        self.assertEqual(self.runs, [])
+
+    def test_failed_close_after_a_completed_flight_names_the_real_outcome(self):
+        real = engine.flight.journal.Lease.close
+        def broken(lease):
+            real(lease)
+            raise OSError("boom")
+        for fail, expected in ((None, "APPLIED"), (("web", "target"), "ROLLED_BACK")):
+            with self.subTest(expected=expected):
+                self.setUp()
+                if fail:
+                    self.fail.add(fail)
+                with mock.patch.object(engine.flight.journal.Lease, "close", broken):
+                    with self.assertRaisesRegex(
+                            engine.Stop, "^ENGINE_CLOSE_FAILED_AFTER_" + expected + "$"):
+                        self.fly()
+                self.assertEqual(self.terminal(), expected)
+                self.tearDown()
+
+    def test_runner_factory_receives_the_held_plane(self):
+        seen = []
+        def factory(plane):
+            plane.assert_held()
+            seen.append(plane)
+            return self.runner
+        result = engine.run_synthetic(
+            root=self.fx.root, admission=self.fx.admission,
+            admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
+            admission_bytes=trust.canonical(self.record),
+            approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+            synthetic_lock_dir=self.lockdir, reader=self.reader,
+            target=self.target, project="centenario", workdir="/opt/centenario",
+            env_file="/etc/pmgm/qa.env", runner_factory=factory,
+            scope_factory=Scope, settle=lambda: None, external_gate=lambda _s: True)
+        self.assertEqual(result["status"], "APPLIED")
+        self.assertEqual(len(seen), 1)
+
+    def test_exactly_one_of_runner_or_factory_is_required(self):
+        base = dict(
+            root=self.fx.root, admission=self.fx.admission,
+            admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
+            admission_bytes=trust.canonical(self.record),
+            approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+            synthetic_lock_dir=self.lockdir, reader=self.reader,
+            target=self.target, project="centenario", workdir="/opt/centenario",
+            env_file="/etc/pmgm/qa.env", scope_factory=Scope,
+            settle=lambda: None, external_gate=lambda _s: True)
+        for extra in ({}, {"runner": self.runner, "runner_factory": lambda p: self.runner}):
+            with self.assertRaisesRegex(engine.Stop, "^ENGINE_ADAPTER_INVALID$"):
+                engine.run_synthetic(**base, **extra)
         self.assertEqual(self.runs, [])
 
     def test_no_physical_or_shell_entrypoint_exists(self):
