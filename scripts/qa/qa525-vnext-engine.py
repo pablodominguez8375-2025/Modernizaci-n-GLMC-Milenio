@@ -33,6 +33,15 @@ switch = _load("qa525_vnext_switch_for_engine", "qa525-vnext-switch.py")
 locks = _load("qa525_vnext_locks_for_engine", "qa525-vnext-locks.py")
 scopes = _load("qa525_vnext_scope_store_for_engine", "qa525-vnext-scope-store.py")
 bridge = _load("qa525_vnext_admission_bridge_for_engine", "qa525-vnext-admission-bridge.py")
+g6_anchor = _load("qa525_vnext_g6_anchor_for_engine", "qa525-vnext-g6-anchor.py")
+
+# Exact raw-evidence schema. Precomputed PASS/boolean is never an input.
+G6_EVIDENCE_FIELDS = frozenset({
+    "review_bytes", "receipt_bytes", "restore_bytes",
+    "pinned_admission_sha256", "pinned_approval_sha256",
+    "pinned_review_sha256", "pinned_receipt_sha256",
+    "pinned_restore_sha256", "observed_archive_sha256",
+})
 
 # One journal module owns every lease consumer.
 scopes.journal = flight.journal
@@ -44,7 +53,8 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                   admission_bytes, approval_bytes, trusted_policy_hash,
                   synthetic_lock_dir, reader, target, project, workdir,
                   env_file, scope_factory, settle, external_gate,
-                  runner=None, runner_factory=None, samples=3, checkpoint=None):
+                  runner=None, runner_factory=None, samples=3, checkpoint=None,
+                  g6_evidence=None):
     """Run one fully assembled flight against injected synthetic adapters.
 
     ``external_gate(stage)`` stands in for the independently authenticated
@@ -64,12 +74,21 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
     ``lambda plane: adapters.held_runner(plane, run)``) so the process effect can
     only run while the locks and lease are held.
 
+    g6_evidence carries raw review/receipt/restore bytes and the exact SHA
+    pins and observed archive SHA. It is rechecked with a freshly read clock
+    inside the held synthetic five-lock + root-lease plane before any factory,
+    baseline or runner and before each forward API/WEB intent. Rollback stays
+    guarded by locks and external_gate, not by G6 expiry. No authentication
+    or physical permission is established here.
+
     If the plane cannot be closed cleanly AFTER the flight ended, the durable
     journal is the source of truth and the code says how the flight ended:
     ``ENGINE_CLOSE_FAILED_AFTER_APPLIED`` / ``_ROLLED_BACK`` / ``_FLIGHT_STOP``.
     """
     if not callable(clock) or (runner is None) == (runner_factory is None):
         raise Stop("ENGINE_ADAPTER_INVALID")
+    if type(g6_evidence) is not dict or set(g6_evidence) != G6_EVIDENCE_FIELDS:
+        raise Stop("ENGINE_G6_EVIDENCE_INVALID")
     for adapter in (runner or runner_factory, scope_factory, settle, external_gate):
         if not callable(adapter):
             raise Stop("ENGINE_ADAPTER_INVALID")
@@ -87,6 +106,41 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                 synthetic_lock_dir=synthetic_lock_dir) as plane:
             plane.assert_held()
             lease = plane.lease
+            if bound.last_binding is None or \
+                    bound.last_binding["admission_sha256"] != admission_sha256:
+                raise Stop("ENGINE_ADMISSION_UNBOUND")
+
+            def check_held_g6():
+                """Fresh, locked G6 byte consistency; NEVER host authority."""
+                try:
+                    plane.assert_held()
+                    checked = g6_anchor.compare(
+                        admission_bytes=admission_bytes,
+                        approval_bytes=approval_bytes,
+                        review_bytes=g6_evidence["review_bytes"],
+                        receipt_bytes=g6_evidence["receipt_bytes"],
+                        restore_bytes=g6_evidence["restore_bytes"],
+                        pinned_admission_sha256=g6_evidence["pinned_admission_sha256"],
+                        pinned_approval_sha256=g6_evidence["pinned_approval_sha256"],
+                        pinned_review_sha256=g6_evidence["pinned_review_sha256"],
+                        pinned_receipt_sha256=g6_evidence["pinned_receipt_sha256"],
+                        pinned_restore_sha256=g6_evidence["pinned_restore_sha256"],
+                        observed_archive_sha256=g6_evidence["observed_archive_sha256"],
+                        trusted_policy_hash=trusted_policy_hash, now=clock())
+                    plane.assert_held()
+                    if (checked.get("status") != g6_anchor.STATUS
+                            or checked.get("may_apply") is not False
+                            or checked.get("may_install") is not False
+                            or checked.get("admission_sha256") != admission_sha256
+                            or checked.get("approval_sha256")
+                            != bound.last_binding["external_anchor_sha256"]
+                            or checked.get("nonce") != lease.nonce):
+                        raise Stop("ENGINE_G6_EVIDENCE_DENIED")
+                except Exception:
+                    raise Stop("ENGINE_G6_EVIDENCE_DENIED") from None
+
+            # Deny before a factory, baseline, scope manifest or runner.
+            check_held_g6()
             if runner_factory is not None:
                 try:
                     runner = runner_factory(plane)
@@ -94,9 +148,6 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                     raise Stop("ENGINE_ADAPTER_INVALID") from None
                 if not callable(runner):
                     raise Stop("ENGINE_ADAPTER_INVALID")
-            if bound.last_binding is None or \
-                    bound.last_binding["admission_sha256"] != admission_sha256:
-                raise Stop("ENGINE_ADMISSION_UNBOUND")
             try:
                 plan = observer.capture_plan(
                     reader, target, nonce=lease.nonce,
@@ -114,7 +165,14 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                     plane.assert_held()
                     allowed = external_gate(stage)
                     plane.assert_held()
-                    return allowed is True
+                    if allowed is not True:
+                        return False
+                    # Read time AFTER the external gate, nearest to the next
+                    # durable forward intent. No expiry check on rollback.
+                    if stage in ("API_SWITCHING", "WEB_SWITCHING"):
+                        check_held_g6()
+                    plane.assert_held()
+                    return True
                 except Exception:
                     return False
 

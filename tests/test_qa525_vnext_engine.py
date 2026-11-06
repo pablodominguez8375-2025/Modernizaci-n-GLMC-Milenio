@@ -1,5 +1,7 @@
 """Fully assembled vNext engine over a fake world and private lock fixture."""
 import copy
+import datetime as dt
+import hashlib
 import importlib.util
 import json
 from unittest import mock
@@ -53,7 +55,41 @@ class EngineTests(unittest.TestCase):
         self.record = trust.admission_record()
         self.fx.put(self.record)
         self.nonce = self.record["nonce"]
-        self.approval = trust.canonical(trust.approval_record(self.record))
+        # Pure synthetic G6 evidence, NOT a real backup or approval.
+        stamp = "20261105T180000Z"
+        name = "centenario-qa-g6-CIFRADO-" + stamp + ".tar.gz"
+        self.review = {
+            "g6_archive_name": name, "g6_archive_sha256": "a" * 64,
+            "g6_restore_report_name": "isolated-restore-" + stamp + ".report.json",
+            "g6_offhost_sha256_verified": True,
+        }
+        self.receipt = {
+            "archive_name": name, "sha256": "a" * 64,
+            "status": "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING",
+        }
+        self.restore = {
+            "result": "G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY",
+            "archive_filename": name, "archive_sha256": "a" * 64,
+            "postgres_tables_by_database": {"pmgm": 7, "pmgm_keycloak": 4},
+            "silo_objects_verified": 2, "production_touched": False,
+        }
+        self.review_bytes = self._raw(self.review)
+        self.receipt_bytes = self._raw(self.receipt)
+        self.restore_bytes = self._raw(self.restore)
+        anchor = trust.approval_record(self.record)
+        anchor["g6_review_sha256"] = self._sha(self.review_bytes)
+        self.approval = trust.canonical(anchor)
+        self.g6_evidence = {
+            "review_bytes": self.review_bytes,
+            "receipt_bytes": self.receipt_bytes,
+            "restore_bytes": self.restore_bytes,
+            "pinned_admission_sha256": self._sha(trust.canonical(self.record)),
+            "pinned_approval_sha256": self._sha(self.approval),
+            "pinned_review_sha256": self._sha(self.review_bytes),
+            "pinned_receipt_sha256": self._sha(self.receipt_bytes),
+            "pinned_restore_sha256": self._sha(self.restore_bytes),
+            "observed_archive_sha256": "sha256:" + "a" * 64,
+        }
         self.lockdir = Path(self.tmp.name) / "locks"
         self.lockdir.mkdir(mode=0o700)
         self.lockdir.chmod(0o700)
@@ -66,6 +102,14 @@ class EngineTests(unittest.TestCase):
         self.reader = Reader(self.base, self.target, self.world)
         self.runs = []
         self.fail = set()
+
+    @staticmethod
+    def _raw(record):
+        return (json.dumps(record, sort_keys=True) + "\n").encode()
+
+    @staticmethod
+    def _sha(raw):
+        return "sha256:" + hashlib.sha256(raw).hexdigest()
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -80,12 +124,14 @@ class EngineTests(unittest.TestCase):
         self.world[service] = side
         return 0
 
-    def fly(self, gate=lambda _stage: True):
+    def fly(self, gate=lambda _stage: True, *, clock=None, evidence=None):
         return engine.run_synthetic(
             root=self.fx.root, admission=self.fx.admission,
-            admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
+            admission_sha256=self.fx.digest, clock=clock or (lambda: trust.NOW),
             admission_bytes=trust.canonical(self.record),
-            approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+            approval_bytes=self.approval,
+            g6_evidence=self.g6_evidence if evidence is None else evidence,
+            trusted_policy_hash=trust.POLICY,
             synthetic_lock_dir=self.lockdir, reader=self.reader,
             target=self.target, project="centenario", workdir="/opt/centenario",
             env_file="/etc/pmgm/qa.env", runner=self.runner,
@@ -161,7 +207,7 @@ class EngineTests(unittest.TestCase):
                 root=self.fx.root, admission=self.fx.admission,
                 admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
                 admission_bytes=trust.canonical(self.record),
-                approval_bytes=self.approval,
+                approval_bytes=self.approval, g6_evidence=self.g6_evidence,
                 trusted_policy_hash="sha256:" + "9" * 64,
                 synthetic_lock_dir=self.lockdir, reader=self.reader,
                 target=self.target, project="centenario", workdir="/opt/centenario",
@@ -180,7 +226,7 @@ class EngineTests(unittest.TestCase):
                 root=self.fx.root, admission=self.fx.admission,
                 admission_sha256=self.fx.digest, clock=lambda: late,
                 admission_bytes=trust.canonical(self.record),
-                approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+                approval_bytes=self.approval, g6_evidence=self.g6_evidence, trusted_policy_hash=trust.POLICY,
                 synthetic_lock_dir=self.lockdir, reader=self.reader,
                 target=self.target, project="centenario", workdir="/opt/centenario",
                 env_file="/etc/pmgm/qa.env", runner=self.runner,
@@ -194,7 +240,7 @@ class EngineTests(unittest.TestCase):
                 root=self.fx.root, admission=self.fx.admission,
                 admission_sha256="sha256:" + "0" * 64, clock=lambda: trust.NOW,
                 admission_bytes=trust.canonical(self.record),
-                approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+                approval_bytes=self.approval, g6_evidence=self.g6_evidence, trusted_policy_hash=trust.POLICY,
                 synthetic_lock_dir=self.lockdir, reader=self.reader,
                 target=self.target, project="centenario", workdir="/opt/centenario",
                 env_file="/etc/pmgm/qa.env", runner=self.runner,
@@ -209,7 +255,7 @@ class EngineTests(unittest.TestCase):
                 root=self.fx.root, admission=self.fx.admission,
                 admission_sha256=self.fx.digest, clock=lambda: next(ticks),
                 admission_bytes=trust.canonical(self.record),
-                approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+                approval_bytes=self.approval, g6_evidence=self.g6_evidence, trusted_policy_hash=trust.POLICY,
                 synthetic_lock_dir=self.lockdir, reader=self.reader,
                 target=self.target, project="centenario", workdir="/opt/centenario",
                 env_file="/etc/pmgm/qa.env", runner=self.runner,
@@ -246,7 +292,7 @@ class EngineTests(unittest.TestCase):
             root=self.fx.root, admission=self.fx.admission,
             admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
             admission_bytes=trust.canonical(self.record),
-            approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+            approval_bytes=self.approval, g6_evidence=self.g6_evidence, trusted_policy_hash=trust.POLICY,
             synthetic_lock_dir=self.lockdir, reader=self.reader,
             target=self.target, project="centenario", workdir="/opt/centenario",
             env_file="/etc/pmgm/qa.env", runner_factory=factory,
@@ -259,7 +305,7 @@ class EngineTests(unittest.TestCase):
             root=self.fx.root, admission=self.fx.admission,
             admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
             admission_bytes=trust.canonical(self.record),
-            approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+            approval_bytes=self.approval, g6_evidence=self.g6_evidence, trusted_policy_hash=trust.POLICY,
             synthetic_lock_dir=self.lockdir, reader=self.reader,
             target=self.target, project="centenario", workdir="/opt/centenario",
             env_file="/etc/pmgm/qa.env", scope_factory=Scope,
@@ -268,6 +314,74 @@ class EngineTests(unittest.TestCase):
             with self.assertRaisesRegex(engine.Stop, "^ENGINE_ADAPTER_INVALID$"):
                 engine.run_synthetic(**base, **extra)
         self.assertEqual(self.runs, [])
+
+    def test_missing_or_precomputed_g6_is_denied_before_any_effect(self):
+        for bad in (False, True, {}, {"status": "PASS"}):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(engine.Stop, "^ENGINE_G6_EVIDENCE_INVALID$"):
+                    self.fly(evidence=bad)
+                self.assertEqual(self.runs, [])
+                self.assertIsNone(self.terminal())
+
+    def test_g6_mismatch_denied_under_locks_before_baseline_or_factory(self):
+        broken = dict(self.g6_evidence,
+                      pinned_review_sha256="sha256:" + "9" * 64)
+        observed = {"factory": False}
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_G6_EVIDENCE_DENIED$"):
+            engine.run_synthetic(
+                root=self.fx.root, admission=self.fx.admission,
+                admission_sha256=self.fx.digest, clock=lambda: trust.NOW,
+                admission_bytes=trust.canonical(self.record),
+                approval_bytes=self.approval, trusted_policy_hash=trust.POLICY,
+                g6_evidence=broken,
+                synthetic_lock_dir=self.lockdir, reader=self.reader,
+                target=self.target, project="centenario", workdir="/opt/centenario",
+                env_file="/etc/pmgm/qa.env",
+                runner_factory=lambda _plane: observed.__setitem__("factory", True),
+                scope_factory=Scope, settle=lambda: None,
+                external_gate=lambda _stage: True)
+        self.assertFalse(observed["factory"])
+        self.assertEqual(self.runs, [])
+        self.assertFalse((self.fx.root / ("scopes-" + self.nonce + ".json")).exists())
+
+    def test_g6_clock_is_read_again_after_locks_and_lease(self):
+        ticks = iter([trust.NOW, trust.NOW, trust.NOW + dt.timedelta(minutes=30)])
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_G6_EVIDENCE_DENIED$"):
+            self.fly(clock=lambda: next(ticks))
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
+
+    def test_g6_evidence_swapped_during_api_gate_is_denied_before_mutation(self):
+        tampered = self._raw(dict(self.review, g6_archive_sha256="b" * 64))
+        def gate(stage):
+            if stage == "API_SWITCHING":
+                self.g6_evidence["review_bytes"] = tampered
+            return True
+        with self.assertRaisesRegex(engine.flight.Stop, "^FLIGHT_GATE_DENIED$"):
+            self.fly(gate)
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
+
+    def test_g6_expiry_before_web_causes_rollback_not_abandon(self):
+        # Clock: pre-lock, journal.begin, held G6, run_apply, API, WEB.
+        expired = trust.NOW + dt.timedelta(minutes=30)
+        ticks = iter([trust.NOW] * 5 + [expired])
+        result = self.fly(clock=lambda: next(ticks))
+        self.assertEqual(result["status"], "ROLLED_BACK")
+        self.assertEqual(self.world, {"api": "baseline", "web": "baseline"})
+        self.assertEqual(self.runs, [
+            ("api", "target"), ("web", "baseline"), ("api", "baseline")])
+        self.assertEqual(self.terminal(), "ROLLED_BACK")
+
+    def test_fresh_g6_check_required_at_both_forward_intents(self):
+        with mock.patch.object(
+                engine.g6_anchor, "compare",
+                wraps=engine.g6_anchor.compare) as compare:
+            result = self.fly()
+        self.assertEqual(result["status"], "APPLIED")
+        self.assertGreaterEqual(compare.call_count, 3)
+        self.assertTrue(all(call.kwargs["now"] == trust.NOW
+                            for call in compare.call_args_list))
 
     def test_no_physical_or_shell_entrypoint_exists(self):
         raw = PATH.read_text(encoding="utf-8")
