@@ -1,38 +1,53 @@
 #!/usr/bin/env python3
-"""QA525 vNext host adapters -- INACTIVE: importable pieces, NO entrypoint.
+"""QA525 vNext host adapters -- INACTIVE: no process, no default executor.
 
-The only code of the vNext line that can start a process. It offers exactly:
+This module imports nothing that can spawn a process and has NO default way to run
+anything. It offers validators/wrappers that only become useful when a future,
+separately reviewed, signed root entrypoint injects the effect:
 
-* ``scope_runner``: executes ONLY the argv that
+* ``held_runner(plane, run)``: returns ``runner(argv) -> int``. Each call first
+  proves, through ``plane.assert_held()``, that the five-lock plane and the
+  journal lease are held right now, then accepts ONLY the argv that
   ``qa525-vnext-containment.systemd_run_argv`` builds (a forced, no-deps,
-  no-build, never-pull recreate of ``api`` or ``web`` inside a transient scope).
-  Anything else -- a different binary, flag, verb, service, unit or an extra
-  token -- is refused BEFORE a process exists. No shell, no inherited
-  environment, stdin/stdout/stderr discarded, bounded time.
-* ``docker_read``: a read-only docker client (``ps``/``inspect``/``image
-  inspect``) for the runtime reader.
-* ``settle_pause``: a bounded sleep for the convergence gate.
-* ``cgroup_scope``: factory for the read-only ``CgroupScope``.
+  no-build, never-pull recreate of ``api`` or ``web`` in a transient scope).
+  ``run`` has no default: it is the caller's process effect. Calling this with a
+  canonical argv but without a held plane never reaches ``run``.
+* ``read_only_docker(run)``: returns ``read(args) -> str`` accepting ONLY the
+  exact argv forms the reader needs (project listing, the fixed 12-field
+  ``inspect`` template on a 64-hex container id, and the web image revision
+  label on an image id). Any other flag, format string or id (for example a
+  ``--format`` that would print ``Config.Env``) is refused BEFORE ``run``, and
+  the answer is size-bounded.
+* ``settle_pause`` (bounded sleep) and ``cgroup_scope`` (read-only view).
 
-Nothing here has a CLI, reads secrets, opens the network, takes locks or
-decides whether an APPLY is allowed: the engine only accepts these through its
-synthetic lock plane, which rejects real host paths, so this module cannot be
-used for a physical APPLY until a separately reviewed, authenticated root
-bootstrap exists. Errors are fixed codes; process output is never captured.
+The engine only accepts a synthetic lock plane that rejects real host paths,
+so none of this can drive a physical APPLY. Errors are fixed codes; process
+output is never echoed.
 """
 import importlib.util
 from pathlib import Path
-import subprocess
+import re
 import time
 
 HERE = Path(__file__).resolve().parent
 STATUS = "HOST_ADAPTERS_NOT_AUTHENTICATED_NOT_AUTHORIZED_FOR_PHYSICAL_APPLY"
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 DOCKER = "/usr/bin/docker"
-RUN_TIMEOUT = 150
-READ_TIMEOUT = 30
 MAX_SETTLE = 30.0
-READ_VERBS = ("ps", "inspect")
+MAX_OUTPUT = 262144
+PROJECT = "centenario-qa-lab2"
+CONTAINER_ID = re.compile(r"[a-f0-9]{64}\Z")
+IMAGE_ID = re.compile(r"(?:sha256:)?[a-f0-9]{64}\Z")
+LIST_ARGV = ["ps", "-a", "--filter", "label=com.docker.compose.project=" + PROJECT,
+             "--format", "{{.ID}}", "--no-trunc"]
+INSPECT_TEMPLATE = (
+    '[{{json .Id}},{{json .Image}},{{json .State.Status}},{{json .State.StartedAt}},'
+    '{{json .RestartCount}},{{json (index .Config.Labels "com.docker.compose.service")}},'
+    '{{json (index .Config.Labels "com.docker.compose.project.working_dir")}},'
+    '{{json (index .Config.Labels "com.docker.compose.project.config_files")}},'
+    '{{json .Mounts}},{{json .NetworkSettings.Networks}},{{json .NetworkSettings.Ports}},'
+    '{{json .State.ExitCode}}]')
+REVISION_FORMAT = '{{index .Config.Labels "org.opencontainers.image.revision"}}'
 
 
 class Stop(Exception):
@@ -47,7 +62,6 @@ def _load(name, filename):
 
 
 containment = _load("qa525_vnext_containment_for_adapters", "qa525-vnext-containment.py")
-_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/root", "LC_ALL": "C"}
 
 
 def _parse(argv):
@@ -75,38 +89,56 @@ def _parse(argv):
     return expected
 
 
-def scope_runner(argv, *, run=subprocess.run):
-    """Run one canonical compose-up scope command; return its exit code."""
-    command = _parse(argv)
-    try:
-        done = run(command, env=dict(_ENV), stdin=subprocess.DEVNULL,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                   timeout=RUN_TIMEOUT, check=False, shell=False)
-    except Exception:
-        raise Stop("ADAPTER_RUN_FAILED") from None
-    code = getattr(done, "returncode", None)
-    if type(code) is not int:
-        raise Stop("ADAPTER_RUN_FAILED")
-    return code
+def held_runner(plane, run):
+    """Bind a process effect to a HELD synthetic plane; return ``runner(argv)``."""
+    if not (callable(run) and callable(getattr(plane, "assert_held", None))):
+        raise Stop("ADAPTER_AUTHORITY_REQUIRED")
+
+    def runner(argv):
+        command = _parse(argv)
+        try:
+            status = plane.assert_held()
+            if (type(status) is not dict or status.get("legacy_locks_held") != 5
+                    or status.get("root_lease_held_synthetically") is not True):
+                raise Stop("ADAPTER_PLANE_NOT_HELD")
+        except Stop:
+            raise
+        except Exception:
+            raise Stop("ADAPTER_PLANE_NOT_HELD") from None
+        try:
+            code = run(list(command))
+        except Exception:
+            raise Stop("ADAPTER_RUN_FAILED") from None
+        if type(code) is not int:
+            raise Stop("ADAPTER_RUN_FAILED")
+        return code
+
+    return runner
 
 
-def docker_read(args, *, run=subprocess.run):
-    """Read-only docker client: only ps / inspect / image inspect."""
-    if (type(args) is not list or not args
-            or not all(type(item) is str and item and "\0" not in item for item in args)
-            or not (args[0] in READ_VERBS or args[:2] == ["image", "inspect"])):
-        raise Stop("ADAPTER_VERB_REFUSED")
-    try:
-        done = run([DOCKER, "--host", "unix:///var/run/docker.sock", *args],
-                   env=dict(_ENV), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                   stderr=subprocess.DEVNULL, timeout=READ_TIMEOUT, check=True,
-                   shell=False, text=True)
-        out = done.stdout
-    except Exception:
-        raise Stop("ADAPTER_READ_FAILED") from None
-    if type(out) is not str:
-        raise Stop("ADAPTER_READ_FAILED")
-    return out.strip()
+def read_only_docker(run):
+    """Return ``read(args) -> str`` for the exact reader argv forms only."""
+    if not callable(run):
+        raise Stop("ADAPTER_RUN_INVALID")
+
+    def read(args):
+        if type(args) is not list or not all(type(item) is str for item in args):
+            raise Stop("ADAPTER_VERB_REFUSED")
+        if not (args == LIST_ARGV
+                or (len(args) == 4 and args[:3] == ["inspect", "--format", INSPECT_TEMPLATE]
+                    and CONTAINER_ID.fullmatch(args[3]))
+                or (len(args) == 5 and args[:4] == ["image", "inspect", "--format", REVISION_FORMAT]
+                    and IMAGE_ID.fullmatch(args[4]))):
+            raise Stop("ADAPTER_VERB_REFUSED")
+        try:
+            out = run(list(args))
+        except Exception:
+            raise Stop("ADAPTER_READ_FAILED") from None
+        if type(out) is not str or len(out) > MAX_OUTPUT:
+            raise Stop("ADAPTER_READ_FAILED")
+        return out.strip()
+
+    return read
 
 
 def settle_pause(seconds=2.0, *, sleep=time.sleep):
