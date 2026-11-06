@@ -70,6 +70,15 @@ def _check_port(port):
         raise Stop("ROOTLOCK_NOT_ROOT")
 
 
+def _close(port, fd):
+    """True only if the port closed the descriptor; never leaks its error."""
+    try:
+        port.close(fd)
+    except Exception:
+        return False
+    return True
+
+
 def _lock_one(port, path):
     for directory in _chain(path):
         _check_dir(port, directory)
@@ -85,15 +94,12 @@ def _lock_one(port, path):
             raise Stop("ROOTLOCK_FILE_CHANGED")
         return fd, before
     except Stop:
-        if fd is not None:
-            port.close(fd)
+        if fd is not None and not _close(port, fd):
+            raise Stop("ROOTLOCK_CLOSE_FAILED") from None
         raise
     except Exception:
-        if fd is not None:
-            try:
-                port.close(fd)
-            except Exception:
-                pass
+        if fd is not None and not _close(port, fd):
+            raise Stop("ROOTLOCK_CLOSE_FAILED") from None
         raise Stop("ROOTLOCK_UNAVAILABLE") from None
 
 
@@ -159,11 +165,12 @@ def root_flight(port, journal, root, admission, admission_sha256, now):
                 lease.close()
             except Exception:
                 close_failed = True
-        for _, fd, _ in reversed(held):
-            try:
-                port.close(fd)
-            except Exception:
-                pass
+        fd_close_failed = False
+        for _, fd, _ in reversed(held):  # every fd is attempted, none skipped
+            if not _close(port, fd):
+                fd_close_failed = True
+        if fd_close_failed:  # a lock may stay held: fixed recovery code wins
+            raise Stop("ROOTLOCK_CLOSE_FAILED")
         if close_failed:
             raise Stop("ROOTLOCK_JOURNAL_CLOSE_FAILED")
 

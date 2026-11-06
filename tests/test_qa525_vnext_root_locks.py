@@ -38,7 +38,8 @@ class Port:
                 self.nodes[d] = dstat(0o1777 if d == "/run/lock" else 0o755)
         for i, path in enumerate(rl.LEGACY_LOCKS):
             self.nodes[path] = fstat_(100 + i)
-        self.fds, self.next = {}, 10
+        self.fds, self.snap, self.next = {}, {}, 10
+        self.close_fail = set()
         self.calls, self.busy, self.closed = [], set(), []
 
     def euid(self):
@@ -54,10 +55,11 @@ class Port:
         self.calls.append(("open", path))
         self.next += 1
         self.fds[self.next] = path
+        self.snap[self.next] = self.nodes[path]  # a real fd keeps its inode
         return self.next
 
     def fstat(self, fd):
-        return self.nodes[self.fds[fd]]
+        return self.snap[fd]
 
     def flock_nb(self, fd):
         self.calls.append(("flock", self.fds[fd]))
@@ -67,7 +69,10 @@ class Port:
         pass
 
     def close(self, fd):
-        self.closed.append(self.fds.pop(fd))
+        path = self.fds.pop(fd)
+        self.closed.append(path)
+        if path in self.close_fail:
+            raise OSError("secret detail /private/path")
 
 
 class Lease:
@@ -173,6 +178,42 @@ class RootLockTests(unittest.TestCase):
             ok = orig(fd); port.nodes[rl.LEGACY_LOCKS[0]] = fstat_(999); return ok
         port.flock_nb = swap
         self.assertEqual(self.stop(port), "ROOTLOCK_FILE_CHANGED")
+
+    def test_close_failure_is_fixed_code_and_never_skips_other_fds(self):
+        port, log = Port(), []
+        port.close_fail.add(rl.LEGACY_LOCKS[2])
+        with self.assertRaises(rl.Stop) as c:
+            with fly(port, Journal(log)):
+                pass
+        self.assertEqual(str(c.exception), "ROOTLOCK_CLOSE_FAILED")
+        self.assertNotIn("secret", repr(c.exception))
+        self.assertEqual(log, ["begin", "lease-close"])
+        self.assertEqual(port.closed, list(reversed(rl.LEGACY_LOCKS)))
+
+    def test_close_failure_after_busy_is_not_hidden(self):
+        port = Port()
+        port.busy.add(rl.LEGACY_LOCKS[2])
+        port.close_fail.add(rl.LEGACY_LOCKS[2])  # the busy lock's own fd
+        self.assertEqual(self.stop(port), "ROOTLOCK_CLOSE_FAILED")
+        self.assertEqual(port.closed, [rl.LEGACY_LOCKS[2], rl.LEGACY_LOCKS[1],
+                                       rl.LEGACY_LOCKS[0]])
+        port = Port()
+        port.busy.add(rl.LEGACY_LOCKS[2])
+        port.close_fail.add(rl.LEGACY_LOCKS[0])  # earlier held lock
+        self.assertEqual(self.stop(port), "ROOTLOCK_CLOSE_FAILED")
+        self.assertEqual(len(port.closed), 3)
+
+    def test_replace_after_open_differs_between_fd_and_path(self):
+        port = Port()
+        with fly(port, Journal([])) as plane:
+            fd = next(iter(port.fds))
+            old = port.fstat(fd)
+            port.nodes[rl.LEGACY_LOCKS[0]] = fstat_(4242)
+            self.assertEqual(port.fstat(fd).st_ino, old.st_ino)
+            self.assertNotEqual(port.lstat(rl.LEGACY_LOCKS[0]).st_ino, old.st_ino)
+            with self.assertRaises(rl.Stop) as c:
+                plane.assert_held()
+            self.assertEqual(str(c.exception), "ROOTLOCK_LOST")
 
     def test_journal_denied_is_static_and_releases_locks(self):
         port = Port()

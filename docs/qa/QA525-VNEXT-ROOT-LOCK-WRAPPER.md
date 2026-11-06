@@ -12,6 +12,7 @@ aplicar ni operar en `glmdch`. Requiere revisión del puerto físico y GO del Sp
 - Apertura de solo lectura, identidad (dev, ino, uid, gid, modo, nlink) antes/durante/después del flock.
 - Después de los 5, `journal.begin` (lease raíz). Falla -> código estático y se sueltan los locks.
 - Liberación: lease primero, luego los 5 en orden inverso, aun si el cierre del lease falla.
+- Si cualquier `close` del puerto falla, se intentan igualmente todos los demás fd y el lease, y se emite `ROOTLOCK_CLOSE_FAILED` (código fijo, sin texto externo): un lock podría seguir tomado, no se reporta éxito. Prevalece sobre el motivo previo (p. ej. `ROOTLOCK_BUSY`).
 - `assert_held()` revalida identidad de cada lock y `lease_is_held`.
 
 ## Puerto inyectado (`euid, lstat, open_ro, fstat, flock_nb, unlock, close`)
