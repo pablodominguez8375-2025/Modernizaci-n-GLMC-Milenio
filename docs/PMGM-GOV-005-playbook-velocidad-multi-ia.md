@@ -10,7 +10,7 @@ Complementa PMGM-GOV-002 (continuidad multichat) y PMGM-GOV-003 (coordinación m
 
 ## 2. Frentes en paralelo (cómo no quedarse esperando)
 - Mientras corre la CI de un PR o se espera la revisión de otro agente, abrir el **siguiente frente independiente** (otro módulo, otro PR a `dev`, documentación, una revisión pendiente). No hay que esperar para empezar el siguiente trabajo si no depende del anterior.
-- **Evitar PR apilados** cuando sea posible: apuntar siempre a `dev`. Si hay que apilar, indicarlo en el título y reapuntar a `dev` apenas se integre la base (`gh api -X PATCH repos/<repo>/pulls/<n> -f base=dev`), reubicando con `git rebase --onto origin/dev <base-vieja>`.
+- **Evitar PR apilados** cuando sea posible: apuntar siempre a `dev`. Si hay que apilar, indicarlo en el título y reapuntar a `dev` apenas se integre la base (`gh api -X PATCH repos/<repo>/pulls/<n> -f base=dev`), reubicando con `git rebase --onto origin/dev <base-vieja>`. **Después de reapuntar, verificar `base.sha` y `changed_files` del PR** (GitHub puede conservar la base histórica y mostrar archivos de más); si están viejos, reasignar la base a otra rama y de vuelta a `dev` para forzar el recálculo.
 - Tren combinado: cuando varios PR pequeños son compatibles, un solo PR que los reúna da **una sola CI**; los PR de origen quedan como fuente exact-head (patrón #855).
 - Las pruebas nuevas de vNext se descubren solas: basta crear `tests/test_qa525_vnext_<tema>.py`; **no** editar `tests/test_qa_agent_readiness.py` (era la causa de un conflicto en cada PR).
 
