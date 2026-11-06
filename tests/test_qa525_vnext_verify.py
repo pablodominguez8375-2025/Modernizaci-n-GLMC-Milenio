@@ -30,7 +30,12 @@ def target():
 
 def observation(kind="APPLIED"):
     base = baseline()
-    new = kind == "APPLIED"
+    new = kind in ("APPLIED", "WEB_SWITCHED")
+    if kind == "API_SWITCHED":  # api on target, web still the baseline
+        return {"images": {"api": NEW_API, "web": OLD_WEB}, "running": {"api": True, "web": True},
+                "dependencies": base["dependencies"], "oneshots": base["oneshots"],
+                "layers": {"api": copy.deepcopy(NEW_LAYERS["api"]), "web": copy.deepcopy(OLD_LAYERS["web"])},
+                "health": {"ok": True, "web_sha": OLD_SHA}}
     return {"images": {"api": NEW_API if new else OLD_API, "web": NEW_WEB if new else OLD_WEB},
             "running": {"api": True, "web": True},
             "dependencies": base["dependencies"], "oneshots": base["oneshots"],
@@ -191,6 +196,44 @@ class VerifierTests(unittest.TestCase):
             mod.require_ok(rolled, base_sha, "ROLLED_BACK", wanted)
         with self.assertRaises(mod.Stop):
             mod.expected_target_sha256(baseline(), "ROLLED_BACK", target())
+
+    def test_partial_checkpoints_api_switched_and_web_switched(self):
+        base_sha = mod.validate_baseline(baseline())
+        api = mod.verify(Fake(observation("API_SWITCHED")), baseline(), "API_SWITCHED", target())
+        self.assertTrue(api["ok"], api)
+        web = mod.verify(Fake(observation("WEB_SWITCHED")), baseline(), "WEB_SWITCHED", target())
+        self.assertTrue(web["ok"], web)
+        mod.require_ok(api, base_sha, "API_SWITCHED", mod.expected_target_sha256(baseline(), "API_SWITCHED", target()))
+        mod.require_ok(web, base_sha, "WEB_SWITCHED", mod.expected_target_sha256(baseline(), "WEB_SWITCHED", target()))
+        # A checkpoint result can never stand in for another kind.
+        for kind in ("APPLIED", "WEB_SWITCHED", "ROLLED_BACK"):
+            with self.subTest(kind=kind), self.assertRaisesRegex(mod.Stop, "RESULT_KIND_MISMATCH"):
+                mod.require_ok(api, base_sha, kind, mod.expected_target_sha256(baseline(), kind, None if kind == "ROLLED_BACK" else target()))
+        with self.assertRaisesRegex(mod.Stop, "RESULT_KIND_MISMATCH"):
+            mod.require_ok(web, base_sha, "APPLIED", mod.expected_target_sha256(baseline(), "APPLIED", target()))
+        # Each state only satisfies its own kind.
+        self.assertFalse(mod.verify(Fake(observation("API_SWITCHED")), baseline(), "APPLIED", target())["ok"])
+        self.assertEqual(mod.verify(Fake(observation("API_SWITCHED")), baseline(), "WEB_SWITCHED", target())["code"],
+                         "IMAGE_MISMATCH_WEB")
+        self.assertEqual(mod.verify(Fake(observation("WEB_SWITCHED")), baseline(), "API_SWITCHED", target())["code"],
+                         "IMAGE_MISMATCH_WEB")
+        self.assertEqual(mod.verify(Fake(observation("ROLLED_BACK")), baseline(), "API_SWITCHED", target())["code"],
+                         "IMAGE_MISMATCH_API")
+        # Web still serving the old revision is required at the API checkpoint.
+        early = observation("API_SWITCHED")
+        early["health"]["web_sha"] = NEW_SHA
+        self.assertEqual(mod.verify(Fake(early), baseline(), "API_SWITCHED", target())["code"], "HEALTH_FAILED")
+        # Checkpoints need a real target, and never accept the baseline as one.
+        with self.assertRaises(mod.Stop):
+            mod.verify(Fake(observation("API_SWITCHED")), baseline(), "API_SWITCHED")
+        with self.assertRaisesRegex(mod.Stop, "APPLIED_TARGET_EQUALS_BASELINE"):
+            same = target()
+            same["images"]["web"] = OLD_WEB
+            mod.verify(Fake(observation("API_SWITCHED")), baseline(), "API_SWITCHED", same)
+        # Dependencies must stay untouched at a checkpoint as well.
+        moved = observation("API_SWITCHED")
+        moved["dependencies"] = {"db": "9" * 12, "keycloak": "e" * 12}
+        self.assertEqual(mod.verify(Fake(moved), baseline(), "API_SWITCHED", target())["code"], "DEPENDENCY_CHANGED")
 
     def test_adapter_text_never_reaches_the_report(self):
         class Leaky:

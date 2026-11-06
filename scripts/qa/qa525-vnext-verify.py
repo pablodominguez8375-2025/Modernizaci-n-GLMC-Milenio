@@ -2,7 +2,7 @@
 """QA525 vNext terminal-state verifier -- READ-ONLY, INACTIVE, NOT an executor.
 
 Decides whether the observed runtime equals either the sealed baseline
-(ROLLED_BACK) or an explicit, different target (APPLIED). It only *reads*
+(ROLLED_BACK) or an explicit, different target (APPLIED), or a mid-transaction checkpoint (API_SWITCHED: api on target, web still baseline; WEB_SWITCHED: both on target). It only *reads*
 through an injected adapter: no Docker, network, subprocess or host path is
 imported or touched here. A future engine supplies a real adapter; a terminal
 journal writer must accept only a result that passes ``require_ok`` for the
@@ -33,7 +33,8 @@ IMAGE_ID = re.compile(r"^(?:sha256:)?[a-f0-9]{64}$")
 CONTAINER_ID = re.compile(r"^[a-f0-9]{12,64}$")
 SHA40 = re.compile(r"^[a-f0-9]{40}$")
 TARGETS = ("api", "web")
-KINDS = ("APPLIED", "ROLLED_BACK")
+KINDS = ("APPLIED", "ROLLED_BACK", "API_SWITCHED", "WEB_SWITCHED")
+TARGET_KINDS = ("APPLIED", "API_SWITCHED", "WEB_SWITCHED")
 MAX_SERVICES = 32
 MAX_LAYERS = 64
 RUNTIME_CODES = frozenset(
@@ -125,6 +126,8 @@ def validate_target(baseline: dict, kind: str, target: dict) -> dict:
             raise Stop("ROLLBACK_TARGET_MUST_BE_BASELINE")
         return {"images": baseline["images"], "layers": baseline["layers"],
                 "web_sha": baseline["web_sha"]}
+    if kind not in TARGET_KINDS:
+        raise Stop("KIND_INVALID")
     _exact(target, dict, "TARGET_INVALID")
     if set(target) != {"images", "layers", "web_sha"}:
         raise Stop("TARGET_INVALID")
@@ -137,7 +140,13 @@ def validate_target(baseline: dict, kind: str, target: dict) -> dict:
         raise Stop("TARGET_INVALID")
     if any(target["images"][name] == baseline["images"][name] for name in TARGETS):
         raise Stop("APPLIED_TARGET_EQUALS_BASELINE")
-    return target
+    if kind == "API_SWITCHED":
+        # Mid-transaction checkpoint: api already on the target, web still the
+        # sealed baseline (image, layers and served web_sha).
+        return {"images": {"api": target["images"]["api"], "web": baseline["images"]["web"]},
+                "layers": {"api": target["layers"]["api"], "web": baseline["layers"]["web"]},
+                "web_sha": baseline["web_sha"]}
+    return target  # APPLIED and WEB_SWITCHED: both services on the target
 
 
 def _observation(adapter) -> dict:
