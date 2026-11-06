@@ -134,9 +134,15 @@ def inspect(review_bytes, receipt_bytes, restore_bytes, *,
             or restore.get("production_touched") is not False):
         raise Stop("G6_RESTORE_METADATA_MISMATCH")
 
+    try:
+        checkpoint_expiry = when + dt.timedelta(hours=48)
+    except OverflowError:
+        raise Stop("G6_CHECKPOINT_DATE_INVALID") from None
+
     return {
         "status": STATUS,
         "checkpoint_age_seconds": int(age),
+        "checkpoint_expires_at": checkpoint_expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "review_sha256": pinned_review_sha256,
         "receipt_sha256": pinned_receipt_sha256,
         "restore_sha256": pinned_restore_sha256,

@@ -64,6 +64,8 @@ class G6MetadataTests(unittest.TestCase):
         result = self.check()
         self.assertEqual(result["status"], gate.STATUS)
         self.assertEqual(result["checkpoint_age_seconds"], 3600)
+        self.assertEqual(result["checkpoint_expires_at"],
+                         (CUT + dt.timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ"))
         self.assertEqual(result["archive_sha256"], "sha256:" + "a" * 64)
         for key in ("may_apply", "may_install", "signature_verified_here",
                     "physical_archive_verified_here",
