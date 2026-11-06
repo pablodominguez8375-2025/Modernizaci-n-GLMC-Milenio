@@ -43,6 +43,16 @@ def _canonical(value):
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
+def _unique_json_keys(pairs):
+    """Reject ambiguity even when duplicate keys resolve to the same value."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise Stop("SCOPE_MANIFEST_INVALID")
+        result[key] = value
+    return result
+
+
 def _lease(lease):
     try:
         if journal.lease_is_held(lease) is not True:
@@ -100,10 +110,20 @@ def _read(path):
             os.close(fd)
         if (path.lstat().st_dev, path.lstat().st_ino) != (info.st_dev, info.st_ino):
             raise Stop("SCOPE_MANIFEST_CHANGED")
-        return json.loads(raw)
+        parsed = json.loads(
+            raw, object_pairs_hook=_unique_json_keys,
+            parse_constant=lambda _: (_ for _ in ()).throw(
+                Stop("SCOPE_MANIFEST_INVALID")))
+        # The exact bytes written by initialize() must be the bytes consumed.
+        # A round trip rejects extra whitespace, reordered keys, duplicate
+        # keys, non-finite numbers and an otherwise equivalent altered file.
+        if type(parsed) is not dict or _canonical(parsed) != raw:
+            raise Stop("SCOPE_MANIFEST_INVALID")
+        return parsed
     except Stop:
         raise
-    except (OSError, ValueError, UnicodeDecodeError):
+    except (OSError, ValueError, UnicodeDecodeError, TypeError, RecursionError,
+            OverflowError):
         raise Stop("SCOPE_MANIFEST_INVALID") from None
 
 
