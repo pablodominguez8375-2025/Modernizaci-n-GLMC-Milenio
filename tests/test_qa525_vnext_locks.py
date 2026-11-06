@@ -107,7 +107,9 @@ class LockPlaneTests(unittest.TestCase):
             foreign_root.mkdir(mode=0o700)
             foreign_root.chmod(0o700)
             with self.assertRaisesRegex(plane.Stop, "^PLANE_SYNTHETIC_SCOPE_INVALID$"):
-                with self.attempt(journal=journal)._recreate_cm():
+                with plane.synthetic_flight(
+                        journal, foreign_root, self.fx.admission, self.fx.digest,
+                        jt.NOW, synthetic_lock_dir=self.dir):
                     self.fail("foreign journal root accepted")
             foreign_admission = Path(foreign) / "admission.json"
             foreign_admission.write_bytes(self.fx.admission.read_bytes())
