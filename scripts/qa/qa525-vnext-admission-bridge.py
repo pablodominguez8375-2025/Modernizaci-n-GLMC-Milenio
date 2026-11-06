@@ -43,7 +43,8 @@ binding = _load("qa525_vnext_trust_binding_for_bridge", "qa525-vnext-trust-bindi
 
 
 class BoundJournal:
-    def __init__(self, journal, admission_bytes, approval_bytes, *, trusted_policy_hash):
+    def __init__(self, journal, admission_bytes, approval_bytes, *, trusted_policy_hash,
+                 clock=None):
         if not (callable(getattr(journal, "begin", None))
                 and callable(getattr(journal, "lease_is_held", None))):
             raise Stop("BRIDGE_JOURNAL_INVALID")
@@ -51,7 +52,10 @@ class BoundJournal:
             raise Stop("BRIDGE_BYTES_INVALID")
         self._journal = journal
         self._admission, self._approval = admission_bytes, approval_bytes
+        if clock is not None and not callable(clock):
+            raise Stop("BRIDGE_CLOCK_INVALID")
         self._policy = trusted_policy_hash
+        self._clock = clock
         self._used = False
         self.last_cause = None
         self.last_binding = None
@@ -60,6 +64,13 @@ class BoundJournal:
         if self._used:
             raise Stop("BRIDGE_ALREADY_USED")
         self._used = True  # even a failed attempt is final for this object
+        if self._clock is not None:
+            # Read the time NOW, after the caller already holds the locks: the
+            # ``now`` it passed was read before waiting for them.
+            try:
+                now = self._clock()
+            except Exception:
+                raise Stop("BRIDGE_CLOCK_FAILED") from None
         try:
             result = binding.bind(self._admission, self._approval,
                                   trusted_policy_hash=self._policy, now=now)

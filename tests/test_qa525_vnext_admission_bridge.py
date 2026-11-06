@@ -95,6 +95,29 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(self.bound.last_cause, "BINDING_WINDOW_INVALID")
         self.assertEqual(self.journal.calls, 0)
 
+    def test_clock_overrides_the_stale_now_and_is_read_at_begin(self):
+        late = trust.NOW + dt.timedelta(minutes=40)
+        bound = bridge.BoundJournal(
+            self.journal, self.admission_bytes, self.approval_bytes,
+            trusted_policy_hash=trust.POLICY, clock=lambda: late)
+        with self.assertRaisesRegex(bridge.Stop, "^BRIDGE_BINDING_REJECTED$"):
+            self.begin(bound=bound, now=trust.NOW)  # stale argument must not win
+        self.assertEqual(bound.last_cause, "BINDING_WINDOW_INVALID")
+        self.assertEqual(self.journal.calls, 0)
+
+    def test_broken_or_invalid_clock_is_refused_with_fixed_codes(self):
+        with self.assertRaisesRegex(bridge.Stop, "^BRIDGE_CLOCK_INVALID$"):
+            bridge.BoundJournal(self.journal, self.admission_bytes, self.approval_bytes,
+                                trusted_policy_hash=trust.POLICY, clock=5)
+        def boom():
+            raise RuntimeError("secret detail")
+        bound = bridge.BoundJournal(
+            self.journal, self.admission_bytes, self.approval_bytes,
+            trusted_policy_hash=trust.POLICY, clock=boom)
+        with self.assertRaisesRegex(bridge.Stop, "^BRIDGE_CLOCK_FAILED$"):
+            self.begin(bound=bound)
+        self.assertEqual(self.journal.calls, 0)
+
     def test_file_swapped_after_binding_is_refused_by_the_journal_hash(self):
         swapped = dict(self.record, artifact_id=57)
         self.fx.admission.write_text(json.dumps(swapped, sort_keys=True) + "\n")

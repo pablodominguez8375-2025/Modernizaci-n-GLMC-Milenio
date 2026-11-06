@@ -40,11 +40,11 @@ if scopes.journal is not flight.journal:  # pragma: no cover
     raise Stop("ENGINE_JOURNAL_NOT_SHARED")
 
 
-def run_synthetic(*, root, admission, admission_sha256, now,
+def run_synthetic(*, root, admission, admission_sha256, clock,
                   admission_bytes, approval_bytes, trusted_policy_hash,
                   synthetic_lock_dir, reader, target, project, workdir,
-                  env_file, runner, scope_factory, settle, external_gate,
-                  samples=3, checkpoint=None):
+                  env_file, scope_factory, settle, external_gate,
+                  runner=None, runner_factory=None, samples=3, checkpoint=None):
     """Run one fully assembled flight against injected synthetic adapters.
 
     ``external_gate(stage)`` stands in for the independently authenticated
@@ -56,22 +56,44 @@ def run_synthetic(*, root, admission, admission_sha256, now,
     admission-bridge binds them to ``trusted_policy_hash`` and re-checks the
     window at ``begin`` time, after the five locks are held. The digest that
     fixes plan, scopes and lease is the bound one, never a caller claim.
+
+    ``clock()`` is read again by the bridge AFTER the five locks are held (and
+    once more before the flight), so a window that closed while waiting for the
+    locks is denied; there is no fixed ``now``. Pass exactly one of ``runner``
+    or ``runner_factory``: the factory receives the HELD plane (for example
+    ``lambda plane: adapters.held_runner(plane, run)``) so the process effect can
+    only run while the locks and lease are held.
+
+    If the plane cannot be closed cleanly AFTER the flight ended, the durable
+    journal is the source of truth and the code says how the flight ended:
+    ``ENGINE_CLOSE_FAILED_AFTER_APPLIED`` / ``_ROLLED_BACK`` / ``_FLIGHT_STOP``.
     """
-    for adapter in (runner, scope_factory, settle, external_gate):
+    if not callable(clock) or (runner is None) == (runner_factory is None):
+        raise Stop("ENGINE_ADAPTER_INVALID")
+    for adapter in (runner or runner_factory, scope_factory, settle, external_gate):
         if not callable(adapter):
             raise Stop("ENGINE_ADAPTER_INVALID")
     try:
         bound = bridge.BoundJournal(
             flight.journal, admission_bytes, approval_bytes,
-            trusted_policy_hash=trusted_policy_hash)
+            trusted_policy_hash=trusted_policy_hash, clock=clock)
+        first = clock()
     except Exception:
         raise Stop("ENGINE_ADMISSION_INVALID") from None
+    ended = {"how": None}
     try:
         with locks.synthetic_flight(
-                bound, root, admission, admission_sha256, now,
+                bound, root, admission, admission_sha256, first,
                 synthetic_lock_dir=synthetic_lock_dir) as plane:
             plane.assert_held()
             lease = plane.lease
+            if runner_factory is not None:
+                try:
+                    runner = runner_factory(plane)
+                except Exception:
+                    raise Stop("ENGINE_ADAPTER_INVALID") from None
+                if not callable(runner):
+                    raise Stop("ENGINE_ADAPTER_INVALID")
             if bound.last_binding is None or \
                     bound.last_binding["admission_sha256"] != admission_sha256:
                 raise Stop("ENGINE_ADMISSION_UNBOUND")
@@ -113,13 +135,21 @@ def run_synthetic(*, root, admission, admission_sha256, now,
                     lease, plan, switch_api=forward.switch_api,
                     switch_web=forward.switch_web,
                     rollback=backward.switch_all, observe=observe,
-                    gate=held_gate, now=now, checkpoint=checkpoint)
+                    gate=held_gate, now=clock(), checkpoint=checkpoint)
+                ended["how"] = result["status"]
                 plane.assert_held()
                 return result
             except flight.Stop:
+                ended["how"] = ended["how"] or "FLIGHT_STOP"
                 raise
             except Exception:
+                ended["how"] = ended["how"] or "FLIGHT_STOP"
                 raise Stop("ENGINE_FLIGHT_FAILED") from None
+    except locks.Stop as exc:
+        if str(exc) == "PLANE_JOURNAL_CLOSE_FAILED" and ended["how"] in (
+                "APPLIED", "ROLLED_BACK", "FLIGHT_STOP"):
+            raise Stop("ENGINE_CLOSE_FAILED_AFTER_" + ended["how"]) from None
+        raise Stop("ENGINE_PLANE_DENIED") from None
     except (flight.Stop, Stop):
         raise
     except Exception:
