@@ -116,6 +116,11 @@ class HealthTests(unittest.TestCase):
             "foreign endpoint": dict(doc, token_endpoint="https://evil.example/identity/t"),
             "outside identity": dict(doc, jwks_uri=O + "/other/certs"),
             "missing": {k: v for k, v in doc.items() if k != "jwks_uri"},
+            "other realm jwks": dict(
+                doc, jwks_uri=O + "/identity/realms/otro/protocol/openid-connect/certs"),
+            "other realm auth": dict(
+                doc, authorization_endpoint=O + "/identity/realms/pmgm2/auth"),
+            "realm prefix only": dict(doc, token_endpoint=O + "/identity/realms/pmgm"),
         }
         for label, variant in variants.items():
             with self.subTest(case=label):
@@ -146,10 +151,18 @@ class HealthTests(unittest.TestCase):
         with self.assertRaisesRegex(health.Stop, "^HEALTH_FETCH_INVALID$"):
             health.build(object())
         for origin in ("http://x.example", "https://x.example/path", "https://X.example",
-                       "https://x.example:8443", "", 5):
+                       "https://x.example:8443", "", 5, "https://qa-falso.example",
+                       O + "/", O.replace("sistema", "otro")):
             with self.subTest(origin=origin), \
                     self.assertRaisesRegex(health.Stop, "^HEALTH_ORIGIN_INVALID$"):
                 health.build(self.fetch, origin)
+
+    def test_a_foreign_but_well_formed_origin_cannot_pass_even_with_matching_pages(self):
+        foreign = "https://qa-falso.example"
+        pages = {url.replace(O, foreign): body.replace(O.encode(), foreign.encode())
+                 for url, body in good_pages().items()}
+        with self.assertRaisesRegex(health.Stop, "^HEALTH_ORIGIN_INVALID$"):
+            health.build(Fetch(pages), foreign)
 
     def test_errors_never_echo_external_text(self):
         fetch = Fetch()

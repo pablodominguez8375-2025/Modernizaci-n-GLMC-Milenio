@@ -10,13 +10,13 @@ json and re (no network, process, environment or Docker client). Passing these t
 the contract against fakes, never a physical result or permission to APPLY.
 
 Contract mirrored from the existing operators (same paths and strictness):
-* origin ``https://sistema.granlogiamixta.cl``; every URL is built here from a
+* fixed origin ``https://sistema.granlogiamixta.cl`` (``build`` refuses any other); every URL is built here from a
   fixed path list, never from external text;
 * status exactly 200 and ``final_url == url`` (a redirect is a failure);
 * ``/health/web`` body is ``ok``; ``/health/ready`` is exactly
   ``{"status": "ready", "database": "postgresql"}``;
 * OIDC discovery for realm ``pmgm`` has the exact issuer and every endpoint
-  under the same origin ``/identity/``;
+  under the SAME realm ``/identity/realms/pmgm/`` of the fixed origin;
 * ``/qa-version.json`` is exactly ``{"environment": "QA_SYNTHETIC",
   "source_sha": <40 lowercase hex>}``.
 Any exception, wrong type, oversize body, duplicate JSON key or NaN yields a
@@ -27,7 +27,6 @@ import re
 
 STATUS = "HEALTH_PROVIDER_NOT_AUTHENTICATED_NOT_AUTHORIZED_FOR_PHYSICAL_APPLY"
 ORIGIN = "https://sistema.granlogiamixta.cl"
-ORIGIN_PATTERN = re.compile(r"https://[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 HOME, WEB, READY = "/", "/health/web", "/health/ready"
 OIDC = "/identity/realms/pmgm/.well-known/openid-configuration"
@@ -69,7 +68,7 @@ def build(fetch, origin=ORIGIN):
     """Return ``(health_check, served_web_revision)`` over the injected fetch."""
     if not callable(fetch):
         raise Stop("HEALTH_FETCH_INVALID")
-    if type(origin) is not str or ORIGIN_PATTERN.fullmatch(origin) is None:
+    if origin != ORIGIN:  # the origin is fixed; no caller-supplied authority
         raise Stop("HEALTH_ORIGIN_INVALID")
 
     def get(path, limit):
@@ -105,7 +104,7 @@ def build(fetch, origin=ORIGIN):
             raise Stop("HEALTH_OIDC_ISSUER_INVALID")
         for key in OIDC_ENDPOINTS:
             value = doc.get(key)
-            if type(value) is not str or not value.startswith(origin + "/identity/"):
+            if type(value) is not str or not value.startswith(origin + ISSUER_PATH + "/"):
                 raise Stop("HEALTH_OIDC_ENDPOINT_INVALID")
 
     def checks():
