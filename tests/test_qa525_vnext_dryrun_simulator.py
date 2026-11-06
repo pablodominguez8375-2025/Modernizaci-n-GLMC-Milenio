@@ -120,6 +120,18 @@ class InertDryRunContractTests(unittest.TestCase):
         with self.assertRaisesRegex(sim.Stop, "^DRYRUN_VERIFICATION_REJECTED$"):
             self.replay("rollback", mutate=tamper)
 
+    def test_verifying_stages_cannot_be_advanced_by_a_supplied_claim(self):
+        for mode, stage in (("apply", "VERIFYING"),
+                            ("rollback", "ROLLBACK_VERIFYING")):
+            b, t, p, shots, claims = fixture(mode)
+            claims[stage] = plan.evidence(p, stage, serial=9)
+            with self.subTest(mode=mode), \
+                    self.assertRaisesRegex(sim.Stop, "^DRYRUN_INPUT_SET_INVALID$"):
+                sim.replay(plan.mod, check.mod, b, t, p, mode=mode,
+                           observations=shots, intents=claims)
+        self.assertNotIn("VERIFYING", sim.APPLY_INTENTS)
+        self.assertNotIn("ROLLBACK_VERIFYING", sim.ROLLBACK_INTENTS)
+
     def test_reject_bad_type_and_stage_without_source_echo(self):
         b, t, p, shots, claims = fixture()
         with self.assertRaisesRegex(sim.Stop, "^DRYRUN_MODE_INVALID$"):
