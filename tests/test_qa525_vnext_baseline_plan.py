@@ -11,7 +11,8 @@ spec.loader.exec_module(mod)
 
 DEP = ("keycloak", "postgres", "minio", "gateway", "clamav")
 ONESHOT = ("db-grants", "migrator", "minio-init")
-EVIDENCE = "sha256:" + "f" * 64
+NONCE = "n" * 64
+ADMISSION_SHA = "sha256:" + "a" * 64
 
 
 def baseline():
@@ -41,10 +42,25 @@ def target():
     }
 
 
+def make_plan(base=None, goal=None, nonce=NONCE, admission=ADMISSION_SHA):
+    return mod.prepare(base if base is not None else baseline(),
+                       goal if goal is not None else target(),
+                       nonce=nonce, admission_sha256=admission)
+
+
+def evidence(plan, stage, serial=None):
+    idx = serial if serial is not None else len(plan["events"]) + 1
+    return {"kind": mod.PROOF_KINDS[stage], "stage": stage,
+            "nonce": plan["nonce"], "admission_sha256": plan["admission_sha256"],
+            "baseline_sha256": plan["baseline_sha256"],
+            "target_sha256": plan["target_sha256"],
+            "evidence_sha256": "sha256:" + format(idx, "064x")}
+
+
 class BaselinePlanTests(unittest.TestCase):
     def test_valid_baseline_and_target_exact_sets_and_digests(self):
         b, t = baseline(), target()
-        p = mod.prepare(b, t)
+        p = make_plan(b, t)
         self.assertEqual(mod.validate(p), "APPLYING")
         self.assertEqual(p["baseline_sha256"], mod.validate_baseline(b))
         self.assertEqual(p["target_sha256"], mod.validate_target(b, t))
@@ -54,44 +70,88 @@ class BaselinePlanTests(unittest.TestCase):
         self.assertNotEqual(b, p["baseline"])
 
     def test_every_monotonic_stage_without_terminal_applied(self):
-        p = mod.prepare(baseline(), target())
+        p = make_plan()
         stages = ("API_SWITCHING", "API_VERIFIED", "WEB_SWITCHING",
                   "WEB_VERIFIED", "VERIFYING")
         for stage in stages:
             old = copy.deepcopy(p)
-            p = mod.advance(p, stage, EVIDENCE)
+            p = mod.advance(p, stage, evidence(p, stage))
             self.assertEqual(mod.validate(p), stage)
             self.assertEqual(len(p["events"]), stages.index(stage) + 1)
             self.assertNotEqual(p["chain_sha256"], old["chain_sha256"])
         with self.assertRaises(mod.Stop):
-            mod.advance(p, "APPLIED", EVIDENCE)
+            mod.advance(p, "APPLIED", {})
         with self.assertRaises(mod.Stop):
-            mod.advance(p, "ROLLED_BACK", EVIDENCE)
+            mod.advance(p, "ROLLED_BACK", {})
         with self.assertRaises(mod.Stop):
-            mod.advance(p, "VERIFYING", EVIDENCE)
+            mod.advance(p, "VERIFYING", evidence(p, "VERIFYING"))
 
     def test_rollback_required_is_a_terminal_block_on_replay(self):
-        p = mod.prepare(baseline(), target())
-        failed = mod.advance(p, "RECOVERY_REQUIRED", EVIDENCE)
+        p = make_plan()
+        failed = mod.advance(p, "RECOVERY_REQUIRED", evidence(p, "RECOVERY_REQUIRED"))
         self.assertEqual(mod.validate(failed), "RECOVERY_REQUIRED")
         with self.assertRaises(mod.Stop):
-            mod.advance(failed, "API_SWITCHING", EVIDENCE)
+            mod.advance(failed, "API_SWITCHING", evidence(failed, "API_SWITCHING"))
         with self.assertRaises(mod.Stop):
-            mod.advance(failed, "RECOVERY_REQUIRED", EVIDENCE)
+            mod.advance(failed, "RECOVERY_REQUIRED", evidence(failed, "RECOVERY_REQUIRED"))
         self.assertEqual(mod.validate(p), "APPLYING")
 
     def test_out_of_order_duplicate_invalid_stage_rejected(self):
-        p = mod.prepare(baseline(), target())
+        p = make_plan()
         for stage in ("WEB_SWITCHING", "WEB_VERIFIED", "VERIFYING",
                       "APPLYING", "APPLIED", "ROLLED_BACK", 1, None):
             with self.subTest(stage=stage), self.assertRaises(mod.Stop):
-                mod.advance(p, stage, EVIDENCE)
-        first = mod.advance(p, "API_SWITCHING", EVIDENCE)
+                mod.advance(p, stage, evidence(p, stage))
+        first = mod.advance(p, "API_SWITCHING", evidence(p, "API_SWITCHING"))
         with self.assertRaises(mod.Stop):
-            mod.advance(first, "API_SWITCHING", EVIDENCE)
-        for proof in ("bad", True, "", None, "sha256:" + "x" * 64):
-            with self.subTest(proof=proof), self.assertRaises(mod.Stop):
-                mod.advance(first, "API_VERIFIED", proof)
+            mod.advance(first, "API_SWITCHING", evidence(first, "API_SWITCHING"))
+        for invalid_proof in ("bad", True, "", None, "sha256:" + "x" * 64, {}):
+            with self.subTest(proof=invalid_proof), self.assertRaises(mod.Stop):
+                mod.advance(first, "API_VERIFIED", invalid_proof)
+        with self.assertRaisesRegex(mod.Stop, "PLAN_PROOF_REUSED"):
+            mod.advance(first, "API_VERIFIED", evidence(first, "API_VERIFIED", 1))
+
+    def test_rollback_is_recorded_before_any_mutation(self):
+        stages = ("API_SWITCHING", "API_VERIFIED", "WEB_SWITCHING",
+                  "WEB_VERIFIED", "VERIFYING")
+        for index, pause in enumerate(stages):
+            p = make_plan()
+            for stage in stages[:index + 1]:
+                p = mod.advance(p, stage, evidence(p, stage))
+            with self.subTest(stage=pause):
+                rollback = mod.advance(p, "ROLLING_BACK", evidence(p, "ROLLING_BACK"))
+                self.assertEqual(mod.validate(rollback), "ROLLING_BACK")
+                checked = mod.advance(rollback, "ROLLBACK_VERIFYING",
+                                      evidence(rollback, "ROLLBACK_VERIFYING"))
+                self.assertEqual(mod.validate(checked), "ROLLBACK_VERIFYING")
+                with self.assertRaises(mod.Stop):
+                    mod.advance(checked, "WEB_SWITCHING", evidence(checked, "WEB_SWITCHING"))
+                with self.assertRaises(mod.Stop):
+                    mod.advance(checked, "ROLLED_BACK", {})
+                self.assertEqual(mod.validate(p), pause)
+        p = make_plan()
+        with self.assertRaises(mod.Stop):
+            mod.advance(p, "ROLLING_BACK", evidence(p, "ROLLING_BACK"))
+
+    def test_structured_proof_binds_nonce_admission_target(self):
+        p = make_plan()
+        for field, changed in (("nonce", "z" * 64),
+                               ("admission_sha256", "sha256:" + "b" * 64),
+                               ("target_sha256", "sha256:" + "d" * 64),
+                               ("kind", "WEB_SWITCHED")):
+            bad = evidence(p, "API_SWITCHING")
+            bad[field] = changed
+            with self.subTest(field=field), self.assertRaises(mod.Stop):
+                mod.advance(p, "API_SWITCHING", bad)
+        with self.assertRaises(mod.Stop):
+            make_plan(nonce="../unsafe")
+        with self.assertRaises(mod.Stop):
+            make_plan(admission="not-a-digest")
+        stage = mod.advance(p, "API_SWITCHING", evidence(p, "API_SWITCHING"))
+        bad = copy.deepcopy(stage)
+        bad["nonce"] = "z" * 64
+        with self.assertRaises(mod.Stop):
+            mod.validate(bad)
 
     def test_wrong_services_and_incomplete_oneshots_refused(self):
         for f in (
@@ -127,7 +187,7 @@ class BaselinePlanTests(unittest.TestCase):
                 mod.validate_target(b, t)
 
     def test_tampered_baseline_target_and_checksum_detected(self):
-        p = mod.prepare(baseline(), target())
+        p = make_plan()
         for f in (
             lambda x: x["baseline"]["images"].update(api="sha256:" + "e" * 64),
             lambda x: x["target"]["images"].update(web="sha256:" + "e" * 64),
@@ -135,7 +195,7 @@ class BaselinePlanTests(unittest.TestCase):
             lambda x: x.update(may_apply=True),
             lambda x: x.update(external_runtime_verified=True),
             lambda x: x["events"].append({"from": "APPLYING", "to": "VERIFYING",
-                                         "evidence_sha256": EVIDENCE}),
+                                         "evidence_sha256": "sha256:" + "f" * 64}),
             lambda x: x.update(chain_sha256="sha256:" + "0" * 64),
         ):
             changed = copy.deepcopy(p)
