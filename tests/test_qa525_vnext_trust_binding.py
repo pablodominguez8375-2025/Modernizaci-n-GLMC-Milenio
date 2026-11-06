@@ -93,6 +93,11 @@ class TrustBindingContractTests(unittest.TestCase):
                   "sponsor_approved_here", "may_apply", "may_install"):
             self.assertIs(r[k], False)
 
+    def test_out_of_range_number_is_a_stop_not_a_valueerror(self):
+        raw = canonical(self.admission).rstrip(b"\n")[:-1] + b', "x": 1e999}\n'
+        with self.assertRaisesRegex(binding.Stop, "BINDING_ADMISSION_NONCANONICAL"):
+            binding.bind(raw, canonical(self.anchor), trusted_policy_hash=POLICY, now=NOW)
+
     def test_admission_any_bit_changed_rejected_even_if_rehashed_by_attacker(self):
         mutations = (
             ("artifact_sha256", DIG_C), ("signed_installable_sha256", DIG_A),

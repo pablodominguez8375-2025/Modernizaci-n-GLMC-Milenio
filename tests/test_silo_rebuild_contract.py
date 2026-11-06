@@ -38,6 +38,57 @@ class SiloRebuildContractTests(unittest.TestCase):
             with self.subTest(target=index, package=package), self.assertRaises(ValueError):
                 rebuild.verify_go_inventory(changed)
 
+    def test_scanner_download_502_503_504_retries_only_twice(self):
+        import urllib.error
+        def transient(code):
+            return urllib.error.HTTPError('https://scanner.invalid/private', code, 'gateway',
+                                          {'Authorization': 'private'}, None)
+        series = iter([transient(504), transient(503), b'pinned-scanner-bytes'])
+        calls, waits = [], []
+        def fetch(url, maximum):
+            calls.append((url, maximum))
+            result = next(series)
+            if isinstance(result, Exception):
+                raise result
+            return result
+        data = rebuild.fetch_pinned_scanner_bytes(
+            fetch, 'https://scanner.invalid/download', sleeper=waits.append)
+        self.assertEqual(data, b'pinned-scanner-bytes')
+        self.assertEqual(len(calls), 3)
+        self.assertEqual([1, 3], waits)
+        self.assertEqual([128 * 1024 * 1024] * 3,
+                         [maximum for _, maximum in calls])
+
+    def test_scanner_download_non_transient_status_never_retries(self):
+        import urllib.error
+        for status in (400, 401, 403, 404, 409, 429, 500):
+            calls, waits = [], []
+            def fetch(url, maximum):
+                calls.append(status)
+                raise urllib.error.HTTPError('https://scanner.invalid/secret', status,
+                                            'not allowed', None, None)
+            with self.subTest(status=status), self.assertRaises(urllib.error.HTTPError):
+                rebuild.fetch_pinned_scanner_bytes(fetch, 'https://scanner.invalid',
+                                                  sleeper=waits.append)
+            self.assertEqual(calls, [status])
+            self.assertEqual(waits, [])
+
+    def test_scanner_download_exhausted_504_is_still_failed_closed(self):
+        import urllib.error
+        calls, waits = [], []
+        def fetch(url, maximum):
+            calls.append(maximum)
+            raise urllib.error.HTTPError('https://scanner.invalid/secret', 504,
+                                        'upstream timeout', None, None)
+        with self.assertRaises(urllib.error.HTTPError) as exc:
+            rebuild.fetch_pinned_scanner_bytes(fetch, 'https://scanner.invalid',
+                                              sleeper=waits.append)
+        self.assertEqual(exc.exception.code, 504)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(waits, [1, 3])
+        self.assertEqual(rebuild.failure_details(exc.exception),
+                         {'type': 'HTTPError', 'http_status': 504})
+
     def test_failure_details_do_not_disclose_urls_or_headers(self):
         import urllib.error
         error = urllib.error.HTTPError('https://private.invalid/token', 403, 'secret', {'Authorization': 'secret'}, None)

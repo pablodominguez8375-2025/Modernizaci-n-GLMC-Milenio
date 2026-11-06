@@ -81,7 +81,8 @@ def _layers(layers, code):
         if not 0 < len(paths) <= MAX_LAYERS or len(set(paths)) != len(paths):
             raise Stop(code)
         for path in paths:
-            if type(path) is not str or not path.startswith("/") or ".." in path.split("/"):
+            if (type(path) is not str or not path.startswith("/") or "\0" in path
+                    or any(part in ("", ".", "..") for part in path[1:].split("/"))):
                 raise Stop(code)
 
 

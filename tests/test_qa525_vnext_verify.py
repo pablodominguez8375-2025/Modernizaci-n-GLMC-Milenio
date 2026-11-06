@@ -235,6 +235,14 @@ class VerifierTests(unittest.TestCase):
         moved["dependencies"] = {"db": "9" * 12, "keycloak": "e" * 12}
         self.assertEqual(mod.verify(Fake(moved), baseline(), "API_SWITCHED", target())["code"], "DEPENDENCY_CHANGED")
 
+    def test_layer_paths_reject_dot_double_slash_trailing_slash_and_nul(self):
+        for bad in ("/w/./base.yml", "/w//base.yml", "/w/base.yml/", "/w/../base.yml", "/w/b\0.yml", "/"):
+            with self.subTest(bad=bad):
+                broken = baseline()
+                broken["layers"]["api"] = [bad]
+                with self.assertRaises(mod.Stop):
+                    mod.validate_baseline(broken)
+
     def test_adapter_text_never_reaches_the_report(self):
         class Leaky:
             def observe(self):

@@ -1,5 +1,7 @@
 """Offline, no-secrets safety tests for QA auto-agent readiness."""
+import importlib
 import importlib.util
+import inspect
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -8,21 +10,23 @@ from email.message import Message
 
 # Ensure QA PAT regressions run in the existing protected readiness CI job.
 from test_qa525_pat_auth import PatClientTests  # noqa: F401
-from test_qa525_vnext_cache import (  # noqa: F401
-    AppliedPostcheck,
-    OfflineAdmission,
-    StaticContract,
-    SyncDownload,
-    TrustedOpsAndCache,
-    TrustedAncestorContract,
-)
-from test_qa525_vnext_journal import DurableJournalContract  # noqa: F401
 from test_qa525_single_plane_contract import SinglePlaneContractTests  # noqa: F401
-from test_qa525_vnext_trust_binding import TrustBindingContractTests  # noqa: F401
-from test_qa525_vnext_baseline_plan import BaselinePlanTests  # noqa: F401
-from test_qa525_vnext_verify import VerifierTests  # noqa: F401
-from test_qa525_vnext_containment import ContainmentTests, DeniedNetworkTests  # noqa: F401
-from test_qa525_vnext_integration_contract import IntegratedVNextContractTests  # noqa: F401
+
+# Auto-discover every vNext suite: a new tests/test_qa525_vnext_*.py is picked up
+# here without editing this shared file, so parallel PRs no longer conflict on a
+# one-import-per-class list. An import error or a duplicated class name fails
+# loudly; it is never skipped.
+_HERE = Path(__file__).resolve().parent
+for _path in sorted(_HERE.glob("test_qa525_vnext_*.py")):
+    _module = importlib.import_module(_path.stem)
+    for _name, _case in inspect.getmembers(_module, inspect.isclass):
+        if issubclass(_case, unittest.TestCase) and _case.__module__ == _module.__name__:
+            if _name in globals():
+                raise ImportError("duplicate vNext test class name: " + _name)
+            globals()[_name] = _case
+# Loop variables must not stay as module attributes: unittest would collect the
+# last class twice under its leftover alias.
+del _path, _module, _name, _case
 
 FILE = Path(__file__).resolve().parents[1] / "scripts/qa/qa-agent-readiness.py"
 spec = importlib.util.spec_from_file_location("qa_agent_readiness", FILE)
