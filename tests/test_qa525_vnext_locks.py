@@ -99,6 +99,27 @@ class LockPlaneTests(unittest.TestCase):
         self.dir.chmod(0o700)
         self.assertEqual(jt.mod.inspect(self.fx.root, jt.NONCE), "NOT_STARTED")
 
+    def test_foreign_root_or_admission_denied_before_journal_begin(self):
+        journal = mock.Mock()
+        journal.begin.side_effect = AssertionError("journal.begin called")
+        with tempfile.TemporaryDirectory() as foreign:
+            foreign_root = Path(foreign) / "authoritative"
+            foreign_root.mkdir(mode=0o700)
+            foreign_root.chmod(0o700)
+            with self.assertRaisesRegex(plane.Stop, "^PLANE_SYNTHETIC_SCOPE_INVALID$"):
+                with self.attempt(journal=journal)._recreate_cm():
+                    self.fail("foreign journal root accepted")
+            foreign_admission = Path(foreign) / "admission.json"
+            foreign_admission.write_bytes(self.fx.admission.read_bytes())
+            foreign_admission.chmod(0o600)
+            with self.assertRaisesRegex(plane.Stop, "^PLANE_SYNTHETIC_SCOPE_INVALID$"):
+                with plane.synthetic_flight(
+                        journal, self.fx.root, foreign_admission, self.fx.digest,
+                        jt.NOW, synthetic_lock_dir=self.dir):
+                    self.fail("foreign admission accepted")
+        journal.begin.assert_not_called()
+        self.assertEqual(jt.mod.inspect(self.fx.root, jt.NONCE), "NOT_STARTED")
+
     def test_symlink_and_hardlink_lock_file_denied(self):
         p = self.lockfile(0)
         copy = self.dir / "real-lock-private"
