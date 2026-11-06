@@ -30,7 +30,7 @@ class Stop(Exception):
 
 
 def _private_dir(path):
-    if type(path) is not Path or not path.is_absolute() or ".." in path.parts:
+    if not isinstance(path, Path) or not path.is_absolute() or ".." in path.parts:
         raise Stop("PLANE_SYNTHETIC_DIR_INVALID")
     try:
         info = path.lstat()
@@ -153,6 +153,8 @@ def synthetic_flight(journal, root, admission, admission_sha256, now, *,
     must implement a separately reviewed root-owned wrapper before any
     physical use. The journal may consume a nonce in an isolated fixture.
     """
+    if synthetic_lock_dir is None or not isinstance(synthetic_lock_dir, (Path, str)):
+        raise Stop("PLANE_SYNTHETIC_DIR_REQUIRED")
     directory = Path(synthetic_lock_dir)
     _private_dir(directory)
     if not (callable(getattr(journal, "begin", None))
