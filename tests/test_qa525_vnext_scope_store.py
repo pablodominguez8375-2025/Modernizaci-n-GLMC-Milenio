@@ -60,7 +60,8 @@ class ScopeStoreTests(unittest.TestCase):
         data["units"].reverse()
         self.path.write_text(json.dumps(data))
         self.path.chmod(0o600)
-        with self.assertRaisesRegex(store.Stop, "^SCOPE_UNIT_NOT_RECORDED$"):
+        # Noncanonical/tampered bytes are rejected before any semantic check.
+        with self.assertRaisesRegex(store.Stop, "^SCOPE_MANIFEST_INVALID$"):
             store.require_recorded(self.lease, self.fx.digest, self.units[0])
         self.path.chmod(0o644)
         with self.assertRaisesRegex(store.Stop, "^SCOPE_MANIFEST_UNTRUSTED$"):
@@ -76,6 +77,41 @@ class ScopeStoreTests(unittest.TestCase):
         os.link(real, self.path)
         with self.assertRaisesRegex(store.Stop, "^SCOPE_MANIFEST_UNTRUSTED$"):
             store.require_recorded(self.lease, self.fx.digest, self.units[0])
+
+    def test_duplicate_key_with_same_value_is_rejected(self):
+        store.initialize(self.lease, self.fx.digest, self.units)
+        original = self.path.read_bytes()
+        changed = original.replace(
+            b'"may_apply":false', b'"may_apply":false,"may_apply":false')
+        self.assertNotEqual(changed, original)
+        self.path.write_bytes(changed)
+        self.path.chmod(0o600)
+        with self.assertRaisesRegex(store.Stop, "^SCOPE_MANIFEST_INVALID$"):
+            store.require_recorded(self.lease, self.fx.digest, self.units[0])
+        self.path.write_bytes(original)
+        self.assertEqual(
+            store.require_recorded(self.lease, self.fx.digest, self.units[0]),
+            json.loads(original)["manifest_sha256"])
+
+    def test_equivalent_but_noncanonical_bytes_and_nonfinite_are_rejected(self):
+        store.initialize(self.lease, self.fx.digest, self.units)
+        original = self.path.read_bytes()
+        variants = (
+            b" " + original,
+            original.rstrip(bytes([10])),
+            original.replace(b",", b", ", 1),
+            original.replace(b'"may_apply":false', b'"may_apply":NaN'),
+            original.replace(b'"may_apply":false', b'"may_apply":1e999'),
+        )
+        for changed in variants:
+            with self.subTest(changed=changed[:60]):
+                self.assertNotEqual(changed, original)
+                self.path.write_bytes(changed)
+                self.path.chmod(0o600)
+                with self.assertRaisesRegex(store.Stop, "^SCOPE_MANIFEST_INVALID$"):
+                    store.require_recorded(self.lease, self.fx.digest, self.units[0])
+        self.path.write_bytes(original)
+        store.require_recorded(self.lease, self.fx.digest, self.units[0])
 
     def test_source_has_no_runner_network_or_physical_lock_interface(self):
         raw = PATH.read_text(encoding="utf-8")

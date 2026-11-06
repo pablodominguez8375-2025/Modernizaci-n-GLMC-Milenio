@@ -7,6 +7,7 @@ observación, verificación, rollback y terminal.
 
 ## Orden cerrado
 
+0. ligar los bytes de admisión y de aprobación externa (`admission-bridge` + `trust-binding`) con la política confiable; el digest que fija plan, scopes y lease es el ligado, nunca el del llamador, y la ventana se revalida al `begin`;
 1. tomar los cinco locks del fixture privado y después el lease del journal;
 2. capturar una sola vez el baseline y preparar el plan ligado al nonce;
 3. persistir y hacer `fsync` del conjunto exacto de scopes API/WEB;

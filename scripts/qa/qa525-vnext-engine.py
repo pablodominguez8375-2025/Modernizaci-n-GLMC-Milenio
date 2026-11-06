@@ -32,6 +32,7 @@ observer = _load("qa525_vnext_observer_for_engine", "qa525-vnext-observer.py")
 switch = _load("qa525_vnext_switch_for_engine", "qa525-vnext-switch.py")
 locks = _load("qa525_vnext_locks_for_engine", "qa525-vnext-locks.py")
 scopes = _load("qa525_vnext_scope_store_for_engine", "qa525-vnext-scope-store.py")
+bridge = _load("qa525_vnext_admission_bridge_for_engine", "qa525-vnext-admission-bridge.py")
 
 # One journal module owns every lease consumer.
 scopes.journal = flight.journal
@@ -40,6 +41,7 @@ if scopes.journal is not flight.journal:  # pragma: no cover
 
 
 def run_synthetic(*, root, admission, admission_sha256, now,
+                  admission_bytes, approval_bytes, trusted_policy_hash,
                   synthetic_lock_dir, reader, target, project, workdir,
                   env_file, runner, scope_factory, settle, external_gate,
                   samples=3, checkpoint=None):
@@ -48,16 +50,31 @@ def run_synthetic(*, root, admission, admission_sha256, now,
     ``external_gate(stage)`` stands in for the independently authenticated
     OPS/APP/Sponsor/G6 decision.  This function does not authenticate it and
     therefore every returned result remains non-authoritative.
+
+    ``admission_bytes`` / ``approval_bytes`` must be the exact bytes of the
+    admission file and of the externally AUTHENTICATED approval anchor; the
+    admission-bridge binds them to ``trusted_policy_hash`` and re-checks the
+    window at ``begin`` time, after the five locks are held. The digest that
+    fixes plan, scopes and lease is the bound one, never a caller claim.
     """
     for adapter in (runner, scope_factory, settle, external_gate):
         if not callable(adapter):
             raise Stop("ENGINE_ADAPTER_INVALID")
     try:
+        bound = bridge.BoundJournal(
+            flight.journal, admission_bytes, approval_bytes,
+            trusted_policy_hash=trusted_policy_hash)
+    except Exception:
+        raise Stop("ENGINE_ADMISSION_INVALID") from None
+    try:
         with locks.synthetic_flight(
-                flight.journal, root, admission, admission_sha256, now,
+                bound, root, admission, admission_sha256, now,
                 synthetic_lock_dir=synthetic_lock_dir) as plane:
             plane.assert_held()
             lease = plane.lease
+            if bound.last_binding is None or \
+                    bound.last_binding["admission_sha256"] != admission_sha256:
+                raise Stop("ENGINE_ADMISSION_UNBOUND")
             try:
                 plan = observer.capture_plan(
                     reader, target, nonce=lease.nonce,
