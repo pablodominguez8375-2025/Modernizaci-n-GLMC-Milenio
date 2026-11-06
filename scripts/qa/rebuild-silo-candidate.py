@@ -128,6 +128,7 @@ VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad
 SERVER_VERSION = 'v0.0.0-20261027000322-dd905b29f45d'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@' + SERVER_VERSION
 SERVER_GO_JOSE_VERSION = 'v4.1.6'
+XNET_SECURITY_FLOOR = 'v0.62.0'  # CVE-2026-78661, required in both Go binaries
 
 
 def fixed_component_vex(evidence, image):
@@ -246,6 +247,12 @@ def verify_go_inventory(inventory):
         if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
                 for p in rows[0].get('Packages', [])):
             raise ValueError('Go toolchain missing or incorrect in scan')
+        # Authoritative built-package inventory, not a source-text declaration.
+        # Keep this independent of the mutable CVE database and all VEX rules.
+        xnet = [p.get('Version') for p in rows[0].get('Packages', [])
+                if p.get('Name') == 'golang.org/x/net']
+        if xnet != [XNET_SECURITY_FLOOR]:
+            raise ValueError('unsafe or missing golang.org/x/net in Go binary')
 
 
 def main():
