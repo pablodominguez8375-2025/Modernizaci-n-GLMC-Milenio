@@ -42,6 +42,27 @@ def _private_dir(path):
         raise Stop("PLANE_SYNTHETIC_DIR_UNTRUSTED")
 
 
+def _synthetic_fixture(directory, root, admission):
+    """Bind every mutable path to one private, direct-child test fixture."""
+    fixture = directory.parent
+    _private_dir(fixture)
+    root, admission = Path(root), Path(admission)
+    expected = (fixture / "locks", fixture / "authoritative",
+                fixture / "admission.json")
+    if (directory, root, admission) != expected:
+        raise Stop("PLANE_SYNTHETIC_SCOPE_INVALID")
+    _private_dir(root)
+    try:
+        info = admission.lstat()
+    except OSError:
+        raise Stop("PLANE_SYNTHETIC_SCOPE_INVALID") from None
+    if (not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)
+            or info.st_nlink != 1 or info.st_uid != os.geteuid()
+            or info.st_gid != os.getegid()
+            or stat.S_IMODE(info.st_mode) != 0o600):
+        raise Stop("PLANE_SYNTHETIC_SCOPE_INVALID")
+
+
 def _file_stat(path):
     try:
         st = path.lstat()
@@ -157,6 +178,7 @@ def synthetic_flight(journal, root, admission, admission_sha256, now, *,
         raise Stop("PLANE_SYNTHETIC_DIR_REQUIRED")
     directory = Path(synthetic_lock_dir)
     _private_dir(directory)
+    _synthetic_fixture(directory, root, admission)
     if not (callable(getattr(journal, "begin", None))
             and callable(getattr(journal, "lease_is_held", None))):
         raise Stop("PLANE_JOURNAL_INVALID")
