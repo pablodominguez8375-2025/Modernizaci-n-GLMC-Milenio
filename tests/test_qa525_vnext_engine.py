@@ -383,6 +383,59 @@ class EngineTests(unittest.TestCase):
         self.assertTrue(all(call.kwargs["now"] == trust.NOW
                             for call in compare.call_args_list))
 
+    def test_g6_requires_native_immutable_bytes_and_pins(self):
+        for key, changed in (
+                ("review_bytes", bytearray(self.review_bytes)),
+                ("receipt_bytes", memoryview(self.receipt_bytes)),
+                ("restore_bytes", [self.restore_bytes]),
+                ("pinned_review_sha256", b"sha256:" + b"f" * 64),
+                ("observed_archive_sha256", ["sha256:" + "a" * 64])):
+            with self.subTest(field=key):
+                bad = dict(self.g6_evidence, **{key: changed})
+                with self.assertRaisesRegex(
+                        engine.Stop, "^ENGINE_G6_EVIDENCE_INVALID$"):
+                    self.fly(evidence=bad)
+                self.assertEqual(self.runs, [])
+                self.assertIsNone(self.terminal())
+
+    def test_mutation_inside_compare_uses_frozen_bytes_and_denies(self):
+        real = engine.g6_anchor.compare
+        seen = []
+        tampered = self._raw(dict(self.review, g6_archive_sha256="f" * 64))
+        def poison(**kwargs):
+            seen.append(kwargs["review_bytes"])
+            self.g6_evidence["review_bytes"] = tampered
+            return real(**kwargs)
+        with mock.patch.object(engine.g6_anchor, "compare", side_effect=poison):
+            with self.assertRaisesRegex(
+                    engine.Stop, "^ENGINE_G6_EVIDENCE_DENIED$"):
+                self.fly()
+        self.assertEqual(seen, [self.review_bytes])
+        self.assertEqual(self.runs, [])
+        self.assertFalse((self.fx.root / ("scopes-" + self.nonce + ".json")).exists())
+
+    def test_rollback_remains_available_if_caller_mutates_g6_during_recovery(self):
+        self.fail.add(("web", "target"))
+        tampered = self._raw(dict(self.review, g6_archive_sha256="f" * 64))
+        def external(stage):
+            if stage == "ROLLING_BACK":
+                self.g6_evidence["review_bytes"] = tampered
+            return True
+        result = self.fly(external)
+        self.assertEqual(result["status"], "ROLLED_BACK")
+        self.assertEqual(self.world, {"api": "baseline", "web": "baseline"})
+        self.assertEqual(self.terminal(), "ROLLED_BACK")
+
+    def test_new_execution_intent_must_not_bypass_held_g6(self):
+        with mock.patch.dict(engine.flight.plan_mod.PROOF_KINDS,
+                             {"FUTURE_SWITCHING": "EXECUTION_INTENT"}):
+            with self.assertRaisesRegex(
+                    engine.Stop, "^ENGINE_FORWARD_STAGES_MISMATCH$"):
+                self.fly()
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
+        self.assertFalse((self.fx.root / ("scopes-" + self.nonce + ".json")).exists())
+
     def test_no_physical_or_shell_entrypoint_exists(self):
         raw = PATH.read_text(encoding="utf-8")
         for token in ("import subprocess", "import socket", "urllib", "requests",

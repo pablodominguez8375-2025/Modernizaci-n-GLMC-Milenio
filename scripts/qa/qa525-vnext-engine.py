@@ -12,6 +12,7 @@ bootstrap, real legacy-lock wrapper, runner, metadata/health providers and G6
 """
 import importlib.util
 from pathlib import Path
+from types import MappingProxyType
 
 HERE = Path(__file__).resolve().parent
 
@@ -42,6 +43,9 @@ G6_EVIDENCE_FIELDS = frozenset({
     "pinned_review_sha256", "pinned_receipt_sha256",
     "pinned_restore_sha256", "observed_archive_sha256",
 })
+G6_BYTE_FIELDS = frozenset({"review_bytes", "receipt_bytes", "restore_bytes"})
+G6_DIGEST_FIELDS = G6_EVIDENCE_FIELDS - G6_BYTE_FIELDS
+G6_FORWARD_STAGES = frozenset({"API_SWITCHING", "WEB_SWITCHING"})
 
 # One journal module owns every lease consumer.
 scopes.journal = flight.journal
@@ -74,8 +78,10 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
     ``lambda plane: adapters.held_runner(plane, run)``) so the process effect can
     only run while the locks and lease are held.
 
-    g6_evidence carries raw review/receipt/restore bytes and the exact SHA
-    pins and observed archive SHA. It is rechecked with a freshly read clock
+    g6_evidence is copied into a private, read-only snapshot of immutable
+    bytes and digest strings before use. Caller mutations cause a closed gate.
+    It carries raw review/receipt/restore bytes and exact SHA pins. It is
+    rechecked with a freshly read clock
     inside the held synthetic five-lock + root-lease plane before any factory,
     baseline or runner and before each forward API/WEB intent. Rollback stays
     guarded by locks and external_gate, not by G6 expiry. No authentication
@@ -87,8 +93,23 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
     """
     if not callable(clock) or (runner is None) == (runner_factory is None):
         raise Stop("ENGINE_ADAPTER_INVALID")
+    # No newly added execution intent may silently bypass the G6 check.
+    if (frozenset(stage for stage, kind in flight.plan_mod.PROOF_KINDS.items()
+                  if kind == "EXECUTION_INTENT") != G6_FORWARD_STAGES):
+        raise Stop("ENGINE_FORWARD_STAGES_MISMATCH")
     if type(g6_evidence) is not dict or set(g6_evidence) != G6_EVIDENCE_FIELDS:
         raise Stop("ENGINE_G6_EVIDENCE_INVALID")
+    # Capture only immutable native types. A caller's mutable dict must not
+    # silently change which G6 bytes are consumed while a flight is held.
+    try:
+        source = {key: g6_evidence[key] for key in G6_EVIDENCE_FIELDS}
+        if (any(type(source[key]) is not bytes for key in G6_BYTE_FIELDS)
+                or any(type(source[key]) is not str for key in G6_DIGEST_FIELDS)
+                or source != g6_evidence):
+            raise Stop("ENGINE_G6_EVIDENCE_INVALID")
+        frozen_g6 = MappingProxyType(source)
+    except Exception:
+        raise Stop("ENGINE_G6_EVIDENCE_INVALID") from None
     for adapter in (runner or runner_factory, scope_factory, settle, external_gate):
         if not callable(adapter):
             raise Stop("ENGINE_ADAPTER_INVALID")
@@ -111,23 +132,30 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                 raise Stop("ENGINE_ADMISSION_UNBOUND")
 
             def check_held_g6():
-                """Fresh, locked G6 byte consistency; NEVER host authority."""
+                """Fresh G6 coherence from frozen bytes; NEVER host authority."""
                 try:
                     plane.assert_held()
+                    # Refuse any post-entry mutation of the caller's dict.
+                    if (type(g6_evidence) is not dict
+                            or g6_evidence != frozen_g6):
+                        raise Stop("ENGINE_G6_INPUT_CHANGED")
                     checked = g6_anchor.compare(
                         admission_bytes=admission_bytes,
                         approval_bytes=approval_bytes,
-                        review_bytes=g6_evidence["review_bytes"],
-                        receipt_bytes=g6_evidence["receipt_bytes"],
-                        restore_bytes=g6_evidence["restore_bytes"],
-                        pinned_admission_sha256=g6_evidence["pinned_admission_sha256"],
-                        pinned_approval_sha256=g6_evidence["pinned_approval_sha256"],
-                        pinned_review_sha256=g6_evidence["pinned_review_sha256"],
-                        pinned_receipt_sha256=g6_evidence["pinned_receipt_sha256"],
-                        pinned_restore_sha256=g6_evidence["pinned_restore_sha256"],
-                        observed_archive_sha256=g6_evidence["observed_archive_sha256"],
+                        review_bytes=frozen_g6["review_bytes"],
+                        receipt_bytes=frozen_g6["receipt_bytes"],
+                        restore_bytes=frozen_g6["restore_bytes"],
+                        pinned_admission_sha256=frozen_g6["pinned_admission_sha256"],
+                        pinned_approval_sha256=frozen_g6["pinned_approval_sha256"],
+                        pinned_review_sha256=frozen_g6["pinned_review_sha256"],
+                        pinned_receipt_sha256=frozen_g6["pinned_receipt_sha256"],
+                        pinned_restore_sha256=frozen_g6["pinned_restore_sha256"],
+                        observed_archive_sha256=frozen_g6["observed_archive_sha256"],
                         trusted_policy_hash=trusted_policy_hash, now=clock())
                     plane.assert_held()
+                    if (type(g6_evidence) is not dict
+                            or g6_evidence != frozen_g6):
+                        raise Stop("ENGINE_G6_INPUT_CHANGED")
                     if (checked.get("status") != g6_anchor.STATUS
                             or checked.get("may_apply") is not False
                             or checked.get("may_install") is not False
@@ -169,7 +197,7 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                         return False
                     # Read time AFTER the external gate, nearest to the next
                     # durable forward intent. No expiry check on rollback.
-                    if stage in ("API_SWITCHING", "WEB_SWITCHING"):
+                    if stage in G6_FORWARD_STAGES:
                         check_held_g6()
                     plane.assert_held()
                     return True
