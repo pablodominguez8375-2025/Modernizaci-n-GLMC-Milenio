@@ -70,6 +70,34 @@ class IntegratedVNextContractTests(unittest.TestCase):
         with self.assertRaises(plan.mod.Stop):
             plan.mod.advance(p, "APPLIED", {})
 
+    def test_mid_transaction_checkpoints_bind_observed_api_then_web(self):
+        _, b, t, p = self.make()
+        p = plan.mod.advance(p, "API_SWITCHING", plan.evidence(p, "API_SWITCHING"))
+        api_only = observation(b, t)
+        api_only["images"]["web"] = b["images"]["web"]
+        api_only["layers"]["web"] = copy.deepcopy(b["layers"]["web"])
+        api_only["health"]["web_sha"] = b["web_sha"]
+        api_result = check.mod.verify(Observed(api_only), b, "API_SWITCHED", t)
+        self.assertTrue(api_result["ok"], api_result)
+        api_target = check.mod.expected_target_sha256(b, "API_SWITCHED", t)
+        check.mod.require_ok(api_result, p["baseline_sha256"], "API_SWITCHED", api_target)
+        api_proof = plan.evidence(p, "API_VERIFIED")
+        api_proof["evidence_sha256"] = api_result["result_checksum_sha256"]
+        p = plan.mod.advance(p, "API_VERIFIED", api_proof)
+        p = plan.mod.advance(p, "WEB_SWITCHING", plan.evidence(p, "WEB_SWITCHING"))
+        web_result = check.mod.verify(Observed(observation(b, t)), b, "WEB_SWITCHED", t)
+        self.assertTrue(web_result["ok"], web_result)
+        web_target = check.mod.expected_target_sha256(b, "WEB_SWITCHED", t)
+        check.mod.require_ok(web_result, p["baseline_sha256"], "WEB_SWITCHED", web_target)
+        web_proof = plan.evidence(p, "WEB_VERIFIED")
+        web_proof["evidence_sha256"] = web_result["result_checksum_sha256"]
+        p = plan.mod.advance(p, "WEB_VERIFIED", web_proof)
+        self.assertEqual(plan.mod.validate(p), "WEB_VERIFIED")
+        with self.assertRaises(check.mod.Stop):
+            check.mod.require_ok(api_result, p["baseline_sha256"],
+                                 "WEB_SWITCHED", web_target)
+        self.assertFalse(p["may_apply"])
+
     def test_recovery_plan_and_verifier_agree_without_rollback_authority(self):
         _, b, t, p = self.make()
         p = plan.mod.advance(p, "API_SWITCHING", plan.evidence(p, "API_SWITCHING"))
