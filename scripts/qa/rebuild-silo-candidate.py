@@ -183,11 +183,28 @@ def evaluate_fixed_component(archive, image, evidence, output):
     return blocking_findings(json.loads((output / 'trivy-reviewed.json').read_text()))
 
 
+def fetch_pinned_scanner_bytes(fetch, url, *, sleeper=time.sleep):
+    """Fail-closed bounded retry ONLY for transient scanner-download 502/503/504.
+
+    No mirror, no waiver, no retry of bad checksums, vulnerability findings,
+    signature failures or non-network scanner exits. Caller MUST validate the
+    immutable SHA256 before extracting or executing downloaded bytes.
+    """
+    for attempt in range(3):
+        try:
+            return fetch(url, maximum=128 * 1024 * 1024)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (502, 503, 504) or attempt == 2:
+                raise
+            sleeper((1, 3)[attempt])
+    raise AssertionError('unreachable retry state')
+
+
 def scanner_tools(output):
     spec = importlib.util.spec_from_file_location('silo_supply', ROOT / 'scripts/qa/verify-silo-supply.py')
     supply = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(supply)
-    data = supply.fetch(supply.TRIVY_URL, maximum=128 * 1024 * 1024)
+    data = fetch_pinned_scanner_bytes(supply.fetch, supply.TRIVY_URL)
     if hashlib.sha256(data).hexdigest() != supply.TRIVY_SHA:
         raise ValueError('scanner checksum mismatch')
     archive = output / 'trivy.tgz'
