@@ -116,18 +116,26 @@ def server_patch_evidence(image, output, source):
     return evidence
 
 
-# Reviewed from authenticated Actions artifact12469593117; independently hashed
-# the sole image layer and matched scan/runtime evidence of source93d85516.
-# Phase 2: SHA-256 independently verified from the actual /usr/bin/silo
-# inside the OCI layer archived by Actions run 40738446846 (artifact
-# 12838117399); the docker-save archive digest, raw Trivy report,
-# S3 Select regression and Go build inventory were reviewed separately.
-# Any different rebuilt binary fails closed; never trust the report alone.
-SERVER_BINARY = '08f5df008efad6c1664e931a48a06b6e0ed9a09e0629338b774e8af07120d369'
+# Independent candidate audit for CVE-2026-78661 on 2026-11-06.
+# GitHub Actions run 42294501706, source 6a0b15d0fa562c62338a9810dfa328db78ca6734.
+# Downloaded artifact 13541112611 ZIP sha256 90949cdf5551fbb3a04285e2719d3e174fb5eb28fc12ee9497c65f3b375326e8.
+# Docker save tar sha256 1231d356d3cd4332cff86d5efa03834a9a2c9ba7d9bf7e0f3df5e157973b6775.
+# OCI layer sha256 46b00a558c10b49e1b7eebc12266c00c97a919b80ab4d5892f7783818f5e0c30.
+# Independently streamed usr/bin/silo from that OCI layer and computed SHA256 below.
+# Compared signed baseline Silo evidence artifact 13536030873 against new
+# runtime-binaries-and-rpms.txt: mcli (106 modules) and silo (262 modules)
+# each changed EXACTLY golang.org/x/net v0.61.0 -> v0.62.0, nothing else.
+# Trivy raw SHA256 f6cbc90cf5d173c079b842e31e27949e03abf95dabf8075059aee93df122754d
+# had no CVE-2026-78661 in either binary; minio CVE-2026-39414 remains
+# restricted to pinned source/fix ancestry, parser blobs and binary-linked VEX.
+# IAM/recovery/S3 select regression PASS in ephemeral runner only.
+# This SHA binding NEVER represents a signed release or host GO by itself.
+SERVER_BINARY = '89a4b84b84cb293dbf75702af2bbbb23df87b05ae79803bc6b9df9adf59878eb'
 VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
 SERVER_VERSION = 'v0.0.0-20261027000322-dd905b29f45d'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@' + SERVER_VERSION
 SERVER_GO_JOSE_VERSION = 'v4.1.6'
+XNET_SECURITY_FLOOR = 'v0.62.0'  # CVE-2026-78661, required in both Go binaries
 
 
 def fixed_component_vex(evidence, image):
@@ -246,6 +254,12 @@ def verify_go_inventory(inventory):
         if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
                 for p in rows[0].get('Packages', [])):
             raise ValueError('Go toolchain missing or incorrect in scan')
+        # Authoritative built-package inventory, not a source-text declaration.
+        # Keep this independent of the mutable CVE database and all VEX rules.
+        xnet = [p.get('Version') for p in rows[0].get('Packages', [])
+                if p.get('Name') == 'golang.org/x/net']
+        if xnet != [XNET_SECURITY_FLOOR]:
+            raise ValueError('unsafe or missing golang.org/x/net in Go binary')
 
 
 def main():

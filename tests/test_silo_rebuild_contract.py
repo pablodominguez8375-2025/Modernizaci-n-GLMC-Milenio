@@ -28,15 +28,64 @@ class SiloRebuildContractTests(unittest.TestCase):
             {'Target': 'usr/bin/silo', 'Packages': [
                 {'Name': 'stdlib', 'Version': 'v1.27.3'},
                 {'Name': 'github.com/minio/minio', 'Version': rebuild.SERVER_PURL.rsplit('@', 1)[1]},
-                {'Name': 'github.com/go-jose/go-jose/v4', 'Version': rebuild.SERVER_GO_JOSE_VERSION}]},
-            {'Target': 'usr/bin/mcli', 'Packages': [{'Name': 'stdlib', 'Version': 'v1.27.3'}]},
+                {'Name': 'github.com/go-jose/go-jose/v4', 'Version': rebuild.SERVER_GO_JOSE_VERSION},
+                {'Name': 'golang.org/x/net', 'Version': rebuild.XNET_SECURITY_FLOOR}]},
+            {'Target': 'usr/bin/mcli', 'Packages': [
+                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'golang.org/x/net', 'Version': rebuild.XNET_SECURITY_FLOOR}]},
         ]}
         rebuild.verify_go_inventory(inventory)
-        for index, package in ((0, 0), (0, 1), (0, 2), (1, 0)):
+        for index, package in ((0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1)):
             changed = copy.deepcopy(inventory)
             changed['Results'][index]['Packages'][package]['Version'] = '(devel)'
             with self.subTest(target=index, package=package), self.assertRaises(ValueError):
                 rebuild.verify_go_inventory(changed)
+
+    def test_xnet_security_floor_covers_both_binaries_without_scan_waiver(self):
+        import copy
+        inventory = {'Results': [
+            {'Target': 'usr/bin/silo', 'Packages': [
+                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'github.com/minio/minio', 'Version': rebuild.SERVER_VERSION},
+                {'Name': 'github.com/go-jose/go-jose/v4', 'Version': rebuild.SERVER_GO_JOSE_VERSION},
+                {'Name': 'golang.org/x/net', 'Version': 'v0.62.0'}]},
+            {'Target': 'usr/bin/mcli', 'Packages': [
+                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'golang.org/x/net', 'Version': 'v0.62.0'}]},
+        ]}
+        rebuild.verify_go_inventory(inventory)
+        for target in (0, 1):
+            for version in ('v0.61.0', '(devel)', 'v0.0.0'):
+                bad = copy.deepcopy(inventory)
+                bad['Results'][target]['Packages'][-1]['Version'] = version
+                with self.subTest(target=target, version=version), self.assertRaisesRegex(
+                        ValueError, 'unsafe or missing golang.org/x/net'):
+                    rebuild.verify_go_inventory(bad)
+            bad = copy.deepcopy(inventory)
+            bad['Results'][target]['Packages'].pop()
+            with self.subTest(target=target, version='missing'), self.assertRaises(ValueError):
+                rebuild.verify_go_inventory(bad)
+            bad = copy.deepcopy(inventory)
+            bad['Results'][target]['Packages'].append(
+                {'Name': 'golang.org/x/net', 'Version': 'v0.62.0'})
+            with self.subTest(target=target, version='duplicate'), self.assertRaises(ValueError):
+                rebuild.verify_go_inventory(bad)
+        scan = {'Results': [{'Target': 'usr/bin/mcli', 'Vulnerabilities': [
+            {'Severity': 'HIGH', 'VulnerabilityID': 'CVE-2026-78661',
+             'PkgName': 'golang.org/x/net', 'InstalledVersion': 'v0.61.0',
+             'FixedVersion': '0.62.0'}]}]}
+        self.assertEqual(len(rebuild.blocking_findings(scan)), 1)
+
+    def test_both_source_builds_require_pinned_authenticated_go_module_fix(self):
+        docker = (ROOT / 'infrastructure/silo/Dockerfile.qa-rebuild').read_text()
+        self.assertEqual(docker.count('go get golang.org/x/net@v0.62.0'), 2)
+        self.assertEqual(docker.count('test "$(go env GOSUMDB)" = sum.golang.org'), 2)
+        self.assertEqual(docker.count('go mod verify'), 2)
+        self.assertEqual(
+            docker.count("go list -m -f '{{.Version}}' golang.org/x/net"), 2)
+        self.assertIn('go build -mod=readonly', docker)
+        self.assertIn('FROM scratch', docker)
+        self.assertNotIn('--ignore-unfixed', docker)
 
     def test_scanner_download_502_503_504_retries_only_twice(self):
         import urllib.error
