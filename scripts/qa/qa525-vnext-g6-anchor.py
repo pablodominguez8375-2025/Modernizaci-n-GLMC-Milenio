@@ -124,8 +124,13 @@ def compare(*, admission_bytes, approval_bytes, review_bytes, receipt_bytes,
             or not hmac.compare_digest(anchor["g6_review_sha256"],
                                        pinned_review_sha256)):
         raise Stop("G6_ANCHOR_REVIEW_MISMATCH")
-    if _utc(anchor.get("g6_expires_at")) < _utc(admission.get("valid_until")):
+    admission_until = _utc(admission.get("valid_until"))
+    if _utc(anchor.get("g6_expires_at")) < admission_until:
         raise Stop("G6_ANCHOR_EXPIRES_BEFORE_ADMISSION")
+    # A claimed G6 TTL alone cannot extend the 48h limit of its actual
+    # checkpoint. This check must cover the ENTIRE admission window.
+    if _utc(reviewed.get("checkpoint_expires_at")) < admission_until:
+        raise Stop("G6_ANCHOR_CHECKPOINT_EXPIRES_BEFORE_ADMISSION")
 
     return {
         "status": STATUS,

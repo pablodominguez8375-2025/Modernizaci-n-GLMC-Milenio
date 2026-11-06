@@ -1,12 +1,12 @@
 # QA525 vNext — enlace G6 ↔ ancla de aprobación (código INACTIVO)
 
-**Estado:** pieza de continuidad de ChatGPT, en PR apilado sobre #884. No autoriza instalar ni aplicar en glmdch.
+**Estado:** biblioteca inactiva; revisada como parte del tren integrador PR #887. No autoriza instalar ni aplicar en glmdch.
 
 ## Propósito
 
 El motor vNext ya dispone de puente `admission+approval` (#878/#879) y de inspector puramente documental G6 (#880). **Todavía falta relacionar las dos evidencias**: el `g6_review_sha256` incluido en el ancla externa debe corresponder exactamente a los bytes del registro G6 inspeccionado; el respaldo debe conservar vigencia durante toda la ventana de admisión, no solo en el instante de inspección.
 
-`scripts/qa/qa525-vnext-g6-anchor.py::compare` recibe bytes de admisión, ancla, review G6, recibo local y reporte de restore, más cinco pins `sha256:`, hash cifrado observado, policy hash y hora. Reutiliza el binding de admisión y el inspector G6, compara cada hash contra sus bytes, exige igualdad de review SHA entre ancla y G6 e impone `g6_expires_at ≥ valid_until`. Los errores son códigos fijos y nunca incluyen secretos.
+`scripts/qa/qa525-vnext-g6-anchor.py::compare` recibe bytes de admisión, ancla, review G6, recibo local y reporte de restore, más cinco pins `sha256:`, hash cifrado observado, policy hash y hora. Reutiliza el binding de admisión y el inspector G6, compara cada hash contra sus bytes, exige igualdad de review SHA entre ancla y G6, `g6_expires_at ≥ valid_until` **y** que el límite derivado del archivo real (`checkpoint + 48 h`) cubra íntegramente `admission.valid_until`. La expiración declarada en el ancla nunca extiende las 48 horas. Los errores son códigos fijos y nunca incluyen secretos.
 
 **NO** autentica los pins, firma Sigstore ni ancla Sponsor; **NO** lee disco/Drive, ni comprueba cifrado real, custodia offhost, restauración física, identidad OCI, locks o salud; cualquier caller podría inyectar datos falsos. Por eso el resultado siempre marca `may_apply=false`, `may_install=false` y todas las verificaciones físicas/autoridad en `false`. La presencia de `G6_METADATA_COHERENT` no habilita ninguna transición.
 

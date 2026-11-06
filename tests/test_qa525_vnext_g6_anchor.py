@@ -99,6 +99,31 @@ class G6AnchorTests(unittest.TestCase):
                 unit.Stop, "^G6_ANCHOR_EXPIRES_BEFORE_ADMISSION$"):
             self.compare(admission=admission, anchor=anchor)
 
+    def test_checkpoint_48h_must_cover_whole_admission_not_just_now(self):
+        # At NOW=Nov 5 18:05 the archive is <48h old, but it expires
+        # at 18:06, before the admitted window closes at 18:25.
+        stamp = "20261103T180600Z"
+        name = "centenario-qa-g6-CIFRADO-" + stamp + ".tar.gz"
+        review = dict(self.review, g6_archive_name=name,
+                      g6_restore_report_name="isolated-restore-" + stamp + ".report.json")
+        receipt = dict(self.receipt, archive_name=name)
+        restore = dict(self.restore, archive_filename=name)
+        anchor = dict(self.anchor, g6_review_sha256=sha(raw(review)))
+        with self.assertRaisesRegex(
+                unit.Stop, "^G6_ANCHOR_CHECKPOINT_EXPIRES_BEFORE_ADMISSION$"):
+            self.compare(review=review, receipt=receipt, restore=restore,
+                         anchor=anchor)
+        # Exact end-of-window boundary is safe: validity is exclusive.
+        stamp = "20261103T182500Z"
+        name = "centenario-qa-g6-CIFRADO-" + stamp + ".tar.gz"
+        review = dict(review, g6_archive_name=name,
+                      g6_restore_report_name="isolated-restore-" + stamp + ".report.json")
+        receipt = dict(receipt, archive_name=name)
+        restore = dict(restore, archive_filename=name)
+        anchor = dict(anchor, g6_review_sha256=sha(raw(review)))
+        self.assertIs(self.compare(review=review, receipt=receipt,
+                                   restore=restore, anchor=anchor)["may_apply"], False)
+
     def test_pinned_bytes_detect_tampering_before_binding(self):
         a = raw(self.admission)
         b = trust.canonical(self.anchor)
