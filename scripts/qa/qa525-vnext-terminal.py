@@ -8,6 +8,11 @@ EXPECTED target, while the caller still holds the flight's lease (the
 transaction lock). It performs no Docker, network, process or host action.
 
 Honest limits:
+* ``final_stage`` is still the caller's claim: the journal and plan do not yet
+  persist stages (durable plan with nonce/admission/baseline/target SHA + fsync
+  is #851 work). Do not connect this writer to a launcher before that exists.
+* The flock is advisory: ``lease_is_held`` proves the lease object owns it for
+  cooperating processes only.
 * ``require_ok`` checks a public checksum, not a signature or the origin of the
   measurement. The engine must run ``verify`` itself under the held lock with a
   trusted adapter and pass the result straight here; never a result received
@@ -46,24 +51,13 @@ verify = _load("qa525_vnext_verify_for_terminal", "qa525-vnext-verify.py")
 
 
 def _require_lock_held(lease) -> None:
-    """The lease must be a Lease-shaped object whose lock is REALLY held.
+    """The lease must be a live one minted by ``begin`` of this journal copy.
 
-    Classes loaded from two copies of the journal module are different
-    objects, so this checks shape and then proves the flock is held by trying
-    to take it: success means nobody (including the lease) holds it.
+    A fabricated Lease, a fd of another file, or a lease from another module
+    instance is refused. Advisory-flock limit: see ``journal.lease_is_held``.
     """
-    fd, root, nonce = (getattr(lease, name, None) for name in ("fd", "root", "nonce"))
-    if (type(fd) is not int or not isinstance(root, Path) or type(nonce) is not str
-            or type(lease).__name__ != "Lease"):
+    if not journal.lease_is_held(lease):
         raise Stop("LEASE_NOT_HELD")
-    try:
-        probe = journal._lock(root)
-    except journal.Stop as exc:
-        if str(exc) == "JOURNAL_OPERATION_ACTIVE":
-            return
-        raise Stop("LEASE_CHECK_FAILED") from None
-    os.close(probe)
-    raise Stop("LEASE_NOT_HELD")
 
 
 def finish(lease, kind: str, result: dict, baseline_sha256: str,

@@ -18,6 +18,7 @@ from pathlib import Path
 import re
 import stat
 import tempfile
+import weakref
 
 SHA = re.compile(r"^[a-f0-9]{40}$")
 DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
@@ -197,6 +198,9 @@ def _atomic_new(path: Path, obj: dict, checkpoint=None) -> None:
         # Never remove an abandoned .qa525-next-* file; retain crash evidence.
 
 
+_ISSUED = weakref.WeakSet()  # leases minted by begin() in THIS module instance
+
+
 class Lease:
     """Keeps the exclusive lock held until the external orchestrator exits."""
 
@@ -239,6 +243,35 @@ def _lock(directory: Path) -> int:
         raise Stop("JOURNAL_LOCK_FAILED") from None
 
 
+def lease_is_held(lease) -> bool:
+    """True only for a live lease minted by begin() of THIS module instance.
+
+    Checks (all must hold): exact ``Lease`` type issued by ``begin``; open fd
+    that is the very file ``root/.qa525-transaction.lock`` (dev/ino/uid/mode/
+    nlink); and the flock is really held (a second open cannot take it).
+    flock is advisory: this proves the lease object owns the lock for
+    cooperating processes only, it does not stop a non-cooperating writer.
+    """
+    try:
+        if type(lease) is not Lease or lease not in _ISSUED or type(lease.fd) is not int:
+            return False
+        held = os.fstat(lease.fd)
+        path = Path(lease.root) / ".qa525-transaction.lock"
+        disk = os.stat(path, follow_symlinks=False)
+        if ((held.st_dev, held.st_ino) != (disk.st_dev, disk.st_ino)
+                or not stat.S_ISREG(held.st_mode) or held.st_uid != os.geteuid()
+                or stat.S_IMODE(held.st_mode) != 0o600 or held.st_nlink != 1):
+            return False
+        try:
+            probe = _lock(Path(lease.root))
+        except Stop as exc:
+            return str(exc) == "JOURNAL_OPERATION_ACTIVE"
+        os.close(probe)
+        return False
+    except (OSError, AttributeError, TypeError):
+        return False
+
+
 def _paths(directory: Path, nonce: str) -> tuple[Path, Path, Path]:
     if type(nonce) is not str or NONCE.fullmatch(nonce) is None:
         raise Stop("JOURNAL_NONCE_INVALID")
@@ -260,6 +293,20 @@ def _terminal_status(nonce: str, marker: Path, journal: Path, recovery: Path,
     if not (marker.exists() and journal.exists()) or marker.is_symlink() or journal.is_symlink():
         raise Stop("TERMINAL_WITHOUT_FLIGHT")
     m, j, t = _object(marker), _object(journal), _object(terminal)
+    # The file is a JSON *claim* written by a checksum-only writer, never proof
+    # of a real runtime state and never authorization for a new flight.
+    fields = {"schema", "status", "nonce", "admission_sha256", "final_stage", "baseline_sha256",
+              "target_sha256", "verify_result_checksum_sha256", "evidence_sha256", "finished_at",
+              "authenticated_by"}
+    stages = {"APPLIED": "VERIFYING", "ROLLED_BACK": "ROLLBACK_VERIFYING"}
+    digests = ("admission_sha256", "baseline_sha256", "target_sha256",
+               "verify_result_checksum_sha256", "evidence_sha256")
+    if (set(t) != fields or t["status"] not in stages or t["final_stage"] != stages[t["status"]]
+            or t["authenticated_by"] != "CHECKSUM_ONLY_NOT_A_SIGNATURE"
+            or any(type(t[key]) is not str or DIGEST.fullmatch(t[key]) is None for key in digests)
+            or type(t["finished_at"]) is not str
+            or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", t["finished_at"]) is None):
+        raise Stop("TERMINAL_RECORD_INVALID")
     if (t.get("schema") != "qa525-terminal-v1" or t.get("status") not in ("APPLIED", "ROLLED_BACK")
             or t.get("nonce") != nonce or m.get("nonce") != nonce
             or j.get("status") != "APPLYING"
@@ -370,7 +417,9 @@ def begin(root: Path, admission_path: Path, expected_sha256: str, now: dt.dateti
                     "created_at": payload["consumed_at"],
                     "terminal_verification": "REQUIRED_EXTERNAL_VERIFIER"}
         _atomic_new(journal, applying, checkpoint)
-        return Lease(fd, root, nonce)
+        lease = Lease(fd, root, nonce)
+        _ISSUED.add(lease)
+        return lease
     except BaseException:
         os.close(fd)
         raise

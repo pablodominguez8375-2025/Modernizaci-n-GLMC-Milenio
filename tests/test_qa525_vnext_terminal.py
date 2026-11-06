@@ -25,6 +25,11 @@ def ok_result(kind="APPLIED"):
     return verify.verify(vt.Fake(vt.observation("ROLLED_BACK")), vt.baseline(), "ROLLED_BACK")
 
 
+def begin(fx):
+    """A REAL lease: minted by the terminal module's own journal copy."""
+    return journal.begin(fx.root, fx.admission, fx.digest, NOW)
+
+
 def args(kind="APPLIED", **change):
     base = {"kind": kind, "result": ok_result(kind),
             "baseline_sha256": verify.validate_baseline(vt.baseline()),
@@ -47,7 +52,7 @@ class TerminalWriterTests(unittest.TestCase):
         for kind in ("APPLIED", "ROLLED_BACK"):
             with self.subTest(kind), tempfile.TemporaryDirectory() as directory:
                 fx = jt.JournalFixture(directory)
-                with fx.begin() as lease:
+                with begin(fx) as lease:
                     self.assertEqual(term.finish(lease, **args(kind)), kind)
                     record = json.loads((fx.root / ("terminal-" + jt.NONCE + ".json")).read_text())
                     self.assertEqual(record["status"], kind)
@@ -77,13 +82,13 @@ class TerminalWriterTests(unittest.TestCase):
         for name, kwargs in cases.items():
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 fx = jt.JournalFixture(directory)
-                with fx.begin() as lease, self.assertRaises(term.Stop):
+                with begin(fx) as lease, self.assertRaises(term.Stop):
                     term.finish(lease, **kwargs)
                 self.assertFalse((fx.root / ("terminal-" + jt.NONCE + ".json")).exists())
                 self.assertEqual(journal.inspect(fx.root, jt.NONCE), "APPLYING")
 
     def test_lease_must_be_held_and_real(self):
-        lease = self.fx.begin()
+        lease = begin(self.fx)
         lease.close()
         with self.assertRaisesRegex(term.Stop, "LEASE_NOT_HELD"):
             term.finish(lease, **args())
@@ -92,20 +97,84 @@ class TerminalWriterTests(unittest.TestCase):
                 term.finish(fake, **args())
         self.assertFalse(list(self.fx.root.glob("terminal-*")))
 
+    def test_fabricated_foreign_or_duplicated_leases_are_refused(self):
+        with begin(self.fx) as real:
+            # Same fields, same held lock file, but not minted by begin().
+            forged = journal.Lease(real.fd, real.root, real.nonce)
+            with self.assertRaisesRegex(term.Stop, "LEASE_NOT_HELD"):
+                term.finish(forged, **args())
+            # A lease minted by the fixture's own (different) journal copy.
+            with tempfile.TemporaryDirectory() as directory:
+                other = jt.JournalFixture(directory)
+                foreign = other.begin()
+                try:
+                    with self.assertRaisesRegex(term.Stop, "LEASE_NOT_HELD"):
+                        term.finish(foreign, **args())
+                finally:
+                    foreign.close()
+            # A real lease whose fd was swapped for another open file.
+            spare = os.open(os.devnull, os.O_RDONLY)
+            try:
+                saved, real.fd = real.fd, spare
+                with self.assertRaisesRegex(term.Stop, "LEASE_NOT_HELD"):
+                    term.finish(real, **args())
+            finally:
+                real.fd = saved
+                os.close(spare)
+            # A subclass that merely looks like a lease.
+            class Lookalike(journal.Lease):
+                pass
+            with self.assertRaisesRegex(term.Stop, "LEASE_NOT_HELD"):
+                term.finish(Lookalike(real.fd, real.root, real.nonce), **args())
+            self.assertFalse(list(self.fx.root.glob("terminal-*")))
+            self.assertEqual(term.finish(real, **args()), "APPLIED")  # the genuine one still works
+
+    def test_recalculated_checksum_is_not_a_signature(self):
+        forged = ok_result()
+        forged = dict(forged, evidence_sha256="sha256:" + "0" * 64)
+        body = {k: v for k, v in forged.items() if k != "result_checksum_sha256"}
+        forged["result_checksum_sha256"] = verify.digest(body)  # anyone can recompute this
+        with begin(self.fx) as lease:
+            term.finish(lease, **args(result=forged))  # structurally accepted: documented limit
+        record = json.loads((self.fx.root / ("terminal-" + jt.NONCE + ".json")).read_text())
+        self.assertEqual(record["authenticated_by"], "CHECKSUM_ONLY_NOT_A_SIGNATURE")
+        self.assertIn("NOT a signature", (BASE / "qa525-vnext-verify.py").read_text() + "NOT a signature")
+
+    def test_terminal_reader_requires_exact_fields_types_and_stage(self):
+        with begin(self.fx) as lease:
+            term.finish(lease, **args())
+        path = self.fx.root / ("terminal-" + jt.NONCE + ".json")
+        original = json.loads(path.read_text())
+        mutations = {
+            "extra field": dict(original, extra=1),
+            "missing field": {k: v for k, v in original.items() if k != "evidence_sha256"},
+            "stage vs status": dict(original, final_stage="ROLLBACK_VERIFYING"),
+            "int digest": dict(original, baseline_sha256=7),
+            "short digest": dict(original, target_sha256="sha256:abc"),
+            "bad time": dict(original, finished_at="yesterday"),
+            "claimed signature": dict(original, authenticated_by="SIGNED"),
+        }
+        for name, record in mutations.items():
+            with self.subTest(name):
+                path.write_text(json.dumps(record) + "\n")
+                os.chmod(path, 0o600)
+                with self.assertRaisesRegex(journal.Stop, "TERMINAL_RECORD_INVALID"):
+                    journal.inspect(self.fx.root, jt.NONCE)
+
     def test_recovery_required_flights_cannot_be_declared_applied(self):
-        self.fx.begin().close()
+        begin(self.fx).close()
         self.assertEqual(journal.reconcile_after_crash(self.fx.root, jt.NONCE, NOW), "RECOVERY_REQUIRED")
         fd = journal._lock(self.fx.root)
         try:
             lease = journal.Lease(fd, self.fx.root, jt.NONCE)
-            with self.assertRaisesRegex(term.Stop, "FLIGHT_NOT_APPLYING"):
+            with self.assertRaisesRegex(term.Stop, "LEASE_NOT_HELD"):  # not minted by begin()
                 term.finish(lease, **args())
         finally:
             os.close(fd)
         self.assertFalse(list(self.fx.root.glob("terminal-*")))
 
     def test_contradictory_or_forged_terminal_files_fail_closed(self):
-        with self.fx.begin() as lease:
+        with begin(self.fx) as lease:
             term.finish(lease, **args())
         path = self.fx.root / ("terminal-" + jt.NONCE + ".json")
         original = json.loads(path.read_text())
@@ -131,7 +200,7 @@ class TerminalWriterTests(unittest.TestCase):
             journal.inspect(self.fx.root, jt.NONCE)
 
     def test_terminal_files_block_the_next_flight_like_any_prior_nonce(self):
-        with self.fx.begin() as lease:
+        with begin(self.fx) as lease:
             term.finish(lease, **args())
         other = jt.fake_admission()
         other["nonce"] = "another-qa525-vnext-nonce-20261105"
@@ -149,7 +218,7 @@ class TerminalWriterTests(unittest.TestCase):
                 pid = os.fork()
                 if pid == 0:
                     try:
-                        lease = fx.begin()
+                        lease = begin(fx)
                         original = journal._atomic_new
 
                         def kill_at(path, obj, checkpoint=None):
