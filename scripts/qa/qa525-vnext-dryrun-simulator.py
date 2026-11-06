@@ -9,8 +9,10 @@ A passing simulation is never evidence for physical QA or permission to APPLY.
 """
 import copy
 
-APPLY_INTENTS = ("API_SWITCHING", "WEB_SWITCHING", "VERIFYING")
-ROLLBACK_INTENTS = ("API_SWITCHING", "ROLLING_BACK", "ROLLBACK_VERIFYING")
+# VERIFYING/ROLLBACK_VERIFYING are NOT intents: they advance only with a proof
+# derived from the verifier result (same rule as qa525-vnext-evidence.py).
+APPLY_INTENTS = ("API_SWITCHING", "WEB_SWITCHING")
+ROLLBACK_INTENTS = ("API_SWITCHING", "ROLLING_BACK")
 SIMULATED = "SIMULATED_ONLY_NOT_AUTHORIZED_FOR_APPLY"
 
 
@@ -73,7 +75,9 @@ def replay(planner, verifier, baseline, target, initial_plan,
 
     'apply' requires 2 synthetic samples each for api, web and final.
     'rollback' requires 2 samples for api and rollback. Execution-intent
-    proofs are supplied, never created or authenticated by this module.
+    proofs (API/WEB switching, rolling back) are supplied, never created or
+    authenticated by this module; verification stages are derived from the
+    verifier result and never from a supplied claim.
     All external inputs remain non-authoritative, including successful
     verifier checksums. No APPLIED/ROLLED_BACK journal record is ever made.
     """
@@ -110,16 +114,14 @@ def replay(planner, verifier, baseline, target, initial_plan,
         p = _check(planner, verifier, p, b, t, "WEB_SWITCHED",
                    observations["web"], next_stage="WEB_VERIFIED")
         checked.append("WEB_SWITCHED")
-        p = _step(planner, p, "VERIFYING", intents["VERIFYING"])
-        _check(planner, verifier, p, b, t, "APPLIED", observations["final"])
+        p = _check(planner, verifier, p, b, t, "APPLIED",
+                   observations["final"], next_stage="VERIFYING")
         checked.append("APPLIED")
         end = "VERIFYING"
     else:
         p = _step(planner, p, "ROLLING_BACK", intents["ROLLING_BACK"])
-        p = _step(planner, p, "ROLLBACK_VERIFYING",
-                  intents["ROLLBACK_VERIFYING"])
-        _check(planner, verifier, p, b, t, "ROLLED_BACK",
-               observations["rollback"])
+        p = _check(planner, verifier, p, b, t, "ROLLED_BACK",
+                   observations["rollback"], next_stage="ROLLBACK_VERIFYING")
         checked.append("ROLLED_BACK")
         end = "ROLLBACK_VERIFYING"
     try:
