@@ -166,10 +166,10 @@ class Qa525ComposeBytePinsContractTests(unittest.TestCase):
                         {"mode": stat.S_IFREG | 0o664}):
             with self.subTest(changes=changes):
                 self.port = FakeReadOnlyPort(self.files)
-                old = self.port.file_stats[BASE]
-                fields = {k[3:]: v for k, v in vars(old).items()}
-                fields.update(changes)
-                self.port.file_stats[BASE] = stat_info(**fields)
+                old = copy.copy(self.port.file_stats[BASE])
+                for key, value in changes.items():
+                    setattr(old, "st_" + ("nlink" if key == "links" else key), value)
+                self.port.file_stats[BASE] = old
                 self.code("COMPOSE_ROOT_PATH_UNTRUSTED" if "links" not in changes
                           and "mode" in changes or "uid" in changes
                           else "COMPOSE_FILE_UNTRUSTED")
