@@ -34,7 +34,8 @@ class DualGateContractTests(unittest.TestCase):
                         % base64.b64encode(self.pub_blob).decode()).encode()
         self.fp = ops.fingerprint_of(self.signers)
         self.receipt = {
-            "schema": "qa525-ops-v2", "status": "OPS_SIGNED_VERIFIED",
+            "schema": "qa525-ops-v3", "status": "OPS_SIGNED_VERIFIED",
+            "app_archive_sha256": "sha256:" + "5" * 64,
             "ops_source_sha": "a" * 40,
             "program_sha256": "sha256:" + "1" * 64,
             "readiness_sha256": "sha256:" + "2" * 64,
@@ -70,11 +71,12 @@ class DualGateContractTests(unittest.TestCase):
         return 0, ('Good "%s" signature for %s with ED25519 key %s\n'
                    % (namespace, principal, self.fp)).encode()
 
-    def verify_ops(self, raw, signature, signers, fp, policy):
+    def verify_ops(self, raw, signature, signers, fp, policy, archive):
         return ops.verify_ops_receipt(
             receipt=raw, signature=signature, allowed_signers=signers,
             ops_fingerprint=fp, app_fingerprints=APP_FINGERPRINTS,
-            policy_hash=policy, verifier=self.ssh_verifier)
+            policy_hash=policy, verifier=self.ssh_verifier,
+            expected_app_archive_sha256=archive)
 
     def verify_app(self, bundle, challenge):
         self.app_calls += 1
@@ -110,6 +112,8 @@ class DualGateContractTests(unittest.TestCase):
             "bundle_sha256": hash_bytes(self.bundle),
         })
         self.assertIs(result["two_verifier_ports_accepted"], True)
+        self.assertIs(result["ops_v3_app_archive_challenge_matched_by_ports"], True)
+        self.assertIs(result["ops_app_signed_artifacts_bound_here"], False)
         for key in ("may_install", "may_apply",
                     "ops_fingerprint_provenance_verified_here",
                     "app_attestation_provenance_verified_here",
@@ -157,14 +161,42 @@ class DualGateContractTests(unittest.TestCase):
 
     def test_wrong_receipt_byte_hash_from_ops_port_is_rejected(self):
         valid = self.verify_ops(self.raw, self.signature, self.signers,
-                                self.fp, self.pins["policy_hash"])
+                                self.fp, self.pins["policy_hash"],
+                                self.pins["app_archive_sha256"])
         forged = dict(valid, receipt_sha256="sha256:" + "e" * 64)
         self.denied("DUAL_OPS_RESULT_UNTRUSTED",
                     verify_ops=lambda *args: forged)
         self.assertEqual(self.app_calls, 0)
 
+    def test_signed_v3_archive_cannot_be_swapped_for_other_app_release(self):
+        # Even a well-formed alternate archive hash is denied by OPS v3.
+        changed = dict(self.pins, app_archive_sha256="sha256:" + "6" * 64)
+        self.denied("DUAL_OPS_SIGNATURE_DENIED", pins=changed)
+        self.assertEqual(self.app_calls, 0)
+
+    def test_ops_v2_receipt_cannot_downgrade_strict_archive_binding(self):
+        old_doc = dict(self.receipt, schema="qa525-ops-v2")
+        old_doc.pop("app_archive_sha256")
+        old_raw = (json.dumps(old_doc, sort_keys=True) + "\\n").encode()
+        original = self.raw
+        try:
+            self.raw = old_raw
+            self.denied("DUAL_OPS_SIGNATURE_DENIED", receipt_bytes=old_raw)
+        finally:
+            self.raw = original
+        self.assertEqual(self.app_calls, 0)
+
+    def test_claimed_bound_flag_cannot_be_forged_without_real_v3_port_result(self):
+        valid = self.verify_ops(self.raw, self.signature, self.signers,
+                                self.fp, self.pins["policy_hash"],
+                                self.pins["app_archive_sha256"])
+        altered = dict(valid, app_archive_bound=False)
+        self.denied("DUAL_OPS_RESULT_UNTRUSTED",
+                    verify_ops=lambda *args: altered)
+        self.assertEqual(self.app_calls, 0)
+
     def test_bytes_modified_or_wrong_signature_never_reach_app_verifier(self):
-        modified = self.raw.replace(b"qa525-ops-v2", b"qa525-ops-v3")
+        modified = self.raw.replace(b"qa525-ops-v3", b"qa525-ops-v4")
         self.denied("DUAL_OPS_SIGNATURE_DENIED", receipt_bytes=modified)
         self.denied("DUAL_OPS_SIGNATURE_DENIED", signature_bytes=
                     ops.SIG_BEGIN + b"BAD=\n" + ops.SIG_END)
@@ -179,7 +211,8 @@ class DualGateContractTests(unittest.TestCase):
 
     def test_ops_receipt_shape_and_pins_cannot_be_changed(self):
         response = self.verify_ops(self.raw, self.signature, self.signers,
-                                   self.fp, self.pins["policy_hash"])
+                                   self.fp, self.pins["policy_hash"],
+                                   self.pins["app_archive_sha256"])
         altered = copy.deepcopy(response)
         altered["receipt"]["ops_source_sha"] = "b" * 40
         self.denied("DUAL_OPS_RECEIPT_MISMATCH", verify_ops=lambda *a: altered)
