@@ -180,6 +180,20 @@ class Qa525ReadonlyShapeBridgeContractTests(unittest.TestCase):
                     self.inspect()
                 self.assertEqual(self.calls, [])
 
+    def test_future_reviewed_append_only_seven_six_layers_are_accepted(self):
+        # A future legitimate update extends API6/WEB5 to API7/WEB6.
+        # Every ordered path is still independently pinned; not just a count.
+        data = rows()
+        api = API + ["/opt/centenario/qa525-signed-prepare/api-next.json"]
+        web = WEB + ["/opt/centenario/qa525-signed-prepare/web-next.json"]
+        data["api"][7], data["web"][7] = ",".join(api), ",".join(web)
+        result = bridge.inspect(
+            docker_read=self.docker, compose_adapter=Compose(data),
+            health_check=lambda: True, served_web_revision=lambda: WEB_SHA,
+            expected_layers={"api": api, "web": web})
+        self.assertEqual((result["api_compose_layers"], result["web_compose_layers"]), (7, 6))
+        self.assertIs(result["may_apply"], False)
+
     def test_unpinned_or_invalid_compose_pin_refused(self):
         for pin in (None, {}, {"api": list(API)},
                     {"api": list(API), "web": list(WEB)[:-1]}):
