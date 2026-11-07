@@ -12,7 +12,7 @@ chat. Debe considerarse comprometida. El valor no se repite ni se guarda en este
 repositorio, en Drive ni en chats. La copia legítima vive solo en el Bitwarden
 del Sponsor.
 
-## Decisión: B, repositorio Restic nuevo
+## Decisión de rotación: B, repositorio Restic nuevo (no confundir con las alternativas A/B de G6)
 
 `restic key add/passwd` (alternativa A) cambia la contraseña que abre la clave maestra pero **no recifra los datos**. Quien tenga la contraseña expuesta y una copia anterior (por ejemplo las ya exportadas a Drive) las sigue abriendo. B (repositorio nuevo, contraseña nueva, respaldo completo nuevo) evita que la contraseña comprometida abra copias nuevas. Es una decisión de diseño, no un GO ni una autorización para rotar, borrar o copiar datos físicos.
 
