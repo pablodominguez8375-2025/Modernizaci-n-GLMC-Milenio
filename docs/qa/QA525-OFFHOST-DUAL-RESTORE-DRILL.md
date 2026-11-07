@@ -10,7 +10,7 @@ El operador `qa525-offhost-dual-restore-drill.py` verifica etiquetas de proyecto
 
 ## Entrega cifrada y protección de claves
 
-Desde el operador de respaldo #797 (si está integrado y autorizado para el QA físico) se generan dos archivos cifrados age y un `manifest.json` protegido. Transferir ambos `.age` y manifest a `/var/lib/qa525-restore-lab/incoming/backup-<UTC>-<token>` del host de restauración, directorios root/0700 y archivos root/0600. Validar permisos y checksum durante el traslado, sin subir datos ni claves a GitHub/Drive.
+Desde el operador de respaldo #797 (si está integrado y autorizado para el QA físico) se generan dos archivos cifrados age y un `manifest.json` protegido. Transferir ambos `.age` y manifest a `/var/lib/qa525-restore-lab/incoming/backup-<UTC>-<token>` del host de restauración, directorios root/0700 y archivos root/0600. Validar permisos y checksum durante el traslado. **Nunca** subir a GitHub/Drive un dump en claro ni la clave privada; el ciphertext `.age` y el manifiesto sí pueden custodiarse en una carpeta privada de Drive sin enlace compartido (el PO no dispone de un segundo servidor; ver el runbook de ensayo, alternativa B), comparando el SHA-256 en cada salto y tras la descarga. Este laboratorio es la alternativa B de G6; la alternativa A aprobada para el QA sintético está en `QA525-VNEXT-REHEARSAL-RUNBOOK.md`.
 
 La **clave privada age** solo debe existir en el laboratorio/custodio externo, en `/etc/pmgm/qa525-restore-lab-age-identity.txt`, root/0600, sin symlinks ni hardlinks. No debe instalarse en `glmdch`. Conservar acceso del laboratorio restringido a personal autorizado, porque la restauración permite leer datos QA (que deben ser ficticios).
 
