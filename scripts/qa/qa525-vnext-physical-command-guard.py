@@ -129,6 +129,15 @@ class CommandGuard:
         except Exception:
             raise Stop("COMMANDGUARD_CGROUP_UNSAFE") from None
 
+    def _all_scopes_quiescent(self):
+        """Both leased API/WEB units must be inactive, even during rollback.
+
+        Checking only the unit about to run could launch WEB rollback while
+        an unresolved API cgroup is still active. Unreadable is always STOP.
+        """
+        for service in SERVICES:
+            self._scope_state(self._units[service], ("ABSENT", "EMPTY"))
+
     def __call__(self, argv):
         if type(argv) is not list or not all(type(x) is str for x in argv):
             raise Stop("COMMANDGUARD_ARGV_REFUSED")
@@ -153,14 +162,14 @@ class CommandGuard:
         except Exception:
             raise Stop("COMMANDGUARD_PRECONDITION_DENIED") from None
         self._require_held()
-        self._scope_state(unit, ("ABSENT", "EMPTY"))
+        self._all_scopes_quiescent()
         self._require_held()
         try:
             code = self._execute(list(command))
         except Exception:
             raise Stop("COMMANDGUARD_CHILD_UNCERTAIN") from None
         self._require_held()
-        self._scope_state(unit, ("ABSENT", "EMPTY"))
+        self._all_scopes_quiescent()
         self._require_held()
         if type(code) is not int:
             raise Stop("COMMANDGUARD_CHILD_UNCERTAIN")
