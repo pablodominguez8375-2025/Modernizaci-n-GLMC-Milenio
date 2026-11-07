@@ -13,6 +13,7 @@ journal lease before and throughout each transition, including rollback.
 Every effect (inspector, runtime reader, process runner, scopes and clock)
 is injected; importing this file never opens a resource or runs a command.
 """
+from copy import deepcopy
 from types import MappingProxyType
 import re
 
@@ -179,6 +180,7 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
                     inputs["reader"], inputs["target"], nonce=lease.nonce,
                     admission_sha256=inputs["admission_sha256"])
                 if (type(plan) is not dict
+                        or flight.plan_mod.validate(plan) != "APPLYING"
                         or plan.get("baseline_sha256")
                         != report["baseline_sha256"]):
                     raise Stop("HELDFLIGHT_BASELINE_CHANGED")
@@ -193,12 +195,23 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
 
             # The process effect must be produced by the SIGNED entrypoint.
             # Never import host subprocess/Docker here and never provide a
-            # default runner. The factory must itself verify systemd cgroup,
-            # bytes/owner pins of child/python and the exact command allowlist.
+            # default runner. The exact APPLYING plan is deep-copied AFTER B7,
+            # G6, baseline match and durable scope names; the factory must
+            # derive its 4-command allowlist from this very same plan, not
+            # re-read an unfenced Docker baseline or trust a separate claim.
+            # Never share the mutable original plan held by the flight.
             try:
-                runner = inputs["runner_factory"](plane, held, report)
+                factory_plan = deepcopy(plan)
+                held.require_current_record(report)
+                runner = inputs["runner_factory"](
+                    plane, held, report, factory_plan)
                 if not callable(runner):
                     raise Stop("HELDFLIGHT_RUNNER_INVALID")
+                if (factory_plan != plan
+                        or flight.plan_mod.validate(plan) != "APPLYING"):
+                    raise Stop("HELDFLIGHT_RUNNER_PLAN_MUTATED")
+                held.require_current_record(report)
+                check_g6()
             except Stop:
                 raise
             except Exception:
