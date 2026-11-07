@@ -36,7 +36,11 @@ class HeldFlightBridgeSurvivorGuards(unittest.TestCase):
     def test_lock_lost_while_a_child_runs_blocks_the_next_step(self):
         t = self.t
 
-        def factory(plane, bnd, report):
+        def factory(plane, bnd, report, plan):
+            # Guard against false-green arity TypeError before the child.
+            self.assertEqual(engine.flight.plan_mod.validate(plan), "APPLYING")
+            self.assertEqual(plan["nonce"], plane.lease.nonce)
+            bnd.require_current_record(report)
             def runner(argv):
                 code = t.h.runner(argv)
                 if ("api", "target") in t.h.runs:
@@ -46,13 +50,19 @@ class HeldFlightBridgeSurvivorGuards(unittest.TestCase):
 
         with self.assertRaises(STOPS):
             t.call(runner_factory=factory)
+        self.assertIn(("api", "target"), t.h.runs)
+        self.assertEqual(t.h.runs.count(("api", "target")), 1)
         self.assertNotIn(("web", "target"), t.h.runs)
         self.assertEqual(t.port.fds, {})
 
     def test_lock_lost_right_after_the_last_child_never_records_applied(self):
         t = self.t
 
-        def factory(plane, bnd, report):
+        def factory(plane, bnd, report, plan):
+            # Guard against false-green arity TypeError before the child.
+            self.assertEqual(engine.flight.plan_mod.validate(plan), "APPLYING")
+            self.assertEqual(plan["nonce"], plane.lease.nonce)
+            bnd.require_current_record(report)
             def runner(argv):
                 code = t.h.runner(argv)
                 if ("web", "target") in t.h.runs:
@@ -62,6 +72,8 @@ class HeldFlightBridgeSurvivorGuards(unittest.TestCase):
 
         with self.assertRaises(STOPS):
             t.call(runner_factory=factory)
+        self.assertIn(("web", "target"), t.h.runs)
+        self.assertEqual(t.h.runs.count(("web", "target")), 1)
         self.assertNotEqual(t.h.terminal(), "APPLIED")
         self.assertEqual(t.port.fds, {})
 
