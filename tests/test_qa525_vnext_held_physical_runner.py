@@ -221,18 +221,22 @@ class PhysicalRunnerTests(unittest.TestCase):
 
     def test_invalid_spec_and_pins_denied_before_any_child(self):
         with self.active() as (plane, bnd, record):
-            for kw in (
-                {"pins": dict(PINS, unknown="sha256:" + "a" * 64)},
-                {"pins": {**PINS, "python_sha256": "bad"}},
-                {"spec": {**self.spec, "nonce": "a"}},
-                {"spec": {**self.spec, "admission_sha256": "bad"}},
-                {"spec": {**self.spec, "target_layers": {"api": [], "web": []}}},
-            ):
+            cases = (
+                ({"pins": dict(PINS, unknown="sha256:" + "a" * 64)},
+                 "PHYSRUNNER_INPUT_INVALID"),
+                ({"pins": {**PINS, "python_sha256": "bad"}},
+                 "PHYSRUNNER_INPUT_INVALID"),
+                ({"spec": {**self.spec, "nonce": "a"}},
+                 "PHYSRUNNER_INPUT_INVALID"),
+                ({"spec": {**self.spec, "admission_sha256": "bad"}},
+                 "PHYSRUNNER_INPUT_INVALID"),
+                ({"spec": {**self.spec, "target_layers": {"api": [], "web": []}}},
+                 "PHYSRUNNER_LAYERS_INVALID"),
+            )
+            for kw, expected in cases:
                 with self.subTest(kw=list(kw)):
                     self.stopped(lambda k=kw: self.bind(plane, bnd, record, **k),
-                                 "PHYSRUNNER_INPUT_INVALID" if
-                                 "pins" in kw or "target_layers" not in kw.get("spec", {})
-                                 else "PHYSRUNNER_LAYERS_INVALID")
+                                 expected)
         self.assertEqual(self.effects, [])
 
     def test_bad_effect_result_and_exception_not_leak_secret(self):
