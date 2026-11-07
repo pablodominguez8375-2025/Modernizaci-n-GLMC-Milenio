@@ -1,0 +1,4 @@
+# QA525 — corregir falso verde de tests de locks en PR Claude #926
+Fecha: 07-11-2026; Issue #929, dueño agente:chatgpt. dev inicial dba4d362fd79ef15be3c5be5f96c8a0c0d9ae9b0, main@6dfb9546a4873baff15955cf86abfd7d47e3d111. DRAFT (no host).
+Hallazgo: dos factories en tests/test_qa525_vnext_held_flight_bridge_survivors.py tienen aridad 3, pero el contrato integrado en #923 exige 4. El TypeError llega antes de child y assertRaises(STOPS) pasa sin probar lock loss. 
+Corregir solo firmas 4 args y añadir aserción no ambigua de ejecución real de API target y WEB target según el caso. Conservar los demás tests de Claude y sin tocar sus módulos ya integrados. CI exact HEAD + revisión independiente antes de merge; en el host se mantiene NO-GO #822.
