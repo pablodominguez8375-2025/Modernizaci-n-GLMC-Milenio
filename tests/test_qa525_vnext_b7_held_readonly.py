@@ -77,6 +77,97 @@ class B7HeldReadonlyContractTests(unittest.TestCase):
         self.assertEqual(self.port.closed, list(reversed(rl.LEGACY_LOCKS)))
         self.assertEqual(self.port.fds, {})
 
+    def test_inside_held_plane_allows_safe_continuation_before_unlock(self):
+        """The caller, not B7, owns the lock/lease lifetime."""
+        events = []
+
+        def inspect():
+            events.append("inspect")
+            self.assertEqual(len(self.port.fds), 5)
+            self.assertEqual(self.log, ["begin"])
+            return shape()
+
+        with b7.root_locks.root_flight(
+                self.port, self.journal, "root", "approved-record",
+                "sha256:" + "f" * 64, "2026-11-07T14:54:00Z") as plane:
+            result = b7.inspect_inside_held_plane(
+                plane=plane, inspector=inspect,
+                expected_baseline_sha256=PIN)
+            # A future signed entrypoint could now continue in THIS context,
+            # but this synthetic test deliberately performs NO APPLY action.
+            plane.assert_held()
+            events.append("synthetic-continuation-without-apply")
+            self.assertEqual(len(self.port.fds), 5)
+            self.assertEqual(self.log, ["begin"])
+            self.assertIs(result["may_apply"], False)
+            self.assertIs(result["may_install"], False)
+            self.assertIs(result["signature_verified_here"], False)
+            self.assertIs(result["host_identity_authenticated_here"], False)
+            self.assertIs(result["pin_authenticated_here"], False)
+        self.assertEqual(events, ["inspect", "synthetic-continuation-without-apply"])
+        self.assertEqual(self.log, ["begin", "lease-close"])
+        self.assertEqual(self.port.fds, {})
+        self.assertEqual(self.port.closed, list(reversed(rl.LEGACY_LOCKS)))
+
+    def test_inside_held_plane_rejects_expired_plane_before_inspector(self):
+        with b7.root_locks.root_flight(
+                self.port, self.journal, "root", "approved-record",
+                "sha256:" + "f" * 64, "2026-11-07T14:54:00Z") as plane:
+            plane.assert_held()
+        with self.assertRaises(b7.root_locks.Stop) as err:
+            b7.inspect_inside_held_plane(
+                plane=plane, inspector=lambda: self.fail("never inspect"),
+                expected_baseline_sha256=PIN)
+        self.assertEqual(str(err.exception), "ROOTLOCK_PLANE_CLOSED")
+        self.assertEqual(self.log, ["begin", "lease-close"])
+
+    def test_inside_held_plane_detects_inode_change_before_return(self):
+        with b7.root_locks.root_flight(
+                self.port, self.journal, "root", "approved-record",
+                "sha256:" + "f" * 64, "2026-11-07T14:54:00Z") as plane:
+            def tamper():
+                self.port.nodes[rl.LEGACY_LOCKS[0]] = fstat_(999)
+                return shape()
+            with self.assertRaises(b7.root_locks.Stop):
+                b7.inspect_inside_held_plane(
+                    plane=plane, inspector=tamper,
+                    expected_baseline_sha256=PIN)
+            self.assertEqual(len(self.port.fds), 5)
+        self.assertEqual(self.log, ["begin", "lease-close"])
+        self.assertEqual(self.port.fds, {})
+
+    def test_inside_held_plane_rejects_lease_loss_mid_inspection(self):
+        with b7.root_locks.root_flight(
+                self.port, self.journal, "root", "approved-record",
+                "sha256:" + "f" * 64, "2026-11-07T14:54:00Z") as plane:
+            def lose_lease():
+                plane.lease.held = False
+                return shape()
+            with self.assertRaises(b7.root_locks.Stop) as err:
+                b7.inspect_inside_held_plane(
+                    plane=plane, inspector=lose_lease,
+                    expected_baseline_sha256=PIN)
+            self.assertEqual(str(err.exception), "ROOTLOCK_LEASE_LOST")
+            self.assertEqual(len(self.port.fds), 5)
+        self.assertEqual(self.log, ["begin", "lease-close"])
+        self.assertEqual(self.port.fds, {})
+
+    def test_inside_held_plane_inspector_failure_preserves_caller_lifetime(self):
+        with b7.root_locks.root_flight(
+                self.port, self.journal, "root", "approved-record",
+                "sha256:" + "f" * 64, "2026-11-07T14:54:00Z") as plane:
+            with self.assertRaises(b7.Stop) as err:
+                b7.inspect_inside_held_plane(
+                    plane=plane,
+                    inspector=lambda: (_ for _ in ()).throw(
+                        RuntimeError("private-secret")),
+                    expected_baseline_sha256=PIN)
+            self.assertEqual(str(err.exception), "B7_INSPECTION_FAILED")
+            self.assertIsNone(err.exception.__cause__)
+            plane.assert_held()
+            self.assertEqual(len(self.port.fds), 5)
+        self.assertEqual(self.log, ["begin", "lease-close"])
+
     def test_accepts_new_reviewed_seven_six_layer_shape(self):
         result = self.run_b7(lambda: shape(api_compose_layers=7, web_compose_layers=6))
         self.assertEqual(result["root_locks_held_during_inspection"], 5)

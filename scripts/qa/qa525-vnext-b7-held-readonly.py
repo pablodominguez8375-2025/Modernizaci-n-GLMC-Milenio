@@ -81,13 +81,51 @@ def _shape(report, baseline_sha256):
         raise Stop("B7_SHAPE_MISMATCH")
 
 
+def inspect_inside_held_plane(*, plane, inspector, expected_baseline_sha256):
+    """Inspect with a caller-owned RootPlane that remains held after return.
+
+    This is the composable, still-INACTIVE part of B7 for the future single
+    signed root entrypoint. The caller MUST own the entire root_flight context
+    and preserve it across inspection AND any independently authorized flight.
+    A returned report is NEVER an APPLY permission. A caller-supplied plane,
+    inspector or pin is NOT authenticated by this function.
+    """
+    if (not callable(inspector) or type(expected_baseline_sha256) is not str
+            or SHA256.fullmatch(expected_baseline_sha256) is None):
+        raise Stop("B7_INPUT_INVALID")
+    _held(plane)
+    try:
+        report = inspector()
+    except Exception:
+        raise Stop("B7_INSPECTION_FAILED") from None
+    _held(plane)
+    _shape(report, expected_baseline_sha256)
+    _held(plane)
+    return {
+        "status": STATUS,
+        "baseline_sha256": expected_baseline_sha256,
+        "observation_sha256": report["observation_sha256"],
+        "running_services_verified_structurally": 7,
+        "oneshot_exits_verified_structurally": 3,
+        "root_locks_held_during_inspection": 5,
+        "journal_lease_held_during_inspection": True,
+        "may_apply": False,
+        "may_install": False,
+        "signature_verified_here": False,
+        "host_identity_authenticated_here": False,
+        "pin_authenticated_here": False,
+        "g6_verified_here": False,
+        "sponsor_approved_here": False,
+    }
+
+
 def held_readonly(*, port, journal, root, admission, admission_sha256,
                   now, inspector, expected_baseline_sha256):
-    """Capture once with the same five legacy locks and root journal lease.
+    """Historical convenience wrapper: releases ALL five locks on return.
 
-    No port/journal/inspector/expected pin is created or authenticated here.
-    A future independent pre-root bootstrap must establish the origin and
-    byte-integrity of all of them. This bridge cannot be wired as an APPLY gate.
+    Unlike inspect_inside_held_plane(), this wrapper closes root_flight
+    before yielding its report, so it MUST NEVER be used as a post-unlock
+    preflight for a subsequent APPLY. Its journal may persist nonce/lease.
     """
     if (not callable(inspector) or type(expected_baseline_sha256) is not str
             or SHA256.fullmatch(expected_baseline_sha256) is None):
@@ -95,30 +133,9 @@ def held_readonly(*, port, journal, root, admission, admission_sha256,
     try:
         with root_locks.root_flight(port, journal, root, admission,
                                     admission_sha256, now) as plane:
-            _held(plane)
-            try:
-                report = inspector()
-            except Exception:
-                raise Stop("B7_INSPECTION_FAILED") from None
-            _held(plane)
-            _shape(report, expected_baseline_sha256)
-            _held(plane)  # release is only after the report has been checked
-            return {
-                "status": STATUS,
-                "baseline_sha256": expected_baseline_sha256,
-                "observation_sha256": report["observation_sha256"],
-                "running_services_verified_structurally": 7,
-                "oneshot_exits_verified_structurally": 3,
-                "root_locks_held_during_inspection": 5,
-                "journal_lease_held_during_inspection": True,
-                "may_apply": False,
-                "may_install": False,
-                "signature_verified_here": False,
-                "host_identity_authenticated_here": False,
-                "pin_authenticated_here": False,
-                "g6_verified_here": False,
-                "sponsor_approved_here": False,
-            }
+            return inspect_inside_held_plane(
+                plane=plane, inspector=inspector,
+                expected_baseline_sha256=expected_baseline_sha256)
     except Stop:
         raise
     except Exception:
