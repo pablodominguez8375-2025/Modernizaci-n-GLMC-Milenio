@@ -12,7 +12,8 @@ import unittest
 from test_qa525_vnext_root_locks import Port, rl, fstat_
 from test_qa525_vnext_b7_held_readonly import b7
 from test_qa525_vnext_b7_root_boundary import bound
-from test_qa525_vnext_engine import EngineTests as _Fixture, engine, trust, Scope
+import test_qa525_vnext_engine as engtest
+engine, trust, Scope = engtest.engine, engtest.trust, engtest.Scope
 
 BASE = Path(__file__).resolve().parents[1] / "scripts" / "qa"
 SCRIPT = BASE / "qa525-vnext-held-flight-bridge.py"
@@ -43,7 +44,7 @@ def shape(pin):
 class RealHeldFlightWithFakeEffectsTests(unittest.TestCase):
     def setUp(self):
         # Uses existing independently tested vNext fixture; no host execution.
-        self.h = _Fixture("test_happy_path_records_scopes_then_applies_under_all_locks")
+        self.h = engtest.EngineTests("test_happy_path_records_scopes_then_applies_under_all_locks")
         self.h.setUp()
         self.port = Port()
         self.gates = []
