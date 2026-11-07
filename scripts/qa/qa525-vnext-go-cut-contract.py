@@ -85,7 +85,7 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
     """
     if (type(go_signature_bytes) is not bytes or not 0 < len(go_signature_bytes) <= 4096
             or type(pins) is not dict or set(pins) != PINS
-            or type(ops_v3_receipt) is not dict or set(ops_v3_receipt) != OPS_FIELDS
+            or type(ops_v3_receipt) is not dict
             or type(app_subject) is not dict or set(app_subject) != APP_FIELDS
             or type(now_utc) is not dt.datetime or now_utc.tzinfo is None
             or now_utc.utcoffset() != dt.timedelta(0)
@@ -119,7 +119,8 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
     if not (issued <= now_utc <= expires and
             0 < (expires - issued).total_seconds() <= MAX_GO_AGE_SECONDS):
         raise Stop("GO_CUT_EXPIRED_OR_FUTURE")
-    if (ops_v3_receipt.get("schema") != "qa525-ops-v3"
+    if (set(ops_v3_receipt) != OPS_FIELDS
+            or ops_v3_receipt.get("schema") != "qa525-ops-v3"
             or ops_v3_receipt.get("status") != "OPS_SIGNED_VERIFIED"
             or any(type(ops_v3_receipt.get(k)) is not str or
                    SHA256.fullmatch(ops_v3_receipt[k]) is None
