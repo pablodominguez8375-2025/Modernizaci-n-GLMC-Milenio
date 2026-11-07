@@ -1,8 +1,6 @@
 # QA525 G6 — Rotación de la contraseña de Restic (PROPUESTA, sin ejecutar)
 
-Estado: **borrador para revisión de ChatGPT. No ejecutado. Ningún comando de este
-documento se corre en glmdch sin que el Sponsor lo autorice en ese momento y
-ChatGPT haya dado 0 P0/P1 sobre este texto.**
+Estado: **decisión de diseño tomada por ChatGPT (alternativa B, repositorio nuevo; #931 comentario 6714009993). Borrador documental, sin verificar contra los scripts reales del host. No ejecutado. Este documento NO contiene comandos ejecutables: son pasos de diseño. Cada comando real se redacta después del preflight de solo lectura, lo revisa ChatGPT y el Sponsor lo autoriza en ese momento.**
 
 Alcance: alternativa A de G6 (QA sintético únicamente). No cubre datos reales
 (eso exige la alternativa B, #694, Ley 21.719).
@@ -14,70 +12,35 @@ chat. Debe considerarse comprometida. El valor no se repite ni se guarda en este
 repositorio, en Drive ni en chats. La copia legítima vive solo en el Bitwarden
 del Sponsor.
 
-## Hecho técnico que decide el método
+## Decisión: B, repositorio Restic nuevo
 
-`restic key add/passwd` cambia la contraseña que abre la *clave maestra* del
-repositorio, pero **no recifra los datos**. Quien conserve la contraseña vieja y
-una copia anterior del repositorio (por ejemplo los cifrados subidos a la
-carpeta Drive de respaldos) sigue pudiendo abrir esa copia. Quitar la clave vieja
-solo protege el repositorio vivo.
+`restic key add/passwd` (alternativa A) cambia la contraseña que abre la clave maestra pero **no recifra los datos**. Quien tenga la contraseña expuesta y una copia anterior (por ejemplo las ya exportadas a Drive) las sigue abriendo. B (repositorio nuevo, contraseña nueva, respaldo completo nuevo) evita que la contraseña comprometida abra copias nuevas. Es una decisión de diseño, no un GO ni una autorización para rotar, borrar o copiar datos físicos.
 
-Como el contenido es sintético y la carpeta Drive es privada, el riesgo es bajo,
-pero la opción B cierra el hueco por completo.
+## Reglas
 
-| Opción | Qué hace | Cierra copias antiguas | Costo |
-|---|---|---|---|
-| A. Rotar clave | `key add` nueva, verificar, `key remove` vieja | No | Bajo |
-| B. Repo nuevo (recomendada) | `restic init` nuevo con contraseña nueva, respaldo completo nuevo, retirar el repo y los cifrados viejos de Drive | Sí | Un respaldo completo, que de todos modos se necesita antes del GO |
+1. La contraseña nueva se genera en Bitwarden (32+ caracteres) y se guarda ahí **antes** de usarla en glmdch. Nunca pasa por el chat, Git, Drive ni la línea de comandos. El Sponsor la introduce por Termius sin eco en pantalla y sin historial (el método exacto lo fija el SOP revisado).
+2. Un comando por vez desde Termius; el Sponsor pega la salida solo después de comprobar que no contiene la contraseña. STOP ante cualquier discrepancia.
+3. **No se inventan rutas, flags ni variables.** Los scripts `g6-local.py` y `g6-restore.py` (root, pines 5bbf092e… / 514a482e…) viven en glmdch. Hasta leer cómo obtienen `RESTIC_REPOSITORY` y `RESTIC_PASSWORD_FILE` no se redacta ningún comando de creación.
+4. Está **prohibido** modificar los scripts pineados para apuntar al repositorio nuevo sin revisión de ChatGPT y de Claude y un pin nuevo.
+5. `shred` no es garantía de sanitización en SSD ni en nube. No se retira el repositorio, el archivo de contraseña ni las copias antiguas en esta fase.
 
-Recomendación: **B**. Evita razonar sobre claves residuales y deja el acta de
-restauración sobre un repositorio limpio.
+## Secuencia propuesta para el SOP
 
-## Reglas para ambas opciones
-
-1. La contraseña nueva la genera el generador de Bitwarden (32+ caracteres) y se
-   guarda en Bitwarden **antes** de usarla en glmdch.
-2. Nunca se escribe en la línea de comandos ni se pega en el chat. Entra por
-   entrada estándar a un archivo `0600 root:root`, con `read -s`, para que no
-   quede en el historial del shell.
-3. Un comando por vez desde Termius. El Sponsor pega la salida solo después de
-   revisar que no contenga la contraseña.
-4. Los scripts de `/opt/centenario/qa-tools` (hashes fijados 5bbf092e… y
-   514a482e…) no se modifican. La contraseña no forma parte de ellos.
-5. Antes de empezar: confirmar sin modificar nada que el archivo actual existe,
-   su modo y su propietario (`stat`), sin leer su contenido.
-
-## Esqueleto de pasos (a afinar por ChatGPT con las rutas y flags reales)
-
-Opción B:
-
-1. Solo lectura: `stat` del archivo de contraseña actual; espacio libre.
-2. Crear `/etc/pmgm/qa-g6-restic-password.new` (modo 0600) leyendo de stdin.
-3. `restic init` sobre un directorio nuevo (por ejemplo `/opt/centenario/qa-g6-v2`)
-   con `--password-file` el `.new`.
-4. Respaldo completo con el script fijado, apuntado al repo nuevo.
-5. `restic check` y restauración aislada en el mismo host, con el acta existente
-   (<48 h y que cubra toda la ventana).
-6. Cuando el acta esté verde: reemplazar el archivo de contraseña vigente por el
-   `.new` y apuntar la configuración al repo nuevo. Decisión de ChatGPT: renombrar
-   directorios o cambiar la variable de ruta.
-7. Retirar el repo viejo y su archivo de contraseña (`shred`, luego borrar). Pedir
-   al Sponsor borrar de Drive los cifrados antiguos y la carpeta duplicada vacía.
-8. Registrar en #525 el incidente cerrado, **sin ningún valor secreto**.
-
-Opción A (si ChatGPT la prefiere): pasos 1–2 iguales, luego
-`restic key add --new-password-file`, verificar con la clave nueva
-(`key list`, `check`, `snapshots`), mover el archivo, `key remove` de la clave
-vieja autenticando con la nueva, `shred` del archivo viejo.
+1. **Preflight solo lectura** (autorizado en principio; cada comando se revisa antes): propietario, modo y hash de los dos scripts; espacio libre; cómo obtienen el repositorio y el archivo de contraseña (inspección de las líneas relevantes sin mostrar secretos; `--help` solo si es seguro).
+2. El Sponsor genera la clave nueva en Bitwarden y la deja en un archivo `0600 root:root` nuevo, distinto del actual.
+3. Crear un repositorio distinto, en una carpeta nueva, única y propiedad de root, sin afectar el actual.
+4. Respaldo completo al repositorio nuevo; `restic check` y revisión de snapshots.
+5. Exportar la copia cifrada fuera del host (carpeta Drive de respaldos), descargarla y comprobar que su SHA es idéntico.
+6. Restauración aislada en el mismo glmdch, sin Compose ni base de datos viva, y acta con SHA, fecha y estado, sin secretos. Debe cubrir toda la ventana del GO (<48 h).
+7. Solo después: el Sponsor decide con ChatGPT una conmutación atómica y reversible hacia el repositorio nuevo, conservando el antiguo.
+8. **Fase independiente y con aprobación separada**: retención y purga del material antiguo (repositorio, archivo de contraseña, copias en Drive). Mientras tanto se aísla y se restringe el acceso, y se documenta el riesgo residual: la papelera, las versiones y los cachés de Drive pueden conservar copias.
 
 ## Lo que este documento no autoriza
 
-- No instala nada, no toca glmdch, no da GO.
-- No sustituye el respaldo + restauración + acta del día del GO.
-- La acta de GO la firma el Sponsor con su clave OPS.
+- No instala nada, no toca glmdch, no da GO y no autoriza borrar nada.
+- No sustituye el respaldo, la restauración y el acta del día del GO.
+- El acta de GO la firma el Sponsor con su clave OPS.
 
-## Preguntas abiertas para ChatGPT
+## Riesgo residual aceptado (alternativa A de G6, datos sintéticos)
 
-1. ¿A o B? (recomiendo B).
-2. Flags exactos y rutas de los scripts fijados para el respaldo y la restauración.
-3. ¿Cómo apunta hoy la configuración al repo y a la contraseña (variable, archivo)?
+No hay recuperación ante pérdida del host (el Sponsor no tiene segundo servidor). El contenido es sintético. Antes de datos reales (#694, Ley 21.719) se exige la alternativa B de G6 (age + laboratorio externo).
