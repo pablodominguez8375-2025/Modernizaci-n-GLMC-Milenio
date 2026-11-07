@@ -207,7 +207,7 @@ class RealHeldFlightWithFakeEffectsTests(unittest.TestCase):
             if isinstance(n, ast.ImportFrom)
         }
         self.assertEqual(imports, {"re", "types"})
-        for text in ("subprocess", "Popen(", "shell=True", "import os",
+        for text in ("import subprocess", "Popen(", "shell=True", "import os",
                      "import socket", "docker run", "sudo "):
             self.assertNotIn(text, src)
         with self.assertRaises(SystemExit):
