@@ -31,6 +31,23 @@ SHA-256** de cada archivo Compose referenciado en API/WEB. No reemplaza G6.
   `may_apply=false`, `may_install=false`,
   `pins_authenticated_here=false`, `port_authenticated_here=false`.
 
+## Puerto POSIX específico (también inactivo)
+
+`scripts/qa/qa525-vnext-compose-posix-port.py::PosixReadPort(exact_files)`
+construye un puerto de lectura real, sin CLI ni instancia predeterminada.
+Admite solamente rutas concretas bajo `/opt/centenario/` y limita la
+operación `lstat` a esos archivos y sus ancestros. `open_ro` solo abre las
+rutas fijadas con `O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK` y `fstat/read/close`
+aceptan únicamente los descriptores creados por el puerto. Nunca escribe,
+reinicia servicios ni llama a Docker. La lista `exact_files` debe provenir
+del pin firmado y revisado de B7, no de un parámetro arbitrario del usuario.
+
+La prueba `tests/test_qa525_vnext_compose_posix_port.py` ejecuta la ruta
+completa de 10 archivos sobre syscalls POSIX simuladas y casos negativos
+de rutas externas, FDs desconocidos, reuso y errores. **No acredita
+ejecución como root ni en glmdch**. El puerto devuelve UID real al inspector,
+que rechaza todo caso distinto de 0. Ninguna parte hace `sudo`.
+
 ## Precondiciones del futuro B7 real
 
 La autenticación de estos hashes **no ocurre aquí**: B7 debe obtener el
