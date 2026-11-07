@@ -38,7 +38,7 @@ def _callable(obj, name):
 def _inputs(inputs, g6_evidence, modules):
     required = {
         "clock", "external_gate", "runner_factory", "scope_factory", "settle",
-        "inspector", "reader", "port", "journal", "root", "admission",
+        "inspector", "reader", "port", "root", "admission",
         "admission_sha256", "admission_bytes", "approval_bytes", "policy_hash",
         "baseline_sha256", "target", "project", "workdir", "env_file",
     }
