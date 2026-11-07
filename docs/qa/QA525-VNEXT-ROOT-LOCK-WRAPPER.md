@@ -22,3 +22,8 @@ registrar rutas o contenido externos.
 
 ## No cubre
 Puerto físico, confianza PRE-root, CLI, fetch real, GO físico. Códigos: `ROOTLOCK_*`.
+
+## Puerto POSIX (biblioteca inactiva, sin ejecución)
+`scripts/qa/qa525-vnext-posix-port.py` implementa el puerto inyectado con llamadas POSIX reales, pero SOLO para los 5 archivos de lock fijos y sus carpetas ancestro; cualquier otra ruta se rechaza (`POSIXPORT_PATH_NOT_ALLOWED`). Abre `O_RDONLY|O_NOFOLLOW|O_CLOEXEC`, bloquea con `flock(LOCK_EX|LOCK_NB)` (ocupado = `False`), y solo opera sobre descriptores que él mismo abrió. Códigos fijos `POSIXPORT_*`, sin texto del sistema. No se ejecuta al importar, sin CLI y sin instancia por defecto.
+
+No es autorización: un punto de entrada físico futuro deberá construirlo explícitamente, correr como root en el host único, pasar revisión exact-head y contar con el GO del Sponsor. Pruebas: temp files y `flock` reales con propietario root simulado; la verificación de propietario real y de las carpetas `/opt`, `/run/lock` queda para el ensayo físico.
