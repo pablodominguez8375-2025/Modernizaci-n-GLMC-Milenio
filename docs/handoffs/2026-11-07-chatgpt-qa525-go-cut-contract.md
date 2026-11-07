@@ -1,0 +1,9 @@
+# QA525 Issue #937 — GO cut freshness: biblioteca pura INACTIVA
+
+Fecha 07-11-2026. Base apertura dev@cdece3992270d56266d87c4bebe18811113d8d75 (PR Claude #932 integrado). No host/GO. Rutas exclusivas scripts/qa/qa525-vnext-go-cut-contract.py y tests/test_qa525_vnext_go_cut_contract.py.
+
+Este módulo valida un ACTA Sponsor canónica JSON `qa525-go-cut-v1` de llaves exactas: nonce fuerte 24–96, host glmdch, entorno QA_SYNTHETIC, scope API_WEB_QA_ONLY, acción ADMIT_OFFLINE_APPLY, policy hash, OPS code SHA, APP source SHA, SHA del ZIP INTERNO realmente atestado Sigstore, plan SHA, admission SHA, issued_at/expires_at UTC. Caducidad máxima 30 minutos, sin tiempo futuro, nonce único inyectado y callback firma GO estrictamente True. Rechaza v2 OPS, mismatch de fuente, workflow/OIDC APP falso, ZIP distinto, plan falso, reciclaje nonce, acta malformada/dobles llaves, bool truthy, ventana vencida y firma no válida.
+
+**Fallo cerrado obligatorio:** no permite instalar ni aplicar, y flags de procedencia, bootstrap y persistencia siguen false SIEMPRE. La validación sintética de dos callbacks NO equivale a identidad real Sponsor ni consumo durable. Es un contrato y tests; falta autenticación física de firmas OPS v3 + APP Sigstore y acta GO, verificador rootless PINNEADO fuera GitHub/Drive, bootstrap firmado antes del primer byte root, journal/lease con consumo durable y modo no-downgrade cache/admission. Issue #936 integra los demás carriles; Issue #822 físico NO-GO.
+
+No edita cache.py ni guarda material de firmas privadas; no toca glmdch, Compose, DB, Keycloak, main, producción ni lanza procesos. Requiere CI exact HEAD, revisión cruzada Clau, merge solo dev de biblioteca inactiva. Evitar desplegar el módulo como instalador.
