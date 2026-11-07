@@ -11,9 +11,10 @@ no autentica el host ni autoriza `APPLY` o `root`. El único QA físico vigente 
    `qa-lite-compose-adapter.metadata(run)` y la revisión OCI del mismo inventario.
 3. `qa525-vnext-baseline-plan.validate_baseline` exige siete servicios running,
    tres oneshots `exited/0`, los 10 nombres exactos, capas válidas y Compose base
-   común. Este corte exige API=6 / WEB=5 y **listas completas e idénticas**
-   a `expected_layers` que el futuro operador deberá fijar desde una revisión
-   autenticada de la baseline: no se acepta solo el número de capas.
+   común. API=6 / WEB=5 es el **mínimo histórico**, no un techo: un
+   corte posterior puede tener API=7 / WEB=6 (u otras capas adicionales) si
+   una revisión autenticada fija `expected_layers` con las **listas completas
+   y ordenadas**, idénticas a la observación. Un conteo coincidente no basta.
 4. `qa525-vnext-verify.verify(..., 'ROLLED_BACK', samples=3)` compara nuevas
    observaciones independientes contra la baseline exacta, incluida la salud
    inyectada y la versión pública WEB; todo cambio en capas, imagen, dependencia,
