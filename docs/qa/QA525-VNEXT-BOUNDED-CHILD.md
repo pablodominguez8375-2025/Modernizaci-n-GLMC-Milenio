@@ -8,9 +8,10 @@
 - stdout acotado; stderr se drena, se cuenta y **se descarta** (nunca se devuelve ni se cita). Todos los errores son códigos fijos (`BOUNDED_*`, o `HTTPSFETCH_*` validado por regex), sin argv, rutas ni texto del hijo.
 
 ## `fetch_via_child`
-Adapta el contrato `fetch(url) -> (status, final_url, body)` del proveedor de salud: solo las 5 URL permitidas; lanza `[python, -I, child, url]` y exige un documento JSON exacto (`status`, `final_url`, `body` en base64, tope 262144). `qa525-vnext-https-fetch-child.py` es la entrada del hijo: no lee entorno, usa solo la biblioteca de fetch, imprime una línea JSON y sale 0, 2 (código fijo) o 3 (sin salida).
+Adapta el contrato `fetch(url) -> (status, final_url, body)` del proveedor de salud: solo las 5 URL permitidas; lanza `[python, -I, child, url]` y exige un documento JSON exacto y estricto (sin claves duplicadas ni NaN; `status`, `final_url`, `body` en base64, tope 262144). Los únicos errores del hijo que se propagan son los **8 códigos fijos** de `qa525-vnext-https-fetch.py` (conjunto explícito, con una prueba que lo compara con el código fuente); cualquier otro texto o código inventado es `BOUNDED_CHILD_FAILED`. `qa525-vnext-https-fetch-child.py` es la entrada del hijo: no lee entorno, usa solo la biblioteca de fetch, imprime una línea JSON y sale 0, 2 (código fijo) o 3 (sin salida).
 
 ## Límites
+- **Autenticidad de `python` y `child`:** este módulo solo valida la forma léxica de las rutas. El punto de entrada B7 debe autenticar ruta exacta, dueño (root), modo y hash de ambos fuera de este módulo.
 - Matar un grupo de procesos **no es un cgroup**: un hijo que haga `setsid` escapa. El punto de entrada real debe correr esto dentro de la unidad transitoria de `qa525-vnext-containment`.
 - El plazo externo debe ser mayor que el interno del fetch (20 s) para que el error propio salga primero; el externo es la red de seguridad contra DNS.
 - No prueba red real ni CA/hostname desde glmdch; eso es el ensayo físico con GO del Sponsor.

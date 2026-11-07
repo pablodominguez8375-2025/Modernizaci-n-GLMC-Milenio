@@ -207,10 +207,20 @@ class BoundedChildFetchAdapter(BoundedChildBase):
         err = lambda c: json.dumps({"error": c}).encode()
         self.assertEqual(self.code(lambda: self.call(self.fake(2, err("HTTPSFETCH_TLS_FAILED")))),
                          "HTTPSFETCH_TLS_FAILED")
-        for code, out in ((2, err("rm -rf /")), (2, err("HTTPSFETCH_x")), (3, b""), (1, self.good()),
+        for code, out in ((2, err("rm -rf /")), (2, err("HTTPSFETCH_x")), (2, err("HTTPSFETCH_INVENTED_CODE")),
+                          (2, b'{"error":"HTTPSFETCH_DEADLINE","error":"HTTPSFETCH_FAILED"}'),
+                          (0, b'{"status":200,"status":500,"final_url":"%s","body":""}' % URL.encode()),
+                          (0, b'{"status":NaN,"final_url":"%s","body":""}' % URL.encode()), (3, b""), (1, self.good()),
                           (2, b"not json"), (3, err("HTTPSFETCH_TLS_FAILED")), (0, b""), (0, b"[]"), (-9, b"")):
             with self.subTest(code=code, out=out):
                 self.assertEqual(self.code(lambda: self.call(self.fake(code, out))), "BOUNDED_CHILD_FAILED")
+
+    def test_allowed_error_codes_match_exactly_what_the_fetch_library_can_emit(self):
+        import re as _re
+        source = (ROOT / "scripts/qa/qa525-vnext-https-fetch.py").read_text()
+        self.assertEqual(set(_re.findall(r"HTTPSFETCH_[A-Z_]+", source)), set(bc.FETCH_CODES))
+        for code in bc.FETCH_CODES:
+            self.assertEqual(self.code(lambda: self.call(self.fake(2, json.dumps({"error": code}).encode()))), code)
 
     def test_malformed_success_documents_are_rejected(self):
         b64 = base64.b64encode(b"x").decode()

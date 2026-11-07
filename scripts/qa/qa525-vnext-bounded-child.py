@@ -40,7 +40,10 @@ MAX_OUTPUT = 400000
 MAX_TIMEOUT = 120.0
 ENV = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 ABS_PATH = re.compile(r"/[A-Za-z0-9._/-]{1,200}\Z")
-ERROR_CODE = re.compile(r"HTTPSFETCH_[A-Z_]{3,40}\Z")
+FETCH_CODES = frozenset({
+    "HTTPSFETCH_BODY_TOO_LARGE", "HTTPSFETCH_DEADLINE", "HTTPSFETCH_FAILED",
+    "HTTPSFETCH_HEADER_TOO_LARGE", "HTTPSFETCH_RESPONSE_INVALID", "HTTPSFETCH_TLS_FAILED",
+    "HTTPSFETCH_TLS_POLICY_INVALID", "HTTPSFETCH_URL_NOT_ALLOWED"})
 CHUNK = 65536
 
 
@@ -56,6 +59,19 @@ def _spec(name, filename):
 
 
 fetch_lib = _spec("qa525_vnext_https_fetch_for_bounded", "qa525-vnext-https-fetch.py")
+
+
+def _unique(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate")
+        result[key] = value
+    return result
+
+
+def _reject_constant(_):
+    raise ValueError("non-finite")
 
 
 def _argv(argv):
@@ -145,7 +161,8 @@ def fetch_via_child(url, *, python, child, timeout, run=run_bounded):
             raise Stop("BOUNDED_ARGV_INVALID")
     code, out = run([python, "-I", child, url], timeout=timeout)
     try:
-        doc = json.loads(out.decode("ascii"))
+        doc = json.loads(out.decode("ascii"), object_pairs_hook=_unique,
+                         parse_constant=_reject_constant)
     except (UnicodeDecodeError, ValueError, RecursionError):
         raise Stop("BOUNDED_CHILD_FAILED") from None
     if type(doc) is not dict:
@@ -153,7 +170,7 @@ def fetch_via_child(url, *, python, child, timeout, run=run_bounded):
     if code != 0:
         error = doc.get("error")
         if (code == 2 and set(doc) == {"error"} and type(error) is str
-                and ERROR_CODE.fullmatch(error)):
+                and error in FETCH_CODES):
             raise Stop(error)
         raise Stop("BOUNDED_CHILD_FAILED")
     if set(doc) != {"status", "final_url", "body"}:
