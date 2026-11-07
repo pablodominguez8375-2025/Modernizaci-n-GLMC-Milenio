@@ -35,6 +35,11 @@ SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 RECEIPT_FIELDS = frozenset({"schema", "status", "ops_source_sha", "program_sha256",
                             "readiness_sha256", "staging_sha256", "policy_hash"})
+# v3 = v2 + the digest of the APP-attested archive the OPS digests were built from.
+# It exists so a gate can prove OPS-signed bytes and APP-attested bytes are the SAME
+# release (closes #928 P1-A: two individually valid signatures from different
+# releases must not combine).
+RECEIPT_FIELDS_V3 = RECEIPT_FIELDS | {"app_archive_sha256"}
 PATH = re.compile(r"/[A-Za-z0-9._/-]{1,200}\Z")
 
 
@@ -82,9 +87,16 @@ def ssh_keygen_argv(allowed_signers_path, signature_path):
 
 
 def verify_ops_receipt(*, receipt, signature, allowed_signers, ops_fingerprint,
-                       app_fingerprints, policy_hash, verifier):
+                       app_fingerprints, policy_hash, verifier,
+                       expected_app_archive_sha256=None):
     """Return the parsed receipt only if the pinned OPS key signed its exact bytes
-    AND its seven fields have the exact shape ``load_verified_ops`` consumes."""
+    AND its seven fields have the exact shape ``load_verified_ops`` consumes.
+
+    ``expected_app_archive_sha256`` (default ``None``) selects the schema:
+    ``None`` keeps the v2 contract unchanged (exactly seven fields).  A digest
+    demands a v3 receipt (eight fields) whose ``app_archive_sha256`` equals it, so
+    a v2 receipt can never be downgraded into a bound check and a v3 receipt is
+    never accepted by a caller that did not ask for the binding."""
     if (type(receipt) is not bytes or not 0 < len(receipt) <= MAX_RECEIPT
             or type(signature) is not bytes or not 0 < len(signature) <= MAX_SIGNATURE
             or not signature.startswith(SIG_BEGIN) or not signature.endswith(SIG_END)
@@ -93,7 +105,10 @@ def verify_ops_receipt(*, receipt, signature, allowed_signers, ops_fingerprint,
             or any(type(x) is not str or FINGERPRINT.fullmatch(x) is None
                    for x in app_fingerprints)
             or type(policy_hash) is not str or DIGEST.fullmatch(policy_hash) is None
-            or not callable(verifier)):
+            or not callable(verifier)
+            or (expected_app_archive_sha256 is not None
+                and (type(expected_app_archive_sha256) is not str
+                     or DIGEST.fullmatch(expected_app_archive_sha256) is None))):
         raise Stop("OPSSIG_INPUT_INVALID")
     actual = fingerprint_of(allowed_signers)
     if not hmac.compare_digest(actual, ops_fingerprint):
@@ -116,15 +131,24 @@ def verify_ops_receipt(*, receipt, signature, allowed_signers, ops_fingerprint,
         raise
     except (UnicodeDecodeError, ValueError, RecursionError, TypeError):
         raise Stop("OPSSIG_RECEIPT_INVALID") from None
-    if (type(doc) is not dict or set(doc) != RECEIPT_FIELDS
-            or doc["schema"] != "qa525-ops-v2" or doc["status"] != "OPS_SIGNED_VERIFIED"
+    bound = expected_app_archive_sha256 is not None
+    if (type(doc) is not dict or set(doc) != (RECEIPT_FIELDS_V3 if bound else RECEIPT_FIELDS)
+            or doc["schema"] != ("qa525-ops-v3" if bound else "qa525-ops-v2")
+            or doc["status"] != "OPS_SIGNED_VERIFIED"
             or type(doc["ops_source_sha"]) is not str or not SHA40.fullmatch(doc["ops_source_sha"])
             or any(type(doc[k]) is not str or not DIGEST.fullmatch(doc[k]) for k in (
                 "program_sha256", "readiness_sha256", "staging_sha256"))
             or doc["policy_hash"] != policy_hash):
         raise Stop("OPSSIG_RECEIPT_INVALID")
+    if bound and (type(doc["app_archive_sha256"]) is not str
+                  or not DIGEST.fullmatch(doc["app_archive_sha256"])):
+        raise Stop("OPSSIG_RECEIPT_INVALID")
+    if bound and not hmac.compare_digest(doc["app_archive_sha256"],
+                                         expected_app_archive_sha256):
+        raise Stop("OPSSIG_APP_ARCHIVE_MISMATCH")
     return {"receipt": doc, "ops_fingerprint": ops_fingerprint,
             "receipt_sha256": "sha256:" + hashlib.sha256(receipt).hexdigest(),
+            "app_archive_bound": bound,
             "signature_verified_here": True, "fingerprint_provenance_verified_here": False,
             "app_identity_verified_here": False, "key_custody_verified_here": False,
             "may_apply": False, "sponsor_approved_here": False}

@@ -209,5 +209,77 @@ class Contract(unittest.TestCase):
         self.assertNotIn("__main__", SOURCE.read_text().replace('"""', ""))
 
 
+ARCHIVE = "sha256:" + "4" * 64
+V3 = dict(FIELDS, schema="qa525-ops-v3", app_archive_sha256=ARCHIVE)
+
+
+class ReceiptV3AppBinding(unittest.TestCase):
+    """v3 binds the OPS-signed digests to the APP-attested archive (#928 P1-A)."""
+    SIGNERS = Contract.SIGNERS
+    FP = Contract.FP
+    SIGNATURE = Contract.SIGNATURE
+
+    def good_verifier(self, *args):
+        return 0, ('Good "%s" signature for %s with ED25519 key %s\n'
+                   % (sig.NAMESPACE, sig.PRINCIPAL, self.FP)).encode()
+
+    def code(self, **kw):
+        with self.assertRaises(sig.Stop) as c:
+            self.call(**kw)
+        self.assertIsNone(c.exception.__cause__)
+        return str(c.exception)
+
+    def call(self, **kw):
+        args = dict(receipt=encode(V3), signature=self.SIGNATURE, allowed_signers=self.SIGNERS,
+                    ops_fingerprint=self.FP, app_fingerprints=APP, policy_hash=POLICY,
+                    verifier=self.good_verifier, expected_app_archive_sha256=ARCHIVE)
+        args.update(kw)
+        return sig.verify_ops_receipt(**args)
+
+    def test_bound_receipt_passes_and_reports_the_binding_without_authority(self):
+        out = self.call()
+        self.assertEqual(out["receipt"], V3)
+        self.assertIs(out["app_archive_bound"], True)
+        for flag in ("may_apply", "sponsor_approved_here", "app_identity_verified_here",
+                     "key_custody_verified_here", "fingerprint_provenance_verified_here"):
+            self.assertIs(out[flag], False)
+
+    def test_other_release_archive_is_rejected_even_with_a_valid_signature(self):
+        other = "sha256:" + "5" * 64
+        self.assertEqual(self.code(expected_app_archive_sha256=other), "OPSSIG_APP_ARCHIVE_MISMATCH")
+
+    def test_v2_receipt_cannot_be_downgraded_into_a_bound_check(self):
+        self.assertEqual(self.code(receipt=RECEIPT), "OPSSIG_RECEIPT_INVALID")
+
+    def test_v3_receipt_is_not_accepted_by_a_caller_that_did_not_ask_for_binding(self):
+        self.assertEqual(self.code(expected_app_archive_sha256=None), "OPSSIG_RECEIPT_INVALID")
+
+    def test_v2_path_is_unchanged_and_reports_no_binding(self):
+        out = self.call(receipt=RECEIPT, expected_app_archive_sha256=None)
+        self.assertEqual(out["receipt"], FIELDS)
+        self.assertIs(out["app_archive_bound"], False)
+
+    def test_v3_shape_is_strict(self):
+        bad = [dict(V3, app_archive_sha256="x"), dict(V3, app_archive_sha256=None),
+               dict(V3, app_archive_sha256="sha256:" + "G" * 64),
+               dict(V3, app_archive_sha256="sha256:" + "4" * 63),
+               {k: v for k, v in V3.items() if k != "app_archive_sha256"},
+               dict(V3, extra=1), dict(V3, schema="qa525-ops-v2")]
+        for doc in bad:
+            with self.subTest(doc=str(doc)[:80]):
+                self.assertEqual(self.code(receipt=encode(doc)), "OPSSIG_RECEIPT_INVALID")
+
+    def test_expected_archive_argument_must_be_a_digest(self):
+        for value in ("x", 1, b"sha256:" + b"4" * 64, "sha256:" + "A" * 64, True, ""):
+            with self.subTest(value=value):
+                self.assertEqual(self.code(expected_app_archive_sha256=value),
+                                 "OPSSIG_INPUT_INVALID")
+
+    def test_signature_checks_still_run_before_the_binding_is_compared(self):
+        self.assertEqual(self.code(verifier=lambda *a: (1, b"")), "OPSSIG_NOT_VERIFIED")
+        self.assertEqual(self.code(ops_fingerprint="SHA256:" + "B" * 43),
+                         "OPSSIG_FINGERPRINT_MISMATCH")
+
+
 if __name__ == "__main__":
     unittest.main()
