@@ -172,6 +172,24 @@ class BoundedChildRun(BoundedChildBase):
                          "BOUNDED_SPAWN_FAILED")
 
 
+class BoundedChildSelectorFailure(BoundedChildBase):
+    def test_selector_creation_failure_still_kills_and_reaps_the_child(self):
+        import os, time
+        from unittest import mock
+        pidfile = Path(self.tmp.name) / "pid"
+        body = "import os,time\nopen(%r,'w').write(str(os.getpid()))\ntime.sleep(30)\n" % str(pidfile)
+        with mock.patch.object(bc.selectors, "DefaultSelector", side_effect=OSError("no fds")):
+            self.assertEqual(self.code(lambda: self.run_script(body)), "BOUNDED_RUN_FAILED")
+        pid = None
+        for _ in range(50):
+            if pidfile.exists() and pidfile.read_text():
+                pid = int(pidfile.read_text()); break
+            time.sleep(0.05)
+        if pid is not None:  # the child had time to start: it must be gone
+            with self.assertRaises(ProcessLookupError):
+                os.kill(pid, 0)
+
+
 class BoundedChildFetchAdapter(BoundedChildBase):
     def fake(self, code, out):
         return lambda argv, timeout: (code, out)
@@ -202,6 +220,14 @@ class BoundedChildFetchAdapter(BoundedChildBase):
                 bc.fetch_via_child(URL, python=bad, child="/a/b", timeout=1, run=run)
             with self.assertRaises(bc.Stop):
                 bc.fetch_via_child(URL, python="/usr/bin/python3", child=bad, timeout=1, run=run)
+
+    def test_non_string_url_is_a_fixed_refusal_not_a_type_error(self):
+        run = lambda *a, **k: self.fail("must not spawn")
+        for bad in ([URL], {"u": URL}, b"x", 7, None, (URL,)):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.code(lambda: bc.fetch_via_child(
+                    bad, python="/usr/bin/python3", child="/a/b", timeout=1, run=run)),
+                    "BOUNDED_URL_NOT_ALLOWED")
 
     def test_child_errors_map_to_fixed_codes(self):
         err = lambda c: json.dumps({"error": c}).encode()

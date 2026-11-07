@@ -105,8 +105,9 @@ def run_bounded(argv, *, timeout, max_output=MAX_OUTPUT, clock=time.monotonic):
     except (OSError, ValueError):
         raise Stop("BOUNDED_SPAWN_FAILED") from None
     out, total, code = bytearray(), 0, None
-    selector = selectors.DefaultSelector()
+    selector = None
     try:
+        selector = selectors.DefaultSelector()
         selector.register(proc.stdout, selectors.EVENT_READ, "out")
         selector.register(proc.stderr, selectors.EVENT_READ, "err")
         open_streams = 2
@@ -144,7 +145,11 @@ def run_bounded(argv, *, timeout, max_output=MAX_OUTPUT, clock=time.monotonic):
             proc.wait(timeout=5)
         except Exception:
             pass
-        selector.close()
+        if selector is not None:
+            try:
+                selector.close()
+            except Exception:
+                pass
         for stream in (proc.stdout, proc.stderr):
             try:
                 stream.close()
@@ -154,7 +159,7 @@ def run_bounded(argv, *, timeout, max_output=MAX_OUTPUT, clock=time.monotonic):
 
 def fetch_via_child(url, *, python, child, timeout, run=run_bounded):
     """``fetch(url)`` contract through a bounded child; no default executables."""
-    if url not in fetch_lib.ALLOWED_URLS:
+    if type(url) is not str or url not in fetch_lib.ALLOWED_URLS:
         raise Stop("BOUNDED_URL_NOT_ALLOWED")
     for path in (python, child):
         if type(path) is not str or ABS_PATH.fullmatch(path) is None or ".." in path.split("/"):
