@@ -149,12 +149,12 @@ class Qa525ComposePosixPortContractTests(unittest.TestCase):
             calls.append(("close", fd))
             del by_fd[fd]
 
-        with patch.object(posix.os, "geteuid", return_value=0), (
-            patch.object(posix.os, "lstat", side_effect=fake_lstat)), (
-            patch.object(posix.os, "open", side_effect=fake_open)), (
-            patch.object(posix.os, "fstat", side_effect=fake_fstat)), (
-            patch.object(posix.os, "read", side_effect=fake_read)), (
-            patch.object(posix.os, "close", side_effect=fake_close)):
+        with (patch.object(posix.os, "geteuid", return_value=0),
+              patch.object(posix.os, "lstat", side_effect=fake_lstat),
+              patch.object(posix.os, "open", side_effect=fake_open),
+              patch.object(posix.os, "fstat", side_effect=fake_fstat),
+              patch.object(posix.os, "read", side_effect=fake_read),
+              patch.object(posix.os, "close", side_effect=fake_close)):
             p = posix.PosixReadPort(files)
             result = checker.inspect(layers=layers, pinned_sha256=pins, port=p)
         self.assertEqual((result["files_verified"], result["api_layers"],
