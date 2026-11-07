@@ -8,6 +8,7 @@ import ast
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 from test_qa525_vnext_root_locks import Port, rl, fstat_
 from test_qa525_vnext_b7_held_readonly import b7
@@ -134,6 +135,37 @@ class PhysicalRunnerTests(unittest.TestCase):
             runner = self.bind(plane, bnd, record)
             self.stopped(lambda: runner(self.command("api", "target")),
                          "PHYSRUNNER_SCOPE_NOT_RECORDED")
+        self.assertEqual(self.effects, [])
+        self.assertEqual(self.verify_calls, 0)
+
+    def test_scope_store_receipt_requires_canonical_sha256_digest(self):
+        # Clau's mutation R-no-digest: require_recorded must not be a
+        # truthy string / bool / loose sha prefix. No pins or child may run.
+        variants = (None, True, 1, b"sha256:" + b"a" * 64, "",
+                    "yes", "sha256:broken", "sha256:" + "A" * 64,
+                    "sha256:" + "a" * 63, "sha256:" + "a" * 65)
+        with self.active() as (plane, bnd, record):
+            runner = self.bind(plane, bnd, record)
+            for bad in variants:
+                with self.subTest(value=repr(bad)[:32]):
+                    with mock.patch.object(self.scopes, "require_recorded",
+                                           return_value=bad) as registered:
+                        self.stopped(
+                            lambda: runner(self.command("api", "target")),
+                            "PHYSRUNNER_SCOPE_NOT_RECORDED")
+                    registered.assert_called_once_with(
+                        plane.lease, self.fx.fx.digest,
+                        self.containment.unit_name(plane.lease.nonce, "api"))
+        self.assertEqual(self.effects, [])
+        self.assertEqual(self.verify_calls, 0)
+
+    def test_scope_store_exception_is_closed_without_child(self):
+        with self.active() as (plane, bnd, record):
+            runner = self.bind(plane, bnd, record)
+            with mock.patch.object(self.scopes, "require_recorded",
+                                   side_effect=RuntimeError("never echo token")):
+                self.stopped(lambda: runner(self.command("web", "baseline")),
+                             "PHYSRUNNER_SCOPE_NOT_RECORDED")
         self.assertEqual(self.effects, [])
         self.assertEqual(self.verify_calls, 0)
 
