@@ -61,11 +61,17 @@ class RealHeldFlightWithFakeEffectsTests(unittest.TestCase):
             self.assertEqual(len(self.port.fds), 5)
             return shape(changes.get("baseline_sha256", self.pin))
 
-        def factory(plane, bnd, report):
+        def factory(plane, bnd, report, plan):
             self.factories += 1
             self.assertEqual(len(self.port.fds), 5)
             self.assertEqual(plane.lease.nonce, self.h.nonce)
             bnd.require_current_record(report)
+            self.assertEqual(engine.flight.plan_mod.validate(plan), "APPLYING")
+            self.assertEqual(plan["nonce"], self.h.nonce)
+            self.assertEqual(plan["admission_sha256"], self.h.fx.digest)
+            self.assertEqual(plan["baseline_sha256"], self.pin)
+            self.assertEqual(plan["baseline"]["layers"], self.h.base["layers"])
+            self.assertEqual(plan["target"]["layers"], self.h.target["layers"])
             return self.h.runner
 
         def gate(stage):
@@ -175,6 +181,66 @@ class RealHeldFlightWithFakeEffectsTests(unittest.TestCase):
         self.assertNotIn(("web", "target"), self.h.runs)
         self.assertEqual(self.port.fds, {})
 
+    def test_factory_gets_actual_same_flight_validated_plan_not_second_capture(self):
+        captured = []
+        def pinned(plane, bnd, report, plan):
+            captured.append(plan)
+            self.assertEqual(plan["nonce"], plane.lease.nonce)
+            self.assertEqual(plan["baseline_sha256"], report["baseline_sha256"])
+            self.assertEqual(plan["baseline"]["layers"], self.h.base["layers"])
+            self.assertEqual(plan["target"]["layers"], self.h.target["layers"])
+            bnd.require_current_record(report)
+            return self.h.runner
+        before = self.h.reader.capture_baseline
+        calls = []
+        def only_once():
+            calls.append("read")
+            if len(calls) > 1:
+                raise RuntimeError("SECOND_RUNTIME_BASELINE_DISALLOWED")
+            return before()
+        self.h.reader.capture_baseline = only_once
+        result = self.call(runner_factory=pinned)
+        self.assertEqual(result["terminal_outcome"], "APPLIED")
+        self.assertEqual(calls, ["read"])
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(self.h.runs, [("api", "target"), ("web", "target")])
+
+    def test_mutating_factory_copy_does_not_change_plan_or_launch_child(self):
+        def mutate(plane, bnd, report, plan):
+            plan["target"]["layers"]["api"].append("/tmp/unapproved.yml")
+            return self.h.runner
+        with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_RUNNER_PLAN_MUTATED"):
+            self.call(runner_factory=mutate)
+        self.assertEqual(self.h.runs, [])
+        self.assertEqual(self.port.fds, {})
+        self.assertEqual(self.h.terminal(), None)
+
+    def test_legacy_three_argument_factory_cannot_skip_plan_binding(self):
+        def old_factory(plane, bnd, report):
+            raise AssertionError("must not be called")
+        with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_RUNNER_INVALID"):
+            self.call(runner_factory=old_factory)
+        self.assertEqual(self.h.runs, [])
+        self.assertEqual(self.port.fds, {})
+
+    def test_factory_change_to_g6_is_denied_before_mutation(self):
+        def mutate_g6(plane, bnd, report, plan):
+            self.h.g6_evidence["review_bytes"] = b"bad G6 bytes"
+            return self.h.runner
+        with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_G6_CHANGED"):
+            self.call(runner_factory=mutate_g6)
+        self.assertEqual(self.h.runs, [])
+        self.assertEqual(self.port.fds, {})
+
+    def test_factory_changes_bound_report_is_denied_before_mutation(self):
+        def mutate_report(plane, bnd, report, plan):
+            report["observation_sha256"] = "sha256:" + "9" * 64
+            return self.h.runner
+        with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_RUNNER_INVALID"):
+            self.call(runner_factory=mutate_report)
+        self.assertEqual(self.h.runs, [])
+        self.assertEqual(self.port.fds, {})
+
     def test_required_effect_cannot_be_omitted(self):
         params = self.args(runner_factory=None)
         with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_ADAPTER_REQUIRED"):
@@ -207,7 +273,7 @@ class RealHeldFlightWithFakeEffectsTests(unittest.TestCase):
             n.module for n in ast.walk(ast.parse(src))
             if isinstance(n, ast.ImportFrom)
         }
-        self.assertEqual(imports, {"re", "types"})
+        self.assertEqual(imports, {"copy", "re", "types"})
         for text in ("import subprocess", "Popen(", "shell=True", "import os",
                      "import socket", "docker run", "sudo "):
             self.assertNotIn(text, src)
