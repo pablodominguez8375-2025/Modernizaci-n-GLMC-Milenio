@@ -177,7 +177,7 @@ class DualGateContractTests(unittest.TestCase):
     def test_ops_v2_receipt_cannot_downgrade_strict_archive_binding(self):
         old_doc = dict(self.receipt, schema="qa525-ops-v2")
         old_doc.pop("app_archive_sha256")
-        old_raw = (json.dumps(old_doc, sort_keys=True) + "\\n").encode()
+        old_raw = (json.dumps(old_doc, sort_keys=True) + "\n").encode()
         original = self.raw
         try:
             self.raw = old_raw
