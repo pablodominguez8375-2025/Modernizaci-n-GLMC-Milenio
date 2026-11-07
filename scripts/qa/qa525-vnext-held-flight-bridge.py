@@ -102,10 +102,8 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
         # IMPORTANT: stage and scope manifests must share the ONE journal
         # module instance that minted the lease; independent importlib copies
         # reject foreign lease objects and would jeopardize crash recovery.
-        if not _callable(flight, "journal"):
-            # journal is a module/object, not a callable.
-            if not _callable(getattr(flight, "journal", None), "begin"):
-                raise Stop("HELDFLIGHT_JOURNAL_NOT_SHARED")
+        if not _callable(getattr(flight, "journal", None), "begin"):
+            raise Stop("HELDFLIGHT_JOURNAL_NOT_SHARED")
         scopes.journal = flight.journal
         if scopes.journal is not flight.journal:
             raise Stop("HELDFLIGHT_JOURNAL_NOT_SHARED")
