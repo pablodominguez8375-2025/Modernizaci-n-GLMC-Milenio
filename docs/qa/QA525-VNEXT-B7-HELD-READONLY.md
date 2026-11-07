@@ -9,7 +9,18 @@ el futuro movimiento API/WEB. No es seguro comprobar una pila Compose de
 10 servicios y luego asumir que continúa intacta después de soltar locks.
 
 Este módulo nuevo `qa525-vnext-b7-held-readonly.py::held_readonly` cierra
-solo la **primera mitad de esa frontera**:
+solo la **primera mitad de esa frontera**.
+
+**Advertencia de efectos físicos:** Aunque este código no ejecuta cambios
+API/WEB ni escribe directamente archivos, `root_flight` llama a
+`journal.begin` y `lease.close` del journal inyectado. Si se inyecta el
+journal físico real, esas llamadas **pueden escribir estado persistente en disco**
+(incluso sin APPLY). Por ello NO es un «preflight de solo lectura» autorizable
+en `glmdch` sin GO explícito de mantenimiento/ejecución, y NO debe ser
+ejecutado por un diagnóstico READ_ONLY. Todas las pruebas de este PR usan
+únicamente journales y puertos sintéticos, sin recursos de `glmdch`.
+
+Contrato de la biblioteca:
 
 1. **Exige inyección explícita** de puerto root, journal, revisión, pin SHA y
    proveedor de inspección. No construye defaults, no tiene CLI/root/apply.
