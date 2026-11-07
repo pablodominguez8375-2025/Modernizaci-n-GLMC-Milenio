@@ -171,6 +171,40 @@ class LiveGuardTests(unittest.TestCase):
         self.denied("COMMANDGUARD_CGROUP_UNSAFE",
                     lambda: guard(guard.command_for("target", "api")))
 
+    def test_active_api_scope_forbids_web_rollback_even_if_web_scope_is_absent(self):
+        # Regression P1: a global flight MUST NOT mutate a different service
+        # while an unresolved process from the API scope is still running.
+        api = containment.unit_name(bt.NONCE, "api")
+        self.scope_states[api] = "ACTIVE"
+        guard = self.make()
+        self.denied("COMMANDGUARD_CGROUP_UNSAFE",
+                    lambda: guard(guard.command_for("baseline", "web")))
+        self.assertEqual(self.calls, [])
+        self.assertEqual(guard.status["attempts"], 1)
+
+    def test_unknown_web_scope_forbids_api_target_without_any_child(self):
+        web = containment.unit_name(bt.NONCE, "web")
+        self.scope_states[web] = "UNKNOWN"
+        guard = self.make()
+        self.denied("COMMANDGUARD_CGROUP_UNSAFE",
+                    lambda: guard(guard.command_for("target", "api")))
+        self.assertEqual(self.calls, [])
+
+    def test_other_scope_becomes_active_after_child_and_success_is_denied(self):
+        web = containment.unit_name(bt.NONCE, "web")
+
+        def awaken_other(argv):
+            self.calls.append(list(argv))
+            self.scope_states[web] = "ACTIVE"
+            return 0
+
+        guard = self.make(run_effect=awaken_other)
+        self.denied("COMMANDGUARD_CGROUP_UNSAFE",
+                    lambda: guard(guard.command_for("target", "api")))
+        self.assertEqual(len(self.calls), 1)
+        self.denied("COMMANDGUARD_RETRY_REFUSED",
+                    lambda: guard(guard.command_for("target", "api")))
+
     def test_after_child_cgroup_active_denied_and_lock_loss_caught(self):
         unit = containment.unit_name(bt.NONCE, "api")
 
