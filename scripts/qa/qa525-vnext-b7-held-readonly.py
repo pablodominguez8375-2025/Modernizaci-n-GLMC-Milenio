@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """QA525 B7: capture a non-authoritative read-only baseline under HELD root locks.
 
-INACTIVE, LIBRARY ONLY. Reuses the existing five-lock RootPlane + journal lease,
-but NEVER creates a host port, executes a process, writes a file or authorizes
-an application. The caller must inject a reviewed port, journal and inspector.
+INACTIVE, LIBRARY ONLY. Reuses the existing five-lock RootPlane + journal
+lease. It has no direct file/process writes and never authorizes an APPLY, BUT
+the injected journal.begin MAY persist state when connected to a real journal.
+Never invoke as a physical "read-only preflight" without an explicit host GO.
+The caller must inject a reviewed port, journal and inspector.
 
 The inspector's shape/pin are structurally checked while all five locks and
 the lease are held, with a second lock assertion after inspection. This is a
