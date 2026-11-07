@@ -18,3 +18,11 @@
 ## Bloqueos reales pendientes
 
 Firma OPS Ed25519 del Sponsor y APP Sigstore independentemente autenticadas **pre-root**, procedencia externa y custodia de claves, permisos/source SHA firmados de Python/child/Compose, G6 A Restic nuevo y restauración aislada, baseline 7 running +3 oneshots medidos, cgroup real, validación de crash/rollback, autorización Sponsor separada launcher-only/API+WEB. Único host `glmdch`, no main, producción, DB ni identidad. #822 NO-GO físico.
+
+## Rebase y corrección P1 — 07-11-2026 (continuidad Sponsor)
+
+Rebase bajo force-with-lease del HEAD previo `0ca52ec5801a0b228ab394edcb2ee061f782fbb5` a dev@90521bc710f6f622b3481a3e459a609508e69907 (PR #923 incluido), preservando blobs originales 3/3 idénticos, sin host. Se mantuvo copia temporal `feature/qa525-guard-exact-rebase-20261107-gpt` solo para recreación de árbol; no es ejecutor.
+
+Se detectó peligro P1 de composición: verificar solamente cgroup de servicio elegido permitía que rollback WEB arrancase mientras un proceso del cgroup API seguía ACTIVE. Ahora CommandGuard._all_scopes_quiescent comprueba AMBOS ámbitos API/WEB antes y después de CADA efecto; ACTIVE, UNKNOWN o estado no legible detienen todo el vuelo. Pruebas: API ACTIVE → rollback WEB STOP; WEB UNKNOWN → API target STOP; WEB activo después de API child → STOP, consume intento sin retry. Todo con inyección hermética.
+
+HEAD posterior al cambio: `f8f6b6f78108361dce29d1975e81c91a7b0708fe` (verificar SHA vivo antes de integrar). Volver a obtener 7/7 CI exact HEAD, revisión adversarial específica del gate global y rebase si dev avanzó. Código SIN root/host/GO; #822 permanece NO-GO físico.
