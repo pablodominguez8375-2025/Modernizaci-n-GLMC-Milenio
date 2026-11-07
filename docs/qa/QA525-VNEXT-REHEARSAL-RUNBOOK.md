@@ -26,15 +26,16 @@ El inventario de solo lectura (fase 1) NO muta nada y no necesita el GO del Spon
 | # | Condición | Quién | Evidencia |
 |---|---|---|---|
 | B1 | **GO físico del Sponsor** (aparte del permiso de desarrollo) y ventana | Sponsor / PO | Comentario expreso en #525 |
-| B2 | **G6 vigente**: respaldo cifrado de `pmgm` y `pmgm_keycloak` fuera de `glmdch`, acta y restauración aislada real; edad < 48 h y cubre TODA la ventana | PO + ChatGPT | Acta nueva; el motor exige `checkpoint_expires_at ≥ valid_until` |
+| B2 | **G6 vigente, alternativa A** (aprobada por el PO el 07-11 11:18 Santiago solo para QA SINTÉTICO, #525 6708081930): respaldo cifrado nuevo con las herramientas G6 ya instaladas (Restic: 2 BD + globals + Silo) → solo el ciphertext a una carpeta privada de Drive, SHA-256 de los **bytes descargados** idéntico → restauración aislada en el mismo host → acta con el formato exacto que consume `validate_g6`; edad < 48 h y cubre TODA la ventana | PO + ChatGPT | Acta nueva; el motor exige `checkpoint_expires_at ≥ valid_until`. El informe debe conservar `G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY`: **nunca declararlo OFFHOST**. Riesgo aceptado: sin DR de host perdido |
 | B3 | Imágenes de rollback **retenidas** (API y WEB actuales), confirmadas con la evidencia de la fase 1 | PO | Salida de la fase 1 revisada |
-| B4 | Bootstrap raíz autenticado OPS/APP (Sigstore) | ChatGPT | **PENDIENTE** (no existe) |
-| B5 | Wrapper root de los 5 locks legacy + lease raíz | ChatGPT | **PENDIENTE** (no existe) |
-| B6 | Chequeo de salud real HTTPS/OIDC | ChatGPT | **PENDIENTE** (no existe) |
-| B7 | CLI físico con adaptadores reales, revisado exact-head | ChatGPT | **PENDIENTE** (no existe) |
+| B4 | Bootstrap raíz autenticado OPS/APP (Sigstore) | ChatGPT + Sponsor | **PARCIAL**: contrato inactivo de firma OPS Ed25519 separada de APP (#902, borrador) y recibo de 7 campos; **pendiente** integración PRE-root real y decisión del Sponsor sobre la custodia de la clave OPS (#822 puntos 6/7) |
+| B5 | Wrapper root de los 5 locks legacy + lease raíz | ChatGPT | **PARCIAL**: contrato (#898) y puerto POSIX (#899) en `dev`, inactivos; **pendiente** composición en el punto de entrada y prueba real en el host |
+| B6 | Chequeo de salud real HTTPS/OIDC | ChatGPT | **PARCIAL**: proveedor (#898) y `fetch` HTTPS con plazo duro (#900) en `dev`; hijo acotado con plazo externo para el DNS (#905, borrador); **pendiente** probar CA, nombre y respuestas reales desde `glmdch` |
+| B7 | CLI físico con adaptadores reales, revisado exact-head | ChatGPT | **PENDIENTE**: puente de solo lectura de 10 contenedores (#904) es insumo; falta la composición B7, su `scope` cgroup (un grupo de procesos no contiene `setsid`) y la autenticación de rutas/hash de `python` y del hijo |
+| B8 | Línea base física de **10** contenedores: los 3 oneshots (`db-grants`, `migrator`, `minio-init`) `exited/0` leídos en `glmdch` | PO + ChatGPT | **PENDIENTE**: la fase 1 del 06-11 solo cubrió 7 servicios; lectura complementaria de solo lectura con método revisado |
 
 ## Fase 1 — Inventario de solo lectura (existe; la hace el PO como operador)
-Solo después del bloque 0-A (no requiere el bloque 0-B). El único comando es el documentado:
+**HECHA el 06-11 21:47–21:57 (Santiago)** con código `dev@95ffc073`: exit 0, `PHYSICAL_METADATA_CAPTURED_NO_CHANGE_AUTHORITY`, 7 servicios running, capas API=6/WEB=5 (registro en #525, comentarios 6699949734 y 6699974381). **No repetir** salvo cambio de código fijado o de host. Solo después del bloque 0-A (no requiere el bloque 0-B). El único comando es el documentado:
 
 ```bash
 python3 /ruta-root-verificada/scripts/qa/operators/qa525-host-inventory-readonly.py --inventory
@@ -63,4 +64,9 @@ Ensayar, antes de cualquier actualización real, que una caída a mitad del vuel
 Por cada fase: fecha y hora (America/Santiago), SHA del código, resultado y código de parada si lo hubo, y enlace al comentario en #525. Actualizar el Estado Maestro de Drive y la adenda de la sesión. No pegar salidas crudas.
 
 ## Qué falta para poder ejecutar la fase 3
-Del bloque 0-B: bootstrap raíz OPS/APP (Sigstore), wrapper root de los 5 locks + lease raíz, salud HTTPS/OIDC real, piezas 5 (respaldo previo) y 7 (retirar duplicados legacy), G6 vigente y GO del Sponsor.
+Del bloque 0-B: integración real de la firma OPS y APP (Sigstore) con custodia decidida por el Sponsor (B4), composición del punto de entrada con locks, salud y límite externo de DNS (B5–B7), línea base de 10 contenedores leída en el host (B8), pieza 7 (retirar duplicados legacy), G6 vigente según la alternativa A (B2) y GO del Sponsor (B1).
+
+## G6 en el ensayo: dos alternativas y la elegida
+- **A (elegida, QA sintético):** ver B2. Pendientes antes de usarla: custodia externa de la clave Restic (si solo vive en `glmdch`, perder el host deja inútil el ciphertext de Drive), revalidar byte/hash/dueño de `g6-local.py` y `g6-restore.py` (pines 5bbf092e… / 514a482e… leídos el 04-11; no están en GitHub) y no reescribir el recibo `archive.receipt.json` (`status` exacto `ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING`).
+- **B (hito previo a datos personales reales, #694 / Ley 21.719):** `qa525-dual-db-age-backup` + restauración en un laboratorio descartable externo (estación del PO con WSL2/VM). Cubre solo las 2 BD, no es consumida por `validate_g6` y exige código nuevo revisado antes de contar como G6.
+La alternativa A no autoriza ejecutar respaldo, restauración ni instalación: cada paso necesita autorización específica del PO.
