@@ -6,14 +6,15 @@ capability. Deliberately does NOT authorize applying any release. The future
 signed host entrypoint owns the effects, OPS/APP provenance, G6 and approval.
 
 A successful capture means only that a caller-injected Docker/health port
-reported a stable 7 running + 3 exited-zero baseline with the known historical
-Compose API6/WEB5 shape. It is not independent host evidence or a signature.
+reported a stable 7 running + 3 exited-zero baseline with externally pinned
+complete Compose layers (at least the historical API6/WEB5). It is not independent host evidence or a signature.
 """
 import importlib.util
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-EXPECTED_LAYERS = {"api": 6, "web": 5}
+MIN_LAYERS = {"api": 6, "web": 5}
+MAX_LAYERS = 64
 RESULT_STATUS = "QA525_VNEXT_READONLY_SHAPE_STABLE_NOT_AUTHORIZED"
 
 
@@ -54,11 +55,11 @@ def inspect(*, docker_read, compose_adapter, health_check, served_web_revision,
         raise Stop("BRIDGE_PORT_INVALID")
     if type(samples) is not int or not 2 <= samples <= 5:
         raise Stop("BRIDGE_SAMPLES_INVALID")
-    if (type(expected_layers) is not dict or set(expected_layers) != set(EXPECTED_LAYERS)
+    if (type(expected_layers) is not dict or set(expected_layers) != set(MIN_LAYERS)
             or any(type(expected_layers[name]) is not list
-                   or len(expected_layers[name]) != EXPECTED_LAYERS[name]
+                   or not MIN_LAYERS[name] <= len(expected_layers[name]) <= MAX_LAYERS
                    or any(type(p) is not str for p in expected_layers[name])
-                   for name in EXPECTED_LAYERS)):
+                   for name in MIN_LAYERS)):
         raise Stop("BRIDGE_PIN_INVALID")
     try:
         # Exact argv allowlist, then the existing runtime's read-verb guard.
@@ -69,9 +70,8 @@ def inspect(*, docker_read, compose_adapter, health_check, served_web_revision,
         digest = plan.validate_baseline(baseline)
     except Exception:
         raise Stop("BRIDGE_BASELINE_STOP") from None
-    # This is the verified pre-update glmdch shape; never guess from CI.
-    if {name: len(baseline["layers"][name]) for name in EXPECTED_LAYERS} != EXPECTED_LAYERS:
-        raise Stop("BRIDGE_COMPOSE_6_5_MISMATCH")
+    # Historical 6/5 is a minimum, not a ceiling for later reviewed cuts.
+    # Every complete ordered layer must match the external pin exactly.
     if baseline["layers"] != expected_layers:
         raise Stop("BRIDGE_COMPOSE_ORDER_MISMATCH")
     try:
@@ -87,8 +87,8 @@ def inspect(*, docker_read, compose_adapter, health_check, served_web_revision,
         "observation_sha256": observation["evidence_sha256"],
         "running_services_expected": 7,
         "exited_zero_oneshots_verified": 3,
-        "api_compose_layers": EXPECTED_LAYERS["api"],
-        "web_compose_layers": EXPECTED_LAYERS["web"],
+        "api_compose_layers": len(baseline["layers"]["api"]),
+        "web_compose_layers": len(baseline["layers"]["web"]),
         "samples": samples,
         "sourced_from_authenticated_host": False,
         "sponsor_approved_here": False,
