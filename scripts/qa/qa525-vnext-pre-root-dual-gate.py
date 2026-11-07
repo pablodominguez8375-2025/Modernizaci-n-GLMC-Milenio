@@ -26,6 +26,7 @@ FIELDS = frozenset({
 RECEIPT_FIELDS = frozenset({
     "schema", "status", "ops_source_sha", "program_sha256",
     "readiness_sha256", "staging_sha256", "policy_hash",
+    "app_archive_sha256",
 })
 
 
@@ -41,8 +42,9 @@ def verify_dual(*, receipt_bytes, signature_bytes, allowed_signers_bytes,
                 app_bundle_bytes, pins, verify_ops, verify_app):
     """Evaluate TWO independent verification ports against one immutable cut.
 
-    verify_ops(receipt, signature, allowed_signers, fingerprint, policy_hash)
-       returns the result of qa525-vnext-ops-signature.verify_ops_receipt.
+    verify_ops(receipt, signature, allowed_signers, fingerprint, policy_hash,
+               app_archive_sha256) MUST call OPS signature verifier with
+               expected_app_archive_sha256 (strict v3, NEVER v2 fallback).
     verify_app(bundle, challenge) must invoke a ROOTLESS actual Sigstore
        verifier with expected repository/workflow/issuer/source/digest.
     Neither callback's truthfulness/provenance can be proven by this module.
@@ -80,11 +82,13 @@ def verify_dual(*, receipt_bytes, signature_bytes, allowed_signers_bytes,
     try:
         ops = verify_ops(
             receipt_bytes, signature_bytes, allowed_signers_bytes,
-            frozen["ops_fingerprint"], frozen["policy_hash"])
+            frozen["ops_fingerprint"], frozen["policy_hash"],
+            frozen["app_archive_sha256"])
     except Exception:
         raise Stop("DUAL_OPS_SIGNATURE_DENIED") from None
     if (type(ops) is not dict
             or ops.get("signature_verified_here") is not True
+            or ops.get("app_archive_bound") is not True
             or ops.get("may_apply") is not False
             or ops.get("fingerprint_provenance_verified_here") is not False
             or ops.get("app_identity_verified_here") is not False
@@ -93,11 +97,11 @@ def verify_dual(*, receipt_bytes, signature_bytes, allowed_signers_bytes,
         raise Stop("DUAL_OPS_RESULT_UNTRUSTED")
     receipt = ops.get("receipt")
     if (type(receipt) is not dict or set(receipt) != RECEIPT_FIELDS
-            or receipt.get("schema") != "qa525-ops-v2"
+            or receipt.get("schema") != "qa525-ops-v3"
             or receipt.get("status") != "OPS_SIGNED_VERIFIED"
             or any(receipt.get(key) != frozen[key] for key in (
                 "ops_source_sha", "program_sha256", "readiness_sha256",
-                "staging_sha256", "policy_hash"))):
+                "staging_sha256", "policy_hash", "app_archive_sha256"))):
         raise Stop("DUAL_OPS_RECEIPT_MISMATCH")
 
     challenge = {
@@ -122,6 +126,7 @@ def verify_dual(*, receipt_bytes, signature_bytes, allowed_signers_bytes,
         "ops_receipt_sha256": _digest(receipt_bytes),
         "app_bundle_sha256": frozen["app_bundle_sha256"],
         "two_verifier_ports_accepted": True,
+        "ops_v3_app_archive_challenge_matched_by_ports": True,
         "ops_fingerprint_provenance_verified_here": False,
         "app_attestation_provenance_verified_here": False,
         "sponsor_approval_verified_here": False,
