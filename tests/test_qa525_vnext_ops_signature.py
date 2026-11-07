@@ -16,8 +16,17 @@ sig = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sig)
 KEYGEN = shutil.which("ssh-keygen")
 APP = frozenset({"SHA256:" + "A" * 43})
-RECEIPT = json.dumps({"schema": "qa525-ops-v2", "status": "OPS_SIGNED_VERIFIED"},
-                     sort_keys=True).encode() + b"\n"
+POLICY = "sha256:" + "9" * 64
+FIELDS = {"schema": "qa525-ops-v2", "status": "OPS_SIGNED_VERIFIED", "ops_source_sha": "a" * 40,
+          "program_sha256": "sha256:" + "1" * 64, "readiness_sha256": "sha256:" + "2" * 64,
+          "staging_sha256": "sha256:" + "3" * 64, "policy_hash": POLICY}
+
+
+def encode(doc):
+    return json.dumps(doc, sort_keys=True).encode() + b"\n"
+
+
+RECEIPT = encode(FIELDS)
 
 
 def make_key(directory, name="ops"):
@@ -59,7 +68,8 @@ class RealRoundTrip(unittest.TestCase):
 
     def call(self, **kw):
         args = dict(receipt=RECEIPT, signature=self.sig, allowed_signers=self.allowed,
-                    ops_fingerprint=self.fp, app_fingerprints=APP, verifier=real_verifier)
+                    ops_fingerprint=self.fp, app_fingerprints=APP, policy_hash=POLICY,
+                    verifier=real_verifier)
         args.update(kw)
         return sig.verify_ops_receipt(**args)
 
@@ -70,7 +80,7 @@ class RealRoundTrip(unittest.TestCase):
 
     def test_good_signature_passes_and_grants_nothing(self):
         out = self.call()
-        self.assertEqual(out["receipt"]["status"], "OPS_SIGNED_VERIFIED")
+        self.assertEqual(out["receipt"], FIELDS)
         self.assertTrue(out["signature_verified_here"])
         for flag in ("may_apply", "sponsor_approved_here", "key_custody_verified_here",
                      "fingerprint_provenance_verified_here", "app_identity_verified_here"):
@@ -113,7 +123,8 @@ class Contract(unittest.TestCase):
 
     def call(self, **kw):
         args = dict(receipt=RECEIPT, signature=self.SIGNATURE, allowed_signers=self.SIGNERS,
-                    ops_fingerprint=self.FP, app_fingerprints=APP, verifier=self.good_verifier)
+                    ops_fingerprint=self.FP, app_fingerprints=APP, policy_hash=POLICY,
+                    verifier=self.good_verifier)
         args.update(kw)
         return sig.verify_ops_receipt(**args)
 
@@ -146,6 +157,7 @@ class Contract(unittest.TestCase):
                "signature": (None, b"", b"junk", b"junk\n" + sig.SIG_END, self.SIGNATURE + b"x", sig.SIG_BEGIN + b"x"),
                "ops_fingerprint": (None, "SHA256:short", self.FP.replace("SHA256:", "MD5:")),
                "app_fingerprints": (None, set(), frozenset(), frozenset({"x"}), [APP]),
+               "policy_hash": (None, "sha256:short", "9" * 64, POLICY.upper()),
                "verifier": (None, 1)}
         for field, values in bad.items():
             for value in values:
@@ -163,6 +175,15 @@ class Contract(unittest.TestCase):
                 self.assertEqual(self.code(allowed_signers=bad), "OPSSIG_SIGNERS_INVALID")
 
     def test_receipt_json_strictness(self):
+        bad_docs = [dict(FIELDS, schema="other"), dict(FIELDS, status="OPS_PENDING"),
+                    dict(FIELDS, ops_source_sha="a" * 39), dict(FIELDS, ops_source_sha="A" * 40),
+                    dict(FIELDS, ops_source_sha=1), dict(FIELDS, program_sha256="x"),
+                    dict(FIELDS, readiness_sha256="sha256:" + "G" * 64),
+                    dict(FIELDS, staging_sha256=None), dict(FIELDS, policy_hash="sha256:" + "8" * 64),
+                    dict(FIELDS, extra=1), {k: v for k, v in FIELDS.items() if k != "policy_hash"}]
+        for doc in bad_docs:
+            with self.subTest(doc=str(doc)[:70]):
+                self.assertEqual(self.code(receipt=encode(doc)), "OPSSIG_RECEIPT_INVALID")
         for raw in (b"[]\n", b"{\"schema\":\"other\"}", b"{\"schema\":\"qa525-ops-v2\",\"schema\":\"qa525-ops-v2\"}",
                     b"{\"schema\":\"qa525-ops-v2\",\"x\":NaN}", b"\xff", b"not json"):
             with self.subTest(raw=raw):

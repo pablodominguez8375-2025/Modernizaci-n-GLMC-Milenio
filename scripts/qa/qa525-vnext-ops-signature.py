@@ -31,6 +31,10 @@ SIGNER_LINE = re.compile(
 BLOB_PREFIX = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20"
 SIG_BEGIN = b"-----BEGIN SSH SIGNATURE-----\n"
 SIG_END = b"-----END SSH SIGNATURE-----\n"
+SHA40 = re.compile(r"[a-f0-9]{40}\Z")
+DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
+RECEIPT_FIELDS = frozenset({"schema", "status", "ops_source_sha", "program_sha256",
+                            "readiness_sha256", "staging_sha256", "policy_hash"})
 PATH = re.compile(r"/[A-Za-z0-9._/-]{1,200}\Z")
 
 
@@ -78,8 +82,9 @@ def ssh_keygen_argv(allowed_signers_path, signature_path):
 
 
 def verify_ops_receipt(*, receipt, signature, allowed_signers, ops_fingerprint,
-                       app_fingerprints, verifier):
-    """Return the parsed receipt only if the pinned OPS key signed its exact bytes."""
+                       app_fingerprints, policy_hash, verifier):
+    """Return the parsed receipt only if the pinned OPS key signed its exact bytes
+    AND its seven fields have the exact shape ``load_verified_ops`` consumes."""
     if (type(receipt) is not bytes or not 0 < len(receipt) <= MAX_RECEIPT
             or type(signature) is not bytes or not 0 < len(signature) <= MAX_SIGNATURE
             or not signature.startswith(SIG_BEGIN) or not signature.endswith(SIG_END)
@@ -87,6 +92,7 @@ def verify_ops_receipt(*, receipt, signature, allowed_signers, ops_fingerprint,
             or type(app_fingerprints) is not frozenset or not app_fingerprints
             or any(type(x) is not str or FINGERPRINT.fullmatch(x) is None
                    for x in app_fingerprints)
+            or type(policy_hash) is not str or DIGEST.fullmatch(policy_hash) is None
             or not callable(verifier)):
         raise Stop("OPSSIG_INPUT_INVALID")
     actual = fingerprint_of(allowed_signers)
@@ -110,7 +116,12 @@ def verify_ops_receipt(*, receipt, signature, allowed_signers, ops_fingerprint,
         raise
     except (UnicodeDecodeError, ValueError, RecursionError, TypeError):
         raise Stop("OPSSIG_RECEIPT_INVALID") from None
-    if type(doc) is not dict or doc.get("schema") != "qa525-ops-v2":
+    if (type(doc) is not dict or set(doc) != RECEIPT_FIELDS
+            or doc["schema"] != "qa525-ops-v2" or doc["status"] != "OPS_SIGNED_VERIFIED"
+            or type(doc["ops_source_sha"]) is not str or not SHA40.fullmatch(doc["ops_source_sha"])
+            or any(type(doc[k]) is not str or not DIGEST.fullmatch(doc[k]) for k in (
+                "program_sha256", "readiness_sha256", "staging_sha256"))
+            or doc["policy_hash"] != policy_hash):
         raise Stop("OPSSIG_RECEIPT_INVALID")
     return {"receipt": doc, "ops_fingerprint": ops_fingerprint,
             "receipt_sha256": "sha256:" + hashlib.sha256(receipt).hexdigest(),

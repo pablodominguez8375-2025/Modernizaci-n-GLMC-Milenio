@@ -10,7 +10,7 @@ Una firma separada Ed25519 de `ssh-keygen -Y` sobre los **bytes exactos** del re
 - El archivo `allowed_signers` tiene exactamente una línea, con namespace fijado y clave `ssh-ed25519` de 32 bytes, sin comentario.
 - Su huella SHA256 coincide con la huella que el Sponsor fija fuera de banda, y **no** está entre las huellas APP (Sigstore/GitHub) entregadas.
 - El verificador inyectado (futuro `ssh-keygen -Y verify`, recibo por stdin; ver `ssh_keygen_argv`) devuelve código 0 y la salida exacta `Good "…" signature for qa525-ops with ED25519 key SHA256:…`.
-- El recibo es JSON estricto (sin claves duplicadas ni NaN) con `schema=qa525-ops-v2`.
+- El recibo es JSON estricto (sin claves duplicadas ni NaN) con **exactamente** los siete campos que consume `load_verified_ops`: `schema=qa525-ops-v2`, `status=OPS_SIGNED_VERIFIED`, `ops_source_sha` (40 hex), `program_sha256`/`readiness_sha256`/`staging_sha256` (`sha256:` + 64 hex) y `policy_hash` igual al valor esperado que entrega el llamador. La firma válida sola no basta: si la forma no es exacta, `OPSSIG_RECEIPT_INVALID`.
 
 La respuesta siempre trae `may_apply=False` y marca como NO verificados aquí: procedencia de la huella, identidad APP, custodia de la clave y aprobación del Sponsor.
 
