@@ -60,7 +60,7 @@ class Compose:
         return copy.deepcopy(self.records)
 
 
-class BridgeTests(unittest.TestCase):
+class Qa525ReadonlyShapeBridgeContractTests(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self.data = rows()
