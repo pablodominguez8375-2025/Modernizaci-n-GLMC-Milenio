@@ -19,3 +19,11 @@ Quién guarda la clave privada OPS es decisión del Sponsor (fuera de línea, nu
 
 ## Pruebas
 `tests/test_qa525_vnext_ops_signature.py`: caminos con `ssh-keygen` real (firma buena, byte alterado, namespace distinto, otra clave, huella APP reutilizada, huella no coincidente; se omiten si no hay `ssh-keygen`) y casos herméticos de entrada, salida exacta, JSON y ausencia de superficie de procesos/archivos/red.
+
+## Recibo v3: vínculo OPS ↔ APP (cierra #928 P1-A)
+Sin vínculo, un recibo OPS válido de un programa X y una atestación APP válida de un archivo Y pasan juntos. `verify_ops_receipt(..., expected_app_archive_sha256=<digest>)` exige un recibo **v3**: los siete campos de v2 más `app_archive_sha256`, con `schema=qa525-ops-v3`. El digest debe ser igual al del archivo que APP atestó (lo entrega el llamador desde la prueba APP ya verificada); si no, `OPSSIG_APP_ARCHIVE_MISMATCH`.
+- Sin ese argumento el contrato v2 queda idéntico (siete campos, `schema=qa525-ops-v2`), así que nada existente cambia.
+- No hay degradación: con el argumento, un recibo v2 se rechaza; sin él, un recibo v3 se rechaza (`OPSSIG_RECEIPT_INVALID`). El esquema va dentro de los bytes firmados, no en un parámetro.
+- El namespace y la huella OPS son los mismos que ya fijó el Sponsor (`qa525-ops-v2@pmgm`); no hay que regenerar la clave ni el `allowed_signers`.
+- Quien firma el recibo (el Sponsor, con su clave OPS) debe incluir el digest del archivo que APP atestó. De dónde sale ese digest y cómo se fija `ops_source_sha` frente a `app_source_sha` (P1-B) lo define el gate de #928; este módulo no lo decide.
+- La respuesta añade `app_archive_bound` y mantiene `may_apply=False` y los demás indicadores en `False`.
