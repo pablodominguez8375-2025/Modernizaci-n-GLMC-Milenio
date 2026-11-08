@@ -147,7 +147,7 @@ class GoPortRealSignatureTests(unittest.TestCase):
         subprocess.run(["/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "",
                         "-f", str(other)], check=True)
         public = Path(str(other) + ".pub").read_text().split()[1]
-        foreign = ('qa525-ops namespaces="%s" ssh-ed25519 %s\\n'
+        foreign = ('qa525-ops namespaces="%s" ssh-ed25519 %s\n'
                    % (port.NAMESPACE, public)).encode()
         # Both allowed_signers and caller's claimed GO pin may agree with
         # foreign key, but the independently supplied trusted key still wins.
