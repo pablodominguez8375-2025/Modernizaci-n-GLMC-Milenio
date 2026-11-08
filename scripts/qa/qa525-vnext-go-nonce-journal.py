@@ -10,6 +10,10 @@ and NO success/record digest is reported. Fail-closed: a crash at any point afte
 leaves the nonce spent (never re-usable). A non-blocking flock lease serialises
 concurrent consumers; losers get an opaque STOP. Verifying the GO signature,
 APP provenance or Sponsor consent is NOT done here (bootstrap_authenticated=False).
+Durability is promised only for a call that RETURNED (after file and directory fsync);
+a crash/power loss before the directory fsync may lose the dentry, but success was
+never reported. Not 'power-loss safe' beyond that. Compose it AFTER signature checks
+and under the live 5-lock plane + lease, never as a replacement for them.
 No sudo, docker, network, or path outside the journal root is touched.
 """
 import fcntl
@@ -69,7 +73,7 @@ def _write_all(fd, data):
     view, done = memoryview(data), 0
     while done < len(data):
         n = os.write(fd, view[done:])
-        if type(n) is not int or n <= 0:
+        if type(n) is not int or n <= 0 or n > len(view) - done:
             raise Stop("NONCE_RECORD_WRITE_INCOMPLETE")
         done += n
 
@@ -96,10 +100,11 @@ def consume(root, nonce, binding, *, uid, now, expires_at):
     lease = None
     try:
         try:
-            lease = os.open(LEASE, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
-                            0o600, dir_fd=dirfd)
+            lease = os.open(LEASE, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC
+                            | os.O_NONBLOCK, 0o600, dir_fd=dirfd)
             info = os.fstat(lease)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != uid or info.st_nlink != 1:
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid or info.st_nlink != 1
+                    or info.st_mode & 0o177):
                 raise Stop("NONCE_LEASE_UNSAFE")
             fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:

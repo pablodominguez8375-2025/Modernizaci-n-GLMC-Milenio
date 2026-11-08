@@ -157,6 +157,21 @@ class NonceJournalTests(unittest.TestCase):
             self.stop("NONCE_ROOT_INVALID", self.go)
         self.assertEqual(len(os.listdir("/proc/self/fd")), before)
 
+    def test_lease_with_loose_mode_or_overreporting_write_is_refused(self):
+        import unittest.mock as um
+        lease = os.path.join(self.root, ".lease")
+        open(lease, "x").close()
+        os.chmod(lease, 0o666)
+        self.stop("NONCE_LEASE_UNSAFE", self.go)
+        os.chmod(lease, 0o600)
+        with um.patch.object(mod.os, "write", return_value=10 ** 6):
+            self.stop("NONCE_RECORD_WRITE_INCOMPLETE", self.go)
+        self.stop("NONCE_REPLAY", self.go)
+
+    def test_lease_fifo_does_not_block(self):
+        os.mkfifo(os.path.join(self.root, ".lease"), 0o600)
+        self.stop("NONCE_LEASE_UNSAFE", self.go)
+
     def test_no_forbidden_apis(self):
         text = SRC.read_text()
         for bad in ("subprocess", "sudo", "docker", "urllib", "socket", "/opt/centenario", "os.system"):
