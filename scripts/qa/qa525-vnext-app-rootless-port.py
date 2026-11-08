@@ -6,11 +6,15 @@ dual-gate APP callback. It NEVER installs, authorizes root, or touches QA.
 Its expected GH executable SHA, APP source SHA, and INNER ZIP SHA are
 independent pins supplied by a trusted operator, NOT by this module.
 The root-owned gh executable and host OS are a residual trust boundary.
-The rootless GH CLI may need network trust-root lookup. Unit tests monkeypatch subprocess.run. Runtime callers CANNOT supply a fake
-runner to bypass Sigstore verification; this is not a root authorization.
+The rootless GH CLI may need network trust-root lookup. Unit tests monkeypatch
+subprocess.run. Runtime callers CANNOT supply a fake runner. On success,
+take_verified_fd() transfers a one-use Linux F_SEAL_WRITE immutable memfd with
+the exact verified bytes, not the original mutable ZIP path. This is not
+authenticated root delivery, a bootstrap, or a GO authorization.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import hmac
 import os
@@ -95,6 +99,10 @@ def _open_inner(path):
     """Source must already be staged in a user-owned, mode-0700 private dir."""
     if not isinstance(path, Path) or not path.is_absolute():
         raise Stop("APP_PORT_SOURCE_INVALID")
+    # O_NOFOLLOW applies to the final component only. Refuse symlinked
+    # ancestors too; the private parent remains an authenticated boundary.
+    if os.path.realpath(path) != os.fspath(path):
+        raise Stop("APP_PORT_SOURCE_UNTRUSTED")
     try:
         parent = path.parent.lstat()
         source = path.lstat()
@@ -177,6 +185,91 @@ def _hash_private_file(path, limit):
         os.close(fd)
 
 
+def _immutable_fd_from_verified_zip(path, expected_sha):
+    """Rebind verified ZIP *bytes* to an immutable Linux memfd (never a path).
+
+    The FD remains open after the temporary gh verification path vanishes.
+    This is a pre-root handoff primitive, not a bootstrap or physical GO.
+    Fail closed on kernels without F_SEAL_WRITE support.
+    """
+    required = ("MFD_CLOEXEC", "MFD_ALLOW_SEALING")
+    if (not hasattr(os, "memfd_create")
+            or any(not hasattr(os, name) for name in required)
+            or any(not hasattr(fcntl, name) for name in (
+                "F_ADD_SEALS", "F_GET_SEALS", "F_SEAL_WRITE", "F_SEAL_SEAL",
+                "F_SEAL_SHRINK", "F_SEAL_GROW"))):
+        raise Stop("APP_PORT_IMMUTABLE_FD_UNAVAILABLE")
+    source, identity = _open_inner(path)
+    frozen = None
+    try:
+        frozen = os.memfd_create("qa525-verified-inner-zip",
+                                 os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+        sha = hashlib.sha256()
+        size = 0
+        while True:
+            chunk = os.read(source, CHUNK)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_ZIP:
+                raise Stop("APP_PORT_IMMUTABLE_FD_INVALID")
+            sha.update(chunk)
+            view = memoryview(chunk)
+            while view:
+                written = os.write(frozen, view)
+                if written <= 0:
+                    raise Stop("APP_PORT_IMMUTABLE_FD_INVALID")
+                view = view[written:]
+        end = os.fstat(source)
+        if (not 0 < size == identity.st_size
+                or (identity.st_dev, identity.st_ino, identity.st_size,
+                    identity.st_mtime_ns) !=
+                   (end.st_dev, end.st_ino, end.st_size, end.st_mtime_ns)
+                or not hmac.compare_digest("sha256:" + sha.hexdigest(), expected_sha)):
+            raise Stop("APP_PORT_IMMUTABLE_FD_INVALID")
+        os.fsync(frozen)
+        seals = (fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL |
+                 fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW)
+        fcntl.fcntl(frozen, fcntl.F_ADD_SEALS, seals)
+        if fcntl.fcntl(frozen, fcntl.F_GET_SEALS) & seals != seals:
+            raise Stop("APP_PORT_IMMUTABLE_FD_INVALID")
+        os.lseek(frozen, 0, os.SEEK_SET)
+        result = frozen
+        frozen = None
+        return result
+    except Stop:
+        raise
+    except OSError:
+        raise Stop("APP_PORT_IMMUTABLE_FD_UNAVAILABLE") from None
+    finally:
+        os.close(source)
+        if frozen is not None:
+            os.close(frozen)
+
+
+def _recheck_immutable_fd(fd, expected_sha):
+    """Check sealed, immutable memfd content without changing its file offset."""
+    try:
+        st = os.fstat(fd)
+        seals = (fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL |
+                 fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW)
+        if (not stat.S_ISREG(st.st_mode) or not 0 < st.st_size <= MAX_ZIP
+                or fcntl.fcntl(fd, fcntl.F_GET_SEALS) & seals != seals):
+            raise Stop("APP_PORT_IMMUTABLE_FD_INVALID")
+        h = hashlib.sha256()
+        offset = 0
+        while offset < st.st_size:
+            data = os.pread(fd, min(CHUNK, st.st_size - offset), offset)
+            if not data:
+                raise Stop("APP_PORT_IMMUTABLE_FD_INVALID")
+            h.update(data)
+            offset += len(data)
+        if not hmac.compare_digest("sha256:" + h.hexdigest(), expected_sha):
+            raise Stop("APP_PORT_IMMUTABLE_FD_INVALID")
+    except OSError:
+        raise Stop("APP_PORT_IMMUTABLE_FD_INVALID") from None
+
+
 def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
                  expected_source_sha: str, expected_inner_sha256: str,
                  expected_bundle_sha256: str):
@@ -197,7 +290,30 @@ def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
             or not _check_digest(trusted_gh_sha256)):
         raise Stop("APP_PORT_PINS_INVALID")
 
+    held = {"fd": None, "verified_once": False}
+
+    def take_verified_fd():
+        """Transfer the exact immutable bytes once; CALLER must close the fd.
+
+        A trusted consumer must bind these bytes/digest to its separately
+        authenticated root bootstrap. This library NEVER performs that step.
+        """
+        fd = held["fd"]
+        if fd is None:
+            raise Stop("APP_PORT_VERIFIED_FD_UNAVAILABLE")
+        _recheck_immutable_fd(fd, expected_inner_sha256)
+        held["fd"] = None
+        return fd, expected_inner_sha256
+
+    def close_verified_fd():
+        fd = held["fd"]
+        held["fd"] = None
+        if fd is not None:
+            os.close(fd)
+
     def verify_app(bundle_bytes, challenge):
+        if held["verified_once"]:
+            raise Stop("APP_PORT_ALREADY_VERIFIED")
         if (type(bundle_bytes) is not bytes or not 0 < len(bundle_bytes) <= MAX_BUNDLE
                 or type(challenge) is not dict or set(challenge) != EXPECTED_FIELDS):
             raise Stop("APP_PORT_INPUT_INVALID")
@@ -254,9 +370,17 @@ def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
                         or _hash_private_file(bundle, MAX_BUNDLE) != expected_bundle_sha256):
                     raise Stop("APP_PORT_SIGSTORE_DENIED")
                 _check_binary(trusted_gh_sha256)
+                # The result may never be used via the old source pathname.
+                # Keep immutable content in a sealed memfd, not a temp path
+                # that disappears or could be replaced by the same user.
+                kept_fd = _immutable_fd_from_verified_zip(signed, expected_inner_sha256)
+                held["fd"] = kept_fd
+                held["verified_once"] = True
                 return True
         finally:
             os.close(fd)
+    verify_app.take_verified_fd = take_verified_fd
+    verify_app.close_verified_fd = close_verified_fd
     return verify_app
 
 
