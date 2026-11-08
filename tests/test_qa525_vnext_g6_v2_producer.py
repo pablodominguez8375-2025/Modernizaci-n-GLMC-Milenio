@@ -12,6 +12,7 @@ import stat
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 SOURCE = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-g6-v2-producer.py"
 spec = importlib.util.spec_from_file_location("qa525_vnext_g6_v2_producer_test", SOURCE)
@@ -878,6 +879,78 @@ class G6V2ProducerCliSurfaceTests(unittest.TestCase):
             self.assertNotIn(forbidden, text)
         with self.assertRaises(SystemExit):
             exec(compile(text, "x", "exec"), {"__name__": "__main__"})
+
+
+
+class G6V2ProducerStrictCleanupTests(G6V2ProducerBase):
+    """No PASS/report if encrypted backup working data fails to disappear."""
+
+    def setUp(self):
+        super().setUp()
+        self.init()
+
+    def _prepare_restore(self):
+        out = self.backup()
+        self.download(out)
+        return out
+
+    def _restore(self, out):
+        return prod.restore(
+            self.root, runner=self.fake, verifier=verifier_ok,
+            archive_name=out["archive_name"], archive_sha256=out["archive_sha256"],
+            snapshot_id=out["snapshot_id"],
+            expected_manifest_sha256=out["manifest_sha256"],
+            forbidden_prefixes=[os.path.join(self.base, "prod")],
+            uid=UID, now=NOW + dt.timedelta(hours=2), **self.pins)
+
+    def _report(self):
+        return Path(self.root, "state-v2",
+                    "isolated-restore-v2-20261108T120000Z.report.json")
+
+    def test_backup_cleanup_permission_denied_is_stop_and_no_receipt(self):
+        with mock.patch.object(prod.shutil, "rmtree", side_effect=PermissionError("denied")):
+            self.assertEqual(self.code(self.backup), "G6P_CLEANUP_FAILED")
+        self.assertFalse(Path(self.root, "state-v2",
+                              "receipt-20261108T120000Z.json").exists())
+        self.assertTrue(Path(self.root, "stages-v2", "20261108T120000Z").exists())
+
+    def test_backup_cleanup_false_success_is_stop_and_no_receipt(self):
+        with mock.patch.object(prod.shutil, "rmtree", return_value=None):
+            self.assertEqual(self.code(self.backup), "G6P_CLEANUP_FAILED")
+        self.assertFalse(Path(self.root, "state-v2",
+                              "capture-20261108T120000Z.json").exists())
+
+    def test_restore_cleanup_permission_denied_is_stop_without_success_report(self):
+        out = self._prepare_restore()
+        with mock.patch.object(prod.shutil, "rmtree", side_effect=PermissionError("denied")):
+            self.assertEqual(self.code(self._restore, out), "G6P_CLEANUP_FAILED")
+        self.assertFalse(self._report().exists())
+        self.assertTrue(Path(self.root, "restores-v2", "20261108T120000Z").exists())
+
+    def test_restore_cleanup_false_success_is_stop_without_success_report(self):
+        out = self._prepare_restore()
+        with mock.patch.object(prod.shutil, "rmtree", return_value=None):
+            self.assertEqual(self.code(self._restore, out), "G6P_CLEANUP_FAILED")
+        self.assertFalse(self._report().exists())
+
+    def test_restore_report_is_persisted_only_after_plaintext_disappears(self):
+        out = self._prepare_restore()
+        original = prod._create_excl
+        work = Path(self.root, "restores-v2", "20261108T120000Z")
+        witnessed = []
+
+        def check_before_write(path, payload):
+            if str(path) == str(self._report()):
+                self.assertFalse(work.exists())
+                witnessed.append(True)
+            return original(path, payload)
+
+        with mock.patch.object(prod, "_create_excl", side_effect=check_before_write):
+            report = self._restore(out)
+        self.assertTrue(witnessed)
+        self.assertTrue(self._report().exists())
+        self.assertEqual(report["silo_objects_verified"], 3)
+
 
 
 if __name__ == "__main__":

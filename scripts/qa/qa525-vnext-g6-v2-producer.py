@@ -557,7 +557,17 @@ def _extract_safe(fd, dest, expected_sha256):
 
 
 def _remove_stage(path):
-    shutil.rmtree(path, ignore_errors=True)
+    """Remove plaintext with proof of absence; failure is never a PASS."""
+    try:
+        shutil.rmtree(path)
+        # rmtree can be patched/broken or return without actually cleaning.
+        try:
+            os.lstat(path)
+        except FileNotFoundError:
+            return
+    except OSError:
+        raise Stop("G6P_CLEANUP_FAILED") from None
+    raise Stop("G6P_CLEANUP_FAILED")
 
 
 def backup(root, *, runner, captor, expected_repo_id, expected_key_epoch, uid, now):
@@ -692,12 +702,15 @@ def restore(root, *, runner, verifier, archive_name, archive_sha256, snapshot_id
                   "restic_repo_id": expected_repo_id, "key_epoch": expected_key_epoch,
                   "postgres_tables_by_database": dict(tables),
                   "silo_objects_verified": silo, "production_touched": False}
-        _create_excl(report_path, canonical(report))
-        return report
+        # Do NOT persist success before plaintext cleanup has been proven.
     finally:
-        os.close(fd)
-        if created:  # restored plaintext and the private repo copy never outlive the check
-            shutil.rmtree(workdir, ignore_errors=True)
+        try:
+            os.close(fd)
+        finally:
+            if created:  # fail closed if plaintext or private repo copy remains
+                _remove_stage(workdir)
+    _create_excl(report_path, canonical(report))
+    return report
 
 
 _RESTORE_FIELDS = {"schema", "result", "archive_filename", "archive_sha256",
