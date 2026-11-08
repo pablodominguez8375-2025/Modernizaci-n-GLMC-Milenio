@@ -23,19 +23,31 @@ sale con 1; nunca un traceback, ruta ni salida de un comando.
 - Prefijos prohibidos para el restore: `/var/lib/docker`, `/opt/centenario`, `/srv`.
 
 ## Quiesce del Silo (decisión del Sponsor 08-11 00:55: ventana de 5–10 min, solo durante el respaldo G6)
-El programa **nunca** detiene, arranca ni borra un contenedor (hay una prueba estática que lo prohíbe). La copia del Silo
-solo avanza si MinIO está **positivamente detenido** (`State.Running=false`, etiquetas del proyecto) antes y después de
-copiar. El operador detiene y vuelve a arrancar MinIO con comandos separados dentro de la ventana. Los volcados de Postgres
-ocurren con MinIO ya detenido, así que la ventana cubre todo `backup`; `preflight` imprime el tamaño del Silo para estimarla.
+El programa **nunca** detiene, arranca ni borra un contenedor (hay una prueba estática que lo prohíbe). Revisión ChatGPT 08-11
+(P1-2/P1-3) aplicada:
+- **Ligadura:** antes de la ventana se inspecciona `Mounts` de MinIO: debe haber exactamente un montaje con `Destination=/data`,
+  `Type=volume` y `Source` idéntico a la ruta del Silo, sin symlinks. Si no, `G6RUN_SILO_UNBOUND` y no se pide parar nada.
+- **Ventana medida y acotada:** MinIO debe estar **en marcha** cuando se llega al Silo (los volcados de Postgres ocurren antes, con
+  MinIO activo; si ya está parado, `G6RUN_MINIO_STOPPED_EARLY`). Entonces imprime `G6RUN_ACTION=STOP_MINIO_NOW` y espera hasta
+  180 s a que el operador lo pare. La ventana se mide desde que se observa parado hasta terminar la copia; al terminar imprime
+  `G6RUN_ACTION=START_MINIO_NOW` y `MINIO_WINDOW_SECONDS` **antes** de que Restic y el archivo cifrado sigan. Tope duro 600 s:
+  si se supera, `G6RUN_WINDOW_EXCEEDED` y la copia no es válida. Ante cualquier error tras la parada también imprime
+  `START_MINIO_NOW` (`REASON=ABORTED`).
+- **Lo que el programa NO garantiza:** si la terminal móvil se desconecta, nadie imprime ni ejecuta el arranque. Por eso el operador
+  arma **antes de parar** un temporizador independiente del terminal (paso 4) que arranca MinIO pase lo que pase.
+- Sesgo conocido: los volcados de Postgres y la copia del Silo no son atómicos entre sí (BD antes que Silo).
 
 ## Ciclo propuesto (borrador para revisión de ChatGPT; cada comando lo pega el Sponsor uno a uno por Termius)
 1. **Una vez:** copiar los 4 archivos (`run`, `producer`, `captor`, `verifier`) a un directorio root con el método de la
    Fase 1 y comprobar `sha256sum` contra la lista publicada; `sudo install -d -m 0700 -o root -g root /var/lib/pmgm-qa525-g6-v2`.
-2. `preflight` con el hash de restic y el digest de la imagen. **STOP** si: `RESTIC_MATCHES_PIN=no`, `SILO_SOURCE_OK=no`,
+2. `preflight` con el hash de restic y el digest de la imagen. Sale con código 1 y `PREFLIGHT_READY=no` si algo falla. **STOP** si: `RESTIC_MATCHES_PIN=no`, `SILO_BOUND_TO_MOUNT=no`, `SILO_SOURCE_OK=no`, `PYTHON_FCNTL_SEALS=no`,
    `FREE_OK=no`, `IMAGE_PRESENT=no`, `IMAGE_MATCHES_PIN=no`, `POSTGRES_IDENTITY` distinto de `centenario-qa-lab2|postgres|true`.
 3. `init` (solo la primera vez): el Sponsor pega la clave nueva desde Bitwarden; guarda `RESTIC_REPO_ID` y `KEY_EPOCH` (son los pines).
-4. **Ventana:** `sudo docker stop centenario-qa-lab2-minio-1` → `backup` → `sudo docker start centenario-qa-lab2-minio-1` y
-   comprobar salud (runbook). Si `backup` da STOP, arrancar MinIO igualmente.
+4. **Ventana** (MinIO sigue en marcha al empezar `backup`): en una segunda sesión el Sponsor arma el temporizador independiente
+   `sudo systemd-run --on-active=11min docker start centenario-qa-lab2-minio-1` y lanza `backup`. Al ver `G6RUN_ACTION=STOP_MINIO_NOW`
+   ejecuta `sudo docker stop centenario-qa-lab2-minio-1`; al ver `G6RUN_ACTION=START_MINIO_NOW` ejecuta
+   `sudo docker start centenario-qa-lab2-minio-1` y comprueba salud (runbook). Si no ve nada o `backup` da STOP, arranca MinIO igualmente.
+   Requiere la aprobación expresa del Sponsor para ese día; **no** se extrapola la del 08-11 00:55 si no se puede garantizar el temporizador.
 5. Descargar `exports-v2/<archivo>` por SFTP, subirlo a la carpeta Drive, bajarlo de nuevo, comprobar que su SHA-256 es
    `ARCHIVE_SHA256`, y subirlo por SFTP a `downloads-v2/` (0600).
 6. `restore` con los valores de `backup` → debe imprimir `RESULT=G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY`.
@@ -48,4 +60,11 @@ ocurren con MinIO ya detenido, así que la ventana cubre todo `backup`; `preflig
   restore aislado **no** prueba roles, ACL ni que MinIO lea el Silo restaurado.
 - Se asume Python ≥ 3.9 en el host y raíz de datos de Docker por defecto; `preflight` informa lo que difiera.
 - La clave la lee `getpass` del terminal: debe ser ASCII imprimible, sin espacios, ≥ 32 caracteres.
+- **Primer byte root (P1-1) sigue ABIERTO:** el ejecutor carga hermanos con `exec_module` bajo UID 0 sin ancla por FD ni bootstrap
+  autenticado. Se resuelve con el contrato de #936/#822 (bootstrap autenticado desde un pin independiente antes de privilegiar). Hasta entonces
+  **NO-GO para `sudo` de este entrypoint**, también `preflight`.
+- `preflight` con `PREFLIGHT_READY=yes` es solo lectura, no una puerta de paso validada.
+- **Contrato con `validate_g6` (hallazgo, sin cerrar aquí):** el validador actual lee `/home/soporte/<archivo>`, `/opt/centenario/qa-g6/archive.receipt.json`
+  y el informe de restore bajo `/opt/centenario/qa-g6/`, todo propiedad de root y 0600, mientras que `review` deja los documentos en
+  `/var/lib/pmgm-qa525-g6-v2/`. Falta un paso de puente (o adaptar el validador) y una prueba de contrato; no se afirma compatibilidad.
 - Pendiente de ChatGPT: confirmar rutas, la ventana, y quién convierte el `review` en el acta que consume `validate_g6`.

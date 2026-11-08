@@ -31,17 +31,23 @@ import getpass
 import hashlib
 import hmac
 import importlib.util
+import json
 import os
 from pathlib import Path
 import re
 import shutil
 import stat
 import sys
+import time
 
 HERE = Path(__file__).resolve().parent
 STATE_ROOT = "/var/lib/pmgm-qa525-g6-v2"
 RESTIC = "/usr/bin/restic"
 SILO_SOURCE = ("/var/lib/docker/volumes/centenario-qa-lab2_pmgm_srv01_minio_data/_data")
+MINIO_DATA_DESTINATION = "/data"
+STOP_WAIT_SECONDS = 180      # operator time to stop MinIO once asked
+WINDOW_MAX_SECONDS = 600     # hard cap, stop observed -> Silo copy finished
+POLL_SECONDS = 2
 FORBIDDEN_PREFIXES = ["/var/lib/docker", "/opt/centenario", "/srv"]
 SIBLINGS = {"producer": "qa525-vnext-g6-v2-producer.py",
             "captor": "qa525-vnext-g6-v2-captor.py",
@@ -146,13 +152,15 @@ class Env:
 
     def __init__(self, *, producer, captor, verifier, uid, now, docker_runner, make_restic,
                  read_key, emit, state_root=STATE_ROOT, silo_source=SILO_SOURCE,
-                 restic=RESTIC, forbidden=None, module_hashes=None):
+                 restic=RESTIC, forbidden=None, module_hashes=None,
+                 sleep=time.sleep, monotonic=time.monotonic):
         self.producer, self.captor, self.verifier = producer, captor, verifier
         self.uid, self.now, self.docker_runner = uid, now, docker_runner
         self.make_restic, self.read_key, self.emit = make_restic, read_key, emit
         self.state_root, self.silo_source, self.restic = state_root, silo_source, restic
         self.forbidden = list(FORBIDDEN_PREFIXES if forbidden is None else forbidden)
         self.module_hashes = dict(module_hashes or {})
+        self.sleep, self.monotonic = sleep, monotonic
         self.docker = captor.DOCKER
         self.project = captor.PROJECT
         self.minio = captor.PROJECT + "-minio-1"
@@ -164,6 +172,72 @@ def minio_quiescent(env):
                                   capture_limit=4096)
     return code == 0 and out.decode("ascii", "replace").strip() == \
         "|".join((env.project, "minio", "false"))
+
+
+def silo_bound(env):
+    """True only if MinIO's /data mount IS the volume directory this program will copy."""
+    code, out = env.docker_runner(
+        [env.docker, "--host", env.captor.SOCKET, "inspect", "--format", "{{json .Mounts}}",
+         env.minio], capture_limit=65536)
+    if code != 0:
+        return False
+    try:
+        mounts = json.loads(out.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return False
+    if type(mounts) is not list:
+        return False
+    data = [m for m in mounts if type(m) is dict
+            and m.get("Destination") == MINIO_DATA_DESTINATION]
+    if len(data) != 1:
+        return False
+    source = data[0].get("Source")
+    return (data[0].get("Type") == "volume" and type(source) is str
+            and source == env.silo_source and os.path.realpath(source) == source
+            and not os.path.islink(source))
+
+
+class SiloGate:
+    """The ``silo_quiescent`` port: binds the source, measures and caps the stop window.
+
+    The program never stops or starts MinIO. It asks the operator (one fixed line) and
+    watches. MinIO must be seen RUNNING first, so the window start is observed, not assumed.
+    """
+
+    def __init__(self, env):
+        self.env, self.phase, self.opened_at, self.closed = env, 0, None, False
+
+    def __call__(self):
+        env = self.env
+        if self.phase == 0:
+            self.phase = 1
+            if not silo_bound(env):
+                raise Stop("G6RUN_SILO_UNBOUND")
+            if minio_quiescent(env):
+                raise Stop("G6RUN_MINIO_STOPPED_EARLY")
+            _emit(env, g6run_action="STOP_MINIO_NOW", window_max_seconds=WINDOW_MAX_SECONDS,
+                  wait_seconds=STOP_WAIT_SECONDS)
+            waited = 0
+            while not minio_quiescent(env):
+                if waited >= STOP_WAIT_SECONDS:
+                    return False
+                env.sleep(POLL_SECONDS)
+                waited += POLL_SECONDS
+            self.opened_at = env.monotonic()
+            return True
+        self.phase = 2
+        result = minio_quiescent(env)
+        self.closed = True
+        elapsed = int(env.monotonic() - self.opened_at)
+        _emit(env, g6run_action="START_MINIO_NOW", minio_window_seconds=elapsed)
+        if elapsed > WINDOW_MAX_SECONDS:
+            raise Stop("G6RUN_WINDOW_EXCEEDED")
+        return result
+
+    def abort_notice(self):
+        if self.opened_at is not None and not self.closed:
+            self.closed = True
+            _emit(self.env, g6run_action="START_MINIO_NOW", reason="ABORTED")
 
 
 def _emit(env, **pairs):
@@ -200,6 +274,17 @@ def _yesno(flag):
     return "yes" if flag else "no"
 
 
+def image_matches_pin(raw, image):
+    """Exact: ``<Id> <json RepoDigests>`` where one entry equals the pinned reference."""
+    try:
+        ident, digests = raw.decode("ascii").strip().split(" ", 1)
+        listed = json.loads(digests)
+    except (ValueError, UnicodeDecodeError):
+        return False
+    return (re.fullmatch(r"sha256:[0-9a-f]{64}", ident) is not None and type(listed) is list
+            and any(type(entry) is str and entry == image for entry in listed))
+
+
 def cmd_preflight(env, opts):
     """Read-only checks; writes nothing and changes nothing."""
     cap = env.captor
@@ -228,24 +313,34 @@ def cmd_preflight(env, opts):
         text = out.decode("ascii", "replace").strip() if code == 0 else "unavailable"
         _emit(env, **{service + "_identity": text})
     _emit(env, minio_quiescent=_yesno(minio_quiescent(env)))
+    bound = silo_bound(env)
+    _emit(env, silo_bound_to_mount=_yesno(bound))
     files, size, within = _tree_stats(env.silo_source, cap.SILO_MAX_FILES, cap.SILO_MAX_BYTES)
     _emit(env, silo_source_files=files, silo_source_bytes=size,
           silo_source_ok=_yesno(within and files > 0))
+    ready = [fcntl_ok, bound, within and files > 0]
+    if "restic-sha256" in opts:
+        ready.append(restic_hash is not None
+                     and hmac.compare_digest(restic_hash, opts["restic-sha256"]))
     probe = env.state_root if os.path.isdir(env.state_root) else os.path.dirname(env.state_root)
     try:
         free = shutil.disk_usage(probe).free
     except OSError:
         free = 0
+    free_ok = free >= 3 * size + 2 * 1024 ** 3 and within
+    ready.append(free_ok)
     _emit(env, state_root=("present" if os.path.isdir(env.state_root) else "missing"),
-          free_bytes=free, free_ok=_yesno(free >= 3 * size + 2 * 1024 ** 3 and within))
+          free_bytes=free, free_ok=_yesno(free_ok))
     if "image" in opts:
         code, out = env.docker_runner(
             [env.docker, "--host", cap.SOCKET, "image", "inspect", "--format",
              "{{.Id}} {{json .RepoDigests}}", opts["image"]], capture_limit=8192)
-        text = out.decode("ascii", "replace") if code == 0 else ""
-        pin = opts["image"].split("@", 1)[1]
-        _emit(env, image_present=_yesno(code == 0), image_matches_pin=_yesno(pin in text))
-    return 0
+        matches = code == 0 and image_matches_pin(out, opts["image"])
+        ready.append(matches)
+        _emit(env, image_present=_yesno(code == 0), image_matches_pin=_yesno(matches))
+    ok = all(ready)
+    _emit(env, preflight_ready=_yesno(ok))
+    return 0 if ok else 1
 
 
 def cmd_init(env, opts):
@@ -265,12 +360,17 @@ def cmd_backup(env, opts):
     def copy_silo(dest):
         cap.copy_tree_nofollow(env.silo_source, dest)
 
+    gate = SiloGate(env)
     captor = cap.build_captor(runner=env.docker_runner, copy_silo=copy_silo,
-                              silo_quiescent=lambda: minio_quiescent(env),
-                              uid=env.uid, docker=env.docker)
-    out = env.producer.backup(env.state_root, runner=env.make_restic(opts["restic-sha256"]),
-                              captor=captor, expected_repo_id=opts["repo-id"],
-                              expected_key_epoch=opts["key-epoch"], uid=env.uid, now=env.now())
+                              silo_quiescent=gate, uid=env.uid, docker=env.docker)
+    try:
+        out = env.producer.backup(env.state_root,
+                                  runner=env.make_restic(opts["restic-sha256"]),
+                                  captor=captor, expected_repo_id=opts["repo-id"],
+                                  expected_key_epoch=opts["key-epoch"], uid=env.uid,
+                                  now=env.now())
+    finally:
+        gate.abort_notice()
     _emit(env, archive_name=out["archive_name"], archive_sha256=out["archive_sha256"],
           snapshot_id=out["snapshot_id"], manifest_sha256=out["manifest_sha256"],
           stamp=out["stamp"])

@@ -4,6 +4,7 @@ import datetime as dt
 import hashlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import shutil
@@ -39,17 +40,29 @@ DRIVE = "1AbCdEfGhIjKlMnOpQrStUv"
 class RunFakeDocker(ctest.CaptorFakeRunner):
     """Captor fake plus the MinIO identity and an image look-up."""
 
-    def __init__(self, minio="false", image=None, **o):
+    SILO = None  # set per test by G6RunBase.setUp
+
+    def __init__(self, minio="false", image=None, mounts=None, **o):
         super().__init__(**o)
-        self.minio, self.image = minio, image
+        self.minio, self.image, self.mounts = minio, image, mounts
+
+    def state(self):
+        if isinstance(self.minio, list):  # successive answers, the last one repeats
+            return self.minio.pop(0) if len(self.minio) > 1 else self.minio[0]
+        return self.minio
 
     def __call__(self, argv, *, stdin_path=None, stdout_fd=None, capture_limit=0):
         tail = argv[3:]
         if tail[0] == "inspect" and tail[-1].endswith("-minio-1"):
             self.calls.append(list(argv))
-            if self.minio == "missing":
+            if "{{json .Mounts}}" in tail:
+                mounts = self.mounts if self.mounts is not None else [
+                    {"Type": "volume", "Destination": "/data", "Source": self.SILO}]
+                return 0, json.dumps(mounts).encode()
+            state = self.state()
+            if state == "missing":
                 return 1, b""
-            return 0, ("centenario-qa-lab2|minio|%s\n" % self.minio).encode()
+            return 0, ("centenario-qa-lab2|minio|%s\n" % state).encode()
         if tail[0] == "image":
             self.calls.append(list(argv))
             return (0, self.image) if self.image is not None else (1, b"")
@@ -75,6 +88,8 @@ class G6RunBase(unittest.TestCase):
         self.restic = ptest.G6V2ProducerFakeRestic()
         self.clock = NOW
         self.key = b"K" * 40
+        RunFakeDocker.SILO = self.silo
+        self.slept, self.tick = [], [0.0]
 
     def env(self, runner, **over):
         args = dict(
@@ -83,9 +98,14 @@ class G6RunBase(unittest.TestCase):
             read_key=lambda: self.key, emit=self.lines.append, state_root=self.state,
             silo_source=self.silo, restic=self.restic_bin,
             forbidden=[os.path.join(self.base, "prod")],
-            module_hashes={"producer": "1" * 64, "entrypoint": "2" * 64})
+            module_hashes={"producer": "1" * 64, "entrypoint": "2" * 64},
+            sleep=self.slept.append, monotonic=self.monotonic)
         args.update(over)
         return run.Env(**args)
+
+    def monotonic(self):
+        self.tick[0] += 1.0
+        return self.tick[0]
 
     def go(self, command, env, **opts):
         self.lines.clear()
@@ -146,7 +166,7 @@ class G6RunQuiesceTests(G6RunBase):
         self.assertIs(run.minio_quiescent(self.env(foreign)), False)
 
     def test_the_program_never_issues_a_mutating_docker_verb(self):
-        runner = RunFakeDocker(minio="false")
+        runner = RunFakeDocker(minio=["true", "false"])
         env = self.env(runner)
         self.go("init", env, **{"restic-sha256": PIN})
         _, out = self.go("backup", env, **{"restic-sha256": PIN, "repo-id": ptest.REPO_ID,
@@ -157,7 +177,7 @@ class G6RunQuiesceTests(G6RunBase):
 
 class G6RunCycleTests(G6RunBase):
     def cycle(self):
-        env = self.env(RunFakeDocker(minio="false"))
+        env = self.env(RunFakeDocker(minio=["true", "false"]))
         code, init = self.go("init", env, **{"restic-sha256": PIN})
         self.assertEqual(code, 0)
         pins = {"restic-sha256": PIN, "repo-id": init["RESTIC_REPO_ID"],
@@ -203,7 +223,7 @@ class G6RunCycleTests(G6RunBase):
         before = set(os.listdir(os.path.join(self.state, "exports-v2")))
         self.clock = NOW + dt.timedelta(minutes=5)
         code, out = self.go("backup", self.env(RunFakeDocker(minio="true")), **pins)
-        self.assertEqual((code, out), (1, {"G6RUN_STOP": "G6CAP_SILO_NOT_QUIESCENT"}))
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6CAP_SILO_NOT_QUIESCENT"))
         self.assertEqual(set(os.listdir(os.path.join(self.state, "exports-v2"))), before)
         self.assertEqual(os.listdir(os.path.join(self.state, "stages-v2")), [])
 
@@ -232,13 +252,103 @@ class G6RunCycleTests(G6RunBase):
         self.assertEqual(fake.calls, [])
 
 
+class G6RunSiloBindingTests(G6RunBase):
+    def test_silo_must_be_the_single_volume_mounted_at_data(self):
+        good = {"Type": "volume", "Destination": "/data", "Source": self.silo}
+        cases = {
+            "ok": ([good], True),
+            "other_source": ([dict(good, Source=self.silo + "-other")], False),
+            "bind_not_volume": ([dict(good, Type="bind")], False),
+            "wrong_destination": ([dict(good, Destination="/other")], False),
+            "two_data_mounts": ([good, dict(good, Source="/x")], False),
+            "no_mounts": ([], False),
+            "not_a_list": ({"Destination": "/data"}, False),
+        }
+        for label, (mounts, expected) in cases.items():
+            env = self.env(RunFakeDocker(mounts=mounts))
+            self.assertIs(run.silo_bound(env), expected, label)
+
+    def test_symlinked_source_is_not_bound(self):
+        link = os.path.join(self.base, "link")
+        os.symlink(self.silo, link)
+        mounts = [{"Type": "volume", "Destination": "/data", "Source": link}]
+        env = self.env(RunFakeDocker(mounts=mounts), silo_source=link)
+        self.assertIs(run.silo_bound(env), False)
+
+    def test_another_mount_with_fake_data_on_the_conventional_path_is_refused(self):
+        env, pins, _ = G6RunCycleTests.cycle(self)
+        before = set(os.listdir(os.path.join(self.state, "exports-v2")))
+        self.clock = NOW + dt.timedelta(minutes=5)
+        runner = RunFakeDocker(minio=["true", "false"], mounts=[
+            {"Type": "volume", "Destination": "/data", "Source": "/somewhere/real/_data"}])
+        code, out = self.go("backup", self.env(runner), **pins)
+        self.assertEqual((code, out), (1, {"G6RUN_STOP": "G6RUN_SILO_UNBOUND"}))
+        self.assertEqual(set(os.listdir(os.path.join(self.state, "exports-v2"))), before)
+        self.assertNotIn("G6RUN_ACTION=STOP_MINIO_NOW", self.lines)
+
+
+class G6RunWindowTests(G6RunBase):
+    def backup(self, minio, **over):
+        env = self.env(RunFakeDocker(minio=minio), **over)
+        self.go("init", env, **{"restic-sha256": PIN})
+        pins = {"restic-sha256": PIN, "repo-id": ptest.REPO_ID,
+                "key-epoch": prod.key_epoch(self.key)}
+        self.clock = NOW + dt.timedelta(minutes=5)
+        code, out = self.go("backup", env, **pins)
+        return code, out, list(self.lines)
+
+    def test_operator_is_told_to_stop_then_to_start_with_the_measured_window(self):
+        code, out, lines = self.backup(["true", "true", "false"])
+        self.assertEqual(code, 0, lines)
+        stop = lines.index("G6RUN_ACTION=STOP_MINIO_NOW")
+        start = lines.index("G6RUN_ACTION=START_MINIO_NOW")
+        self.assertLess(stop, start)
+        self.assertLess(start, [i for i, l in enumerate(lines)
+                                if l.startswith("ARCHIVE_NAME=")][0])
+        self.assertIn("MINIO_WINDOW_SECONDS=1", lines)
+        self.assertEqual(self.slept, [run.POLL_SECONDS])
+
+    def test_minio_already_stopped_before_the_gate_is_refused(self):
+        code, out, _ = self.backup("false")
+        self.assertEqual((code, out), (1, {"G6RUN_STOP": "G6RUN_MINIO_STOPPED_EARLY"}))
+
+    def test_a_window_over_the_cap_invalidates_the_backup_and_asks_to_start(self):
+        ticks = iter([0.0, run.WINDOW_MAX_SECONDS + 5.0])
+        code, out, lines = self.backup(["true", "false"], monotonic=lambda: next(ticks))
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6RUN_WINDOW_EXCEEDED"))
+        self.assertIn("G6RUN_ACTION=START_MINIO_NOW", lines)
+        self.assertEqual(os.listdir(os.path.join(self.state, "exports-v2")), [])
+
+    def test_a_failure_after_the_stop_still_prints_the_start_instruction_once(self):
+        boom = mock.Mock(side_effect=OSError("disk"))
+        with mock.patch.object(cap, "copy_tree_nofollow", boom):
+            code, out, lines = self.backup(["true", "false"])
+        self.assertEqual(code, 1)
+        self.assertEqual(lines.count("G6RUN_ACTION=START_MINIO_NOW"), 1)
+        self.assertIn("REASON=ABORTED", lines)
+
+    def test_operator_that_never_stops_minio_times_out_without_a_start_notice(self):
+        code, out, lines = self.backup("true")
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6CAP_SILO_NOT_QUIESCENT"))
+        self.assertNotIn("G6RUN_ACTION=START_MINIO_NOW", lines)
+        self.assertEqual(sum(self.slept), run.STOP_WAIT_SECONDS)
+
+    def test_an_interrupt_during_the_window_still_prints_the_start_instruction(self):
+        boom = mock.Mock(side_effect=KeyboardInterrupt)
+        with mock.patch.object(cap, "copy_tree_nofollow", boom):
+            with self.assertRaises(KeyboardInterrupt):
+                self.backup(["true", "false"])
+        self.assertIn("G6RUN_ACTION=START_MINIO_NOW", self.lines)
+
+
 class G6RunInitAndFailureTests(G6RunBase):
     def test_key_is_only_read_by_init_and_must_be_long_printable_ascii(self):
         def boom():
             raise AssertionError("key must not be read")
         env = self.env(RunFakeDocker(minio="false"), read_key=boom)
-        code, _ = self.go("preflight", env)
-        self.assertEqual(code, 0)
+        code, out = self.go("preflight", env)
+        self.assertIn(code, (0, 1))
+        self.assertIn("PREFLIGHT_READY", out)
         for bad in (b"short", b"x" * 40 + b" ", b"x" * 39 + b"\xc3", b"x" * 39 + b"\n"):
             self.key = bad
             code, out = self.go("init", self.env(RunFakeDocker()), **{"restic-sha256": PIN})
@@ -291,7 +401,9 @@ class G6RunPreflightTests(G6RunBase):
         before = self.tree()
         code, out = self.go("preflight", self.env(runner), **{
             "restic-sha256": hashlib.sha256(b"fake-restic").hexdigest(), "image": image})
-        self.assertEqual(code, 0, self.lines)
+        self.assertEqual(code, 0 if out["PYTHON_FCNTL_SEALS"] == "yes" else 1, self.lines)
+        self.assertEqual(out["PREFLIGHT_READY"], "yes" if code == 0 else "no")
+        self.assertEqual(out["SILO_BOUND_TO_MOUNT"], "yes")
         self.assertEqual(self.tree(), before)
         self.assertEqual(out["RESTIC_MATCHES_PIN"], "yes")
         self.assertEqual(out["MINIO_QUIESCENT"], "yes")
@@ -307,7 +419,7 @@ class G6RunPreflightTests(G6RunBase):
         runner = RunFakeDocker(minio="true", image=None)
         code, out = self.go("preflight", self.env(runner), **{
             "restic-sha256": "0" * 64, "image": vtest.IMAGE})
-        self.assertEqual(code, 0)
+        self.assertEqual((code, out["PREFLIGHT_READY"]), (1, "no"))
         self.assertEqual((out["RESTIC_MATCHES_PIN"], out["MINIO_QUIESCENT"],
                           out["IMAGE_PRESENT"], out["IMAGE_MATCHES_PIN"]),
                          ("no", "no", "no", "no"))
@@ -315,14 +427,30 @@ class G6RunPreflightTests(G6RunBase):
     def test_preflight_flags_an_unsafe_silo_source(self):
         os.symlink("/etc", os.path.join(self.silo, "link"))
         code, out = self.go("preflight", self.env(RunFakeDocker(minio="false")))
-        self.assertEqual((code, out["SILO_SOURCE_OK"]), (0, "no"))
+        self.assertEqual((code, out["SILO_SOURCE_OK"], out["PREFLIGHT_READY"]), (1, "no", "no"))
 
     def test_missing_state_root_is_reported_not_created(self):
         shutil.rmtree(self.state)
         code, out = self.go("preflight", self.env(RunFakeDocker(minio="false"),
                                                   state_root=self.state))
-        self.assertEqual((code, out["STATE_ROOT"]), (0, "missing"))
+        self.assertEqual(out["STATE_ROOT"], "missing")
         self.assertFalse(os.path.exists(self.state))
+
+
+class G6RunImageParseTests(unittest.TestCase):
+    def test_only_an_exact_repo_digest_entry_matches(self):
+        image = vtest.IMAGE
+        ident = "sha256:" + "a" * 64
+        good = ('%s ["%s"]' % (ident, image)).encode()
+        self.assertTrue(run.image_matches_pin(good, image))
+        for bad in (
+                ('%s ["x/%s"]' % (ident, image)).encode(),       # substring only
+                ('%s []' % ident).encode(),
+                ('%s "%s"' % (ident, image)).encode(),           # not a list
+                ('nothex ["%s"]' % image).encode(),
+                ('%s ["%s", ' % (ident, image)).encode(),        # broken json
+                b"", b"\xff\xfe"):
+            self.assertFalse(run.image_matches_pin(bad, image), bad)
 
 
 class G6RunModuleTrustTests(G6RunBase):
