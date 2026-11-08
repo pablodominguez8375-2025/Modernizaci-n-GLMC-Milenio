@@ -35,7 +35,9 @@ import json
 import os
 from pathlib import Path
 import re
+import contextlib
 import shutil
+import signal
 import socket
 import stat
 import sys
@@ -51,6 +53,7 @@ SYSTEMCTL = "/usr/bin/systemctl"
 WATCHDOG_TIMER = "pmgm-g6-minio-restart.timer"
 WATCHDOG_MIN_SECONDS = 600    # must not fire before the largest allowed window
 WATCHDOG_MAX_SECONDS = 900    # nor be so far away that a hung MinIO stays down
+WATCHDOG_MARGIN_SECONDS = 30  # the copy is cut this long BEFORE the independent restart
 STOP_WAIT_SECONDS = 180      # operator time to stop MinIO once asked
 WINDOW_MAX_SECONDS = 600     # hard cap, stop observed -> Silo copy finished
 POLL_SECONDS = 2
@@ -160,7 +163,7 @@ class Env:
                  read_key, emit, state_root=STATE_ROOT, silo_source=SILO_SOURCE,
                  restic=RESTIC, forbidden=None, module_hashes=None,
                  sleep=time.sleep, monotonic=time.monotonic,
-                 systemctl_runner=None, systemctl=SYSTEMCTL):
+                 systemctl_runner=None, systemctl=SYSTEMCTL, deadline_guard=None):
         self.producer, self.captor, self.verifier = producer, captor, verifier
         self.uid, self.now, self.docker_runner = uid, now, docker_runner
         self.make_restic, self.read_key, self.emit = make_restic, read_key, emit
@@ -169,9 +172,24 @@ class Env:
         self.module_hashes = dict(module_hashes or {})
         self.sleep, self.monotonic = sleep, monotonic
         self.systemctl_runner, self.systemctl = systemctl_runner, systemctl
+        self.deadline_guard = deadline_guard or real_deadline
         self.docker = captor.DOCKER
         self.project = captor.PROJECT
         self.minio = captor.PROJECT + "-minio-1"
+
+
+@contextlib.contextmanager
+def real_deadline(seconds):
+    """Interrupt the enclosed work after ``seconds`` (SIGALRM): a real cut, not an after-check."""
+    def fire(signum, frame):
+        raise Stop("G6RUN_WINDOW_EXCEEDED")
+    previous = signal.signal(signal.SIGALRM, fire)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def minio_quiescent(env):
@@ -300,9 +318,15 @@ class SiloGate:
         self.closed = True
         elapsed = int(env.monotonic() - self.opened_at)
         _emit(env, g6run_action="START_MINIO_NOW", minio_window_seconds=elapsed)
-        if elapsed > WINDOW_MAX_SECONDS or env.monotonic() >= self.deadline:
+        if (elapsed > WINDOW_MAX_SECONDS
+                or env.monotonic() >= self.deadline - WATCHDOG_MARGIN_SECONDS):
             raise Stop("G6RUN_WINDOW_EXCEEDED")
         return result
+
+    def copy_budget(self):
+        """Seconds the copy may run: never past the window cap NOR the independent restart."""
+        limit = min(self.opened_at + WINDOW_MAX_SECONDS, self.deadline - WATCHDOG_MARGIN_SECONDS)
+        return limit - self.env.monotonic()
 
     def abort_notice(self):
         if self.opened_at is not None and not self.closed:
@@ -427,10 +451,15 @@ def cmd_init(env, opts):
 def cmd_backup(env, opts):
     cap = env.captor
 
-    def copy_silo(dest):
-        cap.copy_tree_nofollow(env.silo_source, dest)
-
     gate = SiloGate(env)
+
+    def copy_silo(dest):
+        budget = gate.copy_budget()
+        if budget <= 0:
+            raise Stop("G6RUN_WINDOW_EXCEEDED")
+        with env.deadline_guard(budget):  # cut BEFORE the watchdog could restart MinIO
+            cap.copy_tree_nofollow(env.silo_source, dest)
+
     captor = cap.build_captor(runner=env.docker_runner, copy_silo=copy_silo,
                               silo_quiescent=gate, uid=env.uid, docker=env.docker)
     try:

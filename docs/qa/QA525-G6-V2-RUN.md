@@ -94,3 +94,12 @@ PENDIENTE: confirmar en glmdch el formato real de `NextElapseUSecMonotonic` con 
 `real_env` se niega (`G6RUN_HOST_REFUSED`) si `hostname != glmdch`, ANTES de cargar módulos. Es una
 defensa adicional, NO prueba procedencia ni autorización. P1-1 (cargar módulos como root sin ancla
 autenticada) sigue abierto y pertenece al contrato #936/#822: este entrypoint NO es apto para sudo.
+
+## Corte real de la copia antes del temporizador independiente (P1 de ChatGPT)
+
+- Al abrirse la ventana, el presupuesto de copia es `min(apertura + 600 s, deadline_del_temporizador − 30 s) − ahora`.
+- `copy_silo` corre bajo `real_deadline(presupuesto)` (SIGALRM → `G6RUN_WINDOW_EXCEEDED`): la copia se interrumpe de verdad, no solo se verifica después.
+- Si no queda presupuesto, no se copia nada. La ventana autorizada (≤10 min) no se amplía.
+- El gate post-copia también exige `ahora < deadline − 30 s`.
+- Caso SIGKILL/reinicio automático: el temporizador vive en systemd, así que el reinicio ocurre igual; el backup ya está invalidado y se imprime `START_MINIO_NOW`. Nunca se declara G6 coherente.
+- Tests nuevos: temporizador 660 s + espera 120 s + copia 590 s, corte real de un bucle, y sin presupuesto no se copia.

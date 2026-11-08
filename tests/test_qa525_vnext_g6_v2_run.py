@@ -446,8 +446,40 @@ class G6RunWindowTests(G6RunBase):
         self.assertLess(stop, start)
         self.assertLess(start, [i for i, l in enumerate(lines)
                                 if l.startswith("ARCHIVE_NAME=")][0])
-        self.assertIn("MINIO_WINDOW_SECONDS=1", lines)
+        self.assertIn("MINIO_WINDOW_SECONDS=2", lines)
         self.assertEqual(self.slept, [run.POLL_SECONDS])
+
+    def test_copy_is_really_cut_before_the_watchdog_fires(self):
+        # timer=660 s, operator stop=120 s, copy would need 590 s: 120+590 > 660-margin
+        seen = {}
+
+        def guard(seconds):
+            seen["budget"] = seconds
+            raise run.Stop("G6RUN_WINDOW_EXCEEDED")  # the real guard would fire SIGALRM here
+        clock = [0.0]
+        steps = iter([0.0, 0.0, 120.0, 120.0, 120.0])
+        code, out, lines = self.backup(["true", "false"], deadline_guard=lambda s: guard(s),
+                                       monotonic=lambda: next(steps, 120.0))
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6RUN_WINDOW_EXCEEDED"))
+        self.assertLessEqual(seen["budget"], run.WINDOW_MAX_SECONDS)
+        self.assertLess(seen["budget"], 590)
+        self.assertIn("G6RUN_ACTION=START_MINIO_NOW", lines)
+        self.assertEqual(os.listdir(os.path.join(self.state, "exports-v2")), [])
+
+    def test_real_deadline_interrupts_a_running_loop(self):
+        import time as _t
+        with self.assertRaises(run.Stop) as ctx:
+            with run.real_deadline(0.05):
+                _t.sleep(2)
+        self.assertEqual(str(ctx.exception.args[0]), "G6RUN_WINDOW_EXCEEDED")
+
+    def test_no_budget_left_refuses_to_copy(self):
+        called = mock.Mock()
+        with mock.patch.object(cap, "copy_tree_nofollow", called):
+            steps = iter([0.0, 0.0, 700.0, 700.0, 700.0])
+            code, out, lines = self.backup(["true", "false"], monotonic=lambda: next(steps, 700.0))
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6RUN_WINDOW_EXCEEDED"))
+        called.assert_not_called()
 
     def test_minio_already_stopped_before_the_gate_is_refused(self):
         code, out, _ = self.backup("false")
