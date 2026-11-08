@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import os
 from pathlib import Path
+from unittest import mock
 import socket
 import subprocess
 import sys
@@ -75,6 +76,34 @@ class TestFdHandoff(unittest.TestCase):
             self.assertIs(result[field], False)
         with self.assertRaises(PermissionError):
             os.pwrite(result["fd"], b"X", 0)
+
+    def test_received_fd_is_private_readonly_not_sender_shared_description(self):
+        sender = self.fd()
+        self.send(sender)
+        result = self.recv()
+        private = result["fd"]
+        self.fds.append(private)
+        self.assertIs(result["private_readonly_description"], True)
+        self.assertEqual(fcntl.fcntl(private, fcntl.F_GETFL) & os.O_ACCMODE,
+                         os.O_RDONLY)
+        self.assertFalse(os.get_inheritable(private))
+        os.lseek(sender, 5, os.SEEK_SET)
+        self.assertEqual(os.lseek(private, 0, os.SEEK_CUR), 0)
+        fcntl.fcntl(sender, fcntl.F_SETFL,
+                    fcntl.fcntl(sender, fcntl.F_GETFL) | os.O_NONBLOCK)
+        self.assertFalse(fcntl.fcntl(private, fcntl.F_GETFL) & os.O_NONBLOCK)
+        with self.assertRaises(OSError):
+            os.write(private, b"tamper")
+
+    def test_procfd_reopen_failure_is_fail_closed_without_fd_leak(self):
+        self.send(self.fd())
+        before = set(os.listdir("/proc/self/fd"))
+        with mock.patch.object(mod.os, "open",
+                               side_effect=OSError("procfs unavailable")):
+            with self.assertRaises(mod.Stop) as err:
+                self.recv()
+        self.assertEqual(str(err.exception), "FD_HANDOFF_RECEIVE_FAILED")
+        self.assertEqual(set(os.listdir("/proc/self/fd")), before)
 
     def test_nonce_mismatch_does_not_grant_fd(self):
         self.send(self.fd(), nonce="b" * 43)
