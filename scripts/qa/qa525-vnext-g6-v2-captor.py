@@ -16,6 +16,7 @@ Returns only counts; every function is fail-closed with fixed public codes.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import stat
@@ -182,6 +183,68 @@ def parse_restore_list(text, db):
     return declared
 
 
+def _write_all(fd, data):
+    view = memoryview(data)
+    while view:
+        written = os.write(fd, view)
+        if written <= 0:
+            raise Stop("G6CAP_SILO_COPY_MISMATCH")
+        view = view[written:]
+
+
+def _identity(st):
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _copy_object(src, dst, listed):
+    """Copy one object: exact byte count, source stable before/after, destination re-hashed."""
+    fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        first = os.fstat(fd)
+        if (not stat.S_ISREG(first.st_mode) or first.st_nlink != 1
+                or _identity(first) != _identity(listed)):
+            raise Stop("G6CAP_SILO_CHANGED")
+        out = _new_file(dst)
+        h = hashlib.sha256()
+        total = 0
+        try:
+            while True:
+                block = os.read(fd, CHUNK)
+                if not block:
+                    break
+                total += len(block)
+                if total > first.st_size:
+                    raise Stop("G6CAP_SILO_CHANGED")
+                h.update(block)
+                _write_all(out, block)
+            os.fsync(out)
+        finally:
+            os.close(out)
+        if total != first.st_size or _identity(os.fstat(fd)) != _identity(first):
+            raise Stop("G6CAP_SILO_CHANGED")
+        if _identity(os.lstat(src)) != _identity(first):
+            raise Stop("G6CAP_SILO_CHANGED")
+    finally:
+        os.close(fd)
+    check = os.open(dst, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(check)
+        if not stat.S_ISREG(info.st_mode) or info.st_size != total:
+            raise Stop("G6CAP_SILO_COPY_MISMATCH")
+        again = hashlib.sha256()
+        count = 0
+        while True:
+            block = os.read(check, CHUNK)
+            if not block:
+                break
+            count += len(block)
+            again.update(block)
+        if count != total or again.digest() != h.digest():
+            raise Stop("G6CAP_SILO_COPY_MISMATCH")
+    finally:
+        os.close(check)
+
+
 def copy_tree_nofollow(source, destination, *, max_files=SILO_MAX_FILES,
                        max_bytes=SILO_MAX_BYTES):
     """Copy regular files only: no links, devices or sockets; private modes; capped."""
@@ -204,24 +267,7 @@ def copy_tree_nofollow(source, destination, *, max_files=SILO_MAX_FILES,
                 size += info.st_size
                 if files > max_files or size > max_bytes:
                     raise Stop("G6CAP_SILO_TOO_LARGE")
-                fd = os.open(s, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
-                try:
-                    now = os.fstat(fd)
-                    if (now.st_dev, now.st_ino, now.st_size) != (
-                            info.st_dev, info.st_ino, info.st_size):
-                        raise Stop("G6CAP_SILO_CHANGED")
-                    out = _new_file(d)
-                    try:
-                        while True:
-                            block = os.read(fd, CHUNK)
-                            if not block:
-                                break
-                            os.write(out, block)
-                        os.fsync(out)
-                    finally:
-                        os.close(out)
-                finally:
-                    os.close(fd)
+                _copy_object(s, d, info)
             else:
                 raise Stop("G6CAP_SILO_UNSAFE_ENTRY")
 
@@ -244,9 +290,16 @@ def _has_regular_file(root):
     return False
 
 
-def build_captor(*, runner, copy_silo, uid, docker=DOCKER, container=POSTGRES_CONTAINER):
-    """Return ``captor(stage)`` for the G6 v2 producer. ``copy_silo(dest_dir)`` is the port."""
-    if not callable(runner) or not callable(copy_silo) or type(uid) is not int \
+def build_captor(*, runner, copy_silo, silo_quiescent, uid, docker=DOCKER,
+                 container=POSTGRES_CONTAINER):
+    """Return ``captor(stage)`` for the G6 v2 producer.
+
+    ``copy_silo(dest_dir)`` and ``silo_quiescent()`` are ports. The Silo copy is only accepted if
+    ``silo_quiescent()`` is exactly True both before and after it: a live Silo is never an atomic
+    snapshot, so the physical port must prove quiesce/immutability (not defined here).
+    """
+    if not callable(runner) or not callable(copy_silo) or not callable(silo_quiescent) \
+            or type(uid) is not int \
             or container != POSTGRES_CONTAINER:
         raise Stop("G6CAP_CONFIG_INVALID")
 
@@ -281,7 +334,11 @@ def build_captor(*, runner, copy_silo, uid, docker=DOCKER, container=POSTGRES_CO
             counts[db] = parse_restore_list(out.decode("utf-8", "replace"), db)
         dump_to(os.path.join(stage, "globals.sql"), argv_globals(docker, container))
         silo = os.path.join(stage, "silo")
+        if silo_quiescent() is not True:
+            raise Stop("G6CAP_SILO_NOT_QUIESCENT")
         copy_silo(silo)
+        if silo_quiescent() is not True:
+            raise Stop("G6CAP_SILO_NOT_QUIESCENT")
         try:
             ok = stat.S_ISDIR(os.lstat(silo).st_mode) and _has_regular_file(silo)
         except OSError:

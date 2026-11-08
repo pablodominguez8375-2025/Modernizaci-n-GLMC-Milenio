@@ -6,6 +6,7 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,9 +75,10 @@ class G6CaptorBase(unittest.TestCase):
         os.mkdir(self.stage, 0o700)
         self.uid = os.getuid()
 
-    def make(self, runner=None, silo=silo_ok):
+    def make(self, runner=None, silo=silo_ok, quiescent=lambda: True):
         self.runner = runner or CaptorFakeRunner()
-        return cap.build_captor(runner=self.runner, copy_silo=silo, uid=self.uid)
+        return cap.build_captor(runner=self.runner, copy_silo=silo, silo_quiescent=quiescent,
+                                uid=self.uid)
 
     def code(self, call, *a, **k):
         with self.assertRaises(cap.Stop) as ctx:
@@ -121,7 +123,7 @@ class G6CaptorHappyAndArgvTests(G6CaptorBase):
                                  "G6CAP_CONTAINER_UNEXPECTED")
                 self.assertEqual(os.listdir(self.stage), [])
         self.assertEqual(self.code(cap.build_captor, runner=lambda *a, **k: (0, b""),
-                                   copy_silo=silo_ok, uid=self.uid, container="other"),
+                                   copy_silo=silo_ok, silo_quiescent=lambda: True, uid=self.uid, container="other"),
                          "G6CAP_CONFIG_INVALID")
 
     def test_producer_accepts_the_captor_output_end_to_end(self):
@@ -182,7 +184,7 @@ class G6CaptorFailClosedTests(G6CaptorBase):
         link = os.path.join(self.base, "link"); os.symlink(self.stage, link)
         self.assertEqual(self.code(self.make(), link), "G6CAP_STAGE_INVALID")
         self.assertEqual(self.code(cap.build_captor, runner=lambda *a, **k: (0, b""),
-                                   copy_silo=silo_ok, uid="0"), "G6CAP_CONFIG_INVALID")
+                                   copy_silo=silo_ok, silo_quiescent=lambda: True, uid="0"), "G6CAP_CONFIG_INVALID")
 
     def test_empty_or_missing_silo_stops(self):
         def empty(dest): os.mkdir(dest, 0o700)
@@ -194,6 +196,20 @@ class G6CaptorFailClosedTests(G6CaptorBase):
             with self.subTest(port=port.__name__):
                 __import__("shutil").rmtree(self.stage); os.mkdir(self.stage, 0o700)
                 self.assertEqual(self.code(self.make(silo=port), self.stage), "G6CAP_SILO_EMPTY")
+
+    def test_quiescence_port_is_required_true_before_and_after_and_not_merely_truthy(self):
+        for label, port in (("false", lambda: False), ("truthy", lambda: 1), ("none", lambda: None)):
+            with self.subTest(label):
+                __import__("shutil").rmtree(self.stage); os.mkdir(self.stage, 0o700)
+                self.assertEqual(self.code(self.make(quiescent=port), self.stage),
+                                 "G6CAP_SILO_NOT_QUIESCENT")
+        answers = iter([True, False])
+        __import__("shutil").rmtree(self.stage); os.mkdir(self.stage, 0o700)
+        self.assertEqual(self.code(self.make(quiescent=lambda: next(answers)), self.stage),
+                         "G6CAP_SILO_NOT_QUIESCENT")
+        self.assertEqual(self.code(cap.build_captor, runner=lambda *a, **k: (0, b""),
+                                   copy_silo=silo_ok, silo_quiescent=None, uid=self.uid),
+                         "G6CAP_CONFIG_INVALID")
 
 
 class G6CaptorNewFileTests(G6CaptorBase):
@@ -223,6 +239,100 @@ class G6CaptorSiloCopyTests(G6CaptorBase):
         self.assertEqual(Path(self.dst, "d", "b").read_bytes(), b"22")
         self.assertEqual(stat.S_IMODE(os.lstat(os.path.join(self.dst, "a")).st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(os.lstat(os.path.join(self.dst, "d")).st_mode), 0o700)
+
+    def one_file_tree(self, data=b"0123456789"):
+        for name in os.listdir(self.src):
+            full = os.path.join(self.src, name)
+            os.unlink(full) if not os.path.isdir(full) else __import__("shutil").rmtree(full)
+        self.target = os.path.join(self.src, "obj")
+        Path(self.target).write_bytes(data)
+
+    def mid_read(self, mutate):
+        """Run copy with 2-byte blocks; call mutate() right after the first real read."""
+        real, state = os.read, {"n": 0}
+
+        def wrapped(fd, n):
+            blob = real(fd, n)
+            state["n"] += 1
+            if state["n"] == 1:
+                mutate()
+            return blob
+        with mock.patch.object(cap, "CHUNK", 2), mock.patch.object(cap.os, "read", wrapped):
+            return self.code(cap.copy_tree_nofollow, self.src, self.dst)
+
+    def test_short_writes_are_looped_until_every_byte_lands(self):
+        self.one_file_tree()
+        real = os.write
+
+        def trickle(fd, data):
+            return real(fd, bytes(data[:3]))
+        with mock.patch.object(cap.os, "write", trickle):
+            self.assertEqual(cap.copy_tree_nofollow(self.src, self.dst), 1)
+        self.assertEqual(Path(self.dst, "obj").read_bytes(), b"0123456789")
+
+    def test_zero_progress_write_is_refused(self):
+        self.one_file_tree()
+        with mock.patch.object(cap.os, "write", lambda fd, data: 0):
+            self.assertEqual(self.code(cap.copy_tree_nofollow, self.src, self.dst),
+                             "G6CAP_SILO_COPY_MISMATCH")
+
+    def test_source_truncated_grown_or_rewritten_during_read_is_refused(self):
+        for label, mutate in (
+                ("truncate", lambda: os.truncate(self.target, 4)),
+                ("grow", lambda: open(self.target, "ab").write(b"more")),
+                ("rewrite-same-size", lambda: (open(self.target, "r+b").write(b"XXXXXXXXXX")))):
+            with self.subTest(label):
+                self.one_file_tree()
+                if os.path.exists(self.dst):
+                    __import__("shutil").rmtree(self.dst)
+                self.assertEqual(self.mid_read(mutate), "G6CAP_SILO_CHANGED")
+
+    def test_source_replaced_by_another_file_during_read_is_refused(self):
+        self.one_file_tree()
+
+        def swap():
+            Path(self.target + ".new").write_bytes(b"0123456789")
+            os.replace(self.target + ".new", self.target)
+        self.assertEqual(self.mid_read(swap), "G6CAP_SILO_CHANGED")
+
+    def test_destination_corruption_is_caught_by_the_rehash(self):
+        self.one_file_tree()
+        real = os.write
+
+        def lossy(fd, data):
+            real(fd, bytes(data[:-1]) + b"!")
+            return len(data)
+        with mock.patch.object(cap.os, "write", lossy):
+            self.assertEqual(self.code(cap.copy_tree_nofollow, self.src, self.dst),
+                             "G6CAP_SILO_COPY_MISMATCH")
+
+    def test_endlessly_growing_source_stops_after_the_declared_size(self):
+        self.one_file_tree()
+        real, calls = os.read, {"n": 0}
+
+        def growing(fd, n):
+            calls["n"] += 1
+            with open(self.target, "ab") as grow:
+                grow.write(b"+")
+            return real(fd, n)
+        with mock.patch.object(cap, "CHUNK", 2), mock.patch.object(cap.os, "read", growing):
+            self.assertEqual(self.code(cap.copy_tree_nofollow, self.src, self.dst),
+                             "G6CAP_SILO_CHANGED")
+        self.assertLessEqual(calls["n"], 7)
+
+    def test_object_changed_between_listing_and_open_is_refused(self):
+        self.one_file_tree()
+        stale = os.lstat(self.target)
+        Path(self.target).write_bytes(b"0123456789")
+        os.utime(self.target, ns=(1, 1))
+        os.mkdir(self.dst)
+        self.assertEqual(self.code(cap._copy_object, self.target, os.path.join(self.dst, "o"), stale),
+                         "G6CAP_SILO_CHANGED")
+
+    def test_hard_linked_object_is_refused(self):
+        self.one_file_tree()
+        os.link(self.target, os.path.join(self.base, "other-name"))
+        self.assertEqual(self.code(cap.copy_tree_nofollow, self.src, self.dst), "G6CAP_SILO_CHANGED")
 
     def test_symlink_fifo_and_oversize_are_refused(self):
         os.symlink("/etc/passwd", os.path.join(self.src, "ln"))

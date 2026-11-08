@@ -23,8 +23,19 @@ Devuelve solo los conteos de TOC.
    los roles se recrean con las claves del entorno. Si se prefiere incluirlas, es un cambio de una línea y una decisión de seguridad.
 2. `--no-owner --no-acl` (igual que el operador legado `qa525-dual-db-age-backup.py`): los permisos los reaplica `db-grants`.
 3. El **Silo** es un puerto inyectado (`copy_silo(dest)`) más el copiador `copy_tree_nofollow` (solo archivos regulares,
-   sin enlaces/dispositivos/FIFO, topes de 200 000 archivos y 8 GiB). **Falta la ruta física del volumen del Silo**; sin ese dato
+   sin enlaces/dispositivos/FIFO, topes de 200 000 archivos y 8 GiB) y el puerto `silo_quiescent()`. **Falta la ruta física del volumen del Silo**; sin ese dato
    no hay captor real. Se pedirá al Sponsor un dato de solo lectura cuando ChatGPT lo apruebe.
+
+## Corrección tras la revisión de ChatGPT (P1 integridad del Silo)
+- `copy_tree_nofollow` ahora: bucle `write_all` (sin escrituras cortas; progreso cero = STOP), bytes leídos == tamaño inicial,
+  identidad del origen (dev, ino, tamaño, mtime_ns, ctime_ns) igual antes/después por `fstat` y por `lstat`, rechazo de
+  crecimiento (para en cuanto se pasa del tamaño declarado), de enlaces duros, y **re-lectura y SHA-256 del destino**
+  contra lo leído. Cualquier cambio concurrente → STOP.
+- `build_captor` exige el puerto `silo_quiescent()`, que debe devolver exactamente `True` **antes y después** de la copia.
+  Un Silo vivo NO es un snapshot atómico: el puerto físico debe probar quiesce/inmutabilidad y aún NO está definido
+  (sin él el captor niega la operación). `_has_regular_file` solo comprueba que no esté vacío, no integridad.
+- Aceptado por ChatGPT (#952): `--no-role-passwords` (el restore DEBE reacreditar roles/claves desde secretos propios y probar
+  Keycloak y API), `--no-owner --no-acl` (probar `db-grants`, propietarios y ACL tras el restore), TOC mínimo 10 solo preliminar.
 
 ## Límites (no autenticado aquí)
 - El binario `docker`, el host y la ruta del Silo los fija y autentica el bootstrap root (#936/#822).
