@@ -22,6 +22,21 @@ GO_FIELDS = frozenset({"schema", "nonce", "host", "environment", "scope",
                        "action", "ops_source_sha", "app_source_sha",
                        "app_archive_sha256", "plan_sha256", "admission_sha256",
                        "policy_hash", "issued_at", "expires_at"})
+# Separate signed launcher GO: the legacy root approval uses this exact scope,
+# action, environment and operator. It cannot accept an API/WEB authorization.
+LAUNCHER_SCOPE = "QA525_LAUNCHER_ONLY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION"
+LAUNCHER_ACTION = "replace-root-launcher-supervised"
+LAUNCHER_ENVIRONMENT = "QA_GLMDCH_ONLY"
+LAUNCHER_OPERATOR = "soporte@glmdch"
+LAUNCHER_FIELDS = GO_FIELDS | frozenset({
+    "operator", "release_asset_sha256", "old_launcher_sha256",
+    "candidate_operator_sha256",
+})
+LAUNCHER_PIN_FIELDS = frozenset({
+    "release_asset_sha256", "old_launcher_sha256", "candidate_operator_sha256",
+})
+HEX64 = re.compile(r"[0-9a-f]{64}\\Z")
+MAX_LAUNCHER_AGE_SECONDS = 900
 OPS_FIELDS = frozenset({"schema", "status", "ops_source_sha", "program_sha256",
                         "readiness_sha256", "staging_sha256", "policy_hash",
                         "app_archive_sha256"})
@@ -45,7 +60,7 @@ def _strict_pairs(pairs):
     return result
 
 
-def _parse(raw):
+def _parse(raw, *, launcher=False):
     if type(raw) is not bytes or not 0 < len(raw) <= 65536:
         raise Stop("GO_CUT_INPUT_INVALID")
     try:
@@ -53,7 +68,7 @@ def _parse(raw):
                            parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
     except (ValueError, UnicodeDecodeError, RecursionError, TypeError):
         raise Stop("GO_CUT_JSON_INVALID") from None
-    if type(value) is not dict or set(value) != GO_FIELDS:
+    if type(value) is not dict or set(value) != (LAUNCHER_FIELDS if launcher else GO_FIELDS):
         raise Stop("GO_CUT_FIELDS_INVALID")
     # Canonical byte layout ensures Sponsor signs exactly the reviewed cut.
     expected = (json.dumps(value, sort_keys=True, separators=(",", ":"),
@@ -74,7 +89,8 @@ def _utc(raw):
 
 
 def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
-              app_subject, now_utc, verify_go_signature, nonce_unused):
+              app_subject, now_utc, verify_go_signature, nonce_unused,
+              purpose="API_WEB_QA_ONLY", launcher_pins=None):
     """Require consistent signed-GO *claims* and an exact freshness window.
 
     verify_go_signature(go_bytes,signature_bytes,go_fingerprint) -> bool True
@@ -89,7 +105,13 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
             or type(app_subject) is not dict or set(app_subject) != APP_FIELDS
             or type(now_utc) is not dt.datetime or now_utc.tzinfo is None
             or now_utc.utcoffset() != dt.timedelta(0)
-            or not callable(verify_go_signature) or not callable(nonce_unused)):
+            or not callable(verify_go_signature) or not callable(nonce_unused)
+            or type(purpose) is not str
+            or purpose not in ("API_WEB_QA_ONLY", "LAUNCHER_ONLY")
+            or (purpose == "API_WEB_QA_ONLY" and launcher_pins is not None)
+            or (purpose == "LAUNCHER_ONLY"
+                and (type(launcher_pins) is not dict
+                     or set(launcher_pins) != LAUNCHER_PIN_FIELDS))):
         raise Stop("GO_CUT_INPUT_INVALID")
     frozen = dict(pins)
     if (any(type(frozen[k]) is not str or SHA40.fullmatch(frozen[k]) is None
@@ -100,12 +122,25 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
             or type(frozen["go_fingerprint"]) is not str
             or FP.fullmatch(frozen["go_fingerprint"]) is None):
         raise Stop("GO_CUT_PIN_INVALID")
-    acta = _parse(go_bytes)
-    expected = {
+    launcher = purpose == "LAUNCHER_ONLY"
+    if launcher and (type(launcher_pins["release_asset_sha256"]) is not str
+                     or SHA256.fullmatch(launcher_pins["release_asset_sha256"]) is None
+                     or any(type(launcher_pins[k]) is not str
+                            or HEX64.fullmatch(launcher_pins[k]) is None
+                            for k in ("old_launcher_sha256", "candidate_operator_sha256"))):
+        raise Stop("GO_CUT_LAUNCHER_PIN_INVALID")
+    launcher_frozen = dict(launcher_pins) if launcher else None
+    acta = _parse(go_bytes, launcher=launcher)
+    expected = ({
+        "schema": "qa525-go-launcher-v1",
+        "host": "glmdch", "environment": LAUNCHER_ENVIRONMENT,
+        "scope": LAUNCHER_SCOPE, "action": LAUNCHER_ACTION,
+        "operator": LAUNCHER_OPERATOR,
+    } if launcher else {
         "schema": "qa525-go-cut-v1",
         "host": "glmdch", "environment": "QA_SYNTHETIC",
         "scope": "API_WEB_QA_ONLY", "action": "ADMIT_OFFLINE_APPLY",
-    }
+    })
     for key in ("ops_source_sha", "app_source_sha", "app_archive_sha256",
                 "plan_sha256", "admission_sha256", "policy_hash"):
         expected[key] = frozen[key]
@@ -114,10 +149,15 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
             or type(acta["nonce"]) is not str
             or NONCE.fullmatch(acta["nonce"]) is None):
         raise Stop("GO_CUT_MISMATCH")
+    if launcher:
+        if (any(acta[k] != launcher_frozen[k] for k in LAUNCHER_PIN_FIELDS)
+                or HEX64.fullmatch(acta["nonce"]) is None):
+            raise Stop("GO_CUT_LAUNCHER_BINDING_MISMATCH")
     issued = _utc(acta["issued_at"])
     expires = _utc(acta["expires_at"])
-    if not (issued <= now_utc <= expires and
-            0 < (expires - issued).total_seconds() <= MAX_GO_AGE_SECONDS):
+    if not (issued <= now_utc < expires and
+            0 < (expires - issued).total_seconds() <=
+            (MAX_LAUNCHER_AGE_SECONDS if launcher else MAX_GO_AGE_SECONDS)):
         raise Stop("GO_CUT_EXPIRED_OR_FUTURE")
     if (set(ops_v3_receipt) != OPS_FIELDS
             or ops_v3_receipt.get("schema") != "qa525-ops-v3"
@@ -140,16 +180,19 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
             go_bytes, go_signature_bytes, frozen["go_fingerprint"])
     except Exception:
         raise Stop("GO_CUT_SIGNATURE_DENIED") from None
-    if signature_ok is not True or pins != frozen:
+    if (signature_ok is not True or pins != frozen
+            or (launcher and launcher_pins != launcher_frozen)):
         raise Stop("GO_CUT_SIGNATURE_DENIED")
     try:
         unused = nonce_unused(acta["nonce"], frozen["admission_sha256"])
     except Exception:
         raise Stop("GO_CUT_NONCE_UNSAFE") from None
-    if unused is not True or pins != frozen:
+    if (unused is not True or pins != frozen
+            or (launcher and launcher_pins != launcher_frozen)):
         raise Stop("GO_CUT_NONCE_UNSAFE")
     return {
         "status": STATUS,
+        "purpose": purpose, "launcher_contract_shape_only": launcher,
         "nonce": acta["nonce"], "go_bytes_sha256": "sha256:" + hashlib.sha256(go_bytes).hexdigest(),
         "ops_source_sha": frozen["ops_source_sha"],
         "app_source_sha": frozen["app_source_sha"],
