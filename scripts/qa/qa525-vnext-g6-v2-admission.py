@@ -8,7 +8,8 @@ archive copies here, and hands everything to ``qa525-vnext-g6-v2-evidence.py::in
 It never reads or writes the legacy G6 receipt, the legacy home-directory archive or the
 legacy validator inputs, accepts no v1 name or schema (the evidence module's exact v2
 schemas and name patterns refuse them), and always reports
-``may_apply=False``. Pins, repo id, key epoch and clocks are ASSERTIONS of the caller: they must
+``may_apply=False``. ``uid`` is the expected owner and is ALSO an assertion of the caller (a physical bootstrap
+pins it, e.g. 0). Pins, repo id, key epoch and clocks are ASSERTIONS of the caller: they must
 come from the authenticated pre-root bootstrap (#936/#822). This module authenticates nothing
 about Drive, Restic, the host, Sponsor or signatures.
 """
@@ -60,14 +61,48 @@ def _identity(st):
     return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
 
 
+def _check_ancestors(root, uid):
+    """Every ancestor must be a real directory owned by root or ``uid`` that others can not
+    rename into: not group/other-writable, unless root-owned with the sticky bit (/tmp)."""
+    parts = Path(root).parents
+    for ancestor in parts:
+        try:
+            st = os.lstat(str(ancestor))
+        except OSError:
+            raise Stop("G6ADM_ROOT_UNTRUSTED") from None
+        writable = st.st_mode & 0o022
+        sticky_root = st.st_uid == 0 and st.st_mode & stat.S_ISVTX
+        if (not stat.S_ISDIR(st.st_mode) or st.st_uid not in (0, uid)
+                or (writable and not sticky_root)):
+            raise Stop("G6ADM_ROOT_UNTRUSTED")
+
+
 def _open_root(root, uid):
     if (type(root) is not str or not os.path.isabs(root)
             or os.path.realpath(root) != root):
         raise Stop("G6ADM_ROOT_UNTRUSTED")
+    _check_ancestors(root, uid)
     try:
         fd = os.open(root, OPEN | os.O_DIRECTORY)
     except OSError:
         raise Stop("G6ADM_ROOT_UNTRUSTED") from None
+    try:
+        st = os.fstat(fd)
+        # The ROOT ITSELF, judged on the open descriptor: a directory of the expected owner
+        # that nobody else can enter or change; and the descriptor must still be the path
+        # that was vetted (closes the window between realpath and open).
+        if (not stat.S_ISDIR(st.st_mode) or st.st_uid != uid or st.st_mode & 0o077
+                or os.readlink("/proc/self/fd/%d" % fd) != root):
+            raise Stop("G6ADM_ROOT_UNTRUSTED")
+        again = os.lstat(root)
+        if (again.st_dev, again.st_ino) != (st.st_dev, st.st_ino):
+            raise Stop("G6ADM_ROOT_UNTRUSTED")
+    except OSError:
+        os.close(fd)
+        raise Stop("G6ADM_ROOT_UNTRUSTED") from None
+    except Stop:
+        os.close(fd)
+        raise
     return fd
 
 

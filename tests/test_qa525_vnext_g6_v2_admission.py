@@ -132,6 +132,82 @@ class AdmissionTests(AdmissionBase):
                       admission_expires_at=NOW + dt.timedelta(hours=4))
         self.assertEqual(str(err.exception), "G6ADM_ROOT_UNTRUSTED")
 
+    def root_code(self, root=None, **over):
+        with self.assertRaises(adm.Stop) as err:
+            self.admit_at(root or self.root, **over)
+        return str(err.exception)
+
+    def admit_at(self, root, **over):
+        args = dict(stamp=self.stamp, pins=self.pins(), expected_restic_repo_id=ptest.REPO_ID,
+                    expected_key_epoch=self.epoch, uid=UID, now=NOW + dt.timedelta(hours=3),
+                    admission_expires_at=NOW + dt.timedelta(hours=4))
+        args.update(over)
+        return adm.admit(root, **args)
+
+    def test_the_root_itself_must_be_private_and_owned_by_the_expected_uid(self):
+        for mode in (0o755, 0o750, 0o705, 0o770, 0o777, 0o710):
+            os.chmod(self.root, mode)
+            self.assertEqual(self.root_code(), "G6ADM_ROOT_UNTRUSTED", oct(mode))
+        os.chmod(self.root, 0o700)
+        self.admit_at(self.root)                         # control: private root is fine
+        self.assertEqual(self.root_code(uid=UID + 1), "G6ADM_ROOT_UNTRUSTED")
+        self.assertEqual(self.root_code(uid=0 if UID else 1), "G6ADM_ROOT_UNTRUSTED")
+
+    def test_a_group_or_world_writable_ancestor_is_refused(self):
+        parent = os.path.dirname(self.root)
+        for mode in (0o770, 0o775, 0o702, 0o777):
+            os.chmod(parent, mode)
+            self.assertEqual(self.root_code(), "G6ADM_ROOT_UNTRUSTED", oct(mode))
+        os.chmod(parent, 0o700)
+        self.admit_at(self.root)
+
+    def test_a_file_where_the_root_should_be_is_refused(self):
+        fake = os.path.join(os.path.dirname(self.root), "plain")
+        Path(fake).write_text("x")
+        self.assertEqual(self.root_code(fake), "G6ADM_ROOT_UNTRUSTED")
+
+    def test_the_root_is_closed_when_its_check_fails(self):
+        before = set(os.listdir("/proc/self/fd"))
+        os.chmod(self.root, 0o755)
+        for _ in range(3):
+            self.root_code()
+        self.assertEqual(set(os.listdir("/proc/self/fd")) - before, set())
+
+    def test_the_root_swapped_between_the_check_and_the_open_is_refused(self):
+        other = self.root + "-other"
+        os.mkdir(other, 0o700)
+        real_open = os.open
+
+        def swap(path, flags, *a, **k):
+            if path == self.root and not a and not k:
+                os.rename(self.root, self.root + "-moved")
+                os.rename(other, self.root)             # a different directory takes the name
+            return real_open(path, flags, *a, **k)
+
+        with mock.patch.object(adm.os, "open", side_effect=swap):
+            code = self.root_code()
+        self.assertIn(code, ("G6ADM_DIR_UNTRUSTED", "G6ADM_ROOT_UNTRUSTED"))
+
+    def test_the_root_renamed_right_after_it_was_opened_is_refused(self):
+        real_fstat, done = os.fstat, []
+
+        def rename_then_fstat(fd, *a):
+            if not done:
+                done.append(True)
+                os.rename(self.root, self.root + "-moved")   # the opened dir leaves its name
+                os.mkdir(self.root, 0o700)                   # and a decoy takes it
+            return real_fstat(fd, *a)
+
+        with mock.patch.object(adm.os, "fstat", side_effect=rename_then_fstat):
+            self.assertEqual(self.root_code(), "G6ADM_ROOT_UNTRUSTED")
+        self.assertTrue(done)
+
+    @unittest.skipUnless(os.geteuid() == 0, "needs root to chown an ancestor")
+    def test_an_ancestor_owned_by_a_stranger_is_refused(self):
+        parent = os.path.dirname(self.root)
+        os.chown(parent, 12345, 12345)
+        self.assertEqual(self.root_code(), "G6ADM_ROOT_UNTRUSTED")
+
     def test_symlinked_evidence_file_dir_or_archive_is_refused(self):
         for kind in ("review", "receipt", "restore"):
             original = self.path(kind)
@@ -234,7 +310,7 @@ class AdmissionTests(AdmissionBase):
         self.assertEqual(self.code(uid="0"), "G6ADM_UID_INVALID")
 
     def test_files_owned_by_someone_else_are_refused(self):
-        self.assertEqual(self.code(uid=UID + 1), "G6ADM_DIR_UNTRUSTED")
+        self.assertEqual(self.code(uid=UID + 1), "G6ADM_ROOT_UNTRUSTED")
 
 
 class AdmissionStaticTests(unittest.TestCase):
