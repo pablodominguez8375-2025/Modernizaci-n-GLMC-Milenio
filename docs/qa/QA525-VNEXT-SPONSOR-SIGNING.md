@@ -20,6 +20,26 @@ no toca archivos, red ni procesos.** Todo resultado dice `may_apply=False`.
 3. Verificar localmente con `allowed_signers` y `ssh-keygen -Y verify`.
 4. Mover el `.sig` por SFTP/Drive. Nunca pegar llaves ni frases en chats, Git o Drive.
 
+## Hoja Termux para el acta GO (pasos SEPARADOS de los del recibo OPS)
+1. Generar el acta justo antes de firmar y confirmar que la ventana es ≤ 30 min (`expires_at - issued_at`).
+2. Comparar el código corto en dos dispositivos.
+3. Firmar los bytes exactos: `ssh-keygen -Y sign -f ~/.ssh/qa525-ops -n qa525-go-cut-v1@pmgm <acta>`.
+4. Verificar con el `allowed_signers` del namespace GO (no el del OPS): `ssh-keygen -Y verify ... -n qa525-go-cut-v1@pmgm`.
+5. Mover la firma sin divulgar llaves. **Nunca reutilizar una firma OPS** como GO ni al revés: el namespace distinto es la barrera anti-replay.
+
+El acta GO v1 (API_WEB_QA_ONLY) **no sustituye** la autorización de instalador launcher-only, que es distinta y no está en el contrato GO v1.
+El namespace GO es una elección confirmada para el FUTURO adaptador; `check_cut` solo recibe un callback `verify_go_signature`, así que
+el verificador físico (namespace, principal, ssh-keygen, huella externa) aún debe fijarse en ese callback antes de root.
+
+## Alcance de los campos
+- `status=OPS_SIGNED_VERIFIED` es un **campo a firmar**, no un resultado de verificación.
+- El constructor GO no firma, no atestigua la APP ni consume el nonce.
+
+## Nonce
+`new_nonce` exige 32 bytes de un CSPRNG **del dispositivo del Sponsor**; la biblioteca nunca los genera ni autentica
+(su comprobación `len(set(bytes))>=8` solo descarta entradas triviales, no prueba entropía). Ni un nonce de prueba ni el código corto
+de 64 bits prueban aprobación, frescura ni journal durable.
+
 ## Límites
 - Firmar el OPS v3 o el acta GO es decisión exclusiva del Sponsor; esta biblioteca no la sustituye.
 - Procedencia de la huella fijada: responsabilidad fuera de banda del Sponsor.

@@ -156,7 +156,7 @@ def fingerprint_of_public_key(pub_text):
 
 def allowed_signers_line(pub_text, namespace, pinned_fingerprint):
     """``allowed_signers`` line for one namespace; refuses a key that is not the pin."""
-    if namespace not in NAMESPACES:
+    if type(namespace) is not str or namespace not in NAMESPACES:
         raise Stop("SIGNSHEET_NAMESPACE_INVALID")
     _need(pinned_fingerprint, FP, "SIGNSHEET_KEY_INVALID")
     if fingerprint_of_public_key(pub_text) != pinned_fingerprint:

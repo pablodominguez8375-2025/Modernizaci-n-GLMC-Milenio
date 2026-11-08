@@ -223,6 +223,24 @@ class SponsorSigningRealSshKeygenTests(unittest.TestCase):
         code, _ = self.verifier(allowed, sig, sheet.PRINCIPAL, sheet.OPS_NAMESPACE, raw)
         self.assertNotEqual(code, 0)
 
+    def test_signature_namespace_mismatch_fails_in_both_directions(self):
+        ops_raw = sheet.build_ops_v3_receipt(**FIELDS)
+        go_raw = sheet.build_go_cut(**GO)
+        for raw, signed_ns, verify_ns in ((ops_raw, sheet.GO_NAMESPACE, sheet.OPS_NAMESPACE),
+                                          (go_raw, sheet.OPS_NAMESPACE, sheet.GO_NAMESPACE),
+                                          (go_raw, sheet.GO_NAMESPACE, sheet.OPS_NAMESPACE),
+                                          (ops_raw, sheet.OPS_NAMESPACE, sheet.GO_NAMESPACE)):
+            with self.subTest(signed=signed_ns, verify=verify_ns, same_doc=raw is go_raw):
+                sig = self.sign(raw, signed_ns)
+                allowed = sheet.allowed_signers_line(self.pub, verify_ns, self.fp).encode()
+                code, _ = self.verifier(allowed, sig, sheet.PRINCIPAL, verify_ns, raw)
+                self.assertNotEqual(code, 0)
+
+    def test_namespace_non_string_is_a_fixed_stop(self):
+        for bad in (None, 5, ["x"], {"a": 1}, b"qa525-ops-v2@pmgm"):
+            self.assertEqual(self._code(sheet.allowed_signers_line, self.pub, bad, self.fp),
+                             "SIGNSHEET_NAMESPACE_INVALID")
+
     def test_allowed_line_refuses_wrong_pin_namespace_and_bad_keys(self):
         other = "SHA256:" + "B" * 43
         self.assertEqual(self._code(sheet.allowed_signers_line, self.pub, sheet.OPS_NAMESPACE, other),
