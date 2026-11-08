@@ -142,6 +142,41 @@ def _seal_zip(source, output, identity, expected_sha):
         raise Stop("APP_PORT_SOURCE_HASH_MISMATCH")
 
 
+def _hash_private_file(path, limit):
+    """Stream and verify a private regular file without following a link."""
+    try:
+        before = path.lstat()
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        raise Stop("APP_PORT_SEALED_FILE_UNTRUSTED") from None
+    try:
+        st = os.fstat(fd)
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid()
+                or st.st_nlink != 1 or st.st_mode & 0o077
+                or not 0 < st.st_size <= limit
+                or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+                != (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)):
+            raise Stop("APP_PORT_SEALED_FILE_UNTRUSTED")
+        total = 0
+        h = hashlib.sha256()
+        while True:
+            b = os.read(fd, CHUNK)
+            if not b:
+                break
+            total += len(b)
+            if total > limit:
+                raise Stop("APP_PORT_SEALED_FILE_UNTRUSTED")
+            h.update(b)
+        final = os.fstat(fd)
+        if (total != st.st_size
+                or (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns)
+                != (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)):
+            raise Stop("APP_PORT_SEALED_FILE_CHANGED")
+        return "sha256:" + h.hexdigest()
+    finally:
+        os.close(fd)
+
+
 def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
                  expected_source_sha: str, expected_inner_sha256: str,
                  expected_bundle_sha256: str, runner=subprocess.run):
@@ -213,8 +248,8 @@ def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
                 except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
                     raise Stop("APP_PORT_SIGSTORE_DENIED") from None
                 if (getattr(done, "returncode", None) != 0
-                        or _digest(signed.read_bytes()) != expected_inner_sha256
-                        or _digest(bundle.read_bytes()) != expected_bundle_sha256):
+                        or _hash_private_file(signed, MAX_ZIP) != expected_inner_sha256
+                        or _hash_private_file(bundle, MAX_BUNDLE) != expected_bundle_sha256):
                     raise Stop("APP_PORT_SIGSTORE_DENIED")
                 _check_binary(trusted_gh_sha256)
                 return True
