@@ -6,8 +6,8 @@ dual-gate APP callback. It NEVER installs, authorizes root, or touches QA.
 Its expected GH executable SHA, APP source SHA, and INNER ZIP SHA are
 independent pins supplied by a trusted operator, NOT by this module.
 The root-owned gh executable and host OS are a residual trust boundary.
-The rootless GH CLI may need network trust-root lookup. An injected runner is
-ONLY suitable for synthetic unit tests, never physical authority.
+The rootless GH CLI may need network trust-root lookup. Unit tests monkeypatch subprocess.run. Runtime callers CANNOT supply a fake
+runner to bypass Sigstore verification; this is not a root authorization.
 """
 from __future__ import annotations
 
@@ -179,12 +179,13 @@ def _hash_private_file(path, limit):
 
 def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
                  expected_source_sha: str, expected_inner_sha256: str,
-                 expected_bundle_sha256: str, runner=subprocess.run):
+                 expected_bundle_sha256: str):
     """Return verify_app(bundle_bytes,challenge) compatible with dual.verify_dual.
 
     The caller must supply authentic, independently obtained source/ZIP/bundle
     and GH binary pins, and keep the rootless staged ZIP in a private folder.
-    A fake injected runner can emulate success FOR TESTS ONLY.
+    Tests may monkeypatch subprocess.run in their own process, but a caller
+    cannot request an injected fake verifier through this public API.
     """
     if os.geteuid() == 0:
         raise Stop("APP_PORT_ROOT_FORBIDDEN")
@@ -193,8 +194,7 @@ def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
             or SHA40.fullmatch(expected_source_sha) is None
             or not _check_digest(expected_inner_sha256)
             or not _check_digest(expected_bundle_sha256)
-            or not _check_digest(trusted_gh_sha256)
-            or not callable(runner)):
+            or not _check_digest(trusted_gh_sha256)):
         raise Stop("APP_PORT_PINS_INVALID")
 
     def verify_app(bundle_bytes, challenge):
@@ -241,7 +241,7 @@ def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
                     "--deny-self-hosted-runners", "--format", "json",
                 ]
                 try:
-                    done = runner(argv, env=safe_env, cwd=str(temp),
+                    done = subprocess.run(argv, env=safe_env, cwd=str(temp),
                                   stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL, timeout=120,
                                   check=False)
