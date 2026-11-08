@@ -3,7 +3,7 @@
 
 Builds the ``verifier(data_dir)`` the G6 v2 producer's RESTORE calls on the extracted data
 (``pmgm.dump``, ``pmgm_keycloak.dump``, ``globals.sql``, ``silo/``, ``manifest.json``). It
-restores both dumps into a THROWAWAY PostgreSQL container that has no network, a read-only
+restores both dumps into a THROWAWAY PostgreSQL container (created with ``--pull=never``) that has no network, a read-only
 root, no capabilities and no host mount, counts the restored user
 tables of each database and the regular Silo objects, then ALWAYS removes the container.
 Returns ``({"pmgm": n, "pmgm_keycloak": m}, silo_objects)``; the producer rejects zero.
@@ -29,6 +29,9 @@ DBS = ("pmgm", "pmgm_keycloak")
 IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]{0,127}@sha256:[0-9a-f]{64}\Z")
 STAMP = re.compile(r"[0-9]{8}T[0-9]{6}Z\Z")
 MIN_SERVER_VERSION_NUM = 170000
+MAX_SERVER_VERSION_NUM = 179999
+MAX_DUMP_TOTAL_BYTES = 1024**3
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 READY_ATTEMPTS = 60
 SOCKET = "unix:///var/run/docker.sock"
 OUT_LIMIT = 65536
@@ -51,9 +54,9 @@ def _d(binary, *tail):
     return [binary, "--host", SOCKET, *tail]
 
 
-def argv_run(binary, name, image):
-    return _d(binary, "run", "-d", "--name", name, "--network", "none", "--read-only",
-              "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+def argv_create(binary, name, image):
+    return _d(binary, "create", "--pull=never", "--name", name, "--network", "none",
+              "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
               "--pids-limit", "256", "--memory", "2g", "--user", "999:999",
               "--label", "org.pmgm.qa525.g6v2-verifier=1",
               "--tmpfs", "/var/lib/postgresql/data:rw,size=4g,uid=999,gid=999,mode=0700",
@@ -62,35 +65,46 @@ def argv_run(binary, name, image):
               "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image)
 
 
-def argv_ready(binary, name):
-    return _d(binary, "exec", name, "pg_isready", "-U", "postgres", "-h", "/run/postgresql")
+def argv_start(binary, cid):
+    return _d(binary, "start", cid)
 
 
-def argv_version(binary, name):
-    return _d(binary, "exec", name, "psql", "-U", "postgres", "-At", "-c",
+def argv_ready(binary, cid):
+    return _d(binary, "exec", cid, "pg_isready", "-U", "postgres", "-h", "/run/postgresql")
+
+
+def argv_version(binary, cid):
+    return _d(binary, "exec", cid, "psql", "-U", "postgres", "-At", "-c",
               "show server_version_num")
 
 
-def argv_createdb(binary, name, db):
-    return _d(binary, "exec", name, "createdb", "-U", "postgres", db)
+def argv_createdb(binary, cid, db):
+    return _d(binary, "exec", cid, "createdb", "-U", "postgres", db)
 
 
-def argv_restore(binary, name, db):
+def argv_restore(binary, cid, db):
     # The dump is streamed on stdin: nothing from the host is mounted into the container.
-    return _d(binary, "exec", "-i", name, "pg_restore", "--exit-on-error", "--no-owner",
+    return _d(binary, "exec", "-i", cid, "pg_restore", "--exit-on-error", "--no-owner",
               "--no-acl", "-U", "postgres", "--dbname", db)
 
 
-def argv_count(binary, name, db):
-    return _d(binary, "exec", name, "psql", "-U", "postgres", "-d", db, "-At", "-c", TABLES_SQL)
+def argv_count(binary, cid, db):
+    return _d(binary, "exec", cid, "psql", "-U", "postgres", "-d", db, "-At", "-c", TABLES_SQL)
 
 
-def argv_remove(binary, name):
-    return _d(binary, "rm", "-f", "-v", name)
+def argv_remove(binary, cid):
+    """Only ever called with the ID this invocation created, never with a name."""
+    return _d(binary, "rm", "-f", "-v", cid)
 
 
-def argv_exists(binary, name):
-    return _d(binary, "inspect", "--format", "{{.Name}}", name)
+def argv_list_name(binary, name):
+    return _d(binary, "container", "ls", "-a", "--no-trunc", "--filter", "name=^/" + name + "$",
+              "--format", "{{.ID}}")
+
+
+def argv_list_id(binary, cid):
+    return _d(binary, "container", "ls", "-a", "--no-trunc", "--filter", "id=" + cid,
+              "--format", "{{.ID}}")
 
 
 def count_silo_objects(data_dir):
@@ -140,36 +154,60 @@ def build_verifier(*, runner, image, stamp, docker=DOCKER, sleep=time.sleep):
             raise Stop("G6VER_COMMAND_FAILED")
         return out
 
+    def dumps_size(data_dir):
+        total = 0
+        for db in DBS:
+            try:
+                info = os.lstat(os.path.join(data_dir, db + ".dump"))
+            except OSError:
+                raise Stop("G6VER_DATA_DIR_INVALID") from None
+            if not stat.S_ISREG(info.st_mode) or info.st_size <= 0:
+                raise Stop("G6VER_DATA_DIR_INVALID")
+            total += info.st_size
+        if total > MAX_DUMP_TOTAL_BYTES:
+            raise Stop("G6VER_TOO_LARGE")
+
     def verifier(data_dir):
         if type(data_dir) is not str or not os.path.isabs(data_dir) \
                 or "\0" in data_dir:
             raise Stop("G6VER_DATA_DIR_INVALID")
         silo = count_silo_objects(data_dir)
-        present, _ = runner(argv_exists(docker, name), capture_limit=OUT_LIMIT)
-        if present == 0:
+        dumps_size(data_dir)
+        # A failed or uncertain look-up stops here: absence must be positively shown.
+        if run(argv_list_name(docker, name)).strip():
             raise Stop("G6VER_NAME_IN_USE")
+        cid = None
         try:
-            run(argv_run(docker, name, image))
+            # `create` first: if it fails nothing was created by us, so nothing is removed.
+            cid = run(argv_create(docker, name, image)).decode("ascii", "replace").strip()
+            if HEX64.fullmatch(cid) is None:
+                cid = None
+                raise Stop("G6VER_CLEANUP_FAILED")  # ownership of what exists is unknown
+            run(argv_start(docker, cid))
             for _ in range(READY_ATTEMPTS):
-                code, _ = runner(argv_ready(docker, name), capture_limit=OUT_LIMIT)
+                code, _ = runner(argv_ready(docker, cid), capture_limit=OUT_LIMIT)
                 if code == 0:
                     break
                 sleep(1)
             else:
                 raise Stop("G6VER_NOT_READY")
-            _number(run(argv_version(docker, name)), MIN_SERVER_VERSION_NUM)
+            version = _number(run(argv_version(docker, cid)), MIN_SERVER_VERSION_NUM)
+            if version > MAX_SERVER_VERSION_NUM:
+                raise Stop("G6VER_RESULT_INVALID")
             tables = {}
             for db in DBS:
-                run(argv_createdb(docker, name, db))
-                run(argv_restore(docker, name, db),
+                run(argv_createdb(docker, cid, db))
+                run(argv_restore(docker, cid, db),
                     stdin_path=os.path.join(data_dir, db + ".dump"))
-                tables[db] = _number(run(argv_count(docker, name, db)), 1)
+                tables[db] = _number(run(argv_count(docker, cid, db)), 1)
             return tables, silo
         finally:
-            runner(argv_remove(docker, name), capture_limit=OUT_LIMIT)
-            still, _ = runner(argv_exists(docker, name), capture_limit=OUT_LIMIT)
-            if still == 0:  # the container is still there: never report PASS silently
-                raise Stop("G6VER_CLEANUP_FAILED")
+            if cid is not None:
+                removed, _ = runner(argv_remove(docker, cid), capture_limit=OUT_LIMIT)
+                listed, left = runner(argv_list_id(docker, cid), capture_limit=OUT_LIMIT)
+                # PASS only if the removal succeeded AND absence is positively confirmed.
+                if removed != 0 or listed != 0 or left.strip():
+                    raise Stop("G6VER_CLEANUP_FAILED")
 
     return verifier
 
