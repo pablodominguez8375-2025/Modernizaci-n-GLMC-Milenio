@@ -41,6 +41,21 @@ GO_FIELDS = ("schema", "nonce", "host", "environment", "scope", "action",
 GO_CONSTANTS = {"schema": "qa525-go-cut-v1", "host": "glmdch",
                 "environment": "QA_SYNTHETIC", "scope": "API_WEB_QA_ONLY",
                 "action": "ADMIT_OFFLINE_APPLY"}
+# Launcher-only needs a DIFFERENT signed document, action and 15-min TTL.
+# These exact values match qa525-launcher-root-approval.py (shape-only).
+LAUNCHER_GO_FIELDS = GO_FIELDS + (
+    "operator", "release_asset_sha256", "old_launcher_sha256",
+    "candidate_operator_sha256",
+)
+LAUNCHER_GO_CONSTANTS = {
+    "schema": "qa525-go-launcher-v1", "host": "glmdch",
+    "environment": "QA_GLMDCH_ONLY",
+    "scope": "QA525_LAUNCHER_ONLY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION",
+    "action": "replace-root-launcher-supervised",
+    "operator": "soporte@glmdch",
+}
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+MAX_LAUNCHER_AGE_SECONDS = 900
 
 
 class Stop(Exception):
@@ -78,6 +93,13 @@ def new_nonce(entropy):
     return base64.urlsafe_b64encode(entropy).decode("ascii").rstrip("=")
 
 
+def new_launcher_nonce(entropy):
+    """64 lowercase hexadecimal chars for the legacy root-approval nonce field."""
+    if type(entropy) is not bytes or len(entropy) != 32 or len(set(entropy)) < 8:
+        raise Stop("SIGNSHEET_NONCE_ENTROPY_INVALID")
+    return entropy.hex()
+
+
 def _utc(text):
     _need(text, UTC, "SIGNSHEET_TIME_INVALID")
     try:
@@ -87,10 +109,30 @@ def _utc(text):
 
 
 def build_go_cut(*, nonce, ops_source_sha, app_source_sha, app_archive_sha256,
-                 plan_sha256, admission_sha256, policy_hash, issued_at, expires_at):
-    """Exact bytes of the short-lived GO cut (<= 30 min) the Sponsor signs at GO time."""
-    record = dict(GO_CONSTANTS)
-    record["nonce"] = _need(nonce, NONCE, "SIGNSHEET_INPUT_INVALID")
+                 plan_sha256, admission_sha256, policy_hash, issued_at, expires_at,
+                 purpose="API_WEB_QA_ONLY", release_asset_sha256=None,
+                 old_launcher_sha256=None, candidate_operator_sha256=None):
+    """Canonical GO bytes, explicitly distinct for launcher and API/WEB.
+
+    Both are NOT approval. The launcher scope has a 900-second window and
+    directly binds the same hashes the existing root approval checks.
+    """
+    launcher = purpose == "LAUNCHER_ONLY"
+    if type(purpose) is not str or purpose not in ("API_WEB_QA_ONLY", "LAUNCHER_ONLY"):
+        raise Stop("SIGNSHEET_PURPOSE_INVALID")
+    extra = (release_asset_sha256, old_launcher_sha256, candidate_operator_sha256)
+    if not launcher and any(v is not None for v in extra):
+        raise Stop("SIGNSHEET_PURPOSE_INVALID")
+    record = dict(LAUNCHER_GO_CONSTANTS if launcher else GO_CONSTANTS)
+    record["nonce"] = _need(nonce, HEX64 if launcher else NONCE,
+                            "SIGNSHEET_INPUT_INVALID")
+    if launcher:
+        record["release_asset_sha256"] = _need(
+            release_asset_sha256, DIGEST, "SIGNSHEET_INPUT_INVALID")
+        record["old_launcher_sha256"] = _need(
+            old_launcher_sha256, HEX64, "SIGNSHEET_INPUT_INVALID")
+        record["candidate_operator_sha256"] = _need(
+            candidate_operator_sha256, HEX64, "SIGNSHEET_INPUT_INVALID")
     record["ops_source_sha"] = _need(ops_source_sha, SHA40, "SIGNSHEET_INPUT_INVALID")
     record["app_source_sha"] = _need(app_source_sha, SHA40, "SIGNSHEET_INPUT_INVALID")
     for name, value in (("app_archive_sha256", app_archive_sha256),
@@ -98,7 +140,8 @@ def build_go_cut(*, nonce, ops_source_sha, app_source_sha, app_archive_sha256,
                         ("policy_hash", policy_hash)):
         record[name] = _need(value, DIGEST, "SIGNSHEET_INPUT_INVALID")
     issued, expires = _utc(issued_at), _utc(expires_at)
-    if not 0 < (expires - issued).total_seconds() <= MAX_GO_AGE_SECONDS:
+    if not 0 < (expires - issued).total_seconds() <= (
+            MAX_LAUNCHER_AGE_SECONDS if launcher else MAX_GO_AGE_SECONDS):
         raise Stop("SIGNSHEET_WINDOW_INVALID")
     record["issued_at"], record["expires_at"] = issued_at, expires_at
     return _canonical(record)
@@ -128,6 +171,12 @@ def review_card(raw):
         order, namespace = OPS_FIELDS, OPS_NAMESPACE
     elif schema == "qa525-go-cut-v1":
         order, namespace = GO_FIELDS, GO_NAMESPACE
+    elif schema == "qa525-go-launcher-v1":
+        order, namespace = LAUNCHER_GO_FIELDS, GO_NAMESPACE
+        if (doc.get("scope") != LAUNCHER_GO_CONSTANTS["scope"]
+                or doc.get("action") != LAUNCHER_GO_CONSTANTS["action"]
+                or doc.get("operator") != LAUNCHER_GO_CONSTANTS["operator"]):
+            raise Stop("SIGNSHEET_DOCUMENT_INVALID")
     else:
         raise Stop("SIGNSHEET_DOCUMENT_INVALID")
     if set(doc) != set(order):
