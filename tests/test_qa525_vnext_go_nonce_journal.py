@@ -121,6 +121,42 @@ class NonceJournalTests(unittest.TestCase):
         self.stop("NONCE_LEASE_BUSY", self.go)
         self.assertEqual([f for f in os.listdir(self.root) if f.endswith(".spent")], [])
 
+    def test_short_writes_are_looped_and_disk_matches_reported_digest(self):
+        import hashlib
+        import unittest.mock as um
+        real = os.write
+        calls = []
+
+        def short(fd, data):
+            calls.append(len(data))
+            return real(fd, bytes(data[:7]))
+        with um.patch.object(mod.os, "write", side_effect=short):
+            r = self.go()
+        self.assertGreater(len(calls), 1)
+        name = hashlib.sha256(NONCE.encode()).hexdigest() + ".spent"
+        with open(os.path.join(self.root, name), "rb") as handle:
+            disk = handle.read()
+        self.assertEqual(r["record_sha256"], "sha256:" + hashlib.sha256(disk).hexdigest())
+
+    def test_zero_progress_write_reports_no_success_but_nonce_stays_spent(self):
+        import unittest.mock as um
+        with um.patch.object(mod.os, "write", return_value=0):
+            self.stop("NONCE_RECORD_WRITE_INCOMPLETE", self.go)
+        self.stop("NONCE_REPLAY", self.go)
+
+    def test_write_error_enospc_reports_opaque_stop_and_stays_spent(self):
+        import unittest.mock as um
+        with um.patch.object(mod.os, "write", side_effect=OSError(28, "full")):
+            self.stop("NONCE_JOURNAL_IO", self.go)
+        self.stop("NONCE_REPLAY", self.go)
+
+    def test_readlink_failure_closes_fd_and_stops_opaquely(self):
+        import unittest.mock as um
+        before = len(os.listdir("/proc/self/fd"))
+        with um.patch.object(mod.os, "readlink", side_effect=OSError(5, "io")):
+            self.stop("NONCE_ROOT_INVALID", self.go)
+        self.assertEqual(len(os.listdir("/proc/self/fd")), before)
+
     def test_no_forbidden_apis(self):
         text = SRC.read_text()
         for bad in ("subprocess", "sudo", "docker", "urllib", "socket", "/opt/centenario", "os.system"):

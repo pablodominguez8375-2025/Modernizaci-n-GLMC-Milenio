@@ -4,8 +4,9 @@
 consume() atomically marks a URL-safe signed-GO nonce as spent, bound to the
 APP/OPS/policy/plan/admission digests the caller supplies. The mark is the
 EXISTENCE of a file created O_CREAT|O_EXCL|O_NOFOLLOW under a validated 0700
-journal directory (by dir_fd, no path re-walk), fsynced with its directory
-BEFORE success is returned. Fail-closed: a crash at any point after creation
+journal directory (by dir_fd, no path re-walk), fully written (short writes looped), fsynced, read back and compared with its
+directory fsynced BEFORE success is returned. On a failed write the nonce stays SPENT
+and NO success/record digest is reported. Fail-closed: a crash at any point after creation
 leaves the nonce spent (never re-usable). A non-blocking flock lease serialises
 concurrent consumers; losers get an opaque STOP. Verifying the GO signature,
 APP provenance or Sponsor consent is NOT done here (bootstrap_authenticated=False).
@@ -50,12 +51,27 @@ def _journal(root, uid):
         fd = os.open(root, OPEN_DIR)
     except OSError:
         raise Stop("NONCE_ROOT_INVALID") from None
-    info = os.fstat(fd)
-    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or info.st_mode & 0o077
-            or os.readlink("/proc/self/fd/%d" % fd) != root):
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or info.st_mode & 0o077
+                or os.readlink("/proc/self/fd/%d" % fd) != root):
+            raise Stop("NONCE_ROOT_UNTRUSTED")
+    except BaseException as exc:
         os.close(fd)
-        raise Stop("NONCE_ROOT_UNTRUSTED")
+        if isinstance(exc, OSError):
+            raise Stop("NONCE_ROOT_INVALID") from None
+        raise
     return fd
+
+
+def _write_all(fd, data):
+    """Strictly write every byte (short writes looped); no progress -> STOP."""
+    view, done = memoryview(data), 0
+    while done < len(data):
+        n = os.write(fd, view[done:])
+        if type(n) is not int or n <= 0:
+            raise Stop("NONCE_RECORD_WRITE_INCOMPLETE")
+        done += n
 
 
 def _bind(binding):
@@ -90,7 +106,7 @@ def consume(root, nonce, binding, *, uid, now, expires_at):
             raise Stop("NONCE_LEASE_BUSY") from None
         name = hashlib.sha256(nonce.encode("ascii")).hexdigest() + ".spent"
         try:
-            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+            fd = os.open(name, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
                          0o600, dir_fd=dirfd)
         except FileExistsError:
             raise Stop("NONCE_REPLAY") from None
@@ -100,8 +116,18 @@ def consume(root, nonce, binding, *, uid, now, expires_at):
                                 sort_keys=True, separators=(",", ":")).encode()
             if len(record) > MAX_RECORD:
                 raise Stop("NONCE_BINDING_INVALID")
-            os.write(fd, record)
+            _write_all(fd, record)
             os.fsync(fd)
+            if os.fstat(fd).st_size != len(record):
+                raise Stop("NONCE_RECORD_WRITE_INCOMPLETE")
+            persisted = b""
+            while len(persisted) < len(record):
+                chunk = os.pread(fd, len(record) - len(persisted), len(persisted))
+                if not chunk:
+                    break
+                persisted += chunk
+            if persisted != record:  # on-disk bytes must equal the digest we report
+                raise Stop("NONCE_RECORD_WRITE_INCOMPLETE")
         finally:
             os.close(fd)
         os.fsync(dirfd)
