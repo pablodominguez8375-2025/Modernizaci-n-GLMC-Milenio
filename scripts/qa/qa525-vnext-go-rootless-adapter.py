@@ -117,18 +117,25 @@ def _private(path, payload):
         raise Stop("GO_PORT_PRIVATE_FILE_DENIED") from None
 
 
-def verifier_for(*, trusted_binary_sha256, allowed_signers):
+def verifier_for(*, trusted_binary_sha256, allowed_signers,
+                 expected_fingerprint):
     """Return immutable GO signature callback; **no runtime runner injection**.
 
-    Caller must pin *both* external binary digest and GO signer fingerprint.
-    This function does not claim to authenticate their independent origin.
+    Callers MUST supply an independently authenticated Sponsor fingerprint.
+    Deriving a fingerprint from caller-supplied allowed_signers is not a pin.
+    No filesystem/host action is authorized by this library.
     """
     if (type(trusted_binary_sha256) is not str
             or SHA256.fullmatch(trusted_binary_sha256) is None):
         raise Stop("GO_PORT_BINARY_PIN_INVALID")
+    if (type(expected_fingerprint) is not str
+            or FP.fullmatch(expected_fingerprint) is None):
+        raise Stop("GO_PORT_FINGERPRINT_PIN_INVALID")
     if os.geteuid() == 0:
         raise Stop("GO_PORT_ROOT_FORBIDDEN")
     fingerprint = _fingerprint(allowed_signers)
+    if not hmac.compare_digest(fingerprint, expected_fingerprint):
+        raise Stop("GO_PORT_FINGERPRINT_PIN_MISMATCH")
     if not hmac.compare_digest(_binary_sha(), trusted_binary_sha256):
         raise Stop("GO_PORT_BINARY_PIN_MISMATCH")
 
@@ -140,7 +147,7 @@ def verifier_for(*, trusted_binary_sha256, allowed_signers):
                 or not 0 < len(go_signature_bytes) <= MAX_SIG
                 or type(go_fingerprint) is not str
                 or FP.fullmatch(go_fingerprint) is None
-                or not hmac.compare_digest(fingerprint, go_fingerprint)):
+                or not hmac.compare_digest(expected_fingerprint, go_fingerprint)):
             raise Stop("GO_PORT_INPUT_INVALID")
         if os.geteuid() == 0:
             raise Stop("GO_PORT_ROOT_FORBIDDEN")
