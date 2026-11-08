@@ -96,6 +96,29 @@ class RootlessAppPortTests(unittest.TestCase):
         self.assertEqual(kw["check"], False)
         self.assertFalse(Path(args[3]).exists())
         self.assertFalse(Path(args[args.index("--bundle") + 1]).exists())
+        # P1 fix: the same exact verified bytes survive the temp path removal
+        # as a one-shot Linux memfd with F_SEAL_WRITE. Caller owns/close FD.
+        fd, pin = ver.take_verified_fd()
+        try:
+            self.assertEqual(pin, digest(INNER))
+            self.assertEqual(os.pread(fd, len(INNER), 0), INNER)
+            with self.assertRaises(OSError):
+                os.pwrite(fd, b"X", 0)
+            self.path.write_bytes(b"source path replaced after Sigstore")
+            self.assertEqual(os.pread(fd, len(INNER), 0), INNER)
+            self.denied("APP_PORT_VERIFIED_FD_UNAVAILABLE", ver.take_verified_fd)
+            self.denied("APP_PORT_ALREADY_VERIFIED", ver, BUNDLE, dict(self.good_challenge))
+        finally:
+            os.close(fd)
+
+    def test_retained_fd_not_accessible_before_success_and_can_be_closed(self):
+        ver = self.verifier()
+        self.denied("APP_PORT_VERIFIED_FD_UNAVAILABLE", ver.take_verified_fd)
+        with mock.patch.object(app, "_check_binary", return_value=None):
+            self.assertTrue(ver(BUNDLE, dict(self.good_challenge)))
+        ver.close_verified_fd()
+        self.denied("APP_PORT_VERIFIED_FD_UNAVAILABLE", ver.take_verified_fd)
+        self.denied("APP_PORT_ALREADY_VERIFIED", ver, BUNDLE, dict(self.good_challenge))
 
     def test_mixed_signer_repo_source_issuer_digest_rejected_before_cli(self):
         ver = self.verifier()
