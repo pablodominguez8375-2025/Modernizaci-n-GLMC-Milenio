@@ -23,6 +23,7 @@ import stat
 MAGIC = b"QA525-FD-V1:"
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
+NONCE = re.compile(r"[A-Za-z0-9_-]{24,96}\Z")
 MAX_INNER_BYTES = 2 * 1024 ** 3
 SEALS = (fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SHRINK |
          fcntl.F_SEAL_GROW | fcntl.F_SEAL_SEAL)
@@ -33,8 +34,8 @@ class Stop(Exception):
     """Opaque STOP code; never include untrusted wire content."""
 
 
-def _pin(value, code, *, digest=False):
-    pattern = SHA256 if digest else HEX64
+def _pin(value, code, *, digest=False, nonce=False):
+    pattern = SHA256 if digest else NONCE if nonce else HEX64
     if type(value) is not str or pattern.fullmatch(value) is None:
         raise Stop(code)
     return value
@@ -76,7 +77,7 @@ def _fd_hash(fd, pin):
 def send_verified_fd(sock, fd, *, nonce, sha256):
     """Send an already-sealed fd; never send a path or claim it authorizes GO."""
     _socket(sock)
-    _pin(nonce, "FD_HANDOFF_NONCE_INVALID")
+    _pin(nonce, "FD_HANDOFF_NONCE_INVALID", nonce=True)
     _pin(sha256, "FD_HANDOFF_PIN_INVALID", digest=True)
     if type(fd) is not int or fd < 0:
         raise Stop("FD_HANDOFF_FD_UNSAFE")
@@ -100,7 +101,7 @@ def receive_verified_fd(sock, *, expected_nonce, expected_sha256):
     No root, Sponsor, signature, APP provenance or admission is authenticated here.
     """
     _socket(sock)
-    _pin(expected_nonce, "FD_HANDOFF_NONCE_INVALID")
+    _pin(expected_nonce, "FD_HANDOFF_NONCE_INVALID", nonce=True)
     _pin(expected_sha256, "FD_HANDOFF_PIN_INVALID", digest=True)
     received = []
     keep = None

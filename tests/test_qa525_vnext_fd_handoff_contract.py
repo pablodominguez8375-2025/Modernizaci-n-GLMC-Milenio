@@ -16,7 +16,7 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 DATA = b"QA525 sealed real memfd test bytes; not an APP attestation"
 SHA = "sha256:" + hashlib.sha256(DATA).hexdigest()
-NONCE = "a" * 64
+NONCE = "a" * 41 + "-_"
 
 
 @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "memfd_create")
@@ -77,10 +77,16 @@ class TestFdHandoff(unittest.TestCase):
             os.pwrite(result["fd"], b"X", 0)
 
     def test_nonce_mismatch_does_not_grant_fd(self):
-        self.send(self.fd(), nonce="b" * 64)
+        self.send(self.fd(), nonce="b" * 43)
         with self.assertRaises(mod.Stop) as err:
             self.recv()
         self.assertEqual(str(err.exception), "FD_HANDOFF_FRAME_MISMATCH")
+
+    def test_sender_refuses_nonce_outside_signed_go_grammar(self):
+        for bad in ("a" * 23, "a" * 97, "a" * 42 + "!"):
+            with self.assertRaises(mod.Stop) as err:
+                self.send(self.fd(), nonce=bad)
+            self.assertEqual(str(err.exception), "FD_HANDOFF_NONCE_INVALID")
 
     def test_wire_digest_is_not_an_independent_pin(self):
         self.raw_send([self.fd()], mod.MAGIC + NONCE.encode() + b":" + b"b" * 64)
