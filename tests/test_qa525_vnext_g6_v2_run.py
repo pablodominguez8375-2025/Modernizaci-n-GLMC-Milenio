@@ -70,6 +70,29 @@ class RunFakeDocker(ctest.CaptorFakeRunner):
                                 capture_limit=capture_limit)
 
 
+class SystemctlFake:
+    """Answers `systemctl show` like systemd would for the operator-armed restart timer."""
+
+    def __init__(self, test, *, active="active", sub="waiting", offset=660,
+                 argv=None, unit="pmgm-g6-minio-restart.service", code=0):
+        self.test, self.active, self.sub, self.offset = test, active, sub, offset
+        self.argv, self.unit, self.code, self.calls = argv, unit, code, []
+
+    def __call__(self, argv, *, stdin_path=None, stdout_fd=None, capture_limit=0):
+        self.calls.append(list(argv))
+        verbs = {a for a in argv[1:] if a in ("show",)}
+        assert verbs == {"show"} and argv[0] == "/usr/bin/systemctl", argv  # read-only only
+        if self.code:
+            return self.code, b""
+        if argv[3] == "pmgm-g6-minio-restart.timer":
+            next_us = int((self.test.tick[0] + self.offset) * 1e6)
+            return 0, ("ActiveState=%s\nSubState=%s\nUnit=%s\nNextElapseUSecMonotonic=%d\n"
+                       % (self.active, self.sub, self.unit, next_us)).encode()
+        argv_text = self.argv or "/usr/bin/docker start centenario-qa-lab2-minio-1"
+        return 0, ("ExecStart={ path=/usr/bin/docker ; argv[]=%s ; ignore_errors=no ; "
+                   "start_time=[n/a] ; status=0/0 }\n" % argv_text).encode()
+
+
 class G6RunBase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -99,7 +122,8 @@ class G6RunBase(unittest.TestCase):
             silo_source=self.silo, restic=self.restic_bin,
             forbidden=[os.path.join(self.base, "prod")],
             module_hashes={"producer": "1" * 64, "entrypoint": "2" * 64},
-            sleep=self.slept.append, monotonic=self.monotonic)
+            sleep=self.slept.append, monotonic=self.monotonic,
+            systemctl_runner=SystemctlFake(self), systemctl="/usr/bin/systemctl")
         args.update(over)
         return run.Env(**args)
 
@@ -149,7 +173,8 @@ class G6RunGrammarTests(unittest.TestCase):
         self.assertEqual(out.getvalue(), "G6RUN_STOP=G6RUN_USAGE\n")
         out = io.StringIO()
         with contextlib.redirect_stdout(out), \
-                mock.patch.object(run.os, "geteuid", return_value=1000):
+                mock.patch.object(run.os, "geteuid", return_value=1000), \
+                mock.patch.object(run.socket, "gethostname", return_value="glmdch"):
             self.assertEqual(run.main(["preflight"]), 1)
         self.assertEqual(out.getvalue(), "G6RUN_STOP=G6RUN_ROOT_REQUIRED\n")
 
@@ -252,6 +277,69 @@ class G6RunCycleTests(G6RunBase):
         self.assertEqual(fake.calls, [])
 
 
+class G6RunHostAndWatchdogTests(G6RunBase):
+    def prepare(self):
+        env = self.env(RunFakeDocker(minio="false"))
+        init = self.go("init", env, **{"restic-sha256": PIN})[1]
+        self.clock = NOW + dt.timedelta(minutes=5)
+        return {"restic-sha256": PIN, "repo-id": init["RESTIC_REPO_ID"],
+                "key-epoch": init["KEY_EPOCH"]}
+
+    def attempt(self, pins, **over):
+        self.tick[0] = 0.0
+        env = self.env(RunFakeDocker(minio=["true", "false"]), **over)
+        return self.go("backup", env, **pins)
+
+    def test_other_host_is_refused_before_any_module_is_loaded(self):
+        loaded = []
+        with mock.patch.object(run.socket, "gethostname", return_value="otro-host"), \
+                mock.patch.object(run, "_load_module", side_effect=loaded.append), \
+                mock.patch.object(run.os, "geteuid", return_value=0):
+            with self.assertRaises(run.Stop) as err:
+                run.real_env("backup")
+        self.assertEqual(str(err.exception), "G6RUN_HOST_REFUSED")
+        self.assertEqual(loaded, [])
+
+    def test_armed_watchdog_lets_the_window_open_and_is_read_only(self):
+        pins = self.prepare()
+        sysctl = SystemctlFake(self)
+        code, out = self.attempt(pins, systemctl_runner=sysctl)
+        self.assertEqual(code, 0, self.lines)
+        self.assertEqual(len(sysctl.calls), 2)
+
+    def test_missing_or_wrong_watchdog_stops_before_asking_to_stop_minio(self):
+        pins = self.prepare()
+        cases = {
+            "no_runner": (None, "G6RUN_WATCHDOG_MISSING"),
+            "unit_absent": (SystemctlFake(self, code=1), "G6RUN_WATCHDOG_MISSING"),
+            "inactive": (SystemctlFake(self, active="inactive", sub="dead"),
+                         "G6RUN_WATCHDOG_MISSING"),
+            "other_target": (SystemctlFake(self, argv="/usr/bin/docker start otra-cosa"),
+                             "G6RUN_WATCHDOG_WRONG"),
+            "echo_only": (SystemctlFake(self, argv="/bin/echo prueba"), "G6RUN_WATCHDOG_WRONG"),
+            "extra_args": (SystemctlFake(self, argv="/usr/bin/docker start "
+                                         "centenario-qa-lab2-minio-1 --x"), "G6RUN_WATCHDOG_WRONG"),
+            "weird_unit": (SystemctlFake(self, unit="../x"), "G6RUN_WATCHDOG_WRONG"),
+            "fires_too_soon": (SystemctlFake(self, offset=120), "G6RUN_WATCHDOG_TIMING"),
+            "fires_too_late": (SystemctlFake(self, offset=7200), "G6RUN_WATCHDOG_TIMING"),
+        }
+        for label, (runner, expected) in cases.items():
+            code, out = self.attempt(pins, systemctl_runner=runner)
+            self.assertEqual((label, code, out["G6RUN_STOP"]), (label, 1, expected))
+            self.assertNotIn("G6RUN_ACTION", out)  # never asked the operator to stop MinIO
+
+    def test_window_is_aborted_if_the_watchdog_would_have_fired(self):
+        pins = self.prepare()
+        ticks = iter([0.0, 0.0, 100.0, 600.0, 650.0, 650.0])
+        code, out = self.attempt(pins, systemctl_runner=SystemctlFake(self, offset=610),
+                                 monotonic=lambda: next(ticks))
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6RUN_WINDOW_EXCEEDED"))
+
+    def test_sigkill_case_is_covered_because_the_watchdog_lives_in_systemd(self):
+        self.assertIn("WATCHDOG_TIMER", SOURCE)
+        self.assertNotIn("import subprocess", SOURCE)
+
+
 class G6RunSiloBindingTests(G6RunBase):
     def test_silo_must_be_the_single_volume_mounted_at_data(self):
         good = {"Type": "volume", "Destination": "/data", "Source": self.silo}
@@ -329,7 +417,7 @@ class G6RunWindowTests(G6RunBase):
         self.assertEqual((code, out), (1, {"G6RUN_STOP": "G6RUN_MINIO_STOPPED_EARLY"}))
 
     def test_a_window_over_the_cap_invalidates_the_backup_and_asks_to_start(self):
-        ticks = iter([0.0, run.WINDOW_MAX_SECONDS + 5.0])
+        ticks = iter([0.0, 0.0, 0.0] + [run.WINDOW_MAX_SECONDS + 5.0] * 4)
         code, out, lines = self.backup(["true", "false"], monotonic=lambda: next(ticks))
         self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6RUN_WINDOW_EXCEEDED"))
         self.assertIn("G6RUN_ACTION=START_MINIO_NOW", lines)
@@ -496,9 +584,13 @@ class G6RunStaticTests(unittest.TestCase):
     def test_no_shell_environment_override_or_service_control_in_the_source(self):
         for forbidden in ("shell=True", "os.system", "os.popen", "import subprocess",
                           "os.environ", "getenv", "eval(", "exec(", "input(",
-                          '"stop"', '"start"', '"kill"', '"restart"', '"rm"', '"pause"',
+                          '"stop"', '"kill"', '"restart"', '"rm"', '"pause"',
                           '"run"', '"create"', '"compose"', "--privileged"):
             self.assertNotIn(forbidden, SOURCE, forbidden)
+
+    def test_start_appears_only_as_the_expected_watchdog_target(self):
+        self.assertEqual(SOURCE.count('"start"'), 1)
+        self.assertIn('[env.docker, "start", env.minio]', SOURCE)
 
     def test_every_docker_command_comes_from_the_audited_builders(self):
         self.assertIn("argv_inspect", SOURCE)

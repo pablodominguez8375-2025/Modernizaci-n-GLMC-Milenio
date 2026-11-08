@@ -36,6 +36,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import stat
 import sys
 import time
@@ -45,6 +46,11 @@ STATE_ROOT = "/var/lib/pmgm-qa525-g6-v2"
 RESTIC = "/usr/bin/restic"
 SILO_SOURCE = ("/var/lib/docker/volumes/centenario-qa-lab2_pmgm_srv01_minio_data/_data")
 MINIO_DATA_DESTINATION = "/data"
+EXPECTED_HOST = "glmdch"      # defence in depth only: never proof of provenance or authorization
+SYSTEMCTL = "/usr/bin/systemctl"
+WATCHDOG_TIMER = "pmgm-g6-minio-restart.timer"
+WATCHDOG_MIN_SECONDS = 600    # must not fire before the largest allowed window
+WATCHDOG_MAX_SECONDS = 900    # nor be so far away that a hung MinIO stays down
 STOP_WAIT_SECONDS = 180      # operator time to stop MinIO once asked
 WINDOW_MAX_SECONDS = 600     # hard cap, stop observed -> Silo copy finished
 POLL_SECONDS = 2
@@ -153,7 +159,8 @@ class Env:
     def __init__(self, *, producer, captor, verifier, uid, now, docker_runner, make_restic,
                  read_key, emit, state_root=STATE_ROOT, silo_source=SILO_SOURCE,
                  restic=RESTIC, forbidden=None, module_hashes=None,
-                 sleep=time.sleep, monotonic=time.monotonic):
+                 sleep=time.sleep, monotonic=time.monotonic,
+                 systemctl_runner=None, systemctl=SYSTEMCTL):
         self.producer, self.captor, self.verifier = producer, captor, verifier
         self.uid, self.now, self.docker_runner = uid, now, docker_runner
         self.make_restic, self.read_key, self.emit = make_restic, read_key, emit
@@ -161,6 +168,7 @@ class Env:
         self.forbidden = list(FORBIDDEN_PREFIXES if forbidden is None else forbidden)
         self.module_hashes = dict(module_hashes or {})
         self.sleep, self.monotonic = sleep, monotonic
+        self.systemctl_runner, self.systemctl = systemctl_runner, systemctl
         self.docker = captor.DOCKER
         self.project = captor.PROJECT
         self.minio = captor.PROJECT + "-minio-1"
@@ -197,6 +205,48 @@ def silo_bound(env):
             and not os.path.islink(source))
 
 
+def _props(raw):
+    out = {}
+    for line in raw.decode("utf-8", "replace").splitlines():
+        key, sep, value = line.partition("=")
+        if sep:
+            out[key] = value
+    return out
+
+
+def watchdog_deadline(env):
+    """Monotonic deadline of an INDEPENDENT, armed restart of MinIO, or Stop.
+
+    The operator arms ``systemd-run --on-active=11min --unit=pmgm-g6-minio-restart
+    /usr/bin/docker start <minio>`` BEFORE the window. This reads systemd (not this process),
+    so it survives the terminal dying or SIGKILL of this program.
+    """
+    if env.systemctl_runner is None:
+        raise Stop("G6RUN_WATCHDOG_MISSING")
+    shown = [env.systemctl, "show", "--no-pager", WATCHDOG_TIMER,
+             "--property=ActiveState,SubState,Unit,NextElapseUSecMonotonic"]
+    code, raw = env.systemctl_runner(shown, capture_limit=4096)
+    props = _props(raw) if code == 0 else {}
+    if props.get("ActiveState") != "active" or props.get("SubState") != "waiting":
+        raise Stop("G6RUN_WATCHDOG_MISSING")
+    service = props.get("Unit", "")
+    if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,80}\.service", service):
+        raise Stop("G6RUN_WATCHDOG_WRONG")
+    code, raw = env.systemctl_runner(
+        [env.systemctl, "show", "--no-pager", service, "--property=ExecStart"],
+        capture_limit=8192)
+    found = re.search(r"argv\[\]=(.*?) ;", raw.decode("utf-8", "replace")) if code == 0 else None
+    if (found is None or found.group(1).split(" ") != [env.docker, "start", env.minio]):
+        raise Stop("G6RUN_WATCHDOG_WRONG")
+    try:
+        remaining = int(props["NextElapseUSecMonotonic"]) / 1e6 - env.monotonic()
+    except (KeyError, ValueError):
+        raise Stop("G6RUN_WATCHDOG_TIMING") from None
+    if not WATCHDOG_MIN_SECONDS <= remaining <= WATCHDOG_MAX_SECONDS:
+        raise Stop("G6RUN_WATCHDOG_TIMING")
+    return env.monotonic() + remaining
+
+
 class SiloGate:
     """The ``silo_quiescent`` port: binds the source, measures and caps the stop window.
 
@@ -206,6 +256,7 @@ class SiloGate:
 
     def __init__(self, env):
         self.env, self.phase, self.opened_at, self.closed = env, 0, None, False
+        self.deadline = None
 
     def __call__(self):
         env = self.env
@@ -215,6 +266,7 @@ class SiloGate:
                 raise Stop("G6RUN_SILO_UNBOUND")
             if minio_quiescent(env):
                 raise Stop("G6RUN_MINIO_STOPPED_EARLY")
+            self.deadline = watchdog_deadline(env)
             _emit(env, g6run_action="STOP_MINIO_NOW", window_max_seconds=WINDOW_MAX_SECONDS,
                   wait_seconds=STOP_WAIT_SECONDS)
             waited = 0
@@ -230,7 +282,7 @@ class SiloGate:
         self.closed = True
         elapsed = int(env.monotonic() - self.opened_at)
         _emit(env, g6run_action="START_MINIO_NOW", minio_window_seconds=elapsed)
-        if elapsed > WINDOW_MAX_SECONDS:
+        if elapsed > WINDOW_MAX_SECONDS or env.monotonic() >= self.deadline:
             raise Stop("G6RUN_WINDOW_EXCEEDED")
         return result
 
@@ -435,6 +487,8 @@ def _read_key_from_terminal():
 
 def real_env(command):
     """Production wiring. Root only; no parameter lets a caller replace a runner."""
+    if socket.gethostname() != EXPECTED_HOST:  # before any module is loaded
+        raise Stop("G6RUN_HOST_REFUSED")
     if os.geteuid() != 0:
         raise Stop("G6RUN_ROOT_REQUIRED")
     uid = os.geteuid()
@@ -449,6 +503,7 @@ def real_env(command):
         producer=producer, captor=captor, verifier=modules["verifier"], uid=uid,
         now=lambda: dt.datetime.now(dt.timezone.utc),
         docker_runner=captor.FixedRunner(),
+        systemctl_runner=captor.FixedRunner(SYSTEMCTL, 15),
         make_restic=lambda sha: producer.ResticCli(RESTIC, binary_sha256=sha),
         read_key=_read_key_from_terminal, emit=print, module_hashes=hashes)
 

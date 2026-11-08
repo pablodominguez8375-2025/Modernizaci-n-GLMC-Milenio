@@ -73,3 +73,24 @@ El programa **nunca** detiene, arranca ni borra un contenedor (hay una prueba es
   y el informe de restore bajo `/opt/centenario/qa-g6/`, todo propiedad de root y 0600, mientras que `review` deja los documentos en
   `/var/lib/pmgm-qa525-g6-v2/`. Falta un paso de puente (o adaptar el validador) y una prueba de contrato; no se afirma compatibilidad.
 - Pendiente de ChatGPT: confirmar rutas, la ventana, y quién convierte el `review` en el acta que consume `validate_g6`.
+
+## Temporizador independiente (obligatorio, verificado por el programa) y guard de host
+
+Antes de `backup` el Sponsor arma, con el nombre EXACTO, un reinicio independiente de la terminal:
+
+    sudo systemd-run --on-active=11min --unit=pmgm-g6-minio-restart --collect \
+        /usr/bin/docker start centenario-qa-lab2-minio-1
+
+`backup` consulta SOLO LECTURA a systemd (`systemctl show`) ANTES de imprimir `STOP_MINIO_NOW` y se
+detiene si: el temporizador no está `active/waiting` (`G6RUN_WATCHDOG_MISSING`); la unidad que
+dispara no ejecuta exactamente `docker start centenario-qa-lab2-minio-1` (`G6RUN_WATCHDOG_WRONG`);
+o no vence entre 600 y 900 s (`G6RUN_WATCHDOG_TIMING`). Si al terminar la copia el reloj ya
+superó el vencimiento, la ventana se invalida (`G6RUN_WINDOW_EXCEEDED`). Como el reinicio vive en
+systemd, cubre desconexión de Termius o SIGKILL del programa. Tras la ventana cancelar si sigue
+armado: `sudo systemctl stop pmgm-g6-minio-restart.timer`.
+Probado en glmdch (08-11-2026, 21:39Z): `systemd-run --on-active=60s` ejecuta y termina bien.
+PENDIENTE: confirmar en glmdch el formato real de `NextElapseUSecMonotonic` con el ensayo de 11 min.
+
+`real_env` se niega (`G6RUN_HOST_REFUSED`) si `hostname != glmdch`, ANTES de cargar módulos. Es una
+defensa adicional, NO prueba procedencia ni autorización. P1-1 (cargar módulos como root sin ancla
+autenticada) sigue abierto y pertenece al contrato #936/#822: este entrypoint NO es apto para sudo.
