@@ -33,13 +33,16 @@ Contrato, no implementación; nada de esto se ejecuta ni se instala sin PR, CI h
 
 ### Dos cosas distintas (respuesta al P1-2)
 El borrador anterior exigía a la vez «un `diff` que pruebe que solo cambian constantes» y cambiar comportamiento (sobrescritura, entorno, validador). Eso es contradictorio y se retira: **ya no se afirma «solo constantes»**. Se separan:
-- **(a) Equivalencia funcional con v1**: no se prueba por `diff` de fuente, sino por contrato observable: mismo formato de `archive.receipt.json`, mismos estados (`ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING`, `G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY`), mismas bases verificadas (pmgm y pmgm_keycloak) y mismo cálculo de edad (<48 h), con pruebas que consumen ese formato.
+- **(a) Equivalencia funcional con v1**: no se prueba por `diff` de fuente, sino por contrato observable: campos semánticos comunes con v1 más un envelope v2 versionado (`schema=qa525-g6-v2`, generación propia); no hay identidad byte a byte ni compatibilidad hacia atrás silenciosa; mismos estados (`ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING`, `G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY`), mismas bases verificadas (pmgm y pmgm_keycloak) y mismo cálculo de edad (<48 h), con pruebas que consumen ese formato.
 - **(b) Protecciones de seguridad nuevas, explícitas y con prueba propia** (ver abajo).
 
 ### Contrato mínimo del par v2
 1. **Ubicaciones propias:** repositorio nuevo en una ruta que no exista previamente; archivo de clave nuevo y distinto del actual (`0600 root:root`); pin propio. No se usa ni se modifica el repositorio antiguo.
 2. **Entorno:** el script construye su entorno desde cero y no hereda `RESTIC_*`; si el entorno heredado trae esas variables, se **rechaza** (no se ignoran en silencio).
-3. **No sobrescritura:** si el repositorio o la clave nuevos ya existen, STOP. Nunca se crea sobre algo existente ni se destruye el repositorio antiguo.
+3. **Dos modos, con precondiciones distintas:**
+   - **INIT** (una sola vez): exige destino de repositorio y de clave **inexistentes**; crea la carpeta y la clave `0600` con `O_EXCL` bajo una raíz root verificada. Si ya existen, STOP.
+   - **BACKUP / RESTORE** (posteriores): exigen repositorio y clave **existentes**, idénticos a pines independientes, sin symlinks, de dueño root; no truncan ni sobrescriben y **jamás** inician el repositorio de nuevo. Un repositorio o clave ajenos, o una generación no admitida, son STOP.
+   Nunca se destruye el repositorio antiguo.
 4. **Archivo realmente exportado = archivo restaurado:** el SHA-256 del archivo cifrado que se copia fuera del host es el mismo que `restore` abre, con la clave nueva; sin ese vínculo no hay acta.
 5. **Sin falso PASS ni acta v1 para un GO v2:** el acta v2 lleva una marca de versión y el identificador del repositorio; el validador del GO v2 rechaza un acta v1 y viceversa.
 6. **Logs saneados:** nunca imprimen clave, contraseña ni contenido de la base; hay prueba de ello.
