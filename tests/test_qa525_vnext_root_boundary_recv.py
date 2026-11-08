@@ -1,4 +1,4 @@
-"""QA525 boundary receiver: real kernel SCM_RIGHTS/SO_PEERCRED, subprocess peers, never GO."""
+"""QA525 boundary receiver: real kernel SCM_RIGHTS/per-message SCM_CREDENTIALS, subprocess peers, never GO."""
 import array
 import fcntl
 import hashlib
