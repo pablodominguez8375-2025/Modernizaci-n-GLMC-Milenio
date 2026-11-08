@@ -238,6 +238,8 @@ def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
                     "--repo", REPO, "--bundle", str(bundle),
                     "--signer-workflow", WORKFLOW,
                     "--source-digest", expected_source_sha,
+                    "--cert-oidc-issuer", ISSUER,
+                    "--predicate-type", "https://slsa.dev/provenance/v1",
                     "--deny-self-hosted-runners", "--format", "json",
                 ]
                 try:
