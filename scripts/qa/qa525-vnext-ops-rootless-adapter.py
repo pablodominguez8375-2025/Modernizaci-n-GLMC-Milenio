@@ -5,6 +5,7 @@ Call this from a separately trusted, pinned UNPRIVILEGED operator before any
 Python/root bootstrap. No install, Docker, gh, network, sudo, roots or secrets.
 Executable sha256 MUST come from an independent Sponsor/operator source,
 never from this program, GitHub/Drive alone or a claimed release manifest.
+Runtime execution uses subprocess.run directly, not an injectable runner.
 The host OS/root and OpenSSH package are a residual trusted computing base.
 """
 import hashlib
@@ -91,16 +92,17 @@ def _private_file(root, name, content):
     return str(file)
 
 
-def verifier_for(*, trusted_binary_sha256, runner=subprocess.run):
+def verifier_for(*, trusted_binary_sha256):
     """Produce a port for qa525-vnext-ops-signature.verify_ops_receipt.
 
     Returned callable accepts (signers, signature, principal, namespace,
     receipt) and returns (exitcode, stdout), which #902 checks EXACTLY.
     Real ssh-keygen verify uses stdin receipt and a private signers/sig path.
+    Production callers CANNOT inject or replace subprocess.run. Tests may
+    patch the child boundary in their isolated test process only.
     """
     if (type(trusted_binary_sha256) is not str or
-            DIGEST.fullmatch(trusted_binary_sha256) is None or
-            not callable(runner)):
+            DIGEST.fullmatch(trusted_binary_sha256) is None):
         raise Stop("OPS_PORT_INPUT_INVALID")
     if os.geteuid() == 0:
         raise Stop("OPS_PORT_ROOT_FORBIDDEN")
@@ -133,7 +135,7 @@ def verifier_for(*, trusted_binary_sha256, runner=subprocess.run):
                 try:
                     with tempfile.TemporaryFile(mode="w+b", dir=temp) as output:
                         try:
-                            response = runner(
+                            response = subprocess.run(
                                 argv, input=receipt, check=False,
                                 stdout=output, stderr=subprocess.DEVNULL,
                                 timeout=30, cwd=temp,
