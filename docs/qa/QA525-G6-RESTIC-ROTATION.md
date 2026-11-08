@@ -45,11 +45,16 @@ El borrador anterior exigía a la vez «un `diff` que pruebe que solo cambian co
 6. **Logs saneados:** nunca imprimen clave, contraseña ni contenido de la base; hay prueba de ello.
 7. **Prueba de error:** un caso de fallo deliberado (clave incorrecta o archivo alterado) debe producir STOP y no un acta.
 
-### Hallazgo que afecta el diseño: ruta fija del acta
-Tanto el operador legacy (`ARCHIVE_RECEIPT = /opt/centenario/qa-g6/archive.receipt.json`) como `qa525-vnext-cache.py` (`G6_RECEIPT_PATH`) leen el recibo **desde una ruta fija** dentro de `/opt/centenario/qa-g6`. Un repositorio v2 en otra carpeta raíz **no sería visto por ningún validador existente**. Opciones, a decidir por ChatGPT (no puedo ver las constantes ocultas):
-- **(i)** Dejar el recibo en la misma ruta fija y poner solo el repositorio Restic nuevo bajo un subdirectorio nuevo de esa raíz, conservando una copia fechada del recibo anterior antes de reemplazarlo (el recibo viejo está vencido desde el 04-11).
-- **(ii)** Parametrizar la ruta del recibo en los validadores con un PR aparte (cambio en código ya integrado y en el operador legacy, que se mantiene).
-La opción (i) evita tocar los validadores, pero hay que probar que el reemplazo del recibo es atómico y que no destruye evidencia.
+### Decisión de arquitectura (ChatGPT, #931 comentario 6715141689): rutas y recibos versionados, validador v2 separado
+`G6_RECEIPT_PATH` y `G6_REPORT_ROOT` en `qa525-vnext-cache.py`, y `ARCHIVE_RECEIPT` en el operador legacy, son rutas fijas de v1, y `_g6_expiry()` también lee el hash del archivo desde un directorio fijo. Cambiar solo el recibo fijo podría dar un **falso PASS contra la versión equivocada** y afectar la recuperación legacy. Por eso:
+1. **No se sobrescribe** `/opt/centenario/qa-g6/archive.receipt.json` ni se toca el recibo v1. El legacy sigue siendo exclusivamente v1.
+2. Repositorio, clave, archivo de respaldo, recibo y reporte de restauración v2 viven en **espacios distintos y versionados**, con nombres y pines nuevos. Los metadatos v2 llevan `schema=qa525-g6-v2`, la generación, el archivo cifrado exacto, su hash, el SHA de subida y de descarga a Drive (iguales) y la restauración **del mismo archivo con la clave nueva**. Las afirmaciones no sustituyen hechos: los hechos vienen de una raíz de confianza con descriptores y hashes validados.
+3. Un **validador v2 nuevo y fail-closed**, en código nuevo (`scripts/qa/qa525-vnext-g6-v2-metadata.py`, PR #940, inactivo). **Nunca** hay fallback v1→v2 ni v2→v1, y un módulo solo de metadatos no autoriza APPLY. La integración con el launcher y la admisión pertenece al carril #936, cuando existan la cadena APP Sigstore + OPS v3 + GO del Sponsor con nonce, el pin externo y el lease; no se parchea el loader root antiguo por comodidad.
+4. **Negativos de CI exigidos:** checkpoint vencido (<48 h) o que no cubre la ventana completa; un recibo v1 vigente NO es v2; recibo v2 con restauración v1, o repo o clave viejos; digest o archivo de Drive distinto; reparse entre comprobaciones (TOCTOU); booleanos falsos o truthy; falso PASS por archivo o acta.
+5. Instalar scripts root nuevos, generar la clave nueva en Bitwarden, hacer el G6 real y el GO físico son **autorizaciones separadas**. Los artefactos del GO no se crean desde metadatos autodeclarados.
+
+#### Definición de admisión de un G6 v2 (para el carril #936)
+Un G6 v2 solo cuenta como «admitido» cuando, además de pasar el validador v2: (a) los pines de los tres documentos y el hash observado del archivo vienen del bootstrap root autenticado, no del llamador; (b) el hash de descarga de Drive lo midió el propio bootstrap, no un campo del documento; (c) el acta coincide con el nonce y la ventana del GO del Sponsor; (d) no existe otro acta v1 u otra generación aceptada en la misma ventana. Hasta que (a)–(d) estén implementadas, la salida del validador es solo coherencia de metadatos.
 
 ### Alcance de la CI
 Pruebas herméticas con un Restic simulado o un directorio temporal; **ni la CI ni una aprobación implícita instalan binarios en el host**.
