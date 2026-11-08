@@ -88,7 +88,10 @@ def _stamp(now):
 
 
 def _parse_stamp(text):
-    return dt.datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+    try:
+        return dt.datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+    except (ValueError, TypeError):
+        raise Stop("G6P_ARCHIVE_REF_INVALID") from None
 
 
 def key_epoch(key_bytes):
@@ -224,10 +227,9 @@ class ResticCli:
     def _run(self, args, repo, keyfile, *, want_output=False):
         self._pinned()
         env = {"RESTIC_REPOSITORY": repo, "RESTIC_PASSWORD_FILE": keyfile,
-               "PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/nonexistent",
-               "RESTIC_CACHE_DIR": os.path.join(os.path.dirname(repo), STATE, "cache")}
+               "PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/nonexistent"}
         try:
-            done = subprocess.run([self._binary, *args], env=env, stdin=subprocess.DEVNULL,
+            done = subprocess.run([self._binary, "--no-cache", *args], env=env, stdin=subprocess.DEVNULL,
                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                   timeout=self._timeout, check=False)
         except (OSError, subprocess.SubprocessError):
@@ -268,10 +270,31 @@ class ResticCli:
     def check(self, repo, keyfile):
         self._run(["check", "--quiet"], repo, keyfile)
 
-    def restore(self, repo, keyfile, target, snapshot_id):
+    def snapshot_paths(self, repo, keyfile, snapshot_id):
+        """Paths recorded in one exact snapshot (Restic keeps ABSOLUTE hierarchy)."""
         if type(snapshot_id) is not str or SNAPSHOT.fullmatch(snapshot_id) is None:
             raise Stop("G6P_SNAPSHOT_INVALID")
-        self._run(["restore", snapshot_id, "--target", target], repo, keyfile)
+        out = self._run(["snapshots", "--json", snapshot_id], repo, keyfile,
+                        want_output=True)
+        try:
+            rows = json.loads(out.decode("utf-8"))
+            found = [r for r in rows if r["id"].startswith(snapshot_id)]
+            paths = found[0]["paths"] if len(found) == 1 else None
+        except (ValueError, KeyError, TypeError, UnicodeError, AttributeError, IndexError):
+            raise Stop("G6P_SNAPSHOT_INVALID") from None
+        if (type(paths) is not list
+                or any(type(x) is not str or not x.startswith("/") for x in paths)):
+            raise Stop("G6P_SNAPSHOT_INVALID")
+        return paths
+
+    def restore(self, repo, keyfile, target, snapshot_id, subfolder):
+        """Restore ONLY ``snapshot:subfolder`` so its content lands at the target root."""
+        if (type(snapshot_id) is not str or SNAPSHOT.fullmatch(snapshot_id) is None
+                or type(subfolder) is not str or not subfolder.startswith("/")
+                or "\0" in subfolder or ":" in subfolder):
+            raise Stop("G6P_SNAPSHOT_INVALID")
+        self._run(["restore", snapshot_id + ":" + subfolder, "--target", target],
+                  repo, keyfile)
 
 
 # ---------------------------------------------------------------- identity
@@ -342,12 +365,14 @@ def _load_identity(paths, *, runner, uid, expected_repo_id, expected_key_epoch):
 
 
 # ---------------------------------------------------------------- capture stage
-def _verify_stage(stage, uid):
+def _verify_stage(stage, uid, allow_manifest=False):
     """Exactly the allowlisted entries; only regular files; hashes recorded."""
     try:
         names = set(os.listdir(stage))
     except OSError:
         raise Stop("G6P_STAGE_INVALID") from None
+    if allow_manifest:
+        names.discard("manifest.json")
     if names != REQUIRED_STAGE:
         raise Stop("G6P_STAGE_INVALID")
     entries = {}
@@ -355,6 +380,7 @@ def _verify_stage(stage, uid):
         full = os.path.join(stage, name)
         if name == "silo":
             _safe_dir(full, uid)
+            before = len(entries)
             for base, dirs, files in os.walk(full, followlinks=False):
                 for sub in dirs:
                     _safe_dir(os.path.join(base, sub), uid)
@@ -365,6 +391,8 @@ def _verify_stage(stage, uid):
                         entries[rel] = _hash_fd(fd, MAX_EXTRACTED)
                     finally:
                         os.close(fd)
+            if len(entries) == before:
+                raise Stop("G6P_STAGE_INVALID")  # empty silo needs an authenticated inventory
             continue
         fd, info = _open_regular(full, uid)
         try:
@@ -571,68 +599,105 @@ def backup(root, *, runner, captor, expected_repo_id, expected_key_epoch, uid, n
     _create_excl(os.path.join(paths[STATE], "receipt-" + stamp + ".json"),
                  canonical(receipt))
     return {"archive_name": name, "archive_sha256": sha, "snapshot_id": snapshot,
-            "stamp": stamp}
+            "manifest_sha256": manifest_sha, "stamp": stamp}
+
+
+def _verify_restored(data_dir, stamp, expected_manifest_sha256, uid):
+    """The restored root must be EXACTLY the captured stage, bound to the manifest."""
+    try:
+        names = set(os.listdir(data_dir))
+    except OSError:
+        raise Stop("G6P_RESTORE_LAYOUT") from None
+    if names != REQUIRED_STAGE | {"manifest.json"}:
+        raise Stop("G6P_RESTORE_LAYOUT")
+    raw = _read_file(os.path.join(data_dir, "manifest.json"), uid, limit=64 << 20)
+    if not hmac.compare_digest(hashlib.sha256(raw).hexdigest(), expected_manifest_sha256):
+        raise Stop("G6P_RESTORE_LAYOUT")
+    manifest = _canonical_doc(raw, {"schema", "cut", "entries"}, SCHEMA_CAPTURE,
+                              "G6P_RESTORE_LAYOUT")
+    actual = _verify_stage(data_dir, uid, allow_manifest=True)
+    if manifest["cut"] != stamp or manifest["entries"] != actual:
+        raise Stop("G6P_RESTORE_LAYOUT")
 
 
 def restore(root, *, runner, verifier, archive_name, archive_sha256, snapshot_id,
-            expected_repo_id, expected_key_epoch, forbidden_prefixes, uid, now):
-    """RESTORE only from the DOWNLOADED archive copy; never from the live repo."""
+            expected_manifest_sha256, expected_repo_id, expected_key_epoch,
+            forbidden_prefixes, uid, now):
+    """RESTORE only from the DOWNLOADED archive copy. Needs no live repo or record.
+
+    Identity comes from independent pins: the key file's epoch and the repo id of
+    the repository EXTRACTED from the download.
+    """
     paths = _layout(root, uid)
-    _load_identity(paths, runner=runner, uid=uid, expected_repo_id=expected_repo_id,
-                   expected_key_epoch=expected_key_epoch)
+    _check_pins(expected_repo_id, expected_key_epoch)
     match = ARCHIVE_RE.fullmatch(archive_name if type(archive_name) is str else "")
     if (match is None or type(archive_sha256) is not str
             or HEX64.fullmatch(archive_sha256) is None
-            or type(snapshot_id) is not str or SNAPSHOT.fullmatch(snapshot_id) is None):
+            or type(snapshot_id) is not str or SNAPSHOT.fullmatch(snapshot_id) is None
+            or type(expected_manifest_sha256) is not str
+            or HEX64.fullmatch(expected_manifest_sha256) is None):
         raise Stop("G6P_ARCHIVE_REF_INVALID")
-    cut = _parse_stamp(match.group(1))
+    stamp = match.group(1)
+    cut = _parse_stamp(stamp)
     clock = _clock(now)
     if clock < cut or clock >= cut + WINDOW:
         raise Stop("G6P_RESTORE_WINDOW")
-    record = _canonical_doc(
-        _read_file(os.path.join(paths[STATE], "capture-" + match.group(1) + ".json"), uid),
-        {"schema", "cut", "snapshot_id", "manifest_sha256"}, SCHEMA_CAPTURE_RECORD,
-        "G6P_CAPTURE_RECORD_INVALID")
-    if (record["cut"] != match.group(1) or type(record["snapshot_id"]) is not str
-            or not hmac.compare_digest(record["snapshot_id"], snapshot_id)):
-        raise Stop("G6P_SNAPSHOT_MISMATCH")
+    if not hmac.compare_digest(key_epoch(_read_file(paths[KEY], uid)), expected_key_epoch):
+        raise Stop("G6P_GENERATION_MISMATCH")
+    _ensure_dir(paths[STATE], uid)
     _ensure_dir(paths[RESTORES], uid)
     _safe_dir(paths[DOWNLOADS], uid)
-    workdir = os.path.join(paths[RESTORES], match.group(1))
+    workdir = os.path.join(paths[RESTORES], stamp)
     real_work = os.path.realpath(workdir)
     if (type(forbidden_prefixes) is not list or not forbidden_prefixes
             or any(os.path.commonpath([real_work, os.path.realpath(p)])
                    == os.path.realpath(p) for p in forbidden_prefixes)):
         raise Stop("G6P_RESTORE_TARGET_FORBIDDEN")
+    report_path = os.path.join(paths[STATE], RESTORE_FMT.format(stamp=stamp))
+    if os.path.lexists(report_path):
+        raise Stop("G6P_TARGET_EXISTS")
     fd, _ = _open_regular(os.path.join(paths[DOWNLOADS], archive_name), uid)
+    created = False
     try:
         if not hmac.compare_digest(_hash_fd(fd, MAX_ARCHIVE_BYTES), archive_sha256):
             raise Stop("G6P_ARCHIVE_HASH_MISMATCH")
         try:
             os.mkdir(workdir, 0o700)
-            repo_dir, data_dir = (os.path.join(workdir, n) for n in ("repo", "data"))
-            os.mkdir(repo_dir, 0o700)
-            os.mkdir(data_dir, 0o700)
         except OSError:
             raise Stop("G6P_TARGET_EXISTS") from None
+        created = True
+        repo_dir, data_dir = (os.path.join(workdir, n) for n in ("repo", "data"))
+        os.mkdir(repo_dir, 0o700)
+        os.mkdir(data_dir, 0o700)
         _extract_safe(fd, repo_dir, archive_sha256)
+        live_id = runner.repo_id(repo_dir, paths[KEY])
+        if type(live_id) is not str or not hmac.compare_digest(live_id, expected_repo_id):
+            raise Stop("G6P_GENERATION_MISMATCH")
+        runner.check(repo_dir, paths[KEY])
+        recorded = runner.snapshot_paths(repo_dir, paths[KEY], snapshot_id)
+        if (type(recorded) is not list or len(recorded) != 1
+                or not re.fullmatch(r"/(?:[^/\0:]+/)*stages-v2/" + stamp, recorded[0])):
+            raise Stop("G6P_RESTORE_LAYOUT")
+        if os.listdir(data_dir):
+            raise Stop("G6P_TARGET_EXISTS")
+        runner.restore(repo_dir, paths[KEY], data_dir, snapshot_id, recorded[0])
+        _verify_restored(data_dir, stamp, expected_manifest_sha256, uid)
+        tables, silo = verifier(data_dir)
+        if (type(tables) is not dict or set(tables) != DATABASES
+                or any(type(v) is not int or v <= 0 for v in tables.values())
+                or type(silo) is not int or silo < 0):
+            raise Stop("G6P_RESTORE_VERIFY_FAILED")
+        report = {"schema": SCHEMA_RESTORE, "result": RESULT_RESTORE,
+                  "archive_filename": archive_name, "archive_sha256": archive_sha256,
+                  "restic_repo_id": expected_repo_id, "key_epoch": expected_key_epoch,
+                  "postgres_tables_by_database": dict(tables),
+                  "silo_objects_verified": silo, "production_touched": False}
+        _create_excl(report_path, canonical(report))
+        return report
     finally:
         os.close(fd)
-    runner.check(repo_dir, paths[KEY])
-    runner.restore(repo_dir, paths[KEY], data_dir, snapshot_id)
-    tables, silo = verifier(data_dir)
-    if (type(tables) is not dict or set(tables) != DATABASES
-            or any(type(v) is not int or v <= 0 for v in tables.values())
-            or type(silo) is not int or silo < 0):
-        raise Stop("G6P_RESTORE_VERIFY_FAILED")
-    report = {"schema": SCHEMA_RESTORE, "result": RESULT_RESTORE,
-              "archive_filename": archive_name, "archive_sha256": archive_sha256,
-              "restic_repo_id": expected_repo_id, "key_epoch": expected_key_epoch,
-              "postgres_tables_by_database": dict(tables),
-              "silo_objects_verified": silo, "production_touched": False}
-    _create_excl(os.path.join(paths[STATE], RESTORE_FMT.format(stamp=match.group(1))),
-                 canonical(report))
-    return report
+        if created:  # restored plaintext and the private repo copy never outlive the check
+            shutil.rmtree(workdir, ignore_errors=True)
 
 
 _RESTORE_FIELDS = {"schema", "result", "archive_filename", "archive_sha256",

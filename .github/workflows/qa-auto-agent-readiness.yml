@@ -23,12 +23,19 @@ jobs:
   readiness:
     name: Offline read-only readiness tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Install restic for hermetic G6 v2 integration tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends restic
+          restic version
       - name: Syntax and safety contract
+        env:
+          QA525_REQUIRE_RESTIC: "1"
         run: |
           python3 -m py_compile scripts/qa/qa-agent-readiness.py tests/test_qa_agent_readiness.py
           python3 -m unittest discover -s tests -p test_qa_agent_readiness.py -v
