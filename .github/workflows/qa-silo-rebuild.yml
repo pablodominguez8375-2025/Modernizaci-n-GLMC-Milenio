@@ -233,16 +233,51 @@ jobs:
               }
               if verifier(bundle, challenge) is not True:
                   raise SystemExit("QA525_REAL_APP_PORT_ATTESTATION_DENIED_NO_GO")
-              # Negative: identical authenticated challenge rejects changed ZIP.
-              with staged.open("ab") as stream:
-                  stream.write(b"\nQA525_TEST_TAMPERED_NO_GO\n")
+              # Cryptographically verified bytes are retained as a one-shot
+              # F_SEAL_WRITE immutable Linux memfd, NOT re-read by pathname.
+              fd, received_sha = verifier.take_verified_fd()
               try:
-                  verifier(bundle, challenge)
-              except app.Stop as denied:
-                  if str(denied) != "APP_PORT_SOURCE_HASH_MISMATCH":
-                      raise
-              else:
-                  raise SystemExit("QA525_REAL_APP_PORT_TAMPER_NOT_REJECTED")
+                  if received_sha != expected_zip:
+                      raise SystemExit("QA525_REAL_APP_FD_DIGEST_STOP")
+                  original = hashlib.sha256()
+                  cursor = 0
+                  size = os.fstat(fd).st_size
+                  while cursor < size:
+                      block = os.pread(fd, min(1024 * 1024, size - cursor), cursor)
+                      if not block:
+                          raise SystemExit("QA525_REAL_APP_FD_READ_STOP")
+                      original.update(block)
+                      cursor += len(block)
+                  if "sha256:" + original.hexdigest() != expected_zip:
+                      raise SystemExit("QA525_REAL_APP_FD_BYTES_STOP")
+                  try:
+                      os.pwrite(fd, b"X", 0)
+                  except OSError:
+                      pass
+                  else:
+                      raise SystemExit("QA525_REAL_APP_FD_MUTABLE_STOP")
+                  with staged.open("ab") as stream:
+                      stream.write(b"\nQA525_TEST_TAMPERED_NO_GO\n")
+                  # Path now differs; immutable FD stays at verified bytes.
+                  if os.fstat(fd).st_size != size:
+                      raise SystemExit("QA525_REAL_APP_FD_UNSTABLE_STOP")
+                  # Negative: a NEW verifier must fail on altered source.
+                  tampered = app.verifier_for(
+                      signed_inner_zip=staged,
+                      trusted_gh_sha256=gh_pin,
+                      expected_source_sha=source_sha,
+                      expected_inner_sha256=expected_zip,
+                      expected_bundle_sha256=expected_bundle,
+                  )
+                  try:
+                      tampered(bundle, challenge)
+                  except app.Stop as denied:
+                      if str(denied) != "APP_PORT_SOURCE_HASH_MISMATCH":
+                          raise
+                  else:
+                      raise SystemExit("QA525_REAL_APP_PORT_TAMPER_NOT_REJECTED")
+              finally:
+                  os.close(fd)
           print("QA525_REAL_SIGSTORE_CI_PASS_NO_PHYSICAL_AUTHORITY")
           PYTHON
       - name: Preserve QA candidate installable (deployment pending)
