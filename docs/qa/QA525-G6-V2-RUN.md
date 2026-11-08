@@ -63,6 +63,11 @@ El programa **nunca** detiene, arranca ni borra un contenedor (hay una prueba es
 - **Primer byte root (P1-1) sigue ABIERTO:** el ejecutor carga hermanos con `exec_module` bajo UID 0 sin ancla por FD ni bootstrap
   autenticado. Se resuelve con el contrato de #936/#822 (bootstrap autenticado desde un pin independiente antes de privilegiar). Hasta entonces
   **NO-GO para `sudo` de este entrypoint**, también `preflight`.
+- **Capacidades de Python en glmdch (evidencia del Sponsor 08-11, solo lectura, sin sudo):** el `python3` del usuario `soporte` es 3.14.4 y trae
+  `os.memfd_create` y las seis constantes de sellado (`F_ADD_SEALS`, `F_GET_SEALS`, `F_SEAL_WRITE`, `F_SEAL_SEAL`, `F_SEAL_SHRINK`,
+  `F_SEAL_GROW`). Eso prueba **símbolos presentes** (`hasattr`), no que se pueda crear, sellar y bloquear `pwrite` en un memfd real, ni que root use
+  el mismo intérprete, ni su procedencia. Queda **un** test funcional rootless de sellado (una vez) y no se repite la comprobación de símbolos.
+  Nada de esto concede autorización física: `PYTHON_FCNTL_SEALS=yes` en `preflight` sigue siendo informativo.
 - `preflight` con `PREFLIGHT_READY=yes` es solo lectura, no una puerta de paso validada.
 - **Contrato con `validate_g6` (hallazgo, sin cerrar aquí):** el validador actual lee `/home/soporte/<archivo>`, `/opt/centenario/qa-g6/archive.receipt.json`
   y el informe de restore bajo `/opt/centenario/qa-g6/`, todo propiedad de root y 0600, mientras que `review` deja los documentos en
