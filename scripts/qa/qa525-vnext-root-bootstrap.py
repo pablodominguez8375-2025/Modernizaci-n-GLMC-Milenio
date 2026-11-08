@@ -67,10 +67,18 @@ def check_manifest_pin(manifest_bytes, external_pin):
         raise Stop("BOOT_PIN_INVALID")
     if not hmac.compare_digest(hashlib.sha256(manifest_bytes).hexdigest(), external_pin):
         raise Stop("BOOT_MANIFEST_PIN_MISMATCH")
+    def pairs(items):
+        keys = [k for k, _ in items]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate key")
+        return dict(items)
     try:
-        manifest = json.loads(manifest_bytes)
-    except ValueError:
+        manifest = json.loads(manifest_bytes, object_pairs_hook=pairs)
+    except (ValueError, TypeError):
         raise Stop("BOOT_MANIFEST_INVALID") from None
+    if (not isinstance(manifest, dict) or set(manifest) != {"files", "interpreter"}
+            or json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() != manifest_bytes):
+        raise Stop("BOOT_MANIFEST_INVALID")  # exact keys, canonical form only
     files = manifest.get("files") if isinstance(manifest, dict) else None
     interp = manifest.get("interpreter") if isinstance(manifest, dict) else None
     if (not isinstance(files, dict) or not files or not isinstance(interp, dict)
@@ -82,13 +90,34 @@ def check_manifest_pin(manifest_bytes, external_pin):
     return files, interp
 
 
-def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, interpreter_real=None, anchor="/"):
+_TOKEN = object()
+
+
+class Verified:
+    """Opaque product of verify_install(): the ONLY thing load_module() accepts."""
+    __slots__ = ("_code", "record")
+
+    def __init__(self, token, code, record):
+        if token is not _TOKEN:
+            raise Stop("BOOT_VERIFIED_FORGED")
+        object.__setattr__(self, "_code", dict(code))
+        object.__setattr__(self, "record", dict(record))
+
+    def __setattr__(self, name, value):
+        raise Stop("BOOT_VERIFIED_FORGED")
+
+
+def _interpreter_real():
+    return os.path.realpath(sys.executable)
+
+
+def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, anchor="/"):
     """Return {name: verified bytes} and the trust record. Raises Stop before anything is loaded."""
     files, interp = check_manifest_pin(manifest_bytes, external_pin)
     if sys.flags.isolated != 1 or sys.flags.no_site != 1 or sys.flags.ignore_environment != 1:
         raise Stop("BOOT_NOT_ISOLATED")  # requires python -I -S
     _safe_dir(install_dir, uid, anchor)
-    real = interpreter_real if interpreter_real is not None else os.path.realpath(sys.executable)
+    real = _interpreter_real()
     if real != os.path.realpath(interp["path"]):
         raise Stop("BOOT_INTERPRETER_MISMATCH")
     _safe_dir(os.path.dirname(real), 0)  # the OS owns the interpreter: root-owned, from /
@@ -98,16 +127,19 @@ def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, interpre
     record = {"schema": "qa525-pre-root-trust-v1", "manifest_pin": external_pin,
               "interpreter": {"real": real, "sha256": interp["sha256"]},
               "files": dict(sorted(files.items()))}
-    return code, record
+    return Verified(_TOKEN, code, record)
 
 
-def load_module(code, name, verified):
-    """Compile ONLY from verified bytes; never imports from disk."""
-    if name not in verified:
+def load_module(verified, name):
+    """Compile ONLY from the bytes held by a Verified object; never imports from disk."""
+    if type(verified) is not Verified:
+        raise Stop("BOOT_VERIFIED_FORGED")
+    code = object.__getattribute__(verified, "_code")
+    if name not in code:
         raise Stop("BOOT_MODULE_UNKNOWN")
     import types
     mod = types.ModuleType("qa525_boot_" + name[:-3].replace("-", "_"))
-    exec(compile(verified[name], "<verified:%s>" % name, "exec"), mod.__dict__)
+    exec(compile(code[name], "<verified:%s>" % name, "exec"), mod.__dict__)
     return mod
 
 
@@ -125,4 +157,33 @@ def write_record(evidence_dir, record, uid=0, anchor="/"):
         os.fsync(fd)
     finally:
         os.close(fd)
+    dfd = os.open(evidence_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        os.fsync(dfd)  # the directory entry itself must survive a power cut
+    finally:
+        os.close(dfd)
     return name
+
+
+def main(argv):
+    """`python3 -I -S bootstrap.py check INSTALL_DIR MANIFEST PIN`: read-only check run by `soporte`
+    WITHOUT sudo, before any sudo. Prints a fixed code only; never executes the verified modules."""
+    if len(argv) != 5 or argv[1] != "check":
+        print("BOOT_USAGE")
+        return 2
+    try:
+        with open(argv[3], "rb") as f:
+            manifest = f.read(MAX_FILE)
+        verified = verify_install(argv[2], manifest, argv[4], uid=0)
+        print("BOOT_CHECK_OK manifest_pin=%s files=%d" % (verified.record["manifest_pin"],
+                                                          len(verified.record["files"])))
+        return 0
+    except Stop as exc:
+        print(str(exc))
+    except OSError:
+        print("BOOT_IO_ERROR")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
