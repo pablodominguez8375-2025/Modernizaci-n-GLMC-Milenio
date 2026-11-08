@@ -42,7 +42,7 @@ suficiente: el receptor root, el intérprete y sus bibliotecas son TCB y deben a
 3. El proceso emisor (`soporte`) se liga al receptor con uid + pid por mensaje (`SCM_CREDENTIALS`); además el
    receptor lo lanza o lo conoce el propio bootstrap (no se confía solo en un PID declarado). El FD se entrega
    por el socket del bootstrap, se reabre `O_RDONLY` por `/proc/self/fd`, se recalcula SHA independiente y se
-   compara contra el pin del paso 3 antes de usarlo; no se heredan FDs ajenos (`close_range`/`CLOEXEC`).
+   compara contra el digest AUTENTICADO (evidencia Sigstore y/o GO/OPS firmados con clave independiente, ligado a source/workflow/plan/admission) antes de usarlo; el SHA calculado por `soporte` (paso 3) o el de la trama NO es autoridad, porque un emisor comprometido cambiaría FD y hash a la vez; no se heredan FDs ajenos (`close_range`/`CLOEXEC`).
 4. Evidencia: el bootstrap registra, ANTES de consumir el nonce, un registro `pre-root-trust` con los SHA del
    bootstrap, del intérprete y de los helpers verificados. Sin ese registro no hay nonce ni GO.
 
@@ -51,8 +51,11 @@ suficiente: el receptor root, el intérprete y sus bibliotecas son TCB y deben a
 - cambiar el intérprete, un helper o una biblioteca del bootstrap;
 - un bootstrap en directorio escribible por `soporte` o con symlink en la ruta;
 - pin tomado del mismo paquete;
+- FD + pin del emisor coinciden pero GO/OPS/Sigstore respaldan OTRO ZIP -> STOP;
 - el mismo criterio sobre `qa525-vnext-g6-v2-run.py` y su `exec_module` (que hoy NO lo cumple: #958 no es
   apto para sudo mientras no corra desde este bootstrap).
+
+Nota: la identidad del código emisor sigue requiriendo atestación más allá de UID/PID. PRE-4 descrito no es PRE-4 instalado.
 
 Estado: contrato inactivo; no se instala ni ejecuta nada root. Mientras PRE-4 no exista, no hay GO.
 
