@@ -25,6 +25,7 @@ class BoundaryRecvTests(unittest.TestCase):
     def setUp(self):
         self.a, self.b = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         self.fds = []
+        mod.prepare(self.b)
         self.addCleanup(self.clean)
 
     def clean(self):
@@ -64,7 +65,7 @@ class BoundaryRecvTests(unittest.TestCase):
         self.send([self.memfd()])
         r = self.recv()
         self.fds.append(r["fd"])
-        self.assertEqual(r["peer_uid"], os.getuid())
+        self.assertEqual(r["sender_uid"], os.getuid())
         self.assertEqual(os.pread(r["fd"], len(DATA), 0), DATA)
         for k in ("may_install", "may_apply", "sponsor_authorized_here",
                   "bootstrap_authenticated_here"):
@@ -87,26 +88,71 @@ class BoundaryRecvTests(unittest.TestCase):
         before = len(os.listdir("/proc/self/fd"))
         self.send([self.memfd()])
         mid = len(os.listdir("/proc/self/fd"))
-        self.stop("BND_PEER_UID_REFUSED", expected_peer_uid=os.getuid() + 1)
+        self.stop("BND_PEER_REFUSED", expected_peer_uid=os.getuid() + 1)
         self.assertEqual(len(os.listdir("/proc/self/fd")), mid)
         self.assertGreater(mid, before)
 
-    def test_peer_in_other_process_is_attested(self):
-        code = ("import socket,sys,os,array\n"
-                "s=socket.socket(fileno=int(sys.argv[1]))\n"
-                "fd=os.memfd_create('c',os.MFD_ALLOW_SEALING)\n"
-                "import fcntl\nos.write(fd,b'A'*1000+b'B'*1000)\n"
-                "fcntl.fcntl(fd,fcntl.F_ADD_SEALS,int(sys.argv[2]))\n"
-                "s.sendmsg([sys.argv[3].encode()],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])\n")
+    CHILD = ("import socket,sys,os,array,fcntl\n"
+             "s=socket.socket(fileno=int(sys.argv[1]))\n"
+             "fd=os.memfd_create('c',os.MFD_ALLOW_SEALING)\n"
+             "os.write(fd,b'A'*1000+b'B'*1000)\n"
+             "fcntl.fcntl(fd,fcntl.F_ADD_SEALS,int(sys.argv[2]))\n"
+             "print(os.getpid(),flush=True)\n"
+             "s.sendmsg([sys.argv[3].encode()],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])\n")
+
+    def spawn_sender(self):
         frame = (mod.MAGIC + NONCE.encode() + b":" + SHA[7:].encode()).decode()
-        child = subprocess.Popen([sys.executable, "-I", "-c", code, str(self.a.fileno()),
-                                  str(mod.SEALS), frame], pass_fds=[self.a.fileno()])
+        return subprocess.Popen([sys.executable, "-I", "-c", self.CHILD, str(self.a.fileno()),
+                                 str(mod.SEALS), frame], pass_fds=[self.a.fileno()],
+                                stdout=subprocess.PIPE, text=True)
+
+    def test_actual_sending_process_is_attested_per_message(self):
+        child = self.spawn_sender()
+        pid = int(child.stdout.readline())
+        r = self.recv(expected_peer_pid=pid)
+        child.wait(5)
+        self.fds.append(r["fd"])
+        self.assertEqual(r["sender_pid"], pid)
+        self.assertNotEqual(pid, os.getpid())
+        self.assertEqual(os.pread(r["fd"], 2000, 0), DATA)
+
+    def test_inherited_endpoint_used_by_third_process_is_refused(self):
+        """The socketpair was created by THIS process; a different process sends."""
+        child = self.spawn_sender()
+        child.stdout.readline()
+        # Policy pins the creator (this pid) as the only acceptable sender: the child lies outside.
+        self.stop("BND_PEER_REFUSED", expected_peer_pid=os.getpid())
+        child.wait(5)
+
+    def test_sender_pid_is_reported_for_the_real_sender_not_the_creator(self):
+        child = self.spawn_sender()
+        pid = int(child.stdout.readline())
         r = self.recv()
         child.wait(5)
         self.fds.append(r["fd"])
-        self.assertEqual(r["peer_pid"], os.getpid())  # socketpair creds are creator's
-        self.assertEqual(child.returncode, 0)
-        self.assertEqual(os.pread(r["fd"], 2000, 0), DATA)
+        self.assertEqual(r["sender_pid"], pid)
+
+    def test_message_queued_before_prepare_has_no_credentials_and_is_refused(self):
+        a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        self.addCleanup(a.close)
+        self.addCleanup(b.close)
+        frame = mod.MAGIC + NONCE.encode() + b":" + SHA[7:].encode()
+        fd = self.memfd()
+        a.sendmsg([frame], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]))])
+        b.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)  # too late for that message
+        with self.assertRaises(mod.Stop) as err:
+            mod.receive(b, expected_nonce=NONCE, expected_sha256=SHA,
+                        expected_peer_uid=os.getuid(), timeout=2)
+        self.assertEqual(str(err.exception), "BND_CREDENTIALS_MISSING")
+
+    def test_receive_without_prepare_is_refused(self):
+        a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        self.addCleanup(a.close)
+        self.addCleanup(b.close)
+        with self.assertRaises(mod.Stop) as err:
+            mod.receive(b, expected_nonce=NONCE, expected_sha256=SHA,
+                        expected_peer_uid=os.getuid(), timeout=1)
+        self.assertEqual(str(err.exception), "BND_PASSCRED_NOT_ENABLED")
 
     def test_timeout_is_mandatory_and_silent_peer_stops(self):
         for bad in (None, 0, -1, 61, True, "2"):

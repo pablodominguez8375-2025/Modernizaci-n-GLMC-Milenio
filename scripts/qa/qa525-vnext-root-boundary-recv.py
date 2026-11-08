@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""QA525 boundary receiver: SO_PEERCRED + sealed-memfd SCM_RIGHTS + pin. Library only.
+"""QA525 boundary receiver: per-message SCM_CREDENTIALS + sealed-memfd SCM_RIGHTS + pin. Library only.
 
-Authenticates (kernel-attested) the peer uid/pid, requires a mandatory timeout,
+Authenticates the SENDING process of each message (kernel-stamped SCM_CREDENTIALS via
+SO_PASSCRED, not the connect/socketpair-time SO_PEERCRED, which an inherited endpoint
+can outlive), requires a mandatory timeout,
 closes every received fd on any failure (including BaseException), verifies
 seals and an independently supplied sha256 pin, and returns a PRIVATE read-only
 reopen of the fd (own offset/flags; the sender cannot skew it).
@@ -30,7 +32,7 @@ class Stop(Exception):
     """Opaque STOP code."""
 
 
-def _check(sock, nonce, pin, uid, timeout):
+def _check(sock, nonce, pin, uid, pid, timeout):
     if (not isinstance(sock, socket.socket) or sock.family != socket.AF_UNIX
             or (sock.type & 0xf) != socket.SOCK_SEQPACKET):
         raise Stop("BND_SOCKET_INVALID")
@@ -40,6 +42,8 @@ def _check(sock, nonce, pin, uid, timeout):
         raise Stop("BND_PIN_INVALID")
     if type(uid) is not int or isinstance(uid, bool) or uid < 0:
         raise Stop("BND_UID_INVALID")
+    if pid is not None and (type(pid) is not int or isinstance(pid, bool) or pid <= 0):
+        raise Stop("BND_PID_INVALID")
     if type(timeout) not in (int, float) or isinstance(timeout, bool) or not 0 < timeout <= 60:
         raise Stop("BND_TIMEOUT_REQUIRED")
 
@@ -62,27 +66,41 @@ def _hash(fd, pin):
         raise Stop("BND_DIGEST_MISMATCH")
 
 
-def receive(sock, *, expected_nonce, expected_sha256, expected_peer_uid, timeout):
+def prepare(sock):
+    """Call BEFORE the peer can send: messages queued earlier carry no credentials."""
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+    except (OSError, AttributeError):
+        raise Stop("BND_PEER_UNKNOWN") from None
+
+
+def receive(sock, *, expected_nonce, expected_sha256, expected_peer_uid, timeout,
+            expected_peer_pid=None):
     """Return {'fd': private RDONLY fd (caller closes), 'peer_pid', ...}; NO authority."""
-    _check(sock, expected_nonce, expected_sha256, expected_peer_uid, timeout)
+    _check(sock, expected_nonce, expected_sha256, expected_peer_uid, expected_peer_pid, timeout)
     held = []
     prior = sock.gettimeout()
     try:
         try:
-            pid, uid, _gid = struct.unpack("3i", sock.getsockopt(
-                socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+            if not sock.getsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED):
+                raise Stop("BND_PASSCRED_NOT_ENABLED")
         except OSError:
             raise Stop("BND_PEER_UNKNOWN") from None
-        if uid != expected_peer_uid:
-            raise Stop("BND_PEER_UID_REFUSED")
         sock.settimeout(timeout)
         try:
             frame, anc, flags, _ = sock.recvmsg(
-                256, socket.CMSG_SPACE(MAX_FDS * 4), getattr(socket, "MSG_CMSG_CLOEXEC", 0))
+                256, socket.CMSG_SPACE(MAX_FDS * 4) + socket.CMSG_SPACE(12), getattr(socket, "MSG_CMSG_CLOEXEC", 0))
         except OSError:
             raise Stop("BND_RECEIVE_FAILED") from None
         bad = False
+        creds = []
         for level, kind, value in anc:  # register fds immediately; BaseException-safe
+            if level == socket.SOL_SOCKET and kind == socket.SCM_CREDENTIALS:
+                if len(value) != 12:
+                    bad = True
+                else:
+                    creds.append(struct.unpack("3i", value))
+                continue
             if level != socket.SOL_SOCKET or kind != socket.SCM_RIGHTS or not value or len(value) % 4:
                 bad = True
                 continue
@@ -91,6 +109,13 @@ def receive(sock, *, expected_nonce, expected_sha256, expected_peer_uid, timeout
             held.extend(ints)
         if bad:
             raise Stop("BND_CONTROL_INVALID")
+        if len(creds) != 1:
+            raise Stop("BND_CREDENTIALS_MISSING")
+        pid, uid, _gid = creds[0]
+        if pid <= 0:  # kernel stamps pid 0/overflow uid on messages queued before SO_PASSCRED
+            raise Stop("BND_CREDENTIALS_MISSING")
+        if uid != expected_peer_uid or (expected_peer_pid is not None and pid != expected_peer_pid):
+            raise Stop("BND_PEER_REFUSED")
         if flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC):
             raise Stop("BND_TRUNCATED")
         want = MAGIC + expected_nonce.encode() + b":" + expected_sha256[7:].encode()
@@ -108,7 +133,7 @@ def receive(sock, *, expected_nonce, expected_sha256, expected_peer_uid, timeout
         except BaseException:
             os.close(private)
             raise
-        return {"fd": private, "peer_pid": pid, "peer_uid": uid, "sha256": expected_sha256,
+        return {"fd": private, "sender_pid": pid, "sender_uid": uid, "sha256": expected_sha256,
                 "bootstrap_authenticated_here": False, "sponsor_authorized_here": False,
                 "may_install": False, "may_apply": False}
     except (OSError, ValueError, OverflowError):
