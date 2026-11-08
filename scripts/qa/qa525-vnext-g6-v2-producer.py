@@ -2,17 +2,26 @@
 """QA525 G6 v2 producer library. INACTIVE, NEVER physical GO, NEVER executed here.
 
 Clean-room implementation from the contract in docs/qa/QA525-G6-RESTIC-ROTATION.md.
-It is NOT derived from the host v1 scripts. It has three separate modes:
+It is NOT derived from the host v1 scripts. Separate modes:
 
   INIT     once; every target must be absent; creates key and repo with O_EXCL.
   BACKUP   later; repo and key must already exist and match independent pins;
-           never initializes, truncates or overwrites; exports ciphertext only.
-  RESTORE  into a brand-new isolated directory; verifier injected by the caller.
+           never initializes, truncates or overwrites. Only a controlled stage
+           (2 DB dumps + globals + silo, produced by an injected captor and then
+           verified) is snapshotted; the ciphertext repo is streamed to a file.
+  RESTORE  ONLY from the downloaded copy of the archive (pinned SHA, held fd),
+           extracted by a link-free extractor into a private repository, then
+           Restic check and restore of the PINNED snapshot. The live repo is
+           never used.
+  REVIEW   hashes the downloaded file itself and needs an existing restore report.
+
+The injected captor and verifier are NOT authenticated here: they stand for the
+future root-verified physical adapters (pg_dump x2 + globals + silo, real
+Postgres/silo checks). Evidence stays NO-GO until those exist.
 
 All evidence is canonical JSON written with O_EXCL under versioned v2 paths.
-Nothing here reads or writes any v1 path or receipt. The Restic password file is
-only ever passed by path; secret bytes are never placed in argv, logs or
-exceptions. Fixed error codes only.
+Nothing here reads or writes any v1 path. The Restic password file is passed by
+path only. Fixed error codes only.
 """
 from __future__ import annotations
 
@@ -20,10 +29,10 @@ import datetime as dt
 import gzip
 import hashlib
 import hmac
-import io
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import tarfile
@@ -32,6 +41,8 @@ SCHEMA_REVIEW = "qa525-g6-v2-review"
 SCHEMA_RECEIPT = "qa525-g6-v2-receipt"
 SCHEMA_RESTORE = "qa525-g6-v2-restore"
 SCHEMA_IDENTITY = "qa525-g6-v2-identity"
+SCHEMA_CAPTURE = "qa525-g6-v2-capture"
+SCHEMA_CAPTURE_RECORD = "qa525-g6-v2-capture-record"
 STATUS_RECEIPT = "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING"
 RESULT_RESTORE = "G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY"
 ARCHIVE_FMT = "centenario-qa-g6-v2-CIFRADO-{stamp}.tar.gz"
@@ -39,12 +50,22 @@ RESTORE_FMT = "isolated-restore-v2-{stamp}.report.json"
 HEX64 = re.compile(r"[a-f0-9]{64}\Z")
 EPOCH = re.compile(r"[a-f0-9]{32}\Z")
 DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{15,128}\Z")
+SNAPSHOT = re.compile(r"[a-f0-9]{8,64}\Z")
+ARCHIVE_RE = re.compile(r"centenario-qa-g6-v2-CIFRADO-(\d{8}T\d{6}Z)\.tar\.gz\Z")
+MEMBER = re.compile(r"[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\Z")
 MIN_KEY_BYTES = 32
 MAX_ARCHIVE_BYTES = 8 * 1024 ** 3
+MAX_EXTRACTED = 16 * 1024 ** 3
+MAX_MEMBERS = 200000
+CHUNK = 1 << 20
+WINDOW = dt.timedelta(hours=48)
 DATABASES = frozenset({"pmgm", "pmgm_keycloak"})
+REQUIRED_STAGE = frozenset({"pmgm.dump", "pmgm_keycloak.dump", "globals.sql", "silo"})
 # Only these names exist under the v2 root; no v1 name is ever touched.
-REPO, KEY, STATE, EXPORTS, RESTORES = ("repo-v2", "key-v2", "state-v2",
-                                       "exports-v2", "restores-v2")
+REPO, KEY, STATE, EXPORTS, RESTORES, DOWNLOADS, STAGES = (
+    "repo-v2", "key-v2", "state-v2", "exports-v2", "restores-v2", "downloads-v2",
+    "stages-v2")
+NAMES = (REPO, KEY, STATE, EXPORTS, RESTORES, DOWNLOADS, STAGES)
 
 
 class Stop(Exception):
@@ -56,10 +77,18 @@ def canonical(record):
                        ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
 
 
-def _stamp(now):
+def _clock(now):
     if type(now) is not dt.datetime or now.tzinfo is None or now.utcoffset() is None:
         raise Stop("G6P_CLOCK_INVALID")
-    return now.astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return now.astimezone(dt.timezone.utc)
+
+
+def _stamp(now):
+    return _clock(now).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _parse_stamp(text):
+    return dt.datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
 
 
 def key_epoch(key_bytes):
@@ -78,20 +107,35 @@ def _safe_dir(path, uid):
         raise Stop("G6P_DIR_UNSAFE")
 
 
-def _safe_file(path, uid):
+def _open_regular(path, uid):
+    """Open a regular, owned, 0600, single-link file; fstat must equal lstat."""
     try:
-        info = os.lstat(path)
+        before = os.lstat(path)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
     except OSError:
         raise Stop("G6P_FILE_UNSAFE") from None
-    if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid
-            or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1):
-        raise Stop("G6P_FILE_UNSAFE")
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1
+                or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)):
+            raise Stop("G6P_FILE_UNSAFE")
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd, info
+
+
+def _safe_file(path, uid):
+    fd, _ = _open_regular(path, uid)
+    os.close(fd)
 
 
 def _read_file(path, uid, limit=1 << 20):
-    _safe_file(path, uid)
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    fd, info = _open_regular(path, uid)
     try:
+        if not 0 < info.st_size <= limit:
+            raise Stop("G6P_FILE_UNSAFE")
         data = os.read(fd, limit + 1)
     finally:
         os.close(fd)
@@ -119,11 +163,11 @@ def _create_excl(path, data):
 
 
 def _layout(root, uid):
-    if type(root) is not str or not os.path.isabs(root) or type(uid) is not int:
+    if (type(root) is not str or not os.path.isabs(root) or type(uid) is not int
+            or os.path.realpath(root) != os.path.normpath(root)):
         raise Stop("G6P_ROOT_INVALID")
     _safe_dir(root, uid)
-    return {name: os.path.join(root, name)
-            for name in (REPO, KEY, STATE, EXPORTS, RESTORES)}
+    return {name: os.path.join(root, name) for name in NAMES}
 
 
 def _ensure_dir(path, uid):
@@ -135,16 +179,50 @@ def _ensure_dir(path, uid):
     _safe_dir(path, uid)
 
 
+def _hash_fd(fd, cap):
+    digest, total = hashlib.sha256(), 0
+    while True:
+        chunk = os.read(fd, CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > cap:
+            raise Stop("G6P_ARCHIVE_SIZE")
+        digest.update(chunk)
+    if total == 0:
+        raise Stop("G6P_ARCHIVE_SIZE")
+    return digest.hexdigest()
+
+
 # ---------------------------------------------------------------- Restic port
 class ResticCli:
-    """Thin argv-only adapter. Secrets travel by file path, never by value."""
+    """Thin argv-only adapter. Secrets travel by file path, never by value.
 
-    def __init__(self, binary, *, timeout=3600):
-        if type(binary) is not str or not os.path.isabs(binary) or "\0" in binary:
+    The binary is pinned by SHA-256 and re-hashed before every call. This is a
+    best-effort check (a path can still be swapped between hash and exec); the
+    root bootstrap must still authenticate the binary before running as root.
+    """
+
+    def __init__(self, binary, *, binary_sha256, timeout=3600):
+        if (type(binary) is not str or not os.path.isabs(binary) or "\0" in binary
+                or type(binary_sha256) is not str or HEX64.fullmatch(binary_sha256) is None):
             raise Stop("G6P_RESTIC_BINARY_INVALID")
-        self._binary, self._timeout = binary, timeout
+        self._binary, self._pin, self._timeout = binary, binary_sha256, timeout
+
+    def _pinned(self):
+        try:
+            fd = os.open(self._binary, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        except OSError:
+            raise Stop("G6P_RESTIC_BINARY_INVALID") from None
+        try:
+            actual = _hash_fd(fd, 1 << 30)
+        finally:
+            os.close(fd)
+        if not hmac.compare_digest(actual, self._pin):
+            raise Stop("G6P_RESTIC_BINARY_INVALID")
 
     def _run(self, args, repo, keyfile, *, want_output=False):
+        self._pinned()
         env = {"RESTIC_REPOSITORY": repo, "RESTIC_PASSWORD_FILE": keyfile,
                "PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/nonexistent",
                "RESTIC_CACHE_DIR": os.path.join(os.path.dirname(repo), STATE, "cache")}
@@ -171,15 +249,29 @@ class ResticCli:
             raise Stop("G6P_REPO_ID_INVALID")
         return value
 
-    def backup(self, repo, keyfile, sources):
-        self._run(["backup", "--quiet", "--one-file-system", "--", *sources],
-                  repo, keyfile)
+    def backup(self, repo, keyfile, stage):
+        """Snapshot exactly one stage directory; return the new snapshot id."""
+        out = self._run(["backup", "--json", "--one-file-system", "--", stage],
+                        repo, keyfile, want_output=True)
+        snapshot = None
+        try:
+            for line in out.decode("utf-8").splitlines():
+                doc = json.loads(line)
+                if type(doc) is dict and doc.get("message_type") == "summary":
+                    snapshot = doc.get("snapshot_id")
+        except (ValueError, UnicodeError):
+            raise Stop("G6P_SNAPSHOT_INVALID") from None
+        if type(snapshot) is not str or SNAPSHOT.fullmatch(snapshot) is None:
+            raise Stop("G6P_SNAPSHOT_INVALID")
+        return snapshot
 
     def check(self, repo, keyfile):
         self._run(["check", "--quiet"], repo, keyfile)
 
-    def restore(self, repo, keyfile, target):
-        self._run(["restore", "latest", "--target", target], repo, keyfile)
+    def restore(self, repo, keyfile, target, snapshot_id):
+        if type(snapshot_id) is not str or SNAPSHOT.fullmatch(snapshot_id) is None:
+            raise Stop("G6P_SNAPSHOT_INVALID")
+        self._run(["restore", snapshot_id, "--target", target], repo, keyfile)
 
 
 # ---------------------------------------------------------------- identity
@@ -213,121 +305,325 @@ def init_repo(root, *, runner, key_bytes, uid, now):
     return {"restic_repo_id": repo_id, "key_epoch": epoch}
 
 
-def _load_identity(paths, *, runner, uid, expected_repo_id, expected_key_epoch):
-    """BACKUP/RESTORE precondition: everything exists and equals independent pins."""
+def _canonical_doc(raw, fields, schema, code):
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError):
+        raise Stop(code) from None
+    if (type(doc) is not dict or set(doc) != fields or doc["schema"] != schema
+            or not hmac.compare_digest(raw, canonical(doc))):
+        raise Stop(code)
+    return doc
+
+
+def _check_pins(expected_repo_id, expected_key_epoch):
     if (type(expected_repo_id) is not str or HEX64.fullmatch(expected_repo_id) is None
             or type(expected_key_epoch) is not str
             or EPOCH.fullmatch(expected_key_epoch) is None):
         raise Stop("G6P_PIN_INVALID")
+
+
+def _load_identity(paths, *, runner, uid, expected_repo_id, expected_key_epoch):
+    """BACKUP/RESTORE precondition: everything exists and equals independent pins."""
+    _check_pins(expected_repo_id, expected_key_epoch)
     _safe_dir(paths[REPO], uid)
     _safe_dir(paths[STATE], uid)
     key = _read_file(paths[KEY], uid)
     raw = _read_file(os.path.join(paths[STATE], "identity.json"), uid)
-    try:
-        doc = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeError):
-        raise Stop("G6P_IDENTITY_INVALID") from None
-    if (type(doc) is not dict or set(doc) != {"schema", "restic_repo_id", "key_epoch"}
-            or doc["schema"] != SCHEMA_IDENTITY
-            or not hmac.compare_digest(raw, canonical(doc))):
-        raise Stop("G6P_IDENTITY_INVALID")
-    epoch = key_epoch(key)
+    doc = _canonical_doc(raw, {"schema", "restic_repo_id", "key_epoch"},
+                         SCHEMA_IDENTITY, "G6P_IDENTITY_INVALID")
     live_id = runner.repo_id(paths[REPO], paths[KEY])
-    for have in ((doc["restic_repo_id"], expected_repo_id),
-                 (live_id, expected_repo_id), (doc["key_epoch"], expected_key_epoch),
-                 (epoch, expected_key_epoch)):
-        if (type(have[0]) is not str
-                or not hmac.compare_digest(have[0], have[1])):
+    for have, want in ((doc["restic_repo_id"], expected_repo_id),
+                       (live_id, expected_repo_id),
+                       (doc["key_epoch"], expected_key_epoch),
+                       (key_epoch(key), expected_key_epoch)):
+        if type(have) is not str or not hmac.compare_digest(have, want):
             raise Stop("G6P_GENERATION_MISMATCH")
 
 
+# ---------------------------------------------------------------- capture stage
+def _verify_stage(stage, uid):
+    """Exactly the allowlisted entries; only regular files; hashes recorded."""
+    try:
+        names = set(os.listdir(stage))
+    except OSError:
+        raise Stop("G6P_STAGE_INVALID") from None
+    if names != REQUIRED_STAGE:
+        raise Stop("G6P_STAGE_INVALID")
+    entries = {}
+    for name in sorted(REQUIRED_STAGE):
+        full = os.path.join(stage, name)
+        if name == "silo":
+            _safe_dir(full, uid)
+            for base, dirs, files in os.walk(full, followlinks=False):
+                for sub in dirs:
+                    _safe_dir(os.path.join(base, sub), uid)
+                for leaf in files:
+                    rel = os.path.relpath(os.path.join(base, leaf), stage)
+                    fd, _ = _open_regular(os.path.join(base, leaf), uid)
+                    try:
+                        entries[rel] = _hash_fd(fd, MAX_EXTRACTED)
+                    finally:
+                        os.close(fd)
+            continue
+        fd, info = _open_regular(full, uid)
+        try:
+            if info.st_size <= 0:
+                raise Stop("G6P_STAGE_INVALID")
+            entries[name] = _hash_fd(fd, MAX_EXTRACTED)
+        finally:
+            os.close(fd)
+    return entries
+
+
 # ---------------------------------------------------------------- archive
+class _Sink:
+    """Counting, hashing writer on an exclusively created fd."""
+
+    def __init__(self, fd, cap):
+        self._fd, self._cap, self.total = fd, cap, 0
+        self.digest = hashlib.sha256()
+
+    def write(self, data):
+        self.total += len(data)
+        if self.total > self._cap:
+            raise Stop("G6P_ARCHIVE_SIZE")
+        self.digest.update(data)
+        view = memoryview(data)
+        while view:
+            view = view[os.write(self._fd, view):]
+        return len(data)
+
+    def flush(self):
+        pass
+
+
 def _write_archive(repo_dir, key_path, out_path):
-    """Deterministic tar.gz of the CIPHERTEXT repository only; refuses links."""
+    """Stream a deterministic tar.gz of the CIPHERTEXT repo; bounded memory."""
     real_repo = os.path.realpath(repo_dir)
     if os.path.commonpath([real_repo, os.path.realpath(key_path)]) == real_repo:
         raise Stop("G6P_KEY_INSIDE_REPO")
-    buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
-        with tarfile.open(fileobj=gz, mode="w", format=tarfile.PAX_FORMAT) as tar:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        out_fd = os.open(out_path, flags, 0o600)
+    except FileExistsError:
+        raise Stop("G6P_TARGET_EXISTS") from None
+    except OSError:
+        raise Stop("G6P_WRITE_FAILED") from None
+    sink = _Sink(out_fd, MAX_ARCHIVE_BYTES)
+    try:
+        with gzip.GzipFile(fileobj=sink, mode="wb", mtime=0) as gz, \
+                tarfile.open(fileobj=gz, mode="w|", format=tarfile.PAX_FORMAT) as tar:
             for base, dirs, files in os.walk(repo_dir, followlinks=False):
                 dirs.sort()
                 for name in sorted(dirs) + sorted(files):
                     full = os.path.join(base, name)
-                    info = os.lstat(full)
-                    if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
-                        raise Stop("G6P_ARCHIVE_SPECIAL_FILE")
-                    entry = tar.gettarinfo(full, os.path.relpath(full, repo_dir))
-                    entry.uid = entry.gid = 0
+                    arc = os.path.relpath(full, repo_dir)
+                    before = os.lstat(full)
+                    entry = tarfile.TarInfo(arc)
+                    entry.uid = entry.gid = entry.mtime = 0
                     entry.uname = entry.gname = ""
-                    entry.mtime = 0
-                    entry.mode = 0o700 if stat.S_ISDIR(info.st_mode) else 0o600
-                    if entry.isreg():
-                        with open(full, "rb") as handle:
+                    if stat.S_ISDIR(before.st_mode):
+                        entry.type, entry.mode = tarfile.DIRTYPE, 0o700
+                        tar.addfile(entry)
+                    elif stat.S_ISREG(before.st_mode):
+                        try:
+                            fd = os.open(full, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                        except OSError:
+                            raise Stop("G6P_ARCHIVE_SPECIAL_FILE") from None
+                        with os.fdopen(fd, "rb") as handle:
+                            info = os.fstat(handle.fileno())
+                            if ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)
+                                    or not stat.S_ISREG(info.st_mode)):
+                                raise Stop("G6P_ARCHIVE_SPECIAL_FILE")
+                            entry.size, entry.mode = info.st_size, 0o600
                             tar.addfile(entry, handle)
                     else:
-                        tar.addfile(entry)
-    data = buf.getvalue()
-    if not 0 < len(data) <= MAX_ARCHIVE_BYTES:
-        raise Stop("G6P_ARCHIVE_SIZE")
-    _create_excl(out_path, data)
-    return hashlib.sha256(data).hexdigest()
+                        raise Stop("G6P_ARCHIVE_SPECIAL_FILE")
+        if not sink.total:
+            raise Stop("G6P_ARCHIVE_SIZE")
+        os.fsync(out_fd)
+    except BaseException as exc:
+        os.close(out_fd)
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
+        if isinstance(exc, Stop):
+            raise
+        if isinstance(exc, (OSError, tarfile.TarError, EOFError, ValueError)):
+            raise Stop("G6P_ARCHIVE_FAILED") from None
+        raise
+    os.close(out_fd)
+    return sink.digest.hexdigest()
 
 
-def backup(root, *, runner, sources, expected_repo_id, expected_key_epoch, uid, now):
-    """BACKUP: never initializes. Produces ciphertext archive + versioned receipt."""
+class _HashingFd:
+    """Reader over a held fd that hashes what is consumed."""
+
+    def __init__(self, fd):
+        self._fd, self.digest, self.total = fd, hashlib.sha256(), 0
+
+    def read(self, size=-1):
+        chunk = os.read(self._fd, CHUNK if size is None or size < 0 else min(size, CHUNK))
+        self.total += len(chunk)
+        if self.total > MAX_ARCHIVE_BYTES:
+            raise Stop("G6P_ARCHIVE_SIZE")
+        self.digest.update(chunk)
+        return chunk
+
+    def drain(self):
+        while self.read(CHUNK):
+            pass
+
+
+def _extract_safe(fd, dest, expected_sha256):
+    """Extract a regular-files-and-dirs tar.gz from a held fd, link-free."""
+    os.lseek(fd, 0, os.SEEK_SET)
+    reader = _HashingFd(fd)
+    members, extracted = 0, 0
+    try:
+        with gzip.GzipFile(fileobj=reader, mode="rb") as gz, \
+                tarfile.open(fileobj=gz, mode="r|") as tar:
+            for member in tar:
+                members += 1
+                name = member.name
+                if (members > MAX_MEMBERS or not MEMBER.fullmatch(name)
+                        or any(part in (".", "..") for part in name.split("/"))):
+                    raise Stop("G6P_EXTRACT_UNSAFE")
+                target = os.path.join(dest, name)
+                if member.isdir():
+                    try:
+                        os.mkdir(target, 0o700)
+                    except OSError:
+                        raise Stop("G6P_EXTRACT_UNSAFE") from None
+                elif member.isreg():
+                    extracted += member.size
+                    if extracted > MAX_EXTRACTED:
+                        raise Stop("G6P_ARCHIVE_SIZE")
+                    source = tar.extractfile(member)
+                    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+                    try:
+                        out = os.open(target, flags, 0o600)
+                    except OSError:
+                        raise Stop("G6P_EXTRACT_UNSAFE") from None
+                    try:
+                        left = member.size
+                        while left:
+                            chunk = source.read(min(CHUNK, left))
+                            if not chunk:
+                                raise Stop("G6P_EXTRACT_UNSAFE")
+                            left -= len(chunk)
+                            view = memoryview(chunk)
+                            while view:
+                                view = view[os.write(out, view):]
+                    finally:
+                        os.close(out)
+                else:
+                    raise Stop("G6P_EXTRACT_UNSAFE")
+        reader.drain()
+    except (tarfile.TarError, EOFError, OSError, ValueError):
+        raise Stop("G6P_EXTRACT_UNSAFE") from None
+    if not hmac.compare_digest(reader.digest.hexdigest(), expected_sha256):
+        raise Stop("G6P_ARCHIVE_HASH_MISMATCH")
+
+
+def _remove_stage(path):
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def backup(root, *, runner, captor, expected_repo_id, expected_key_epoch, uid, now):
+    """BACKUP: never initializes. Captures a verified stage, snapshots only it."""
     paths = _layout(root, uid)
     _load_identity(paths, runner=runner, uid=uid, expected_repo_id=expected_repo_id,
                    expected_key_epoch=expected_key_epoch)
-    if (type(sources) is not list or not sources
-            or any(type(s) is not str or not os.path.isabs(s) or "\0" in s
-                   for s in sources)):
-        raise Stop("G6P_SOURCES_INVALID")
+    if not callable(captor):
+        raise Stop("G6P_CAPTOR_INVALID")
     stamp = _stamp(now)
+    _ensure_dir(paths[STAGES], uid)
     _ensure_dir(paths[EXPORTS], uid)
-    runner.backup(paths[REPO], paths[KEY], sources)
-    runner.check(paths[REPO], paths[KEY])
+    stage = os.path.join(paths[STAGES], stamp)
+    try:
+        os.mkdir(stage, 0o700)
+    except OSError:
+        raise Stop("G6P_TARGET_EXISTS") from None
     name = ARCHIVE_FMT.format(stamp=stamp)
-    sha = _write_archive(paths[REPO], paths[KEY], os.path.join(paths[EXPORTS], name))
+    try:
+        captor(stage)
+        entries = _verify_stage(stage, uid)
+        manifest = canonical({"schema": SCHEMA_CAPTURE, "cut": stamp,
+                              "entries": entries})
+        manifest_sha = hashlib.sha256(manifest).hexdigest()
+        _create_excl(os.path.join(stage, "manifest.json"), manifest)
+        snapshot = runner.backup(paths[REPO], paths[KEY], stage)
+        if type(snapshot) is not str or SNAPSHOT.fullmatch(snapshot) is None:
+            raise Stop("G6P_SNAPSHOT_INVALID")
+        runner.check(paths[REPO], paths[KEY])
+        sha = _write_archive(paths[REPO], paths[KEY], os.path.join(paths[EXPORTS], name))
+    finally:
+        _remove_stage(stage)
+    _create_excl(os.path.join(paths[STATE], "capture-" + stamp + ".json"), canonical(
+        {"schema": SCHEMA_CAPTURE_RECORD, "cut": stamp, "snapshot_id": snapshot,
+         "manifest_sha256": manifest_sha}))
     receipt = {"schema": SCHEMA_RECEIPT, "archive_name": name, "sha256": sha,
                "status": STATUS_RECEIPT, "restic_repo_id": expected_repo_id,
                "key_epoch": expected_key_epoch}
     _create_excl(os.path.join(paths[STATE], "receipt-" + stamp + ".json"),
                  canonical(receipt))
-    return {"archive_name": name, "archive_sha256": sha, "stamp": stamp}
+    return {"archive_name": name, "archive_sha256": sha, "snapshot_id": snapshot,
+            "stamp": stamp}
 
 
-def restore(root, *, runner, verifier, archive_name, archive_sha256, expected_repo_id,
-            expected_key_epoch, forbidden_prefixes, uid, now):
-    """RESTORE into a brand-new isolated directory; verifier is caller-injected."""
+def restore(root, *, runner, verifier, archive_name, archive_sha256, snapshot_id,
+            expected_repo_id, expected_key_epoch, forbidden_prefixes, uid, now):
+    """RESTORE only from the DOWNLOADED archive copy; never from the live repo."""
     paths = _layout(root, uid)
     _load_identity(paths, runner=runner, uid=uid, expected_repo_id=expected_repo_id,
                    expected_key_epoch=expected_key_epoch)
-    match = re.fullmatch(r"centenario-qa-g6-v2-CIFRADO-(\d{8}T\d{6}Z)\.tar\.gz", archive_name
-                         if type(archive_name) is str else "")
-    if match is None or type(archive_sha256) is not str \
-            or HEX64.fullmatch(archive_sha256) is None:
+    match = ARCHIVE_RE.fullmatch(archive_name if type(archive_name) is str else "")
+    if (match is None or type(archive_sha256) is not str
+            or HEX64.fullmatch(archive_sha256) is None
+            or type(snapshot_id) is not str or SNAPSHOT.fullmatch(snapshot_id) is None):
         raise Stop("G6P_ARCHIVE_REF_INVALID")
-    actual = _hash_big(os.path.join(paths[EXPORTS], archive_name), uid)
-    if not hmac.compare_digest(actual, archive_sha256):
-        raise Stop("G6P_ARCHIVE_HASH_MISMATCH")
+    cut = _parse_stamp(match.group(1))
+    clock = _clock(now)
+    if clock < cut or clock >= cut + WINDOW:
+        raise Stop("G6P_RESTORE_WINDOW")
+    record = _canonical_doc(
+        _read_file(os.path.join(paths[STATE], "capture-" + match.group(1) + ".json"), uid),
+        {"schema", "cut", "snapshot_id", "manifest_sha256"}, SCHEMA_CAPTURE_RECORD,
+        "G6P_CAPTURE_RECORD_INVALID")
+    if (record["cut"] != match.group(1) or type(record["snapshot_id"]) is not str
+            or not hmac.compare_digest(record["snapshot_id"], snapshot_id)):
+        raise Stop("G6P_SNAPSHOT_MISMATCH")
     _ensure_dir(paths[RESTORES], uid)
-    target = os.path.join(paths[RESTORES], match.group(1))
-    real_target = os.path.realpath(target)
+    _safe_dir(paths[DOWNLOADS], uid)
+    workdir = os.path.join(paths[RESTORES], match.group(1))
+    real_work = os.path.realpath(workdir)
     if (type(forbidden_prefixes) is not list or not forbidden_prefixes
-            or any(os.path.commonpath([real_target, os.path.realpath(p)])
+            or any(os.path.commonpath([real_work, os.path.realpath(p)])
                    == os.path.realpath(p) for p in forbidden_prefixes)):
         raise Stop("G6P_RESTORE_TARGET_FORBIDDEN")
+    fd, _ = _open_regular(os.path.join(paths[DOWNLOADS], archive_name), uid)
     try:
-        os.mkdir(target, 0o700)
-    except OSError:
-        raise Stop("G6P_TARGET_EXISTS") from None
-    runner.restore(paths[REPO], paths[KEY], target)
-    tables, silo = verifier(target)
+        if not hmac.compare_digest(_hash_fd(fd, MAX_ARCHIVE_BYTES), archive_sha256):
+            raise Stop("G6P_ARCHIVE_HASH_MISMATCH")
+        try:
+            os.mkdir(workdir, 0o700)
+            repo_dir, data_dir = (os.path.join(workdir, n) for n in ("repo", "data"))
+            os.mkdir(repo_dir, 0o700)
+            os.mkdir(data_dir, 0o700)
+        except OSError:
+            raise Stop("G6P_TARGET_EXISTS") from None
+        _extract_safe(fd, repo_dir, archive_sha256)
+    finally:
+        os.close(fd)
+    runner.check(repo_dir, paths[KEY])
+    runner.restore(repo_dir, paths[KEY], data_dir, snapshot_id)
+    tables, silo = verifier(data_dir)
     if (type(tables) is not dict or set(tables) != DATABASES
-            or any(type(v) is not int or isinstance(v, bool) or v <= 0
-                   for v in tables.values())
-            or type(silo) is not int or isinstance(silo, bool) or silo < 0):
+            or any(type(v) is not int or v <= 0 for v in tables.values())
+            or type(silo) is not int or silo < 0):
         raise Stop("G6P_RESTORE_VERIFY_FAILED")
     report = {"schema": SCHEMA_RESTORE, "result": RESULT_RESTORE,
               "archive_filename": archive_name, "archive_sha256": archive_sha256,
@@ -339,50 +635,50 @@ def restore(root, *, runner, verifier, archive_name, archive_sha256, expected_re
     return report
 
 
-def _hash_big(path, uid):
-    """Stream-hash a regular, owned, non-link file with a hard size cap."""
-    _safe_file(path, uid)
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
-    digest, total = hashlib.sha256(), 0
-    try:
-        while True:
-            chunk = os.read(fd, 1 << 20)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > MAX_ARCHIVE_BYTES:
-                raise Stop("G6P_ARCHIVE_SIZE")
-            digest.update(chunk)
-    finally:
-        os.close(fd)
-    if total == 0:
-        raise Stop("G6P_ARCHIVE_SIZE")
-    return digest.hexdigest()
+_RESTORE_FIELDS = {"schema", "result", "archive_filename", "archive_sha256",
+                   "restic_repo_id", "key_epoch", "postgres_tables_by_database",
+                   "silo_objects_verified", "production_touched"}
 
 
-def finalize_review(root, *, archive_name, archive_sha256, downloaded_sha256,
-                    drive_file_id, expected_repo_id, expected_key_epoch, uid):
-    """Write the review only when the DOWNLOADED copy hash equals the archive hash."""
+def finalize_review(root, *, archive_name, drive_file_id, expected_repo_id,
+                    expected_key_epoch, uid):
+    """Hash the DOWNLOADED file here and require a matching restore report."""
     paths = _layout(root, uid)
-    match = re.fullmatch(r"centenario-qa-g6-v2-CIFRADO-(\d{8}T\d{6}Z)\.tar\.gz",
-                         archive_name if type(archive_name) is str else "")
+    _check_pins(expected_repo_id, expected_key_epoch)
+    match = ARCHIVE_RE.fullmatch(archive_name if type(archive_name) is str else "")
     if (match is None or type(drive_file_id) is not str
             or DRIVE_ID.fullmatch(drive_file_id) is None):
         raise Stop("G6P_REVIEW_INPUT_INVALID")
-    for value in (archive_sha256, downloaded_sha256, expected_repo_id):
-        if type(value) is not str or HEX64.fullmatch(value) is None:
-            raise Stop("G6P_REVIEW_INPUT_INVALID")
-    if type(expected_key_epoch) is not str or EPOCH.fullmatch(expected_key_epoch) is None:
-        raise Stop("G6P_REVIEW_INPUT_INVALID")
-    if not hmac.compare_digest(archive_sha256, downloaded_sha256):
-        raise Stop("G6P_OFFHOST_HASH_MISMATCH")
+    stamp = match.group(1)
+    fd, _ = _open_regular(os.path.join(paths[DOWNLOADS], archive_name), uid)
+    try:
+        downloaded = _hash_fd(fd, MAX_ARCHIVE_BYTES)
+    finally:
+        os.close(fd)
+    receipt = _canonical_doc(
+        _read_file(os.path.join(paths[STATE], "receipt-" + stamp + ".json"), uid),
+        {"schema", "archive_name", "sha256", "status", "restic_repo_id", "key_epoch"},
+        SCHEMA_RECEIPT, "G6P_RECEIPT_INVALID")
+    report = _canonical_doc(
+        _read_file(os.path.join(paths[STATE], RESTORE_FMT.format(stamp=stamp)), uid),
+        _RESTORE_FIELDS, SCHEMA_RESTORE, "G6P_RESTORE_REPORT_INVALID")
+    for have in (receipt["sha256"], report["archive_sha256"]):
+        if type(have) is not str or not hmac.compare_digest(have, downloaded):
+            raise Stop("G6P_OFFHOST_HASH_MISMATCH")
+    for doc in (receipt, report):
+        if (doc.get("restic_repo_id") != expected_repo_id
+                or doc.get("key_epoch") != expected_key_epoch):
+            raise Stop("G6P_GENERATION_MISMATCH")
+    if (receipt["archive_name"] != archive_name or report["archive_filename"] != archive_name
+            or report["production_touched"] is not False
+            or report["result"] != RESULT_RESTORE):
+        raise Stop("G6P_RESTORE_REPORT_INVALID")
     review = {"schema": SCHEMA_REVIEW, "g6_archive_name": archive_name,
-              "g6_archive_sha256": archive_sha256,
-              "g6_restore_report_name": RESTORE_FMT.format(stamp=match.group(1)),
+              "g6_archive_sha256": downloaded,
+              "g6_restore_report_name": RESTORE_FMT.format(stamp=stamp),
               "g6_offhost_sha256_verified": True, "g6_drive_file_id": drive_file_id,
               "restic_repo_id": expected_repo_id, "key_epoch": expected_key_epoch}
-    _create_excl(os.path.join(paths[STATE], "review-" + match.group(1) + ".json"),
-                 canonical(review))
+    _create_excl(os.path.join(paths[STATE], "review-" + stamp + ".json"), canonical(review))
     return review
 
 
