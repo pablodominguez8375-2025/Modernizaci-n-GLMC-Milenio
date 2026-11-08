@@ -125,8 +125,8 @@ class G6V2AdmissionContractTests(unittest.TestCase):
                             "receipt-%s.json" % self.stamp)
 
     def test_legacy_validate_g6_cannot_accept_the_v2_review_and_nothing_here_makes_it(self):
-        since = os.path.exists(str(legacy.ARCHIVE_RECEIPT))
-        self.assertFalse(since, "this test must run on a host without the legacy receipt")
+        # validate_g6 fails first on /home/soporte/<v2 name>, which no host has; this does not
+        # depend on the historical legacy receipt and is NOT an authorization condition.
         with self.assertRaises(Exception) as err:
             legacy.validate_g6(self.review, int((NOW + dt.timedelta(hours=3)).timestamp()))
         self.assertIn("G6_LOCAL_ARCHIVE_MISSING", str(err.exception))
