@@ -168,6 +168,83 @@ jobs:
               --source-digest "$GITHUB_SHA" --deny-self-hosted-runners --format json \
               > "$package.verification.json"
           done
+      - name: Verify QA inner ZIP with REAL rootless APP Sigstore port (CI only, NO GO)
+        env:
+          # No GH_TOKEN reaches the spawned verifier. The verifier uses its
+          # private bundle and Sigstore public trusted root lookup.
+          INSTALLABLE_BUNDLE: ${{ steps.installable-provenance.outputs.bundle-path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          import hashlib
+          import importlib.util
+          import os
+          from pathlib import Path
+          import shutil
+          import tempfile
+
+          def digest_path(path):
+              sha = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b""):
+                      sha.update(block)
+              return "sha256:" + sha.hexdigest()
+
+          spec = importlib.util.spec_from_file_location(
+              "qa525_ci_real_app_port", "scripts/qa/qa525-vnext-app-rootless-port.py")
+          if spec is None or spec.loader is None:
+              raise SystemExit("QA525_REAL_APP_PORT_CODE_MISSING_NO_GO")
+          app = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(app)
+          sources = list(Path("artifacts/qa-installable").glob("*.zip"))
+          if len(sources) != 1:
+              raise SystemExit("QA525_REAL_APP_PORT_ZIP_CARDINALITY_STOP")
+          bundle_path = Path(os.environ["INSTALLABLE_BUNDLE"])
+          bundle = bundle_path.read_bytes()
+          if not 0 < len(bundle) <= app.MAX_BUNDLE:
+              raise SystemExit("QA525_REAL_APP_PORT_BUNDLE_STOP")
+          source_sha = os.environ["GITHUB_SHA"]
+          # CI-local hashes EXERCISE the verifier; neither is independently
+          # trusted Sponsor pin or authority for the physical glmdch host.
+          with tempfile.TemporaryDirectory(prefix="qa525-real-app-proof-") as tmp:
+              private = Path(tmp) / "source"
+              private.mkdir(mode=0o700)
+              staged = private / "inner.zip"
+              shutil.copyfile(sources[0], staged)
+              staged.chmod(0o600)
+              expected_zip = digest_path(staged)
+              gh_pin = digest_path(app.GH)
+              expected_bundle = "sha256:" + hashlib.sha256(bundle).hexdigest()
+              verifier = app.verifier_for(
+                  signed_inner_zip=staged,
+                  trusted_gh_sha256=gh_pin,
+                  expected_source_sha=source_sha,
+                  expected_inner_sha256=expected_zip,
+                  expected_bundle_sha256=expected_bundle,
+              )
+              challenge = {
+                  "repository": app.REPO,
+                  "signer_workflow": app.WORKFLOW,
+                  "oidc_issuer": app.ISSUER,
+                  "source_sha": source_sha,
+                  "archive_sha256": expected_zip,
+                  "bundle_sha256": expected_bundle,
+              }
+              if verifier(bundle, challenge) is not True:
+                  raise SystemExit("QA525_REAL_APP_PORT_ATTESTATION_DENIED_NO_GO")
+              # Negative: identical authenticated challenge rejects changed ZIP.
+              with staged.open("ab") as stream:
+                  stream.write(b"\nQA525_TEST_TAMPERED_NO_GO\n")
+              try:
+                  verifier(bundle, challenge)
+              except app.Stop as denied:
+                  if str(denied) != "APP_PORT_SOURCE_HASH_MISMATCH":
+                      raise
+              else:
+                  raise SystemExit("QA525_REAL_APP_PORT_TAMPER_NOT_REJECTED")
+          print("QA525_REAL_SIGSTORE_CI_PASS_NO_PHYSICAL_AUTHORITY")
+          PYTHON
       - name: Preserve QA candidate installable (deployment pending)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
