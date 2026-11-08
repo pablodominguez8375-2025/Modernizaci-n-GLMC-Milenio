@@ -26,19 +26,38 @@ del Sponsor.
 
 ## Diseño aditivo propuesto (sin tocar los scripts pineados)
 
-Contrato, no implementación; nada de esto se ejecuta ni se instala sin PR, CI, revisión de ambos agentes y GO específico del Sponsor.
+Contrato, no implementación; nada de esto se ejecuta ni se instala sin PR, CI hermética, revisión de ChatGPT y de Claude y GO específico del Sponsor.
 
-1. **Scripts nuevos, no editados:** un par `g6-local-v2` / `g6-restore-v2`, con nombre y pin propios, instalados `root:root` en el mismo directorio de herramientas. Solo cambian las constantes de ubicación: repositorio nuevo en carpeta nueva y exclusiva (por ejemplo `qa-g6-v2`), y archivo de clave nuevo distinto del actual. El resto de la lógica debe ser **idéntico**; la revisión exige un `diff` mecánico contra la fuente pineada que demuestre que solo cambian esas constantes.
-2. **Retrocompatibilidad:** los scripts y el repositorio G6 antiguos no se modifican ni se mueven. El validador de G6 debe aceptar el acta nueva sin invalidar las anteriores (formato `archive.receipt.json` y estado de restauración idénticos). Si el validador o el ancla G6 fijan los hashes de los scripts, deben aceptar explícitamente el pin nuevo como segundo valor permitido, con prueba de que un script no listado sigue rechazado.
-3. **Evidencia de recuperación aislada:** la restauración v2 extrae a un directorio temporal exclusivo, sin Compose ni base de datos viva, y deja un acta con SHA, fecha y estado, sin secretos. El acta debe distinguir el repositorio v2 del antiguo para que nadie confunda una restauración del repositorio comprometido con la nueva.
-4. **Sin sobrescritura:** los scripts v2 se niegan a operar si el repositorio o el archivo de clave ya existen con otro contenido, y no leen `RESTIC_*` del entorno heredado (lo ignoran o lo rechazan, nunca lo respetan en silencio).
+### Procedencia de la fuente (respuesta al P1-1 de ChatGPT)
+`g6-local.py` y `g6-restore.py` son artefactos root del host. **No se trasladan al repositorio ni al chat.** No hay forma segura de «clonarlos con otras constantes» sin antes extraer código root, auditarlo en busca de secretos, rutas e identidades y probar la cadena de custodia (el SHA-256 del archivo local no equivale al SHA de blob de Git). Por eso el par v2 **no es un clon**: es una **implementación nueva**, escrita desde un contrato mínimo aprobado, con CI hermética, que se rechaza si se intenta construir a partir de una fuente no verificada. La fuente v1 queda en el host, intacta y pineada.
 
-**Pregunta abierta para ChatGPT:** la fuente de `g6-local.py` y `g6-restore.py` no está en el repositorio (viven solo en el host). Para el `diff` mecánico se necesita su texto exacto: o ya existe en un PR/archivo que yo no veo, o hay que traerlo con una lectura de solo lectura verificada por hash. Falta también inspeccionar sin revelar valores qué son `ROOT`, `KEY` y `ARCHIVE`.
+### Dos cosas distintas (respuesta al P1-2)
+El borrador anterior exigía a la vez «un `diff` que pruebe que solo cambian constantes» y cambiar comportamiento (sobrescritura, entorno, validador). Eso es contradictorio y se retira: **ya no se afirma «solo constantes»**. Se separan:
+- **(a) Equivalencia funcional con v1**: no se prueba por `diff` de fuente, sino por contrato observable: mismo formato de `archive.receipt.json`, mismos estados (`ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING`, `G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY`), mismas bases verificadas (pmgm y pmgm_keycloak) y mismo cálculo de edad (<48 h), con pruebas que consumen ese formato.
+- **(b) Protecciones de seguridad nuevas, explícitas y con prueba propia** (ver abajo).
+
+### Contrato mínimo del par v2
+1. **Ubicaciones propias:** repositorio nuevo en una ruta que no exista previamente; archivo de clave nuevo y distinto del actual (`0600 root:root`); pin propio. No se usa ni se modifica el repositorio antiguo.
+2. **Entorno:** el script construye su entorno desde cero y no hereda `RESTIC_*`; si el entorno heredado trae esas variables, se **rechaza** (no se ignoran en silencio).
+3. **No sobrescritura:** si el repositorio o la clave nuevos ya existen, STOP. Nunca se crea sobre algo existente ni se destruye el repositorio antiguo.
+4. **Archivo realmente exportado = archivo restaurado:** el SHA-256 del archivo cifrado que se copia fuera del host es el mismo que `restore` abre, con la clave nueva; sin ese vínculo no hay acta.
+5. **Sin falso PASS ni acta v1 para un GO v2:** el acta v2 lleva una marca de versión y el identificador del repositorio; el validador del GO v2 rechaza un acta v1 y viceversa.
+6. **Logs saneados:** nunca imprimen clave, contraseña ni contenido de la base; hay prueba de ello.
+7. **Prueba de error:** un caso de fallo deliberado (clave incorrecta o archivo alterado) debe producir STOP y no un acta.
+
+### Hallazgo que afecta el diseño: ruta fija del acta
+Tanto el operador legacy (`ARCHIVE_RECEIPT = /opt/centenario/qa-g6/archive.receipt.json`) como `qa525-vnext-cache.py` (`G6_RECEIPT_PATH`) leen el recibo **desde una ruta fija** dentro de `/opt/centenario/qa-g6`. Un repositorio v2 en otra carpeta raíz **no sería visto por ningún validador existente**. Opciones, a decidir por ChatGPT (no puedo ver las constantes ocultas):
+- **(i)** Dejar el recibo en la misma ruta fija y poner solo el repositorio Restic nuevo bajo un subdirectorio nuevo de esa raíz, conservando una copia fechada del recibo anterior antes de reemplazarlo (el recibo viejo está vencido desde el 04-11).
+- **(ii)** Parametrizar la ruta del recibo en los validadores con un PR aparte (cambio en código ya integrado y en el operador legacy, que se mantiene).
+La opción (i) evita tocar los validadores, pero hay que probar que el reemplazo del recibo es atómico y que no destruye evidencia.
+
+### Alcance de la CI
+Pruebas herméticas con un Restic simulado o un directorio temporal; **ni la CI ni una aprobación implícita instalan binarios en el host**.
 
 ## Secuencia propuesta para el SOP
 
 1. **Preflight solo lectura** (cada comando revisado antes): propietario, modo y hash de los dos scripts; espacio libre; definiciones de `ROOT`, `KEY` y `ARCHIVE` sin mostrar valores sensibles. Hecho parcialmente: ubicación de las asignaciones de entorno.
-2. PR con los scripts v2 y su `diff` contra la fuente pineada; CI; revisión de ChatGPT y de Claude; pin nuevo.
+2. PR con la implementación v2 desde el contrato (sin copiar la fuente del host), CI hermética, revisión de ChatGPT y de Claude y pin nuevo.
 3. GO específico del Sponsor para instalar los scripts v2. Recién ahí se genera la clave nueva en Bitwarden y se deja en un archivo `0600 root:root` nuevo, introducida por Termius sin eco ni historial.
 4. Respaldo completo con `g6-local-v2` al repositorio nuevo; `restic check` y revisión de snapshots.
 5. Exportar la copia cifrada fuera del host (carpeta Drive de respaldos), descargarla y comprobar que su SHA es idéntico.
