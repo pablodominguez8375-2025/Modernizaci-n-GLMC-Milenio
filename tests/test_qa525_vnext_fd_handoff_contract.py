@@ -1,5 +1,6 @@
 """QA525 SCM_RIGHTS sealed fd transport, real Linux kernel, never physical GO."""
 import array
+import errno
 import fcntl
 import hashlib
 import importlib.util
@@ -74,8 +75,11 @@ class TestFdHandoff(unittest.TestCase):
         for field in ("may_install", "may_apply", "sponsor_authorized_here",
                       "bootstrap_authenticated_here"):
             self.assertIs(result[field], False)
-        with self.assertRaises(PermissionError):
+        # Private O_RDONLY reopen rejects writes with EBADF, unlike the
+        # original writable sealed memfd (EPERM). Assert the stronger contract.
+        with self.assertRaises(OSError) as err:
             os.pwrite(result["fd"], b"X", 0)
+        self.assertEqual(err.exception.errno, errno.EBADF)
 
     def test_received_fd_is_private_readonly_not_sender_shared_description(self):
         sender = self.fd()
