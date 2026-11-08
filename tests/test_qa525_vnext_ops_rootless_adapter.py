@@ -68,7 +68,7 @@ class RootlessPort(unittest.TestCase):
             with self.assertRaisesRegex(port.Stop, "OPS_PORT_ROOT_FORBIDDEN"):
                 self.make()
 
-    def test_fixed_argv_private_modes_and_no_shell_through_injected_runner(self):
+    def test_fixed_argv_private_modes_and_no_shell_with_test_only_patch(self):
         received = []
         expected = ('Good "%s" signature for %s with ED25519 key %s\n'
                     % (fixture.sig.NAMESPACE, fixture.sig.PRINCIPAL, self.fp)).encode()
@@ -92,9 +92,10 @@ class RootlessPort(unittest.TestCase):
             kwargs["stdout"].write(expected)
             return SimpleNamespace(returncode=0, stdout=None)
 
-        actual = self.make(runner=fake)(self.allowed, self.signature,
-                                         fixture.sig.PRINCIPAL, fixture.sig.NAMESPACE,
-                                         self.receipt)
+        with mock.patch.object(port.subprocess, "run", side_effect=fake):
+            actual = self.make()(self.allowed, self.signature,
+                                 fixture.sig.PRINCIPAL, fixture.sig.NAMESPACE,
+                                 self.receipt)
         self.assertEqual(actual, (0, expected))
         self.assertEqual(len(received), 1)
         self.assertFalse(Path(received[0][1]["cwd"]).exists())
@@ -111,24 +112,26 @@ class RootlessPort(unittest.TestCase):
         def noisy(_argv, **kwargs):
             kwargs["stdout"].write(b"A" * 1025)
             return SimpleNamespace(returncode=0, stdout=None)
-        verify = self.make(runner=noisy)
-        with self.assertRaisesRegex(port.Stop, "OPS_PORT_CHILD_RESULT_INVALID"):
-            verify(self.allowed, self.signature,
-                   fixture.sig.PRINCIPAL, fixture.sig.NAMESPACE,
-                   self.receipt)
+        verify = self.make()
+        with mock.patch.object(port.subprocess, "run", side_effect=noisy):
+            with self.assertRaisesRegex(port.Stop, "OPS_PORT_CHILD_RESULT_INVALID"):
+                verify(self.allowed, self.signature,
+                       fixture.sig.PRINCIPAL, fixture.sig.NAMESPACE,
+                       self.receipt)
 
     def test_runner_timeout_exception_and_bad_result_are_fixed_stops(self):
         def fail(*args, **kwargs):
             raise subprocess.TimeoutExpired(args[0], 30)
-        with self.assertRaisesRegex(port.Stop, "OPS_PORT_CHILD_FAILED"):
-            self.make(runner=fail)(self.allowed, self.signature,
-                                   fixture.sig.PRINCIPAL, fixture.sig.NAMESPACE,
-                                   self.receipt)
-        with self.assertRaisesRegex(port.Stop, "OPS_PORT_CHILD_RESULT_INVALID"):
-            self.make(runner=lambda *a, **k: SimpleNamespace(
-                returncode=True, stdout=b"good"))(
-                    self.allowed, self.signature, fixture.sig.PRINCIPAL,
-                    fixture.sig.NAMESPACE, self.receipt)
+        with mock.patch.object(port.subprocess, "run", side_effect=fail):
+            with self.assertRaisesRegex(port.Stop, "OPS_PORT_CHILD_FAILED"):
+                self.make()(self.allowed, self.signature,
+                            fixture.sig.PRINCIPAL, fixture.sig.NAMESPACE,
+                            self.receipt)
+        with mock.patch.object(port.subprocess, "run",
+                               return_value=SimpleNamespace(returncode=True, stdout=b"good")):
+            with self.assertRaisesRegex(port.Stop, "OPS_PORT_CHILD_RESULT_INVALID"):
+                self.make()(self.allowed, self.signature,
+                            fixture.sig.PRINCIPAL, fixture.sig.NAMESPACE, self.receipt)
 
     def test_inputs_cannot_supply_arbitrary_principal_namespace_or_root(self):
         verify = self.make()
@@ -139,8 +142,11 @@ class RootlessPort(unittest.TestCase):
                 with self.assertRaisesRegex(port.Stop, "OPS_PORT_PAYLOAD_INVALID"):
                     verify(self.allowed, self.signature, principal, namespace,
                            self.receipt)
-        with self.assertRaisesRegex(port.Stop, "OPS_PORT_INPUT_INVALID"):
+        with self.assertRaises(TypeError):
             port.verifier_for(trusted_binary_sha256=self.pin, runner=None)
+        with self.assertRaises(TypeError):
+            port.verifier_for(trusted_binary_sha256=self.pin,
+                              runner=lambda *a, **k: SimpleNamespace(returncode=0))
         with mock.patch.object(port.os, "geteuid", return_value=0):
             with self.assertRaisesRegex(port.Stop, "OPS_PORT_ROOT_FORBIDDEN"):
                 verify(self.allowed, self.signature, fixture.sig.PRINCIPAL,
