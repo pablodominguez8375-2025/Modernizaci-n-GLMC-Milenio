@@ -61,7 +61,8 @@ class GoPortRealSignatureTests(unittest.TestCase):
         return Path(str(path) + ".sig").read_bytes()
 
     def verifier(self, **kwargs):
-        params = {"trusted_binary_sha256": self.pin, "allowed_signers": self.allowed}
+        params = {"trusted_binary_sha256": self.pin, "allowed_signers": self.allowed,
+                  "expected_fingerprint": self.fp}
         params.update(kwargs)
         return port.verifier_for(**params)
 
@@ -131,6 +132,30 @@ class GoPortRealSignatureTests(unittest.TestCase):
                         port.NAMESPACE.encode(), SHEET.OPS_NAMESPACE.encode()))
         self.denied(self.verifier, "GO_PORT_SIGNERS_INVALID",
                     allowed_signers=self.allowed * 2)
+
+    def test_external_fingerprint_is_required_and_cannot_follow_untrusted_signers(self):
+        # A callback that accepts only the caller's allowed_signers is a tautology.
+        # The independent expected pin MUST exist before any subprocess call.
+        with self.assertRaises(TypeError):
+            port.verifier_for(trusted_binary_sha256=self.pin,
+                              allowed_signers=self.allowed)
+        self.denied(self.verifier, "GO_PORT_FINGERPRINT_PIN_INVALID",
+                    expected_fingerprint="SHA256:incorrect")
+        self.denied(self.verifier, "GO_PORT_FINGERPRINT_PIN_MISMATCH",
+                    expected_fingerprint="SHA256:" + "A" * 43)
+        other = self.root / "untrusted"
+        subprocess.run(["/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "",
+                        "-f", str(other)], check=True)
+        public = Path(str(other) + ".pub").read_text().split()[1]
+        foreign = ('qa525-ops namespaces="%s" ssh-ed25519 %s\\n'
+                   % (port.NAMESPACE, public)).encode()
+        # Both allowed_signers and caller's claimed GO pin may agree with
+        # foreign key, but the independently supplied trusted key still wins.
+        self.denied(self.verifier, "GO_PORT_FINGERPRINT_PIN_MISMATCH",
+                    allowed_signers=foreign)
+        verify = self.verifier()
+        self.denied(verify, "GO_PORT_INPUT_INVALID", self.go_record,
+                    self.signature, "SHA256:" + "B" * 43)
 
     def test_public_runner_override_rejected_and_root_denied(self):
         with self.assertRaises(TypeError):
