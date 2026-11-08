@@ -21,8 +21,8 @@ DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 HEX64 = re.compile(r"[a-f0-9]{64}\Z")
 EPOCH = re.compile(r"[a-f0-9]{32}\Z")
 DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{15,128}\Z")
-ARCHIVE = re.compile(r"centenario-qa-g6-CIFRADO-(\d{8}T\d{6}Z)\.tar\.gz\Z")
-RESTORE = re.compile(r"isolated-restore-(\d{8}T\d{6}Z)\.report\.json\Z")
+ARCHIVE = re.compile(r"centenario-qa-g6-v2-CIFRADO-(\d{8}T\d{6}Z)\.tar\.gz\Z")
+RESTORE = re.compile(r"isolated-restore-v2-(\d{8}T\d{6}Z)\.report\.json\Z")
 PINS = frozenset({"review_sha256", "receipt_sha256", "restore_sha256"})
 REVIEW_FIELDS = frozenset({
     "schema", "g6_archive_name", "g6_archive_sha256", "g6_restore_report_name",
