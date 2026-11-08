@@ -10,7 +10,14 @@ El productor `qa525-vnext-g6-v2-producer.py` descarta errores en `shutil.rmtree(
 2. `restore` limpia su working directory creado antes de persistir `isolated-restore-v2-*.report.json` o devolver PASS. La limpieza es condición de éxito; reportes de fallo no deben simular GO.
 3. Tests con sabotaje del borrado (PermissionError y no-op) para BACKUP y RESTORE, que exijan STOP y ausencia de report de éxito, sin modificar servicios.
 
+## Implementación documentada
+
+- `_remove_stage(path)` ahora exige borrado exitoso de la etapa y confirma ausencia por `os.lstat` (FileNotFoundError); si rmtree falla o retorna sin borrar, STOP `G6P_CLEANUP_FAILED`.
+- `restore` primero cierra y elimina su área temporal; **solo después** crea el informe de restauración exitosa.
+- Nuevas pruebas con `unittest.mock` cubren PermissionError y borrado falsamente exitoso en backup y restore, y verifican orden de reporte respecto de limpieza.
+- Rama del PR #957 reconciliada sin conflicto con dev@da99bb25a8242691fbdeb24061614c540dc3a8e7, que incluye PR #955. CI exact HEAD y review de Claude son gates pendientes, no aprobados anticipadamente.
+
 ## Alcance y límites
 
-Solo biblioteca INACTIVA; **no** ejecuta QA real, Restic físico, MinIO, Docker, servidor, GitHub main, claves ni producción. No añade autorización ni GO. Verificador desechable PR #955 independiente; coordinación con Claude vía PR #956. Gates GitHub 7/7 exact-head y revisión externa antes de merge solo dev. Este documento actúa como plan y handoff en el PR.
+Solo biblioteca INACTIVA; **no** ejecuta QA real, Restic físico, MinIO, Docker, servidor, GitHub main, claves ni producción. No añade autorización ni GO. Verificador desechable PR #955 independiente; coordinación con Claude vía Issue #956 y PR #957. Gates GitHub 7/7 exact-head y revisión externa antes de merge solo dev. Este documento actúa como plan y handoff en el PR.
 
