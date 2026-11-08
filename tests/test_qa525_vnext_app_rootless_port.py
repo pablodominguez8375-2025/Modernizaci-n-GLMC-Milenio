@@ -83,6 +83,8 @@ class RootlessAppPortTests(unittest.TestCase):
         self.assertEqual(args[args.index("--repo") + 1], app.REPO)
         self.assertEqual(args[args.index("--signer-workflow") + 1], app.WORKFLOW)
         self.assertEqual(args[args.index("--source-digest") + 1], APP_SHA)
+        self.assertEqual(args[args.index("--cert-oidc-issuer") + 1], app.ISSUER)
+        self.assertEqual(args[args.index("--predicate-type") + 1], "https://slsa.dev/provenance/v1")
         self.assertIn("--deny-self-hosted-runners", args)
         self.assertEqual(args[args.index("--format") + 1], "json")
         self.assertEqual(kw["env"]["GH_PROMPT_DISABLED"], "1")
