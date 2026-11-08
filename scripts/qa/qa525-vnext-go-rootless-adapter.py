@@ -135,8 +135,7 @@ def verifier_for(*, trusted_binary_sha256, allowed_signers):
     def verify_go_signature(go_bytes, go_signature_bytes, go_fingerprint):
         if (type(go_bytes) is not bytes or not 0 < len(go_bytes) <= MAX_DOCUMENT
                 or type(go_signature_bytes) is not bytes or
-                not SIG_BEGIN.startswith(go_signature_bytes[:len(SIG_BEGIN)])
-                or not go_signature_bytes.startswith(SIG_BEGIN)
+                not go_signature_bytes.startswith(SIG_BEGIN)
                 or not go_signature_bytes.endswith(SIG_END)
                 or not 0 < len(go_signature_bytes) <= MAX_SIG
                 or type(go_fingerprint) is not str
