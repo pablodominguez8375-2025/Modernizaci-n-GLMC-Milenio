@@ -164,7 +164,7 @@ class GoPortRealSignatureTests(unittest.TestCase):
         bad.write_bytes(Path("/usr/bin/ssh-keygen").read_bytes())
         bad.chmod(0o755)
         with mock.patch.object(port, "KEYGEN", bad):
-            self.denied(self.verifier, "GO_PORT_BINARY_PARENT_UNTRUSTED")
+            self.denied(self.verifier, "GO_PORT_BINARY_UNTRUSTED")
 
 
 if __name__ == "__main__":
