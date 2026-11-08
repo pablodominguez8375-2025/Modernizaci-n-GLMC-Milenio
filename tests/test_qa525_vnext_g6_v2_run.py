@@ -74,9 +74,10 @@ class SystemctlFake:
     """Answers `systemctl show` like systemd would for the operator-armed restart timer."""
 
     def __init__(self, test, *, active="active", sub="waiting", offset=660,
-                 argv=None, unit="pmgm-g6-minio-restart.service", code=0):
+                 argv=None, unit="pmgm-g6-minio-restart.service", code=0, raw=False):
         self.test, self.active, self.sub, self.offset = test, active, sub, offset
         self.argv, self.unit, self.code, self.calls = argv, unit, code, []
+        self.raw = raw
 
     def __call__(self, argv, *, stdin_path=None, stdout_fd=None, capture_limit=0):
         self.calls.append(list(argv))
@@ -85,9 +86,15 @@ class SystemctlFake:
         if self.code:
             return self.code, b""
         if argv[3] == "pmgm-g6-minio-restart.timer":
-            next_us = int((self.test.tick[0] + self.offset) * 1e6)
-            return 0, ("ActiveState=%s\nSubState=%s\nUnit=%s\nNextElapseUSecMonotonic=%d\n"
-                       % (self.active, self.sub, self.unit, next_us)).encode()
+            total = self.test.tick[0] + self.offset
+            if self.raw:
+                shown = "%d" % int(total * 1e6)
+            else:  # systemd 08-11-2026 glmdch: human timespan
+                days, rest = divmod(total, 86400)
+                hours, rest = divmod(rest, 3600)
+                shown = "%dd %dh %dmin %.6fs" % (days, hours, rest // 60, rest % 60)
+            return 0, ("ActiveState=%s\nSubState=%s\nUnit=%s\nNextElapseUSecMonotonic=%s\n"
+                       % (self.active, self.sub, self.unit, shown)).encode()
         argv_text = self.argv or "/usr/bin/docker start centenario-qa-lab2-minio-1"
         return 0, ("ExecStart={ path=/usr/bin/docker ; argv[]=%s ; ignore_errors=no ; "
                    "start_time=[n/a] ; status=0/0 }\n" % argv_text).encode()
@@ -277,6 +284,20 @@ class G6RunCycleTests(G6RunBase):
         self.assertEqual(fake.calls, [])
 
 
+class G6RunUsecParseTests(unittest.TestCase):
+    def test_real_glmdch_rendering_and_raw_microseconds(self):
+        seconds = run.usec_property_seconds("3w 5d 1h 20min 7.412742s")
+        self.assertAlmostEqual(seconds, 3 * 604800 + 5 * 86400 + 3600 + 1200 + 7.412742, 5)
+        self.assertEqual(run.usec_property_seconds("660000000"), 660.0)
+        self.assertAlmostEqual(run.usec_property_seconds("11min 2.5s"), 662.5, 6)
+        self.assertAlmostEqual(run.usec_property_seconds("1month 1d"), 2629800 + 86400, 3)
+
+    def test_garbage_is_refused(self):
+        for bad in ("", "n/a", "infinity", "5 parsecs", "1h; rm", "-5s", "10min foo"):
+            with self.assertRaises(ValueError, msg=bad):
+                run.usec_property_seconds(bad)
+
+
 class G6RunHostAndWatchdogTests(G6RunBase):
     def prepare(self):
         env = self.env(RunFakeDocker(minio="false"))
@@ -306,6 +327,22 @@ class G6RunHostAndWatchdogTests(G6RunBase):
         code, out = self.attempt(pins, systemctl_runner=sysctl)
         self.assertEqual(code, 0, self.lines)
         self.assertEqual(len(sysctl.calls), 2)
+
+    def test_raw_microsecond_rendering_is_accepted_too(self):
+        pins = self.prepare()
+        code, out = self.attempt(pins, systemctl_runner=SystemctlFake(self, raw=True))
+        self.assertEqual(code, 0, self.lines)
+
+    def test_unparsable_time_is_a_timing_stop(self):
+        pins = self.prepare()
+        sysctl = SystemctlFake(self)
+        real = sysctl.__call__
+
+        def broken(argv, **kw):
+            code, out = real(argv, **kw)
+            return code, out.replace(b"NextElapseUSecMonotonic=", b"NextElapseUSecMonotonic=n/a ")
+        code, out = self.attempt(pins, systemctl_runner=broken)
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6RUN_WATCHDOG_TIMING"))
 
     def test_missing_or_wrong_watchdog_stops_before_asking_to_stop_minio(self):
         pins = self.prepare()

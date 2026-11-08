@@ -214,6 +214,24 @@ def _props(raw):
     return out
 
 
+_SPAN = re.compile(r"(\d+(?:\.\d+)?)(us|ms|min|month|s|h|d|w|y)")
+_SPAN_UNITS = {"us": 1e-6, "ms": 1e-3, "s": 1.0, "min": 60.0, "h": 3600.0, "d": 86400.0,
+               "w": 604800.0, "month": 2629800.0, "y": 31557600.0}
+
+
+def usec_property_seconds(text):
+    """Seconds from a systemd USec property: raw microseconds OR its timespan rendering.
+
+    Seen in glmdch (systemd, 08-11-2026): ``NextElapseUSecMonotonic=3w 5d 1h 20min 7.412742s``.
+    """
+    text = text.strip()
+    if text.isdigit():
+        return int(text) / 1e6
+    if not text or _SPAN.sub("", text).strip(" ") != "":
+        raise ValueError("unparsable")
+    return sum(float(n) * _SPAN_UNITS[u] for n, u in _SPAN.findall(text))
+
+
 def watchdog_deadline(env):
     """Monotonic deadline of an INDEPENDENT, armed restart of MinIO, or Stop.
 
@@ -239,7 +257,7 @@ def watchdog_deadline(env):
     if (found is None or found.group(1).split(" ") != [env.docker, "start", env.minio]):
         raise Stop("G6RUN_WATCHDOG_WRONG")
     try:
-        remaining = int(props["NextElapseUSecMonotonic"]) / 1e6 - env.monotonic()
+        remaining = usec_property_seconds(props["NextElapseUSecMonotonic"]) - env.monotonic()
     except (KeyError, ValueError):
         raise Stop("G6RUN_WATCHDOG_TIMING") from None
     if not WATCHDOG_MIN_SECONDS <= remaining <= WATCHDOG_MAX_SECONDS:
