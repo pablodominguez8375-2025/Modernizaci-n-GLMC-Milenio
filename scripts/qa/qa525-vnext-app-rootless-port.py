@@ -93,7 +93,7 @@ def _check_binary(pin):
 
 def _open_inner(path):
     """Source must already be staged in a user-owned, mode-0700 private dir."""
-    if type(path) is not Path or not path.is_absolute():
+    if not isinstance(path, Path) or not path.is_absolute():
         raise Stop("APP_PORT_SOURCE_INVALID")
     try:
         parent = path.parent.lstat()
@@ -189,7 +189,7 @@ def verifier_for(*, signed_inner_zip: Path, trusted_gh_sha256: str,
     """
     if os.geteuid() == 0:
         raise Stop("APP_PORT_ROOT_FORBIDDEN")
-    if (type(signed_inner_zip) is not Path
+    if (not isinstance(signed_inner_zip, Path)
             or type(expected_source_sha) is not str
             or SHA40.fullmatch(expected_source_sha) is None
             or not _check_digest(expected_inner_sha256)
