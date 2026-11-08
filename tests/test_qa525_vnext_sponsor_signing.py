@@ -83,6 +83,48 @@ class SponsorSigningBuilderTests(unittest.TestCase):
                     self.assertEqual(self.code(sheet.build_go_cut, **{**GO, key: bad}),
                                      "SIGNSHEET_INPUT_INVALID")
 
+    def test_launcher_go_is_canonical_separate_and_binds_existing_root_approval(self):
+        args = dict(GO, nonce="e" * 64, purpose="LAUNCHER_ONLY",
+                    release_asset_sha256=D("8"), old_launcher_sha256="8" * 64,
+                    candidate_operator_sha256="9" * 64,
+                    expires_at="2026-11-09T15:10:00Z")
+        raw = sheet.build_go_cut(**args)
+        doc = json.loads(raw)
+        self.assertEqual(set(doc), set(sheet.LAUNCHER_GO_FIELDS))
+        self.assertEqual({k: doc[k] for k in sheet.LAUNCHER_GO_CONSTANTS},
+                         sheet.LAUNCHER_GO_CONSTANTS)
+        self.assertEqual((doc["release_asset_sha256"],
+                          doc["old_launcher_sha256"],
+                          doc["candidate_operator_sha256"]),
+                         (D("8"), "8" * 64, "9" * 64))
+        self.assertEqual(raw, sheet.build_go_cut(**args))
+        card = sheet.review_card(raw)
+        self.assertEqual(card["kind"], "qa525-go-launcher-v1")
+        self.assertEqual(card["namespace"], sheet.GO_NAMESPACE)
+        self.assertFalse(card["signed_here"] or card["approval_here"] or card["may_apply"])
+        self.assertEqual(
+            self.code(sheet.build_go_cut, **dict(args, purpose="API_WEB_QA_ONLY")),
+            "SIGNSHEET_PURPOSE_INVALID")
+        self.assertEqual(
+            self.code(sheet.build_go_cut,
+                      **dict(args, expires_at="2026-11-09T15:15:01Z")),
+            "SIGNSHEET_WINDOW_INVALID")
+        for k, bad in (("nonce", "N" * 43), ("old_launcher_sha256", D("8")),
+                       ("release_asset_sha256", "8" * 64),
+                       ("candidate_operator_sha256", "H" * 64)):
+            self.assertEqual(self.code(sheet.build_go_cut, **dict(args, **{k: bad})),
+                             "SIGNSHEET_INPUT_INVALID")
+        self.assertEqual(sheet.new_launcher_nonce(bytes(range(32))), bytes(range(32)).hex())
+        self.assertEqual(
+            self.code(sheet.new_launcher_nonce, b"Q" * 32),
+            "SIGNSHEET_NONCE_ENTROPY_INVALID")
+        # Unsigned modified purpose/scope must never produce a valid review card.
+        modified = dict(doc, scope="API_WEB_QA_ONLY")
+        corrupted = (json.dumps(modified, sort_keys=True, separators=(",", ":")) +
+                     "\n").encode()
+        self.assertEqual(self.code(sheet.review_card, corrupted),
+                         "SIGNSHEET_DOCUMENT_INVALID")
+
     def test_nonce_comes_from_caller_entropy_only(self):
         nonce = sheet.new_nonce(bytes(range(32)))
         self.assertRegex(nonce, r"^[A-Za-z0-9_-]{43}$")
@@ -215,6 +257,53 @@ class SponsorSigningRealSshKeygenTests(unittest.TestCase):
                             ops_v3_receipt=json.loads(ops_raw), app_subject=subject,
                             now_utc=late, verify_go_signature=verify_go,
                             nonce_unused=lambda nonce, adm: True)
+
+    def test_launcher_go_uses_real_ed25519_signature_and_cannot_approve_api(self):
+        args = dict(GO, nonce="e" * 64, purpose="LAUNCHER_ONLY",
+                    release_asset_sha256=D("8"), old_launcher_sha256="8" * 64,
+                    candidate_operator_sha256="9" * 64,
+                    expires_at="2026-11-09T15:10:00Z")
+        raw = sheet.build_go_cut(**args)
+        signed = self.sign(raw, sheet.GO_NAMESPACE)
+        allowed = sheet.allowed_signers_line(
+            self.pub, sheet.GO_NAMESPACE, self.fp).encode()
+
+        def verify_go(raw_, signature_, fingerprint):
+            code, output = self.verifier(
+                allowed, signature_, sheet.PRINCIPAL, sheet.GO_NAMESPACE, raw_)
+            return code == 0 and fingerprint in output.decode()
+        cut_pins = {k: args[k] for k in (
+            "ops_source_sha", "app_source_sha", "app_archive_sha256",
+            "plan_sha256", "admission_sha256", "policy_hash")}
+        cut_pins["go_fingerprint"] = self.fp
+        launch_pins = {k: args[k] for k in (
+            "release_asset_sha256", "old_launcher_sha256",
+            "candidate_operator_sha256")}
+        subject = dict(source_sha=GO["app_source_sha"],
+                       subject_sha256=GO["app_archive_sha256"],
+                       signer_workflow=gocut.APP_WORKFLOW, oidc_issuer=gocut.ISSUER)
+        call = dict(go_bytes=raw, go_signature_bytes=signed,
+                    pins=cut_pins, ops_v3_receipt=json.loads(
+                        sheet.build_ops_v3_receipt(**FIELDS)),
+                    app_subject=subject, purpose="LAUNCHER_ONLY",
+                    launcher_pins=launch_pins,
+                    now_utc=dt.datetime(2026, 11, 9, 15, 5, tzinfo=dt.timezone.utc),
+                    verify_go_signature=verify_go,
+                    nonce_unused=lambda nonce, admission: True)
+        result = gocut.check_cut(**call)
+        self.assertEqual(result["purpose"], "LAUNCHER_ONLY")
+        self.assertFalse(result["may_install"] or result["may_apply"])
+        # The same cryptographic signature does NOT authorize API/WEB.
+        with self.assertRaises(gocut.Stop):
+            gocut.check_cut(**dict(call, purpose="API_WEB_QA_ONLY", launcher_pins=None))
+        # Signed text or signature swap is not accepted by OpenSSH.
+        altered = bytearray(raw)
+        altered[24] ^= 1
+        with self.assertRaises(gocut.Stop):
+            gocut.check_cut(**dict(call, go_bytes=bytes(altered)))
+        wrong_namespace = self.sign(raw, sheet.OPS_NAMESPACE)
+        with self.assertRaises(gocut.Stop):
+            gocut.check_cut(**dict(call, go_signature_bytes=wrong_namespace))
 
     def test_signature_for_one_namespace_is_useless_in_the_other(self):
         raw = sheet.build_ops_v3_receipt(**FIELDS)
