@@ -35,7 +35,7 @@ LAUNCHER_FIELDS = GO_FIELDS | frozenset({
 LAUNCHER_PIN_FIELDS = frozenset({
     "release_asset_sha256", "old_launcher_sha256", "candidate_operator_sha256",
 })
-HEX64 = re.compile(r"[0-9a-f]{64}\\Z")
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 MAX_LAUNCHER_AGE_SECONDS = 900
 OPS_FIELDS = frozenset({"schema", "status", "ops_source_sha", "program_sha256",
                         "readiness_sha256", "staging_sha256", "policy_hash",
