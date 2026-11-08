@@ -57,5 +57,17 @@ class QaSiloSupplyTests(unittest.TestCase):
                 supply.registry_evidence()
 
 
+def load_tests(loader, tests, pattern):
+    """Run G6 plaintext-cleanup regression under the existing QA Silo CI gate.
+
+    The reusable QA Silo workflow runs only this filename, not every
+    test_qa525_vnext_g6_v2_producer.py test. Keep strict cleanup negative
+    tests mandatory without editing a workflow claimed by another PR.
+    """
+    from test_qa525_vnext_g6_v2_producer import G6V2ProducerStrictCleanupTests
+    tests.addTests(loader.loadTestsFromTestCase(G6V2ProducerStrictCleanupTests))
+    return tests
+
+
 if __name__ == '__main__':
     unittest.main()
