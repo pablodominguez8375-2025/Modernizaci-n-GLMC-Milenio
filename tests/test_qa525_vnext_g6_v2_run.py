@@ -286,6 +286,22 @@ class G6RunSiloBindingTests(G6RunBase):
         self.assertEqual(set(os.listdir(os.path.join(self.state, "exports-v2"))), before)
         self.assertNotIn("G6RUN_ACTION=STOP_MINIO_NOW", self.lines)
 
+    def test_drift_between_preflight_and_backup_is_refused(self):
+        env, pins, _ = G6RunCycleTests.cycle(self)
+        self.assertIs(run.silo_bound(self.env(RunFakeDocker())), True)  # preflight sees it bound
+        moved = [{"Type": "volume", "Destination": "/data",
+                  "Source": "/var/lib/docker/volumes/other_volume/_data"}]
+        self.clock = NOW + dt.timedelta(minutes=5)
+        code, out = self.go("backup", self.env(RunFakeDocker(minio=["true", "false"],
+                                                             mounts=moved)), **pins)
+        self.assertEqual((code, out["G6RUN_STOP"]), (1, "G6RUN_SILO_UNBOUND"))
+        self.assertNotIn("G6RUN_ACTION=STOP_MINIO_NOW", self.lines)
+
+    def test_the_fixed_silo_path_is_the_one_observed_on_glmdch(self):
+        self.assertEqual(run.SILO_SOURCE, "/var/lib/docker/volumes/"
+                         "centenario-qa-lab2_pmgm_srv01_minio_data/_data")
+        self.assertEqual(run.MINIO_DATA_DESTINATION, "/data")
+
 
 class G6RunWindowTests(G6RunBase):
     def backup(self, minio, **over):
