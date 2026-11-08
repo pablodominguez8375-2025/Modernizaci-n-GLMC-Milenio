@@ -791,6 +791,7 @@ class G6V2ProducerRealResticTests(unittest.TestCase):
             self.cli.snapshot_paths(repo, keyfile, "deadbeef")
         for blob in Path(repo, "data").rglob("*"):
             if blob.is_file():
+                os.chmod(blob, 0o600)  # restic packs are read-only; CI is not root
                 blob.write_bytes(b"corrupt"); break
         with self.assertRaises(prod.Stop):
             self.cli.check(repo, keyfile)
