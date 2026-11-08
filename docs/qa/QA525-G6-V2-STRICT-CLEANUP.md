@@ -15,7 +15,8 @@ El productor `qa525-vnext-g6-v2-producer.py` descarta errores en `shutil.rmtree(
 - `_remove_stage(path)` ahora exige borrado exitoso de la etapa y confirma ausencia por `os.lstat` (FileNotFoundError); si rmtree falla o retorna sin borrar, STOP `G6P_CLEANUP_FAILED`.
 - `restore` primero cierra y elimina su área temporal; **solo después** crea el informe de restauración exitosa.
 - Nuevas pruebas con `unittest.mock` cubren PermissionError y borrado falsamente exitoso en backup y restore, y verifican orden de reporte respecto de limpieza.
-- Rama del PR #957 reconciliada sin conflicto con dev@da99bb25a8242691fbdeb24061614c540dc3a8e7, que incluye PR #955. CI exact HEAD y review de Claude son gates pendientes, no aprobados anticipadamente.
+- **Gate CI real**: el workflow QA Silo ejecuta solo `python3 -m unittest discover -s tests -p test_qa_silo_supply.py -v`; `tests/test_qa_silo_supply.py::load_tests` ahora importa las cinco regresiones `G6V2ProducerStrictCleanupTests` y las obliga a ejecutarse en ese control. No se altera ningún workflow compartido caliente.
+- Rama del PR #957 reconciliada sin conflicto con dev@da99bb25a8242691fbdeb24061614c540dc3a8e7, que incluye PR #955. CI exact HEAD y review de Claude son gates pendientes, no aprobados anticipadamente. El PR modifica **4 archivos**: productor G6, sus tests, el puente QA Silo de pruebas y este documento.
 
 ## Alcance y límites
 
