@@ -155,7 +155,8 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
             raise Stop("GO_CUT_LAUNCHER_BINDING_MISMATCH")
     issued = _utc(acta["issued_at"])
     expires = _utc(acta["expires_at"])
-    if not (issued <= now_utc < expires and
+    if not (issued <= now_utc and
+            (now_utc < expires if launcher else now_utc <= expires) and
             0 < (expires - issued).total_seconds() <=
             (MAX_LAUNCHER_AGE_SECONDS if launcher else MAX_GO_AGE_SECONDS)):
         raise Stop("GO_CUT_EXPIRED_OR_FUTURE")
