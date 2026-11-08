@@ -2,7 +2,7 @@
 All world/process effects are synthetic. NEVER invoke Docker, systemd or host.
 
 Depends on reviewed PR #923 (plan-bound bridge) and #921 (upper policy).
-Until both land on dev this test is intentionally NOT green; do not add skips.
+Both modules are integrated on dev; any missing dependency remains a hard failure.
 """
 import ast
 import importlib.util
@@ -170,7 +170,7 @@ class ThreeLayerCompositionTests(unittest.TestCase):
             require_intent=lambda stage: self.require_intent(plane, stage),
             require_scope_recorded=lambda unit: self.require_scope(plane, unit),
             verify_pins=lambda argv: self.pins_ok is True,
-            verify_approval=lambda stage: self.approval_ok is True,
+            verify_approval=lambda stage: self.approval_ok,
         )
         for side in ("target", "baseline"):
             for service in ("api", "web"):
@@ -261,7 +261,7 @@ class ThreeLayerCompositionTests(unittest.TestCase):
 
     def test_truthy_approval_is_not_a_boolean_authorization(self):
         self.approval_ok = 1
-        # The injected callback enforces identity (is True), not mere truthiness.
+        # Pass the raw truthy object so the REAL CommandGuard must reject it.
         with self.assertRaises(Exception):
             self.run_flight()
         self.assertEqual(self.effects, [])
