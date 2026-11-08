@@ -23,13 +23,46 @@ privilegiado**, y que gaste el GO una sola vez bajo los 5 locks.
 Regla de oro: **ningún `exec_module`/import como root de código que no venga del FD verificado**. Lo que
 queda en disco como "hermano" no es ancla.
 
+## 2b. PRE-4 — primer ejecutable privilegiado (P1 de ChatGPT sobre #973, ef1d5de1)
+
+Los pasos 4–6 ejecutan bytes root (crear/aceptar el socket, `SCM_CREDENTIALS`, pines, GO, 5 locks, journal)
+ANTES de que el paso 6 cargue nada desde el FD. «No usar `exec_module` del disco» es necesario pero NO
+suficiente: el receptor root, el intérprete y sus bibliotecas son TCB y deben autenticarse antes.
+
+**PRE-4 (anterior a sudo y a todo byte root):**
+1. Existe un *bootstrap root* mínimo, instalado una sola vez por el PO, propiedad de root, en un directorio
+   root-owned no escribible por `soporte` (ni por grupo/otros) y sin symlinks en la ruta. Contiene el receptor,
+   el verificador de GO y el consumidor del nonce. Es la ÚNICA fuente de código root; el árbol de trabajo, el
+   ZIP/APP y los hermanos no se importan nunca como root en las fases 4, 5 ni 6.
+2. Su autenticidad NO se prueba con un auto-hash ni con `--trusted-bootstrap-sha256` tomado del mismo paquete.
+   La referencia es un pin (o manifiesto firmado con clave OPS del PO) entregado FUERA de GitHub/Drive: huella
+   leída por el PO desde Bitwarden y comparada a mano contra la salida de `sha256sum` de cada archivo del
+   bootstrap, del intérprete exacto (`/usr/bin/python3.14`, resuelto a ruta real) y de cada helper ejecutable.
+   Sin `PATH`, sin `PYTHONPATH`, sin `site`/`usercustomize` de usuario (`python3 -I -S`), entorno limpio.
+3. El proceso emisor (`soporte`) se liga al receptor con uid + pid por mensaje (`SCM_CREDENTIALS`); además el
+   receptor lo lanza o lo conoce el propio bootstrap (no se confía solo en un PID declarado). El FD se entrega
+   por el socket del bootstrap, se reabre `O_RDONLY` por `/proc/self/fd`, se recalcula SHA independiente y se
+   compara contra el pin del paso 3 antes de usarlo; no se heredan FDs ajenos (`close_range`/`CLOEXEC`).
+4. Evidencia: el bootstrap registra, ANTES de consumir el nonce, un registro `pre-root-trust` con los SHA del
+   bootstrap, del intérprete y de los helpers verificados. Sin ese registro no hay nonce ni GO.
+
+**Negativos adicionales exigidos (STOP antes de ejecutar un solo byte Python/root, aun con ZIP/APP/OPS/GO válidos):**
+- cambiar solo el código del receptor root entre verificación y ejecución;
+- cambiar el intérprete, un helper o una biblioteca del bootstrap;
+- un bootstrap en directorio escribible por `soporte` o con symlink en la ruta;
+- pin tomado del mismo paquete;
+- el mismo criterio sobre `qa525-vnext-g6-v2-run.py` y su `exec_module` (que hoy NO lo cumple: #958 no es
+  apto para sudo mientras no corra desde este bootstrap).
+
+Estado: contrato inactivo; no se instala ni ejecuta nada root. Mientras PRE-4 no exista, no hay GO.
+
 ## 3. Anclas de confianza que NO se pueden fabricar desde el repo (condición del PO/OPS)
 - Binarios del SO (`python3`, `sudo`, `sha256sum`, `gh`) y su integridad: se asumen del sistema operativo
   del host; el contrato debe NOMBRAR cuáles y fijar rutas absolutas (`/usr/bin/...`), sin `PATH` heredado.
 - Huella OPS fijada por el PO (Bitwarden) y entregada fuera de banda en cada ejecución.
 - Raíz de confianza Sigstore (TUF) accesible al usuario sin privilegios; si el host no la alcanza, el
   paso 1 debe correr en otra máquina del PO y llevar el bundle, nunca bajar la verificación.
-- `gh` presente en glmdch o alternativa (pendiente: el PO ejecuta un comando de solo lectura para saberlo).
+- Observado en glmdch (solo lectura, 08-11): `/usr/bin/gh` 2.102.0, Python 3.14.4 con memfd/sellos/SCM_*, `sudo-rs` 0.2.13; `soporte` alcanza GitHub y las raíces TUF de Sigstore/GitHub (HTTP 200). Son hechos de entorno, no anclas: su integridad se fija en PRE-4.
 
 ## 4. Pruebas negativas exigidas antes de cualquier consumidor real (por etapa)
 Par ajeno / endpoint heredado, pin falso, ZIP sustituido, digest o nonce de la trama usado como autoridad,
