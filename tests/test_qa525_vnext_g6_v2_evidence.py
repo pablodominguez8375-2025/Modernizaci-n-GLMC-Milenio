@@ -14,8 +14,8 @@ spec.loader.exec_module(unit)
 
 NOW = dt.datetime(2026, 11, 7, 22, 30, tzinfo=dt.timezone.utc)
 END = dt.datetime(2026, 11, 7, 23, 0, tzinfo=dt.timezone.utc)
-NAME = "centenario-qa-g6-CIFRADO-20261107T220000Z.tar.gz"
-REPORT = "isolated-restore-20261107T220000Z.report.json"
+NAME = "centenario-qa-g6-v2-CIFRADO-20261107T220000Z.tar.gz"
+REPORT = "isolated-restore-v2-20261107T220000Z.report.json"
 REPO = "a" * 64
 EPOCH = "b" * 32
 ARCHIVE_SHA = "c" * 64
@@ -148,15 +148,27 @@ class PureEvidence(unittest.TestCase):
     def test_restore_filename_must_equal_archive_capture(self):
         self.denied("G6_V2_CUT_MISMATCH",
                     review=dict(self.review, g6_restore_report_name=
-                                "isolated-restore-20261106T220000Z.report.json"))
+                                "isolated-restore-v2-20261106T220000Z.report.json"))
         self.denied("G6_V2_RESTORE_NAME_INVALID",
                     review=dict(self.review, g6_restore_report_name="unknown"))
         self.denied("G6_V2_ARCHIVE_NAME_INVALID",
                     review=dict(self.review, g6_archive_name="unknown"))
 
+    def test_legacy_v1_filenames_are_rejected_even_with_v2_metadata(self):
+        self.denied("G6_V2_ARCHIVE_NAME_INVALID",
+                    review=dict(self.review, g6_archive_name=
+                                "centenario-qa-g6-CIFRADO-20261107T220000Z.tar.gz"))
+        self.denied("G6_V2_RESTORE_NAME_INVALID",
+                    review=dict(self.review, g6_restore_report_name=
+                                "isolated-restore-20261107T220000Z.report.json"))
+
     def test_stale_future_and_window_fail_closed(self):
         self.denied("G6_V2_WINDOW_EXPIRED_OR_UNCOVERED",
                     now=NOW + dt.timedelta(days=3))
+        checkpoint_end = dt.datetime(2026, 11, 9, 22, 0, tzinfo=dt.timezone.utc)
+        self.denied("G6_V2_WINDOW_EXPIRED_OR_UNCOVERED",
+                    now=checkpoint_end,
+                    admission_expires_at=checkpoint_end + dt.timedelta(seconds=1))
         self.denied("G6_V2_WINDOW_EXPIRED_OR_UNCOVERED",
                     now=NOW - dt.timedelta(days=1))
         self.denied("G6_V2_WINDOW_EXPIRED_OR_UNCOVERED",
