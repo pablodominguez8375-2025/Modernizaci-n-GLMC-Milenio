@@ -39,6 +39,11 @@ class RootlessAppPortTests(unittest.TestCase):
         self.path.write_bytes(INNER)
         self.path.chmod(0o600)
         self.calls = []
+        # Only the test harness replaces the subprocess boundary. Production
+        # verifier_for exposes no runner injection or Sigstore bypass.
+        self.runner_patcher = mock.patch.object(app.subprocess, "run", side_effect=self.fake_runner)
+        self.runner_patcher.start()
+        self.addCleanup(self.runner_patcher.stop)
         self.good_challenge = {
             "repository": app.REPO,
             "signer_workflow": app.WORKFLOW,
@@ -56,7 +61,7 @@ class RootlessAppPortTests(unittest.TestCase):
         request = dict(
             signed_inner_zip=self.path, trusted_gh_sha256=FAKE_BINARY_PIN,
             expected_source_sha=APP_SHA, expected_inner_sha256=digest(INNER),
-            expected_bundle_sha256=digest(BUNDLE), runner=self.fake_runner,
+            expected_bundle_sha256=digest(BUNDLE),
         )
         request.update(overrides)
         return app.verifier_for(**request)
@@ -99,7 +104,6 @@ class RootlessAppPortTests(unittest.TestCase):
             dict(self.good_challenge, source_sha="b" * 40),
             dict(self.good_challenge, archive_sha256="sha256:" + "0" * 64),
             dict(self.good_challenge, bundle_sha256="sha256:" + "1" * 64),
-            dict(self.good_challenge, extra="unsupported"),
         ]
         for case in altered:
             with self.subTest(challenge=case):
@@ -107,6 +111,8 @@ class RootlessAppPortTests(unittest.TestCase):
         self.denied("APP_PORT_CHALLENGE_MISMATCH", ver, BUNDLE + b"x", self.good_challenge)
         self.denied("APP_PORT_INPUT_INVALID", ver, "not-bytes", self.good_challenge)
         self.denied("APP_PORT_INPUT_INVALID", ver, BUNDLE, {"repository":app.REPO})
+        self.denied("APP_PORT_INPUT_INVALID", ver, BUNDLE,
+                    dict(self.good_challenge, extra="unsupported"))
         self.assertFalse(self.calls)
 
     def test_private_source_file_ownership_and_symlinks_enforced(self):
@@ -134,21 +140,23 @@ class RootlessAppPortTests(unittest.TestCase):
 
     def test_gh_failure_and_timeout_do_not_return_success(self):
         bad = lambda argv, **kwargs: SimpleNamespace(returncode=1)
-        ver = self.verifier(runner=bad)
-        with mock.patch.object(app, "_check_binary", return_value=None):
+        ver = self.verifier()
+        with mock.patch.object(app, "_check_binary", return_value=None), \
+                mock.patch.object(app.subprocess, "run", side_effect=bad):
             self.denied("APP_PORT_SIGSTORE_DENIED", ver, BUNDLE, self.good_challenge)
         def timeout(argv, **kwargs):
             raise subprocess.TimeoutExpired(argv, 120)
-        ver = self.verifier(runner=timeout)
-        with mock.patch.object(app, "_check_binary", return_value=None):
+        with mock.patch.object(app, "_check_binary", return_value=None), \
+                mock.patch.object(app.subprocess, "run", side_effect=timeout):
             self.denied("APP_PORT_SIGSTORE_DENIED", ver, BUNDLE, self.good_challenge)
 
     def test_runner_can_not_swap_sealed_files_after_fake_verification(self):
         def tamper(argv, **kwargs):
             Path(argv[3]).write_bytes(b"evil")
             return SimpleNamespace(returncode=0)
-        ver = self.verifier(runner=tamper)
-        with mock.patch.object(app, "_check_binary", return_value=None):
+        ver = self.verifier()
+        with mock.patch.object(app, "_check_binary", return_value=None), \
+                mock.patch.object(app.subprocess, "run", side_effect=tamper):
             self.denied("APP_PORT_SIGSTORE_DENIED", ver, BUNDLE, self.good_challenge)
 
     def test_runtime_binary_pin_mismatch_is_not_bypassed(self):
@@ -164,10 +172,12 @@ class RootlessAppPortTests(unittest.TestCase):
             {"expected_bundle_sha256": True},
             {"trusted_gh_sha256": "abc"},
             {"signed_inner_zip": str(self.path)},
-            {"runner": None},
         ):
             with self.subTest(change=change):
                 self.denied("APP_PORT_PINS_INVALID", self.verifier, **change)
+        # A caller-supplied fake runner must not be accepted by the public API.
+        with self.assertRaises(TypeError):
+            self.verifier(runner=self.fake_runner)
         with mock.patch.object(app.os, "geteuid", return_value=0):
             self.denied("APP_PORT_ROOT_FORBIDDEN", self.verifier)
 
