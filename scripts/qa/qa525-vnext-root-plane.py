@@ -113,7 +113,7 @@ def _take_lease(directory, uid, anchor, locks, view):
     try:
         dfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         dst = os.fstat(dfd)
-        if os.lstat(directory).st_ino != dst.st_ino or dst.st_uid != uid or dst.st_mode & 0o077:
+        if _ident(os.lstat(directory)) != _ident(dst) or dst.st_uid != uid or dst.st_mode & 0o077:
             raise Stop("PLANE_LEASE_DIR_UNSAFE")
         try:
             fd = os.open(LEASE_NAME, os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)  # no O_CREAT

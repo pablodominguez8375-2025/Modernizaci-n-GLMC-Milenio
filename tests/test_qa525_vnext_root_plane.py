@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from types import SimpleNamespace as NS
 
 BASE = Path(__file__).resolve().parents[1]
@@ -272,6 +273,25 @@ class PlaneTests(unittest.TestCase):
         self.stop("PLANE_LEASE_DIR_UNSAFE", directory=os.path.join(self.dir, "mid", "j"))
         self.stop("PLANE_LEASE_DIR_UNSAFE", uid=UID + 1)
         self.assertEqual(len(self.port.fds), 0)
+
+    def test_lease_directory_identity_includes_the_device_not_only_the_inode(self):
+        real = os.lstat
+
+        def swapped(path, *a, **kw):
+            st = real(path, *a, **kw)
+            if path == self.lease_dir:  # same inode number, different device (mount/namespace interference)
+                return NS(st_dev=st.st_dev + 1, st_ino=st.st_ino, st_uid=st.st_uid, st_mode=st.st_mode)
+            return st
+        calls = {"n": 0}
+
+        def lstat(path, *a, **kw):
+            if path == self.lease_dir:
+                calls["n"] += 1
+                if calls["n"] > 1:  # first call is the chain check; the second is the dir_fd comparison
+                    return swapped(path, *a, **kw)
+            return real(path, *a, **kw)
+        with unittest.mock.patch.object(plane_mod.os, "lstat", lstat):
+            self.stop("PLANE_LEASE_DIR_UNSAFE")
 
     def test_lease_is_never_created_and_a_planted_or_loose_file_is_refused(self):
         os.unlink(self.lease_path())
