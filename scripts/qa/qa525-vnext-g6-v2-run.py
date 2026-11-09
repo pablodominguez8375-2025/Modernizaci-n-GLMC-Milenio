@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""QA525 G6 v2 ROOT ENTRYPOINT (INACTIVE in dev: CI never runs it, never a GO).
+"""QA525 G6 v2 ROOT ENTRYPOINT LOGIC (INACTIVE in dev: CI never runs it, never a GO).
 
 Wires the three G6 v2 libraries -- producer (INIT/BACKUP/RESTORE/REVIEW), physical captor and
-isolated restore verifier -- into ONE operator command so the Sponsor can run a backup/restore
-cycle from a phone terminal, one fixed subcommand at a time:
+isolated restore verifier -- into ONE operator command set:
 
     preflight | init | backup | restore | review
+
+DIRECT EXECUTION IS FORBIDDEN. Running this file with python (and above all with sudo) stops with
+G6RUN_UNTRUSTED_ENTRY before importing or executing anything: there is no trust anchor for these
+bytes yet. The only entry is main(argv, verified, load_module) / env_from_verified(), an INTERNAL
+API fed with bytes already authenticated by the PRE-4 bootstrap (pin delivered by the Sponsor outside
+Git/Drive). That API does NOT by itself authorize running anything on the host or as root, and no
+physical execution command is given here until the pre-sudo trusted entrypoint exists.
 
 Rules enforced here (the libraries enforce the rest):
 * Subcommands and option names are a closed set; every value is matched against a strict
@@ -20,9 +26,8 @@ Rules enforced here (the libraries enforce the rest):
 * Output is ``KEY=VALUE`` lines of public identifiers/hashes. Failures print one fixed code
   ``G6RUN_STOP=<CODE>``; never a traceback, path or command output.
 
-NOT proven here: the authenticity of this file and its siblings (the Sponsor must hash them
-against the published list before running), the docker daemon, the host, or that the data are
-production's. Needs root (docker socket, root-only state directory).
+NOT proven here: the authenticity of the bootstrap, the docker daemon, the host, or that the data are
+production's. Static reading and unit tests do not accredit the physical behaviour.
 """
 from __future__ import annotations
 

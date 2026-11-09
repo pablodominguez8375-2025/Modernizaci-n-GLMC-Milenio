@@ -37,7 +37,10 @@ El programa **nunca** detiene, arranca ni borra un contenedor (hay una prueba es
   arma **antes de parar** un temporizador independiente del terminal (paso 4) que arranca MinIO pase lo que pase.
 - Sesgo conocido: los volcados de Postgres y la copia del Silo no son atómicos entre sí (BD antes que Silo).
 
-## Ciclo propuesto (borrador para revisión de ChatGPT; cada comando lo pega el Sponsor uno a uno por Termius)
+## Ciclo propuesto (BORRADOR HISTÓRICO, NO EJECUTABLE HOY)
+
+> **Entrada directa PROHIBIDA.** Ni `preflight` ni ningún subcomando se ejecuta con `python3`/`sudo` sobre estos archivos: el CLI directo termina con `G6RUN_UNTRUSTED_ENTRY`. La única entrada será el entrypoint PRE-SUDO TCB externo (bootstrap root-owned con pin del Sponsor fuera de Git/Drive); `main(argv, verified, load_module)` es una API interna que NO autoriza host/root por sí sola. Los pasos de abajo describen el ciclo futuro y no son una hoja de comandos: **no** se debe pegar ninguno todavía. La comprobación manual `sha256sum` del paso 1 NO sustituye la cadena autenticada.
+
 1. **Una vez:** copiar los 4 archivos (`run`, `producer`, `captor`, `verifier`) a un directorio root con el método de la
    Fase 1 y comprobar `sha256sum` contra la lista publicada; `sudo install -d -m 0700 -o root -g root /var/lib/pmgm-qa525-g6-v2`.
 2. `preflight` con el hash de restic y el digest de la imagen. Sale con código 1 y `PREFLIGHT_READY=no` si algo falla. **STOP** si: `RESTIC_MATCHES_PIN=no`, `SILO_BOUND_TO_MOUNT=no`, `SILO_SOURCE_OK=no`, `PYTHON_FCNTL_SEALS=no`,
@@ -60,9 +63,8 @@ El programa **nunca** detiene, arranca ni borra un contenedor (hay una prueba es
   restore aislado **no** prueba roles, ACL ni que MinIO lea el Silo restaurado.
 - Se asume Python ≥ 3.9 en el host y raíz de datos de Docker por defecto; `preflight` informa lo que difiera.
 - La clave la lee `getpass` del terminal: debe ser ASCII imprimible, sin espacios, ≥ 32 caracteres.
-- **Primer byte root (P1-1) sigue ABIERTO:** el ejecutor carga hermanos con `exec_module` bajo UID 0 sin ancla por FD ni bootstrap
-  autenticado. Se resuelve con el contrato de #936/#822 (bootstrap autenticado desde un pin independiente antes de privilegiar). Hasta entonces
-  **NO-GO para `sudo` de este entrypoint**, también `preflight`.
+- **Primer byte root (P1-1):** corregido en el CÓDIGO de este módulo (ya no carga hermanos del árbol; ver «Entrada» abajo), pero el primer byte
+  privilegiado depende del bootstrap PRE-4 instalado y anclado por el Sponsor, que aún no existe en el host. **NO-GO para `sudo` de este entrypoint**, también `preflight`.
 - **Capacidades de Python en glmdch (evidencia del Sponsor 08-11, solo lectura, sin sudo):** el `python3` del usuario `soporte` es 3.14.4 y trae
   `os.memfd_create` y las seis constantes de sellado (`F_ADD_SEALS`, `F_GET_SEALS`, `F_SEAL_WRITE`, `F_SEAL_SEAL`, `F_SEAL_SHRINK`,
   `F_SEAL_GROW`). Eso prueba **símbolos presentes** (`hasattr`), no que se pueda crear, sellar y bloquear `pwrite` en un memfd real, ni que root use
