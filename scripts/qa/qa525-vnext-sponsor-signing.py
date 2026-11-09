@@ -62,7 +62,7 @@ G6_GO_CONSTANTS = {
     "scope": "QA525_G6_V2_ONLY_NO_LAUNCHER_NO_API_WEB",
     "operator": "soporte@glmdch",
 }
-G6_COMMANDS = frozenset({"init", "backup", "restore", "review"})
+G6_COMMANDS = frozenset({"preflight", "init", "backup", "restore", "review"})
 MAX_G6_AGE_SECONDS = 900
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 MAX_LAUNCHER_AGE_SECONDS = 900
@@ -125,7 +125,7 @@ def build_go_cut(*, nonce, ops_source_sha, app_source_sha, app_archive_sha256,
                  g6_command=None, g6_operation_sha256=None):
     """Canonical GO document bytes for one of three disjoint purposes.
 
-    G6 authorizes precisely ONE of init/backup/restore/review per document.
+    G6 authorizes precisely ONE of preflight/init/backup/restore/review per document.
     This builder never signs, verifies, or approves any physical execution.
     """
     launcher = purpose == "LAUNCHER_ONLY"
