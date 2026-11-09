@@ -330,6 +330,7 @@ class LauncherComposeTests(unittest.TestCase):
         for bad in (dict(cfg, extra=1), {k: v for k, v in cfg.items() if k != "peer_uid"},
                     dict(cfg, peer_uid=0), dict(cfg, timeout=0), dict(cfg, timeout=61),
                     dict(cfg, children=dict(CHILDREN, **{"LAUNCHER_ONLY": "../evil.py"})),
+                    dict(cfg, children=dict(CHILDREN, **{"LAUNCHER_ONLY": "qa525-vnext-other-child.py"})),
                     dict(cfg, children=dict(CHILDREN, extra="qa525-vnext-y.py")),
                     dict(cfg, children={"LAUNCHER_ONLY": "qa525-vnext-x.py"}),
                     dict(cfg, g6_pins={"g6_command": "wipe", "g6_operation_sha256": D("5")}),
@@ -337,6 +338,27 @@ class LauncherComposeTests(unittest.TestCase):
                     dict(cfg, g6_pins={"g6_command": "backup", "g6_operation_sha256": "5" * 64}),
                     dict(cfg, inbox="relative"), dict(cfg, go_fingerprint="SHA256:short")):
             self.stop("LAUNCH_CONFIG_INVALID", load=self.loader(cfg=bad))
+
+    def test_children_mapping_is_exact_so_no_swap_duplicate_or_cross_scope_child_is_accepted(self):
+        swaps = []
+        for a, b in (("G6:backup", "G6:restore"), ("LAUNCHER_ONLY", "G6:backup"), ("G6:init", "G6:review")):
+            swapped = dict(CHILDREN)
+            swapped[a], swapped[b] = CHILDREN[b], CHILDREN[a]
+            swaps.append(swapped)
+        same = dict(CHILDREN, **{"G6:backup": CHILDREN["G6:restore"]})  # two keys -> the same child
+        to_launcher = dict(CHILDREN, **{"G6:backup": CHILDREN["LAUNCHER_ONLY"]})
+        from_g6 = dict(CHILDREN, **{"LAUNCHER_ONLY": CHILDREN["G6:restore"]})
+        for go, cfg_over in ((self.go_bytes(), {}), (self.g6_go(), {"g6_pins": {
+                "g6_command": "backup", "g6_operation_sha256": G6_OP}})):
+            self.write_inbox(go=go)
+            for children in swaps + [same, to_launcher, from_g6]:
+                self.stop("LAUNCH_CONFIG_INVALID", load=self.loader(cfg=self.config(children=children, **cfg_over)))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_children_mapping_is_the_code_constant(self):
+        self.assertEqual(launcher.CHILD_MODULES["G6:backup"], "qa525-vnext-root-g6-backup.py")
+        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 6)
+        self.assertEqual(self.config()["children"], launcher.CHILD_MODULES)
 
     def test_inbox_files_must_be_plain_owned_files(self):
         path = os.path.join(self.dir, "inbox", "go.json")

@@ -48,7 +48,10 @@ PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256",
 # schema -> scope. One signed GO authorizes exactly one scope; a G6 GO authorizes exactly ONE G6 command.
 SCOPES = {"qa525-go-launcher-v1": "LAUNCHER_ONLY", "qa525-go-g6-v1": "G6_V2_ONLY"}
 G6_COMMANDS = ("preflight", "init", "backup", "restore", "review")
-CHILD_KEYS = frozenset({"LAUNCHER_ONLY"} | {"G6:" + c for c in G6_COMMANDS})
+# The ONLY scope/command -> child mapping. It lives in code, not in the configuration: an authentic but
+# mis-bound config (swap, duplicate, alternative child) is refused before authentication, nonce or child.
+CHILD_MODULES = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+                     **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in G6_COMMANDS})
 
 
 class Stop(Exception):
@@ -73,8 +76,7 @@ def _config(module):
             or type(cfg["peer_uid"]) is not int or isinstance(cfg["peer_uid"], bool) or cfg["peer_uid"] <= 0
             or type(cfg["timeout"]) not in (int, float) or isinstance(cfg["timeout"], bool)
             or not 0 < cfg["timeout"] <= 60
-            or set(cfg["children"]) != CHILD_KEYS
-            or any(type(v) is not str or MODULE.fullmatch(v) is None for v in cfg["children"].values())):
+            or cfg["children"] != CHILD_MODULES):  # exact, closed value mapping (dict equality: keys AND values)
         raise Stop("LAUNCH_CONFIG_INVALID")
     g6 = cfg["g6_pins"]
     if g6 is not None and (type(g6) is not dict or set(g6) != {"g6_command", "g6_operation_sha256"}
