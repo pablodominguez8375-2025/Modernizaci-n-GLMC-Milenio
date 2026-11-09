@@ -10,8 +10,8 @@ Order (each step a fixed STOP):
   2. pinned `ssh-keygen` from the bootstrap's verified `helpers`, converted ONCE to `sha256:<hex>`;
   3. inbox files (GO, signature, OPS v3 receipt, APP subject) read without following links; the receipts'
      digests must equal the digests pinned in the configuration;
-  4. closed dispatch on the signed GO's `schema`: only `qa525-go-launcher-v1` (LAUNCHER_ONLY) is executable
-     here; the signed G6 GO is a different scope with no runtime yet (STOP), anything else STOP;
+  4. closed dispatch on the signed GO's `schema`: `qa525-go-launcher-v1` (LAUNCHER_ONLY) or `qa525-go-g6-v1`
+     (G6_V2_ONLY, honoured only for the ONE command the release config pins); anything else STOP;
   5. the child module for that scope is resolved BEFORE any nonce can be spent;
   6. the one composed flight: 5 legacy locks + dedicated lease (#982) -> GO verified (#981 + `check_cut`)
      -> sealed FD received (#966) -> nonce spent (#967) -> fixed child -> plane re-checked (#975/#976).
@@ -41,12 +41,17 @@ MAX_INPUT = 65536
 INBOX_FILES = ("go.json", "go.json.sig", "ops-v3.json", "app-subject.json")
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256", "app_subject_sha256",
-    "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children"})
+    "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
+    "g6_pins"})
 PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256",
                        "admission_sha256", "policy_hash"})
-# schema -> scope. The signed G6 GO is deliberately absent: its runtime does not exist yet.
-EXECUTABLE = {"qa525-go-launcher-v1": "LAUNCHER_ONLY"}
-NOT_YET = frozenset({"qa525-go-g6-v1"})
+# schema -> scope. One signed GO authorizes exactly one scope; a G6 GO authorizes exactly ONE G6 command.
+SCOPES = {"qa525-go-launcher-v1": "LAUNCHER_ONLY", "qa525-go-g6-v1": "G6_V2_ONLY"}
+G6_COMMANDS = ("preflight", "init", "backup", "restore", "review")
+# The ONLY scope/command -> child mapping. It lives in code, not in the configuration: an authentic but
+# mis-bound config (swap, duplicate, alternative child) is refused before authentication, nonce or child.
+CHILD_MODULES = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+                     **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in G6_COMMANDS})
 
 
 class Stop(Exception):
@@ -71,8 +76,13 @@ def _config(module):
             or type(cfg["peer_uid"]) is not int or isinstance(cfg["peer_uid"], bool) or cfg["peer_uid"] <= 0
             or type(cfg["timeout"]) not in (int, float) or isinstance(cfg["timeout"], bool)
             or not 0 < cfg["timeout"] <= 60
-            or set(cfg["children"]) != set(EXECUTABLE.values())
-            or any(type(v) is not str or MODULE.fullmatch(v) is None for v in cfg["children"].values())):
+            or cfg["children"] != CHILD_MODULES):  # exact, closed value mapping (dict equality: keys AND values)
+        raise Stop("LAUNCH_CONFIG_INVALID")
+    g6 = cfg["g6_pins"]
+    if g6 is not None and (type(g6) is not dict or set(g6) != {"g6_command", "g6_operation_sha256"}
+                           or g6["g6_command"] not in G6_COMMANDS
+                           or type(g6["g6_operation_sha256"]) is not str
+                           or SHA256.fullmatch(g6["g6_operation_sha256"]) is None):
         raise Stop("LAUNCH_CONFIG_INVALID")
     return cfg
 
@@ -235,17 +245,21 @@ def _compose(load, record, env):
         raise Stop("LAUNCH_RECEIPT_PIN_MISMATCH")
     go_doc = _json(raw["go.json"], "LAUNCH_GO_INVALID")
     schema = go_doc.get("schema")
-    if type(schema) is str and schema in NOT_YET:
-        raise Stop("LAUNCH_G6_NOT_IMPLEMENTED")
-    if type(schema) is not str or schema not in EXECUTABLE:
+    if type(schema) is not str or schema not in SCOPES:
         raise Stop("LAUNCH_SCOPE_UNKNOWN")
-    purpose = EXECUTABLE[schema]
+    purpose = SCOPES[schema]
+    g6_pins = None
+    if purpose == "G6_V2_ONLY":
+        if cfg["g6_pins"] is None:
+            raise Stop("LAUNCH_G6_NOT_CONFIGURED")  # this release pins no G6 command: a G6 GO is not honoured
+        g6_pins = dict(cfg["g6_pins"])
+    child_key = "G6:" + g6_pins["g6_command"] if g6_pins else purpose
     ops, subject = _json(raw["ops-v3.json"], "LAUNCH_OPS_INVALID"), _json(raw["app-subject.json"], "LAUNCH_APP_INVALID")
     cut, verify, entry = load(CUT), load(VERIFY), load(ENTRY)
     port = getattr(load(AUTH), "verify", None)  # Sigstore APP + OPS v3 under the Sponsor root; absent => STOP
     if not callable(port):
         raise Stop("LAUNCH_AUTHENTICITY_PORT_MISSING")
-    child_mod = load(cfg["children"][purpose])  # resolved BEFORE any nonce can be spent
+    child_mod = load(cfg["children"][child_key])  # resolved BEFORE any nonce can be spent
     act = getattr(child_mod, "act", None)
     if not callable(act):
         raise Stop("LAUNCH_CHILD_INVALID")
@@ -261,13 +275,15 @@ def _compose(load, record, env):
             go_bytes=raw["go.json"], go_signature_bytes=raw["go.json.sig"], pins=pins,
             ops_v3_receipt=ops, app_subject=subject, now_utc=dt.datetime.fromtimestamp(now, dt.timezone.utc),
             verify_go_signature=verifier, nonce_unused=lambda _n, _a: True,  # #967 consume is the ONLY marker
-            purpose=purpose, launcher_pins=dict(cfg["launcher_pins"]))
+            purpose=purpose, launcher_pins=None if g6_pins else dict(cfg["launcher_pins"]), g6_pins=g6_pins)
         try:
             authentic = port(ops_bytes=raw["ops-v3.json"], app_subject_bytes=raw["app-subject.json"], claims=dict(result))
         except Exception:  # noqa: BLE001
             authentic = False
         if authentic is not True:  # check_cut is consistency only; receipts are claims until this port says so
             raise Stop("LAUNCH_AUTHENTICITY_DENIED")
+        if g6_pins and result.get("g6_command") != g6_pins["g6_command"]:
+            raise Stop("LAUNCH_GO_CLAIMS_INVALID")
         if (result.get("purpose") != purpose or type(result.get("nonce")) is not str
                 or HEX64.fullmatch(result["nonce"]) is None):
             raise Stop("LAUNCH_GO_CLAIMS_INVALID")

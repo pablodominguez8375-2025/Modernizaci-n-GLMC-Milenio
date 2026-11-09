@@ -49,6 +49,11 @@ PINS = {"ops_source_sha": OPS_SHA, "app_source_sha": APP_SHA, "app_archive_sha25
         "plan_sha256": D("6"), "admission_sha256": D("7"), "policy_hash": D("4")}
 
 
+G6_OP = D("5")
+CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"}
+CHILDREN.update({"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in launcher.G6_COMMANDS})
+
+
 def run(*argv):
     return subprocess.run(argv, check=True, capture_output=True)
 
@@ -116,7 +121,7 @@ class LauncherComposeTests(unittest.TestCase):
                "inbox": os.path.join(self.dir, "inbox"), "temp_root": os.path.join(self.dir, "tmp"),
                "socket_path": os.path.join(self.dir, "s"), "journal_root": os.path.join(self.dir, "j"),
                "lease_dir": os.path.join(self.dir, "l"), "peer_uid": UID, "timeout": 5,
-               "children": {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"}}
+               "children": dict(CHILDREN), "g6_pins": None}
         cfg.update(over)
         return cfg
 
@@ -142,6 +147,7 @@ class LauncherComposeTests(unittest.TestCase):
             "qa525-vnext-root-plane.py": types.SimpleNamespace(launcher_flight=flight),
             "qa525-vnext-go-nonce-journal.py": journal,
             "qa525-vnext-root-launcher-child.py": child})
+        mods.update({"qa525-vnext-root-g6-%s.py" % c: child for c in launcher.G6_COMMANDS})
         mods.update(extra)
 
         def load(name):
@@ -206,14 +212,66 @@ class LauncherComposeTests(unittest.TestCase):
         self.assertEqual(self.flight_args[2], None, "the lease liveness view is never injected by the launcher")
 
     # ---- cross-scope and dispatch
-    def test_signed_g6_go_and_unknown_schema_never_reach_a_child(self):
-        for schema, code in (("qa525-go-g6-v1", "LAUNCH_G6_NOT_IMPLEMENTED"),
-                             ("qa525-go-cut-v1", "LAUNCH_SCOPE_UNKNOWN"), ("x", "LAUNCH_SCOPE_UNKNOWN")):
+    def g6_go(self, command="backup", op=G6_OP, **over):
+        return self.go_bytes(purpose="G6_V2_ONLY", g6_command=command, g6_operation_sha256=op,
+                             **{k: None for k in LAUNCHER_PINS}, **over)
+
+    def g6_cfg(self, command="backup", op=G6_OP):
+        return self.config(g6_pins={"g6_command": command, "g6_operation_sha256": op})
+
+    def test_unknown_schema_never_reaches_a_child(self):
+        for schema in ("qa525-go-cut-v1", "x"):
             go = json.dumps(dict(json.loads(self.go_bytes()), schema=schema), sort_keys=True,
                             separators=(",", ":")).encode()
             self.write_inbox(go=go)
-            self.stop(code, load=self.loader(cfg=self.config()))
+            self.stop("LAUNCH_SCOPE_UNKNOWN", load=self.loader(cfg=self.config()))
         self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_g6_go_runs_only_the_one_command_the_release_pins(self):
+        self.write_inbox(go=self.g6_go())
+        out = self.compose(load=self.loader(cfg=self.g6_cfg()))
+        self.assertEqual((out["child_outcome"], len(self.spent), self.acted), ("done", 1, [len(DATA)]))
+
+    def test_g6_go_is_refused_when_the_release_pins_no_g6_command(self):
+        self.write_inbox(go=self.g6_go())
+        self.stop("LAUNCH_G6_NOT_CONFIGURED", load=self.loader(cfg=self.config()))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_g6_go_for_another_command_or_operation_is_refused(self):
+        for go in (self.g6_go(command="restore"), self.g6_go(op=D("a"))):
+            self.write_inbox(go=go)
+            with self.assertRaises(Exception) as err:
+                self.compose(load=self.loader(cfg=self.g6_cfg("backup")))
+            self.assertIn(str(err.exception), ("GO_CUT_MISMATCH", "GO_CUT_G6_BINDING_MISMATCH"))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_g6_command_without_its_child_module_stops_before_the_nonce(self):
+        self.write_inbox(go=self.g6_go())
+        load = self.loader(cfg=self.g6_cfg())
+
+        def gone(name):
+            if name == "qa525-vnext-root-g6-backup.py":
+                raise RuntimeError("BOOT_MODULE_UNKNOWN")
+            return load(name)
+        self.stop("BOOT_MODULE_UNKNOWN", load=gone)
+        self.assertEqual(self.spent, [])
+
+    def test_a_launcher_go_cannot_run_a_g6_child_and_a_g6_go_cannot_run_the_launcher_child(self):
+        ran = []
+        load = self.loader(cfg=self.g6_cfg())
+        base = load
+
+        def spy(name):
+            mod = base(name)
+            if name.startswith("qa525-vnext-root-g6-"):
+                ran.append(name)
+            return mod
+        self.compose(load=spy)  # launcher GO with a G6-pinned config
+        self.assertNotIn("qa525-vnext-root-g6-backup.py", ran)
+        self.write_inbox(go=self.g6_go())
+        ran.clear()
+        self.compose(load=spy)
+        self.assertEqual(ran, ["qa525-vnext-root-g6-backup.py"])
 
     def test_g6_go_missing_schema_or_not_json_is_refused(self):
         for raw in (b"not json", b'{"a":1}', b'[1]', b'{"schema":1}'):
@@ -271,10 +329,36 @@ class LauncherComposeTests(unittest.TestCase):
         cfg = self.config()
         for bad in (dict(cfg, extra=1), {k: v for k, v in cfg.items() if k != "peer_uid"},
                     dict(cfg, peer_uid=0), dict(cfg, timeout=0), dict(cfg, timeout=61),
-                    dict(cfg, children={"LAUNCHER_ONLY": "../evil.py"}),
-                    dict(cfg, children={"LAUNCHER_ONLY": "qa525-vnext-x.py", "G6": "qa525-vnext-y.py"}),
+                    dict(cfg, children=dict(CHILDREN, **{"LAUNCHER_ONLY": "../evil.py"})),
+                    dict(cfg, children=dict(CHILDREN, **{"LAUNCHER_ONLY": "qa525-vnext-other-child.py"})),
+                    dict(cfg, children=dict(CHILDREN, extra="qa525-vnext-y.py")),
+                    dict(cfg, children={"LAUNCHER_ONLY": "qa525-vnext-x.py"}),
+                    dict(cfg, g6_pins={"g6_command": "wipe", "g6_operation_sha256": D("5")}),
+                    dict(cfg, g6_pins={"g6_command": "backup"}),
+                    dict(cfg, g6_pins={"g6_command": "backup", "g6_operation_sha256": "5" * 64}),
                     dict(cfg, inbox="relative"), dict(cfg, go_fingerprint="SHA256:short")):
             self.stop("LAUNCH_CONFIG_INVALID", load=self.loader(cfg=bad))
+
+    def test_children_mapping_is_exact_so_no_swap_duplicate_or_cross_scope_child_is_accepted(self):
+        swaps = []
+        for a, b in (("G6:backup", "G6:restore"), ("LAUNCHER_ONLY", "G6:backup"), ("G6:init", "G6:review")):
+            swapped = dict(CHILDREN)
+            swapped[a], swapped[b] = CHILDREN[b], CHILDREN[a]
+            swaps.append(swapped)
+        same = dict(CHILDREN, **{"G6:backup": CHILDREN["G6:restore"]})  # two keys -> the same child
+        to_launcher = dict(CHILDREN, **{"G6:backup": CHILDREN["LAUNCHER_ONLY"]})
+        from_g6 = dict(CHILDREN, **{"LAUNCHER_ONLY": CHILDREN["G6:restore"]})
+        for go, cfg_over in ((self.go_bytes(), {}), (self.g6_go(), {"g6_pins": {
+                "g6_command": "backup", "g6_operation_sha256": G6_OP}})):
+            self.write_inbox(go=go)
+            for children in swaps + [same, to_launcher, from_g6]:
+                self.stop("LAUNCH_CONFIG_INVALID", load=self.loader(cfg=self.config(children=children, **cfg_over)))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_children_mapping_is_the_code_constant(self):
+        self.assertEqual(launcher.CHILD_MODULES["G6:backup"], "qa525-vnext-root-g6-backup.py")
+        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 6)
+        self.assertEqual(self.config()["children"], launcher.CHILD_MODULES)
 
     def test_inbox_files_must_be_plain_owned_files(self):
         path = os.path.join(self.dir, "inbox", "go.json")
