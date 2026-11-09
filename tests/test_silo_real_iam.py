@@ -126,6 +126,27 @@ def s3_request(ip, method, bucket, key, access, secret, body=b""):
         return err.code, b""
 
 
+def configure_initial_admin_alias(cli, root_user, root_pw, *, sleep=time.sleep, attempts=4):
+    """Acota SOLO el primer alias mcli tras healthcheck; un fallo persistente es STOP.
+
+    Silo puede aceptar readiness antes de que el plano de administración
+    responda al primer contacto. Nunca reintentar escrituras de documentos,
+    creación/asignación de políticas ni negativas de autorización: esos
+    resultados deben seguir fallando en CI al primer intento. No divulgar
+    argumentos, stdout ni stderr (incluyen credenciales sintéticas).
+    """
+    if type(attempts) is not int or not 1 <= attempts <= 4:
+        raise ValueError("SILO_IAM_ALIAS_ATTEMPTS_INVALID")
+    for index in range(attempts):
+        result = cli("alias", "set", "--", "admin", "http://127.0.0.1:9000",
+                     root_user, root_pw, check=False)
+        if result is not None and result.returncode == 0:
+            return
+        if index + 1 < attempts:
+            sleep(2)
+    raise AssertionError("SILO_IAM_ADMIN_ALIAS_NOT_READY")
+
+
 class SiloRealIamLaboratoryTests(unittest.TestCase):
     def test_patched_silo_enforces_document_bucket_policy(self):
         if not shutil.which("docker"):
@@ -170,8 +191,7 @@ class SiloRealIamLaboratoryTests(unittest.TestCase):
                     return run(["docker", "exec", server, "mcli", *cmd],
                                timeout=45, check=check)
 
-                cli("alias", "set", "--", "admin", "http://127.0.0.1:9000",
-                    root_user, root_pw)
+                configure_initial_admin_alias(cli, root_user, root_pw)
                 cli("mb", "admin/" + BUCKET)
                 cli("mb", "admin/" + FORBIDDEN_BUCKET)
                 run(["docker", "cp", str(policy), server + ":/tmp/policy.json"])
