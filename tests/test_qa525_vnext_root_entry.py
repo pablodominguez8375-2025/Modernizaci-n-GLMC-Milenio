@@ -213,6 +213,7 @@ class EntryTests(unittest.TestCase):
         os.unlink(p)
         with open(p, "w") as f:
             f.write("open(%r,'w').write('x')\n" % marker)
+        os.chmod(p, 0o644)  # umask-independent: the refusal must come from the hash
         self.send()
         out = self.run_entry()  # still uses the verified bytes
         os.close(out["fd"])
