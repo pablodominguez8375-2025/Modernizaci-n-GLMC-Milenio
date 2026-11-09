@@ -26,6 +26,32 @@ class Stop(Exception):
     """Opaque STOP code."""
 
 
+class FlightPlane:
+    """Adapts `root_flight(...)` (a context manager yielding a RootPlane whose `assert_held()` raises) to
+    the plane protocol used by run(): `with plane:` + `still_held() -> bool`. It adds no authority and
+    swallows nothing on release: errors from the wrapped context manager propagate unchanged."""
+
+    def __init__(self, flight):
+        self._flight, self._plane = flight, None
+
+    def __enter__(self):
+        self._plane = self._flight.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        plane, self._plane = self._plane, None
+        return self._flight.__exit__(*exc) if plane is not None else False
+
+    def still_held(self):
+        if self._plane is None:
+            return False
+        try:
+            self._plane.assert_held()
+        except Exception:  # noqa: BLE001 - any failure means "not held"
+            return False
+        return True
+
+
 def _claims(raw):
     if type(raw) is not dict or set(raw) != set(CLAIM_FIELDS):
         raise Stop("ENTRY_GO_CLAIMS_INVALID")
