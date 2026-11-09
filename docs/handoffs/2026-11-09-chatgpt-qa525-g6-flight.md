@@ -31,3 +31,6 @@ Estado transitorio; antes de actuar consultar GitHub HEAD vivo de dev/main, Issu
 
 ## Continuación accionable
 Validar postmerge dev 9019e6e, gates 976 y eventual merge solo dev. Priorizar un único mecanismo instalador PRE-SUDO autenticado y no otro runner. Coordinar con Claude en #958/#976/#936, sin editar su rama. Registrar nuevos SHA y resultados en Issue 525 y Estado Maestro Drive.
+
+## Delta de continuidad 09-11 — PR #976 fusionada por Claude
+GitHub PR #976 está CLOSED/MERGED, merge SHA a45cc718c514c7c39309b8e8e840f17fd7d0c5b0; el nuevo dev avanza un commit respecto de 9019e6e. Archivo root-entry.py y test FlightPlane integrados únicamente como biblioteca inactiva. Lo indicado arriba como `NO MERGE hasta 7/7` describe el corte ANTERIOR a esa fusión; NO interpretarlo como pendiente actual. Revisar CI postmerge del SHA a45cc718, artifact exacto y estado del GO físico por separado. La PR #977 de este handoff debe reconciliarse al dev ya fusionado sin force y revalidar CI propio antes de merge. NO_GO_FISICO sigue: ningún acceso host, sudo ni G6 real se acreditó aquí.
