@@ -68,9 +68,9 @@ class G6SignedCutContractTests(unittest.TestCase):
             operation(*args, **kwargs)
         return str(err.exception)
 
-    def test_four_operations_are_four_distinct_canonical_go_documents(self):
+    def test_five_operations_are_five_distinct_canonical_go_documents(self):
         signed = {}
-        for cmd in ("init", "backup", "restore", "review"):
+        for cmd in ("preflight", "init", "backup", "restore", "review"):
             with self.subTest(cmd=cmd):
                 raw = self.go(cmd)
                 doc = json.loads(raw)
@@ -99,11 +99,11 @@ class G6SignedCutContractTests(unittest.TestCase):
                 self.assertFalse(result["bootstrap_authenticated_here"])
                 self.assertFalse(result["go_signature_provenance_verified_here"])
                 signed[cmd] = raw
-        self.assertEqual(len(set(signed.values())), 4)
+        self.assertEqual(len(set(signed.values())), 5)
 
     def test_g6_go_does_not_approve_a_different_g6_command(self):
-        for original in ("init", "backup", "restore", "review"):
-            for wanted in ("init", "backup", "restore", "review"):
+        for original in ("preflight", "init", "backup", "restore", "review"):
+            for wanted in ("preflight", "init", "backup", "restore", "review"):
                 if original == wanted:
                     continue
                 with self.subTest(original=original, wanted=wanted):
