@@ -8,8 +8,12 @@ Order is fixed and every step fails closed:
   4. the sealed FD is received (#966) and its digest must equal the AUTHENTICATED digest from the verified
      GO claims (never a sender-supplied pin), with the GO nonce as the frame nonce;
   5. the plane must STILL be held, then the durable nonce (#967) is consumed BEFORE any child exists.
-A failure before step 5 never spends the nonce; after step 5 the nonce stays spent. Returns the private
-read-only FD for the caller to execute FROM (never from sibling files). may_apply/may_install stay False.
+  6. the fixed, authenticated `child(fd)` callback runs INSIDE the plane (locks+lease stay held through it,
+     i.e. through verify_state/rollback of the caller's flight); the plane is re-checked after it, and the FD
+     is closed before the locks are released. A bare `return fd` would NOT transfer lock ownership.
+A failure before step 5 never spends the nonce; after step 5 the nonce stays spent. The FD never outlives
+the plane. may_apply/may_install stay False; `child` is the only code that may act, and it is supplied by
+the authenticated entrypoint, not by the sender.
 """
 import os
 
@@ -31,7 +35,9 @@ def _claims(raw):
 
 
 def run(load, *, plane, verify_go, sock, peer_uid, peer_pid, timeout, journal_root,
-        uid, clock):
+        uid, clock, child):
+    if not callable(child):
+        raise Stop("ENTRY_CHILD_INVALID")
     recv = load(RECV)
     journal = load(JOURNAL)
     with plane:  # step 2: raises Stop if any of the 5 locks / lease cannot be held
@@ -51,11 +57,13 @@ def run(load, *, plane, verify_go, sock, peer_uid, peer_pid, timeout, journal_ro
                        "admission": claims["admission"]}
             spent = journal.consume(journal_root, claims["nonce"], binding, uid=uid,
                                     now=clock(), expires_at=claims["expires_at"])
-        except BaseException:
+            outcome = child(got["fd"])  # step 6: runs while the 5 locks + lease are still held
+            if plane.still_held() is not True:  # lost during the flight: do not report success
+                raise Stop("ENTRY_PLANE_LOST_DURING_FLIGHT")
+        finally:
             if got is not None:
-                os.close(got["fd"])
-            raise
-        return {"fd": got["fd"], "nonce_record_sha256": spent["record_sha256"],
+                os.close(got["fd"])  # the FD never outlives the plane
+        return {"child_outcome": outcome, "nonce_record_sha256": spent["record_sha256"],
                 "sender_pid": got["sender_pid"], "sender_uid": got["sender_uid"],
                 "bootstrap_authenticated_here": False, "sponsor_authorized_here": False,
                 "may_install": False, "may_apply": False}

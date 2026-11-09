@@ -57,6 +57,43 @@ class Plane:
         return self.lose_after is None or self.checks <= self.lose_after
 
 
+class FlockPlane:
+    """Five REAL flock files (no-follow, non-blocking): a competitor can observe them being held."""
+    def __init__(self, directory, exit_raises=False):
+        self.paths = [os.path.join(directory, "lock%d" % i) for i in range(5)]
+        self.fds, self.exit_raises = [], exit_raises
+
+    def __enter__(self):
+        for p in self.paths:
+            fd = os.open(p, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+            self.fds.append(fd)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # BlockingIOError => cannot hold
+        return self
+
+    def __exit__(self, *a):
+        for fd in self.fds:
+            os.close(fd)
+        self.fds = []
+        if self.exit_raises:
+            raise RuntimeError("release failed")
+
+    def still_held(self):
+        return len(self.fds) == 5
+
+    def competitor_blocked(self):
+        blocked = 0
+        for p in self.paths:
+            fd = os.open(p, os.O_RDWR | os.O_CLOEXEC)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except BlockingIOError:
+                blocked += 1
+            finally:
+                os.close(fd)
+        return blocked
+
+
 @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "memfd_create"), "Linux required")
 class EntryTests(unittest.TestCase):
     def setUp(self):
@@ -113,12 +150,13 @@ class EntryTests(unittest.TestCase):
         c.update(over)
         return c
 
-    def run_entry(self, plane=None, claims=None, verify_go=None, peer_uid=None, load=None):
+    def run_entry(self, plane=None, claims=None, verify_go=None, peer_uid=None, load=None, child=None):
         plane = plane or Plane()
         verify_go = verify_go or (lambda: claims if claims is not None else self.claims())
         return self.entry.run(load or self.load, plane=plane, verify_go=verify_go, sock=self.b,
                               peer_uid=UID if peer_uid is None else peer_uid, peer_pid=None,
-                              timeout=2, journal_root=self.jroot, uid=UID, clock=lambda: 1000)
+                              timeout=2, journal_root=self.jroot, uid=UID, clock=lambda: 1000,
+                              child=child or (lambda fd: os.pread(fd, len(DATA), 0)))
 
     def spent(self):
         return [n for n in os.listdir(self.jroot) if n.endswith(".spent")]
@@ -131,8 +169,8 @@ class EntryTests(unittest.TestCase):
     def test_happy_path_returns_private_fd_spends_nonce_and_grants_nothing(self):
         self.send()
         out = self.run_entry()
-        self.fds.append(out["fd"])
-        self.assertEqual(os.pread(out["fd"], len(DATA), 0), DATA)
+        self.assertEqual(out["child_outcome"], DATA)
+        self.assertNotIn("fd", out)
         self.assertEqual(len(self.spent()), 1)
         for k in ("may_apply", "may_install", "sponsor_authorized_here", "bootstrap_authenticated_here"):
             self.assertIs(out[k], False)
@@ -188,8 +226,7 @@ class EntryTests(unittest.TestCase):
 
     def test_replay_after_success_is_refused_and_the_spent_mark_is_permanent(self):
         self.send()
-        out = self.run_entry()
-        os.close(out["fd"])
+        self.run_entry()
         self.send()
         self.stop("NONCE_REPLAY")
         self.assertEqual(len(self.spent()), 1)  # the spent mark is permanent: a crash cannot reuse it
@@ -215,13 +252,84 @@ class EntryTests(unittest.TestCase):
             f.write("open(%r,'w').write('x')\n" % marker)
         os.chmod(p, 0o644)  # umask-independent: the refusal must come from the hash
         self.send()
-        out = self.run_entry()  # still uses the verified bytes
-        os.close(out["fd"])
+        self.run_entry()  # still uses the verified bytes
         self.assertFalse(os.path.exists(marker))
         self.assertEqual(len(self.spent()), 1)
         with self.assertRaises(boot.Stop) as ctx:  # and a NEW verification now refuses the install
             self.verify()
         self.assertEqual(str(ctx.exception), "BOOT_HASH_MISMATCH")
+
+    def test_locks_and_lease_stay_held_through_the_child_and_free_after(self):
+        plane = FlockPlane(self.base)
+        seen = {}
+
+        def child(fd):
+            seen["blocked"] = plane.competitor_blocked()  # a competing process cannot take any of the 5
+            seen["data"] = os.pread(fd, len(DATA), 0)
+            seen["fd"] = fd
+            return "flight-done"
+        self.send()
+        out = self.run_entry(plane=plane, child=child)
+        self.assertEqual((out["child_outcome"], seen["blocked"], seen["data"]), ("flight-done", 5, DATA))
+        self.assertEqual(plane.competitor_blocked(), 0)  # free after the flight
+        with self.assertRaises(OSError):
+            os.fstat(seen["fd"])  # the FD never outlives the plane
+
+    def test_child_failure_closes_fd_frees_locks_and_leaves_nonce_spent(self):
+        plane = FlockPlane(self.base)
+        seen = {}
+
+        def child(fd):
+            seen["fd"] = fd
+            raise RuntimeError("flight crashed")
+        self.send()
+        with self.assertRaises(RuntimeError):
+            self.run_entry(plane=plane, child=child)
+        self.assertEqual(len(self.spent()), 1)
+        self.assertEqual(plane.competitor_blocked(), 0)
+        with self.assertRaises(OSError):
+            os.fstat(seen["fd"])
+        self.send()
+        self.stop("NONCE_REPLAY")
+
+    def test_plane_lost_during_flight_is_a_stop_with_nonce_spent_and_fd_closed(self):
+        seen = {}
+        plane = Plane(lose_after=2)  # held before receive and before consume; lost after the child
+
+        def child(fd):
+            seen["fd"] = fd
+            return "ran"
+        self.send()
+        self.stop("ENTRY_PLANE_LOST_DURING_FLIGHT", plane=plane, child=child)
+        self.assertEqual(len(self.spent()), 1)
+        with self.assertRaises(OSError):
+            os.fstat(seen["fd"])
+
+    def test_plane_release_failure_still_closes_fd_and_keeps_nonce_spent(self):
+        seen = {}
+
+        def child(fd):
+            seen["fd"] = fd
+        self.send()
+        with self.assertRaises(RuntimeError):
+            self.run_entry(plane=FlockPlane(self.base, exit_raises=True), child=child)
+        self.assertEqual(len(self.spent()), 1)
+        with self.assertRaises(OSError):
+            os.fstat(seen["fd"])
+
+    def test_child_must_be_a_callable_and_busy_real_locks_stop_first(self):
+        self.send()
+        with self.assertRaises(self.entry.Stop) as ctx:
+            self.entry.run(self.load, plane=Plane(), verify_go=lambda: self.claims(), sock=self.b,
+                           peer_uid=UID, peer_pid=None, timeout=2, journal_root=self.jroot, uid=UID,
+                           clock=lambda: 1000, child=3)
+        self.assertEqual(str(ctx.exception), "ENTRY_CHILD_INVALID")
+        held = FlockPlane(self.base)
+        with held:
+            with self.assertRaises(BlockingIOError):
+                with FlockPlane(self.base):
+                    pass
+        self.assertEqual(self.spent(), [])
 
     def test_entry_module_imports_no_repo_code_from_disk(self):
         src = (ROOT / NAMES[2]).read_text()
