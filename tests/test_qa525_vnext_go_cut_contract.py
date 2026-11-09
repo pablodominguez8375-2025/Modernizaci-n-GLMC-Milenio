@@ -186,6 +186,61 @@ class CutContractTests(unittest.TestCase):
                     pins=mutable,verify_go_signature=malicious)
         self.assertEqual(self.nonce_count,0)
 
+    def test_launcher_go_signed_shape_is_separate_from_api_web_and_never_authorizes(self):
+        # The injected signature callback is synthetic: this test only checks
+        # strict signed-document scope binding, NOT signature provenance.
+        launch_pins = {
+            "release_asset_sha256": SHA("8"),
+            "old_launcher_sha256": "8" * 64,
+            "candidate_operator_sha256": "9" * 64,
+        }
+        launch = dict(self.go, schema="qa525-go-launcher-v1",
+                      environment=cut.LAUNCHER_ENVIRONMENT,
+                      scope=cut.LAUNCHER_SCOPE, action=cut.LAUNCHER_ACTION,
+                      operator=cut.LAUNCHER_OPERATOR, nonce="d" * 64,
+                      issued_at="2026-11-07T22:20:00Z",
+                      expires_at="2026-11-07T22:34:00Z", **launch_pins)
+        callback = lambda raw, sig, fp: raw == encode(launch) and sig == SIGNATURE and fp == FP
+        req = dict(go_bytes=encode(launch), purpose="LAUNCHER_ONLY",
+                   launcher_pins=launch_pins, verify_go_signature=callback,
+                   nonce_unused=lambda nonce, adm: nonce == "d" * 64 and adm == SHA("3"))
+        result = self.call(**req)
+        self.assertIs(result["launcher_contract_shape_only"], True)
+        self.assertEqual(result["purpose"], "LAUNCHER_ONLY")
+        for k in ("may_apply", "may_install", "nonce_consumption_durable_here",
+                  "bootstrap_authenticated_here", "go_signature_provenance_verified_here"):
+            self.assertIs(result[k], False)
+        # A signed API/WEB document must not be accepted as launcher consent.
+        self.denied("GO_CUT_FIELDS_INVALID", purpose="LAUNCHER_ONLY",
+                    launcher_pins=launch_pins, verify_go_signature=lambda *a: True)
+        # Conversely a launcher document cannot be promoted to an API/WEB GO.
+        self.denied("GO_CUT_FIELDS_INVALID", go_bytes=encode(launch),
+                    verify_go_signature=lambda *a: True)
+        self.denied("GO_CUT_INPUT_INVALID", go_bytes=encode(launch),
+                    purpose="LAUNCHER_ONLY", launcher_pins=None)
+        self.denied("GO_CUT_INPUT_INVALID", launcher_pins=launch_pins)
+        for field, changed in (
+                ("scope", "API_WEB_QA_ONLY"), ("action", "ADMIT_OFFLINE_APPLY"),
+                ("operator", "other@glmdch"), ("environment", "QA_SYNTHETIC"),
+                ("release_asset_sha256", SHA("7")),
+                ("old_launcher_sha256", "7" * 64),
+                ("candidate_operator_sha256", "7" * 64),
+                ("nonce", "N" * 43)):
+            with self.subTest(field=field):
+                self.denied(
+                    "GO_CUT_LAUNCHER_BINDING_MISMATCH"
+                    if field in launch_pins or field == "nonce" else "GO_CUT_MISMATCH",
+                    **dict(req, go_bytes=encode(dict(launch, **{field: changed}))))
+        too_long = dict(launch, expires_at="2026-11-07T22:35:01Z")
+        self.denied("GO_CUT_EXPIRED_OR_FUTURE",
+                    **dict(req, go_bytes=encode(too_long)))
+        self.denied("GO_CUT_EXPIRED_OR_FUTURE",
+                    **dict(req, now_utc=dt.datetime(2026, 11, 7, 22, 34,
+                                                    tzinfo=dt.timezone.utc)))
+        self.denied("GO_CUT_LAUNCHER_BINDING_MISMATCH",
+                    **dict(req, launcher_pins=dict(launch_pins,
+                          release_asset_sha256=SHA("7"))))
+
     def test_module_has_no_host_or_child_surface(self):
         source=HERE.read_text()
         tree=ast.parse(source)
