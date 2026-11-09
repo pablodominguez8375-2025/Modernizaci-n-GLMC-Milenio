@@ -4,7 +4,8 @@ Complements test_qa525_vnext_pre_root_cryptographic_chain.py (synthetic namespac
 verifiers) with the exact configuration the Sponsor will use: ONE Ed25519 key signing the OPS v3
 receipt and the GO cut in their two REAL namespaces, bytes produced by the sponsor-signing
 builders, verified through the rootless OPS and GO ports. Synthetic keys in tempdirs only; the
-APP callback and the nonce journal are simulated. Nothing here is Sponsor authority or a GO.
+APP callback remains synthetic; durable nonce integration uses real kernel-backed journal files.
+Nothing here is Sponsor authority, a physical GO, a trusted bootstrap or a host action.
 """
 import datetime as dt
 import hashlib
@@ -37,6 +38,7 @@ dual = load("qa525_real_chain_dual", "qa525-vnext-pre-root-dual-gate.py")
 go = load("qa525_real_chain_go", "qa525-vnext-go-cut-contract.py")
 ops_port = load("qa525_real_chain_ops_port", "qa525-vnext-ops-rootless-adapter.py")
 go_port = load("qa525_real_chain_go_port", "qa525-vnext-go-rootless-adapter.py")
+nonce_journal = load("qa525_real_chain_durable_nonce", "qa525-vnext-go-nonce-journal.py")
 
 
 def sha(c):
@@ -216,6 +218,89 @@ class SponsorKeyRealPortsChainTests(unittest.TestCase):
             self.go_call(go_bytes=self.cut(nonce=other_nonce),
                          nonce_unused=lambda nonce, admission: True)
         self.assertEqual(str(ctx.exception), "GO_CUT_SIGNATURE_DENIED")
+
+    def _durable_nonce_test_context(self):
+        """Synthetic-key GO bytes + real durable journal; NO real 5-lock/root authority."""
+        journal_root = self.dir / "nonce-journal-private"
+        journal_root.mkdir(mode=0o700)
+        marker = journal_root / (hashlib.sha256(self.nonce.encode("ascii")).hexdigest() + ".spent")
+        binding = {
+            "app": self.cut_pins["app_archive_sha256"],
+            "ops": digest(self.receipt_bytes),
+            "policy": self.cut_pins["policy_hash"],
+            "plan": self.cut_pins["plan_sha256"],
+            "admission": self.cut_pins["admission_sha256"],
+        }
+        now = int(NOW.timestamp())
+        expiry = int(dt.datetime.fromisoformat(
+            json.loads(self.cut_bytes)["expires_at"].replace("Z", "+00:00")).timestamp())
+        return str(journal_root), marker, binding, now, expiry
+
+    def test_real_ops_go_signatures_then_durable_nonce_one_use(self):
+        """Signed GO is checked BEFORE consuming; replay and changed binding fail closed."""
+        root, marker, binding, now, expiry = self._durable_nonce_test_context()
+        dual_result = self.dual_call()  # OpenSSH validates a real detached OPS signature
+        self.assertIs(dual_result["two_verifier_ports_accepted"], True)
+
+        def unused(nonce, admission):
+            # A consistency hint only: journal.consume is the atomic gate.
+            return (nonce == self.nonce
+                    and admission == self.cut_pins["admission_sha256"]
+                    and not marker.exists())
+
+        verified = self.go_call(nonce_unused=unused)  # real SSH GO signature, correct namespace
+        self.assertEqual(verified["nonce"], self.nonce)
+        self.assertEqual(verified["app_archive_sha256"], binding["app"])
+        result = nonce_journal.consume(
+            root, verified["nonce"], binding, uid=os.geteuid(),
+            now=now, expires_at=expiry)
+        self.assertIs(result["consumed"], True)
+        saved = marker.read_bytes()
+        self.assertEqual(result["record_sha256"], digest(saved))
+        self.assertEqual(json.loads(saved)["binding"], binding)
+        self.assertEqual(json.loads(saved)["spent_at"], now)
+        for evidence in (dual_result, verified, result):
+            self.assertIs(evidence["may_apply"], False)
+            self.assertIs(evidence["may_install"], False)
+        self.assertIs(result["sponsor_authorized_here"], False)
+        self.assertIs(result["bootstrap_authenticated_here"], False)
+
+        with self.assertRaises(go.Stop) as replay_hint:
+            self.go_call(nonce_unused=unused)
+        self.assertEqual(str(replay_hint.exception), "GO_CUT_NONCE_UNSAFE")
+        # The O_EXCL filesystem marker, not the hint, is the actual replay barrier.
+        for second_binding in (binding, dict(binding, plan=sha("f"))):
+            with self.assertRaises(nonce_journal.Stop) as replay:
+                nonce_journal.consume(
+                    root, verified["nonce"], second_binding, uid=os.geteuid(),
+                    now=now + 1, expires_at=expiry)
+            self.assertEqual(str(replay.exception), "NONCE_REPLAY")
+
+    def test_invalid_or_expired_go_never_creates_durable_nonce_marker(self):
+        """No journal entry is written if a GO cannot pass signature/age policy."""
+        root, marker, binding, now, expiry = self._durable_nonce_test_context()
+        self.assertIs(self.dual_call()["two_verifier_ports_accepted"], True)
+
+        # A second key cannot impersonate the Sponsor, even with correctly shaped GO bytes.
+        other_signature = self.sign(self.other_key, signing.GO_NAMESPACE, self.cut_bytes)
+        with self.assertRaises(go.Stop) as bad_key:
+            self.go_call(go_signature_bytes=other_signature)
+        self.assertEqual(str(bad_key.exception), "GO_CUT_SIGNATURE_DENIED")
+        self.assertFalse(marker.exists())
+
+        # An OPS-namespace signature cannot authorize a GO-namespace cut.
+        wrong_namespace = self.sign(self.key, signing.OPS_NAMESPACE, self.cut_bytes)
+        with self.assertRaises(go.Stop) as bad_namespace:
+            self.go_call(go_signature_bytes=wrong_namespace)
+        self.assertEqual(str(bad_namespace.exception), "GO_CUT_SIGNATURE_DENIED")
+        self.assertFalse(marker.exists())
+
+        # An expired, otherwise correctly signed GO may not spend a nonce.
+        with self.assertRaises(go.Stop) as expired:
+            self.go_call(now_utc=NOW + dt.timedelta(hours=1))
+        self.assertEqual(str(expired.exception), "GO_CUT_EXPIRED_OR_FUTURE")
+        self.assertFalse(marker.exists())
+        self.assertEqual(list(Path(root).glob("*.spent")), [])
 
     def test_a_replayed_nonce_is_denied_by_the_contract_with_the_real_signature(self):
         with self.assertRaises(go.Stop) as ctx:
