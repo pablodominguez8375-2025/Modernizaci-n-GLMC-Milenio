@@ -103,3 +103,11 @@ autenticada) sigue abierto y pertenece al contrato #936/#822: este entrypoint NO
 - El gate post-copia también exige `ahora < deadline − 30 s`.
 - Caso SIGKILL/reinicio automático: el temporizador vive en systemd, así que el reinicio ocurre igual; el backup ya está invalidado y se imprime `START_MINIO_NOW`. Nunca se declara G6 coherente.
 - Tests nuevos: temporizador 660 s + espera 120 s + copia 590 s, corte real de un bucle, y sin presupuesto no se copia.
+
+## Entrada: sin importar nada del árbol como root (P1-1)
+
+- El CLI directo (`python3 qa525-vnext-g6-v2-run.py ...`) **ya no carga ningún módulo hermano**: tras comprobar host y root termina con `G6RUN_UNTRUSTED_ENTRY`, sin `import`/`exec`/lectura de código del árbol. No hay `importlib`, `exec_module` ni `HERE` en el fuente (hay guarda en los tests).
+- La única ruta de producción es `main(argv, verified, load_module)`/`env_from_verified()`: los módulos `producer`/`captor`/`verifier` se compilan desde los **bytes ya autenticados** por el bootstrap PRE-4 (`Verified` + `load_module` del bootstrap, que rechaza cualquier objeto forjado). Los digests que imprime el preflight (`sha256_*`) salen del manifiesto autenticado, no se recalculan desde el disco.
+- Un hermano sustituido en disco después de la verificación no se ejecuta, y una nueva verificación rechaza la instalación.
+- Se conservan: corte real SIGALRM de la copia del Silo, temporizador systemd independiente, guarda de host `glmdch`, presupuesto de ventana y todos los tests de G6.
+- Sigue siendo **NO-SUDO / NO-GO físico**: esta ruta solo es utilizable cuando el bootstrap root-owned (instalado por el PO con pin fuera de Git/Drive) la invoque; un CLI fail-closed no es autorización para ejecutar nada como root.

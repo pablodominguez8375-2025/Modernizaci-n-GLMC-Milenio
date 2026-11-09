@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -312,14 +313,11 @@ class G6RunHostAndWatchdogTests(G6RunBase):
         return self.go("backup", env, **pins)
 
     def test_other_host_is_refused_before_any_module_is_loaded(self):
-        loaded = []
         with mock.patch.object(run.socket, "gethostname", return_value="otro-host"), \
-                mock.patch.object(run, "_load_module", side_effect=loaded.append), \
                 mock.patch.object(run.os, "geteuid", return_value=0):
             with self.assertRaises(run.Stop) as err:
                 run.real_env("backup")
         self.assertEqual(str(err.exception), "G6RUN_HOST_REFUSED")
-        self.assertEqual(loaded, [])
 
     def test_armed_watchdog_lets_the_window_open_and_is_read_only(self):
         pins = self.prepare()
@@ -626,27 +624,106 @@ class G6RunImageParseTests(unittest.TestCase):
             self.assertFalse(run.image_matches_pin(bad, image), bad)
 
 
-class G6RunModuleTrustTests(G6RunBase):
-    def test_siblings_must_be_regular_owner_trusted_and_not_group_writable(self):
-        good = Path(self.base, "m.py")
-        good.write_text("X = 1\n")
-        os.chmod(good, 0o644)
-        run._trusted_sibling(good, UID)
-        os.chmod(good, 0o664)
-        with self.assertRaises(run.Stop) as ctx:
-            run._trusted_sibling(good, UID)
-        self.assertEqual(str(ctx.exception), "G6RUN_MODULE_UNTRUSTED")
-        os.chmod(good, 0o644)
-        link = Path(self.base, "l.py")
-        os.symlink(good, link)
-        with self.assertRaises(run.Stop):
-            run._trusted_sibling(link, UID)
-        if UID != 0:  # root-owned files are always trusted by design
-            with self.assertRaises(run.Stop):
-                run._trusted_sibling(good, UID + 12345)
-        with self.assertRaises(run.Stop) as ctx:
-            run._trusted_sibling(Path(self.base, "absent.py"), UID)
-        self.assertEqual(str(ctx.exception), "G6RUN_MODULE_UNAVAILABLE")
+BOOT_SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-root-bootstrap.py"
+SIBLING_FILES = ("qa525-vnext-g6-v2-producer.py", "qa525-vnext-g6-v2-captor.py",
+                 "qa525-vnext-g6-v2-verifier.py", "qa525-vnext-g6-v2-run.py")
+
+
+def _boot():
+    spec = importlib.util.spec_from_file_location("qa525_g6run_boot", BOOT_SRC)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+class G6RunUntrustedEntryTests(G6RunBase):
+    def setUp(self):
+        super().setUp()
+        self.boot = _boot()
+        self.inst = os.path.join(self.base, "inst")
+        os.mkdir(self.inst, 0o755)
+        os.chmod(self.base, 0o755)
+        for n in SIBLING_FILES:
+            shutil.copy(Path(__file__).resolve().parents[1] / "scripts/qa" / n, os.path.join(self.inst, n))
+            os.chmod(os.path.join(self.inst, n), 0o644)
+        files = {n: hashlib.sha256(Path(self.inst, n).read_bytes()).hexdigest() for n in SIBLING_FILES}
+        real = os.path.realpath(sys.executable)
+        self.manifest = json.dumps({"files": files, "interpreter": {
+            "path": real, "sha256": hashlib.sha256(Path(real).read_bytes()).hexdigest()}},
+            sort_keys=True, separators=(",", ":")).encode()
+        self.pin = hashlib.sha256(self.manifest).hexdigest()
+
+    def verify(self):
+        flags = type("F", (), dict(isolated=1, no_site=1, ignore_environment=1))()
+        with mock.patch.object(self.boot.sys, "flags", flags):
+            return self.boot.verify_install(self.inst, self.manifest, self.pin, uid=UID, anchor=self.base)
+
+    def test_direct_cli_never_imports_a_sibling_even_as_root_on_glmdch(self):
+        marker = os.path.join(self.base, "pwned")
+        boom = mock.Mock(side_effect=AssertionError("a module was loaded from disk"))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), \
+                mock.patch.object(run.os, "geteuid", return_value=0), \
+                mock.patch.object(run.socket, "gethostname", return_value="glmdch"), \
+                mock.patch("importlib.util.spec_from_file_location", boom), \
+                mock.patch("builtins.exec", boom):
+            self.assertEqual(run.main(["preflight"]), 1)
+        self.assertEqual(out.getvalue(), "G6RUN_STOP=G6RUN_UNTRUSTED_ENTRY\n")
+        boom.assert_not_called()
+        self.assertFalse(os.path.exists(marker))
+
+    def test_source_has_no_disk_import_path_left(self):
+        for forbidden in ("importlib", "spec_from_file_location", "exec_module", "_load_module",
+                          "_trusted_sibling", "HERE"):
+            self.assertNotIn(forbidden, SOURCE, forbidden)
+
+    def test_env_is_built_only_from_verified_bytes_and_reports_the_authenticated_digests(self):
+        verified = self.verify()
+        with mock.patch.object(run.os, "geteuid", return_value=0), \
+                mock.patch.object(run.socket, "gethostname", return_value="glmdch"):
+            env = run.env_from_verified("preflight", verified, self.boot.load_module)
+        self.assertEqual(env.module_hashes["producer"], verified.record["files"][SIBLING_FILES[0]])
+        self.assertEqual(env.module_hashes["entrypoint"], verified.record["files"][SIBLING_FILES[3]])
+        self.assertTrue(hasattr(env.captor, "build_captor"))
+
+    def test_sibling_swapped_on_disk_after_verification_is_never_executed(self):
+        verified = self.verify()
+        marker = os.path.join(self.base, "pwned")
+        p = os.path.join(self.inst, SIBLING_FILES[1])
+        os.unlink(p)
+        Path(p).write_text("open(%r,'w').write('x')\n" % marker)
+        os.chmod(p, 0o644)
+        with mock.patch.object(run.os, "geteuid", return_value=0), \
+                mock.patch.object(run.socket, "gethostname", return_value="glmdch"):
+            env = run.env_from_verified("preflight", verified, self.boot.load_module)
+        self.assertTrue(hasattr(env.captor, "build_captor"))
+        self.assertFalse(os.path.exists(marker))
+        with self.assertRaises(self.boot.Stop):
+            self.verify()  # and a fresh verification now refuses the tampered install
+
+    def test_forged_verified_object_or_loader_is_refused_before_anything_runs(self):
+        marker = os.path.join(self.base, "pwned")
+        evil = ("open(%r,'w').write('x')\n" % marker).encode()
+        forged = type("V", (), {"record": {"files": {n: "0" * 64 for n in SIBLING_FILES}}})()
+        with mock.patch.object(run.os, "geteuid", return_value=0), \
+                mock.patch.object(run.socket, "gethostname", return_value="glmdch"):
+            with self.assertRaises(self.boot.Stop):
+                run.env_from_verified("preflight", forged, self.boot.load_module)
+            for bad in ({"record": {}}, None, object()):
+                with self.assertRaises(run.Stop):
+                    run.env_from_verified("preflight", bad, self.boot.load_module)
+        self.assertFalse(os.path.exists(marker))
+
+    def test_other_host_or_no_root_is_refused_before_any_module_is_touched(self):
+        verified = self.verify()
+        loader = mock.Mock()
+        for host, euid, code in (("otro-host", 0, "G6RUN_HOST_REFUSED"), ("glmdch", 1000, "G6RUN_ROOT_REQUIRED")):
+            with mock.patch.object(run.socket, "gethostname", return_value=host), \
+                    mock.patch.object(run.os, "geteuid", return_value=euid):
+                with self.assertRaises(run.Stop) as err:
+                    run.env_from_verified("preflight", verified, loader)
+            self.assertEqual(str(err.exception), code)
+        loader.assert_not_called()
 
 
 class G6RunStaticTests(unittest.TestCase):

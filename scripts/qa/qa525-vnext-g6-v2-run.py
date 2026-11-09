@@ -30,7 +30,6 @@ import datetime as dt
 import getpass
 import hashlib
 import hmac
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -43,7 +42,6 @@ import stat
 import sys
 import time
 
-HERE = Path(__file__).resolve().parent
 STATE_ROOT = "/var/lib/pmgm-qa525-g6-v2"
 RESTIC = "/usr/bin/restic"
 SILO_SOURCE = ("/var/lib/docker/volumes/centenario-qa-lab2_pmgm_srv01_minio_data/_data")
@@ -58,6 +56,7 @@ STOP_WAIT_SECONDS = 180      # operator time to stop MinIO once asked
 WINDOW_MAX_SECONDS = 600     # hard cap, stop observed -> Silo copy finished
 POLL_SECONDS = 2
 FORBIDDEN_PREFIXES = ["/var/lib/docker", "/opt/centenario", "/srv"]
+ENTRYPOINT = "qa525-vnext-g6-v2-run.py"
 SIBLINGS = {"producer": "qa525-vnext-g6-v2-producer.py",
             "captor": "qa525-vnext-g6-v2-captor.py",
             "verifier": "qa525-vnext-g6-v2-verifier.py"}
@@ -114,16 +113,6 @@ def parse(argv):
     return command, options
 
 
-def _trusted_sibling(path, uid):
-    try:
-        info = path.lstat()
-    except OSError:
-        raise Stop("G6RUN_MODULE_UNAVAILABLE") from None
-    if (not stat.S_ISREG(info.st_mode) or info.st_uid not in (0, uid)
-            or info.st_mode & 0o022):
-        raise Stop("G6RUN_MODULE_UNTRUSTED")
-
-
 def _sha256_file(path):
     """SHA-256 of a regular file opened without following links; None if unavailable."""
     try:
@@ -143,17 +132,6 @@ def _sha256_file(path):
         return None
     finally:
         os.close(fd)
-
-
-def _load_module(alias, filename, uid):
-    path = HERE / filename
-    _trusted_sibling(path, uid)
-    spec = importlib.util.spec_from_file_location(alias, path)
-    if spec is None or spec.loader is None:
-        raise Stop("G6RUN_MODULE_UNAVAILABLE")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 class Env:
@@ -532,18 +510,37 @@ def _read_key_from_terminal():
         raise Stop("G6RUN_KEY_REFUSED") from None
 
 
-def real_env(command):
-    """Production wiring. Root only; no parameter lets a caller replace a runner."""
-    if socket.gethostname() != EXPECTED_HOST:  # before any module is loaded
+def _check_host_and_root():
+    if socket.gethostname() != EXPECTED_HOST:  # before anything is loaded
         raise Stop("G6RUN_HOST_REFUSED")
     if os.geteuid() != 0:
         raise Stop("G6RUN_ROOT_REQUIRED")
+
+
+def real_env(command):
+    """Direct CLI wiring is REFUSED: running as root would import sibling code from the work tree
+    before any independent trust anchor (P1-1). Use main_verified() from the PRE-4 bootstrap."""
+    _check_host_and_root()
+    raise Stop("G6RUN_UNTRUSTED_ENTRY")  # nothing is imported or executed on this path
+
+
+def env_from_verified(command, verified, load_module):
+    """Production wiring ONLY from bytes the PRE-4 bootstrap authenticated (`Verified`).
+    `load_module` must be the bootstrap's own loader, which refuses anything but a Verified object.
+    Digests reported in the preflight come from the authenticated manifest, never from disk."""
+    _check_host_and_root()
     uid = os.geteuid()
+    record = getattr(verified, "record", None)
+    files = record.get("files") if isinstance(record, dict) else None
+    if not isinstance(files, dict):
+        raise Stop("G6RUN_UNTRUSTED_ENTRY")
     modules, hashes = {}, {}
     for label, filename in SIBLINGS.items():
-        modules[label] = _load_module("qa525_g6_run_" + label, filename, uid)
-        hashes[label] = _sha256_file(HERE / filename) or "unavailable"
-    hashes["entrypoint"] = _sha256_file(Path(__file__).resolve()) or "unavailable"
+        if filename not in files:
+            raise Stop("G6RUN_MODULE_UNAVAILABLE")
+        modules[label] = load_module(verified, filename)  # compiles the verified bytes only
+        hashes[label] = files[filename]
+    hashes["entrypoint"] = files.get(ENTRYPOINT, "unavailable")
     captor = modules["captor"]
     producer = modules["producer"]
     return Env(
@@ -555,10 +552,11 @@ def real_env(command):
         read_key=_read_key_from_terminal, emit=print, module_hashes=hashes)
 
 
-def main(argv):
+def main(argv, verified=None, load_module=None):
     try:
         command, opts = parse(list(argv))
-        env = real_env(command)
+        env = (real_env(command) if verified is None
+               else env_from_verified(command, verified, load_module))
     except Stop as stop:
         print("G6RUN_STOP=" + str(stop))
         return 1
