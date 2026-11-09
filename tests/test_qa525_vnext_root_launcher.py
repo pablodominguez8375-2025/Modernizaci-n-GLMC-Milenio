@@ -15,6 +15,7 @@ import sys
 import tempfile
 import types
 import unittest
+import unittest.mock
 from contextlib import contextmanager
 
 BASE = Path(__file__).resolve().parents[1] / "scripts" / "qa"
@@ -132,7 +133,9 @@ class LauncherComposeTests(unittest.TestCase):
         child = types.SimpleNamespace(act=lambda fd: (acted.append(os.fstat(fd).st_size), "done")[1]) if child_ok \
             else types.SimpleNamespace()
         mods = dict(REAL)
+        auth = tests.auth if hasattr(tests, "auth") else (lambda **kw: True)
         mods.update({
+            "qa525-vnext-root-authenticity.py": types.SimpleNamespace(verify=auth),
             "qa525-vnext-root-launch-config.py": types.SimpleNamespace(CONFIG=cfg or self.config()),
             "qa525-vnext-root-locks.py": types.SimpleNamespace(),
             "qa525-vnext-posix-port.py": types.SimpleNamespace(PosixPort=lambda: object()),
@@ -163,7 +166,7 @@ class LauncherComposeTests(unittest.TestCase):
         return b
 
     def env(self, conn=None, **over):
-        env = {"euid": os.geteuid, "root_euid": UID, "os_uid": UID, "now": lambda: NOW,
+        env = {"euid": os.geteuid, "root_euid": UID, "os_uid": UID, "anchor": self.dir, "now": lambda: NOW,
                "accept": lambda path, uid, timeout: conn or self.sender(),
                "sha256": lambda b: "sha256:" + hashlib.sha256(b).hexdigest()}
         env.update(over)
@@ -336,7 +339,7 @@ class LauncherComposeTests(unittest.TestCase):
             got["c"] = c
         t = threading.Thread(target=peer)
         t.start()
-        conn = launcher._accept(path, UID, 5)
+        conn = launcher._accept(path, UID, 5, owner=UID, anchor=self.dir)
         t.join()
         self.addCleanup(conn.close)
         self.addCleanup(got["c"].close)
@@ -347,9 +350,117 @@ class LauncherComposeTests(unittest.TestCase):
     def test_accept_times_out_and_cleans_up(self):
         path = os.path.join(self.dir, "sock2")
         with self.assertRaises(launcher.Stop) as err:
-            launcher._accept(path, UID, 0.2)
+            launcher._accept(path, UID, 0.2, owner=UID, anchor=self.dir)
         self.assertEqual(str(err.exception), "LAUNCH_SOCKET_FAILED")
         self.assertFalse(os.path.exists(path))
+
+    def test_preexisting_socket_is_never_deleted_by_a_failed_attempt(self):
+        path = os.path.join(self.dir, "other")
+        other = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        self.addCleanup(other.close)
+        other.bind(path)
+        before = os.lstat(path)
+        with self.assertRaises(launcher.Stop) as err:
+            launcher._accept(path, UID, 0.2, owner=UID, anchor=self.dir)
+        self.assertEqual(str(err.exception), "LAUNCH_SOCKET_FAILED")
+        after = os.lstat(path)
+        self.assertEqual((before.st_dev, before.st_ino), (after.st_dev, after.st_ino))
+
+    def test_preexisting_regular_file_or_symlink_at_the_path_is_left_alone(self):
+        victim = os.path.join(self.dir, "victim")
+        Path(victim).write_text("keep")
+        os.chmod(victim, 0o640)
+        link = os.path.join(self.dir, "lnk")
+        os.symlink(victim, link)
+        for path in (victim, link):
+            with self.assertRaises(launcher.Stop):
+                launcher._accept(path, UID, 0.2, owner=UID, anchor=self.dir)
+        self.assertEqual((Path(victim).read_text(), os.stat(victim).st_mode & 0o777), ("keep", 0o640))
+        self.assertTrue(os.path.islink(link))
+
+    def test_a_swapped_name_is_not_unlinked_or_chowned(self):
+        path = os.path.join(self.dir, "sw")
+        real_chown, real_listen = os.chown, socket.socket.listen
+        stray = os.path.join(self.dir, "stray")
+        Path(stray).write_text("x")
+        os.chmod(stray, 0o640)
+
+        def swap_then_fail(sock, n):  # the name is replaced after our bind, then the attempt fails
+            os.unlink(path)
+            os.symlink(stray, path)
+            raise OSError("boom")
+        with unittest.mock.patch.object(socket.socket, "listen", swap_then_fail):
+            with self.assertRaises(launcher.Stop):
+                launcher._accept(path, UID, 0.2, owner=UID, anchor=self.dir)
+        self.assertTrue(os.path.islink(path), "the foreign entry that replaced our socket must survive")
+        self.assertEqual(os.stat(stray).st_mode & 0o777, 0o640, "no chmod/chown reached the foreign target")
+
+    def test_unsafe_or_linked_socket_directory_is_refused_before_bind(self):
+        loose = os.path.join(self.dir, "loose")
+        os.mkdir(loose, 0o700)
+        os.chmod(loose, 0o777)
+        linked = os.path.join(self.dir, "linked")
+        os.symlink(os.path.join(self.dir, "tmp"), linked)
+        for directory in (loose, linked):
+            with self.assertRaises(launcher.Stop) as err:
+                launcher._accept(os.path.join(directory, "s"), UID, 0.2, owner=UID, anchor=self.dir)
+            self.assertEqual(str(err.exception), "LAUNCH_DIR_UNSAFE")
+        self.assertEqual(os.listdir(os.path.join(self.dir, "tmp")), [])
+        self.assertEqual(os.listdir(loose), [])
+
+    def test_failure_after_bind_removes_only_our_own_socket(self):
+        path = os.path.join(self.dir, "own")
+        with unittest.mock.patch.object(os, "chown", side_effect=OSError("denied")):
+            with self.assertRaises(launcher.Stop):
+                launcher._accept(path, UID, 0.2, owner=UID, anchor=self.dir)
+        self.assertFalse(os.path.lexists(path))
+
+    def test_inbox_with_an_unsafe_ancestor_is_refused_before_any_read(self):
+        outer = os.path.join(self.dir, "outer")
+        os.mkdir(outer, 0o700)
+        os.chmod(outer, 0o777)
+        inner = os.path.join(outer, "in")
+        os.mkdir(inner, 0o700)
+        shutil.copy(os.path.join(self.dir, "inbox", "go.json"), os.path.join(inner, "go.json"))
+        with self.assertRaises(launcher.Stop) as err:
+            launcher._read_regular(inner, "go.json", UID, self.dir)
+        self.assertEqual(str(err.exception), "LAUNCH_INBOX_UNSAFE")
+
+    # ---- the receipts are claims until the authenticity port says otherwise
+    def test_without_an_authenticity_port_nothing_runs(self):
+        load = self.loader()
+
+        def missing(name):
+            if name == "qa525-vnext-root-authenticity.py":
+                raise RuntimeError("BOOT_MODULE_UNKNOWN")
+            return load(name)
+        self.stop("BOOT_MODULE_UNKNOWN", load=missing)
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_port_without_verify_or_denying_or_raising_or_truthy_only_stops_before_the_nonce(self):
+        for auth, code in ((lambda **kw: False, "LAUNCH_AUTHENTICITY_DENIED"),
+                           (lambda **kw: 1, "LAUNCH_AUTHENTICITY_DENIED"),
+                           (lambda **kw: None, "LAUNCH_AUTHENTICITY_DENIED"),
+                           (lambda **kw: (_ for _ in ()).throw(ValueError("x")), "LAUNCH_AUTHENTICITY_DENIED")):
+            self.auth = auth
+            self.stop(code)
+        self.auth = None
+        self.stop("LAUNCH_AUTHENTICITY_PORT_MISSING")
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_fabricated_receipts_with_a_coherent_digest_are_still_denied_by_the_port(self):
+        fake_ops = dict(self.ops, status="OPS_SIGNED_VERIFIED")  # coherent claims, no signature behind them
+        self.write_inbox(ops=fake_ops)
+        seen = {}
+
+        def auth(**kw):
+            seen.update(kw)
+            return False
+        self.auth = auth
+        self.stop("LAUNCH_AUTHENTICITY_DENIED", load=self.loader(cfg=self.config()))
+        self.assertEqual(json.loads(seen["ops_bytes"])["status"], "OPS_SIGNED_VERIFIED")
+        self.assertEqual(seen["claims"]["purpose"], "LAUNCHER_ONLY")
+        self.assertEqual(self.spent, [])
 
     # ---- production entry point: one fixed code, no traceback
     def test_launch_prints_one_fixed_code_and_exits_nonzero(self):

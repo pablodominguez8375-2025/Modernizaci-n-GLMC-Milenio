@@ -15,7 +15,8 @@ Order (each step a fixed STOP):
   5. the child module for that scope is resolved BEFORE any nonce can be spent;
   6. the one composed flight: 5 legacy locks + dedicated lease (#982) -> GO verified (#981 + `check_cut`)
      -> sealed FD received (#966) -> nonce spent (#967) -> fixed child -> plane re-checked (#975/#976).
-`check_cut` only proves the GO's claims are consistent with the pins; the AUTHENTICITY is #981's
+The OPS v3 / APP receipts are CLAIMS until the authenticity port (Sigstore APP ZIP inner + OPS v3 under
+the Sponsor root) confirms them: with no such module the launcher stops before the flight. `check_cut` only proves the GO's claims are consistent with the pins; the AUTHENTICITY is #981's
 fingerprint-pinned `ssh-keygen -Y verify`. A GO's validity is never read from the host, the sender or Git.
 """
 import datetime as dt
@@ -28,6 +29,7 @@ import sys
 
 CONFIG = "qa525-vnext-root-launch-config.py"
 LOCKS, POSIX, PLANE = ("qa525-vnext-root-locks.py", "qa525-vnext-posix-port.py", "qa525-vnext-root-plane.py")
+AUTH = "qa525-vnext-root-authenticity.py"
 ENTRY, VERIFY, CUT = ("qa525-vnext-root-entry.py", "qa525-vnext-root-go-verify.py",
                       "qa525-vnext-go-cut-contract.py")
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
@@ -75,13 +77,14 @@ def _config(module):
     return cfg
 
 
-def _read_regular(directory, name, uid):
+def _read_regular(directory, name, uid, anchor="/"):
     """Root-owned regular file directly inside `directory`, opened without following links or blocking."""
     if name not in INBOX_FILES:
         raise Stop("LAUNCH_INPUT_NAME")
     try:
+        _chain(directory, uid, anchor)  # every ancestor, before any root I/O on the inbox
         dfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
-    except OSError:
+    except (OSError, Stop):
         raise Stop("LAUNCH_INBOX_UNSAFE") from None
     try:
         dst = os.fstat(dfd)
@@ -135,27 +138,87 @@ def _helper_pin(record):
     return helper["path"], "sha256:" + helper["sha256"]  # the ONE bare-hex -> "sha256:" conversion
 
 
-def _accept(path, peer_uid, timeout):
-    """Listen on a root-created socket path only the Sponsor's operator may connect to; take ONE peer."""
-    server = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+def _chain(path, uid, anchor="/"):
+    """Every directory from `anchor` down to `path`: real (no symlink), owned by `uid`, not group/other writable."""
+    if not _abs(path) or not _abs(anchor) or not (path == anchor or path.startswith(anchor.rstrip("/") + "/")):
+        raise Stop("LAUNCH_DIR_UNSAFE")
+    current = anchor
+    parts = [] if path == anchor else path[len(anchor.rstrip("/")) + 1:].split("/")
+    for part in [None] + parts:
+        if part is not None:
+            current = os.path.join(current, part)
+        try:
+            info = os.lstat(current)
+        except OSError:
+            raise Stop("LAUNCH_DIR_UNSAFE") from None
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or info.st_mode & 0o022:
+            raise Stop("LAUNCH_DIR_UNSAFE")
+
+
+def _open_dir(path, uid, anchor):
+    _chain(path, uid, anchor)
     try:
-        server.bind(path)
-        os.chown(path, peer_uid, -1)
-        os.chmod(path, 0o600)
-        # Set BEFORE listen: the accepted socket inherits it, so a frame sent before accept() still
-        # carries SCM_CREDENTIALS (verified on Linux); setting it only after accept would lose them.
-        server.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
-        server.listen(1)
-        server.settimeout(timeout)
-        conn, _ = server.accept()
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     except OSError:
-        raise Stop("LAUNCH_SOCKET_FAILED") from None
+        raise Stop("LAUNCH_DIR_UNSAFE") from None
+    info = os.fstat(fd)
+    try:
+        same = os.lstat(path)
+    except OSError:
+        os.close(fd)
+        raise Stop("LAUNCH_DIR_UNSAFE") from None
+    if (info.st_dev, info.st_ino) != (same.st_dev, same.st_ino) or info.st_uid != uid or info.st_mode & 0o022:
+        os.close(fd)
+        raise Stop("LAUNCH_DIR_UNSAFE")
+    return fd
+
+
+def _accept(path, peer_uid, timeout, *, owner=0, anchor="/"):
+    """Listen on a socket this attempt creates inside a root-owned, link-free directory; take ONE peer.
+
+    Nothing outside the inode THIS attempt created is ever touched: a pre-existing path makes bind fail and is
+    left alone; owner/mode are set through a descriptor to the exact inode (never the path); the file is
+    unlinked only if the name still refers to that same (dev, ino)."""
+    if not _abs(path) or len(os.path.basename(path)) > 60 or os.path.basename(path) in ("", ".", ".."):
+        raise Stop("LAUNCH_SOCKET_FAILED")
+    directory, name = os.path.dirname(path), os.path.basename(path)
+    dfd = _open_dir(directory, owner, anchor)
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    created, pfd = None, None
+    try:
+        try:
+            server.bind("/proc/self/fd/%d/%s" % (dfd, name))  # EADDRINUSE on any pre-existing entry: untouched
+            info = os.lstat(name, dir_fd=dfd)
+            if not stat.S_ISSOCK(info.st_mode) or info.st_uid != owner:
+                raise Stop("LAUNCH_SOCKET_FAILED")
+            created = (info.st_dev, info.st_ino)
+            pfd = os.open(name, os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)
+            held = os.fstat(pfd)
+            if (held.st_dev, held.st_ino) != created:
+                raise Stop("LAUNCH_SOCKET_FAILED")
+            proc = "/proc/self/fd/%d" % pfd  # resolves to the inode we hold, immune to renames/swaps
+            os.chown(proc, peer_uid, -1)
+            os.chmod(proc, 0o600)
+            # Set BEFORE listen: the accepted socket inherits it, so a frame sent before accept() still
+            # carries SCM_CREDENTIALS (verified on Linux); setting it only after accept would lose them.
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
+            server.listen(1)
+            server.settimeout(timeout)
+            conn, _ = server.accept()
+        except OSError:
+            raise Stop("LAUNCH_SOCKET_FAILED") from None
     finally:
         server.close()
+        if pfd is not None:
+            os.close(pfd)
         try:
-            os.unlink(path)
+            if created is not None:
+                now = os.lstat(name, dir_fd=dfd)
+                if (now.st_dev, now.st_ino) == created:
+                    os.unlink(name, dir_fd=dfd)
         except OSError:
             pass
+        os.close(dfd)
     conn.setsockopt(socket.SOL_SOCKET, socket.SO_PASSCRED, 1)
     return conn
 
@@ -166,7 +229,7 @@ def _compose(load, record, env):
         raise Stop("LAUNCH_NOT_ROOT")
     cfg = _config(load(CONFIG))
     keygen_path, keygen_sha = _helper_pin(record)
-    raw = {n: _read_regular(cfg["inbox"], n, env["os_uid"]) for n in INBOX_FILES}
+    raw = {n: _read_regular(cfg["inbox"], n, env["os_uid"], env["anchor"]) for n in INBOX_FILES}
     if (env["sha256"](raw["ops-v3.json"]) != cfg["ops_v3_sha256"]
             or env["sha256"](raw["app-subject.json"]) != cfg["app_subject_sha256"]):
         raise Stop("LAUNCH_RECEIPT_PIN_MISMATCH")
@@ -179,6 +242,9 @@ def _compose(load, record, env):
     purpose = EXECUTABLE[schema]
     ops, subject = _json(raw["ops-v3.json"], "LAUNCH_OPS_INVALID"), _json(raw["app-subject.json"], "LAUNCH_APP_INVALID")
     cut, verify, entry = load(CUT), load(VERIFY), load(ENTRY)
+    port = getattr(load(AUTH), "verify", None)  # Sigstore APP + OPS v3 under the Sponsor root; absent => STOP
+    if not callable(port):
+        raise Stop("LAUNCH_AUTHENTICITY_PORT_MISSING")
     child_mod = load(cfg["children"][purpose])  # resolved BEFORE any nonce can be spent
     act = getattr(child_mod, "act", None)
     if not callable(act):
@@ -196,6 +262,12 @@ def _compose(load, record, env):
             ops_v3_receipt=ops, app_subject=subject, now_utc=dt.datetime.fromtimestamp(now, dt.timezone.utc),
             verify_go_signature=verifier, nonce_unused=lambda _n, _a: True,  # #967 consume is the ONLY marker
             purpose=purpose, launcher_pins=dict(cfg["launcher_pins"]))
+        try:
+            authentic = port(ops_bytes=raw["ops-v3.json"], app_subject_bytes=raw["app-subject.json"], claims=dict(result))
+        except Exception:  # noqa: BLE001
+            authentic = False
+        if authentic is not True:  # check_cut is consistency only; receipts are claims until this port says so
+            raise Stop("LAUNCH_AUTHENTICITY_DENIED")
         if (result.get("purpose") != purpose or type(result.get("nonce")) is not str
                 or HEX64.fullmatch(result["nonce"]) is None):
             raise Stop("LAUNCH_GO_CLAIMS_INVALID")
@@ -225,7 +297,7 @@ def launch(load, record):
     """Called by the bootstrap. Any failure prints ONE fixed code and exits non-zero (no traceback)."""
     import hashlib
     import time
-    env = {"euid": os.geteuid, "root_euid": 0, "os_uid": 0, "now": lambda: int(time.time()), "accept": _accept,
+    env = {"euid": os.geteuid, "root_euid": 0, "os_uid": 0, "anchor": "/", "now": lambda: int(time.time()), "accept": _accept,
            "sha256": lambda b: "sha256:" + hashlib.sha256(b).hexdigest()}
     try:
         _compose(load, record, env)
