@@ -153,7 +153,7 @@ def verifier_for(*, keygen_path, trusted_binary_sha256, allowed_signers, expecte
             raise Stop("GORV_ROOT_REQUIRED")
         _temp_root_ok(temp_root, os_uid)
         fd, before = _open_binary(binary_path, os_uid, trusted_binary_sha256)
-        tmp = None
+        tmp, cleanup_failed = None, False
         try:
             try:
                 tmp = tempfile.mkdtemp(prefix="gorv-", dir=temp_root)  # 0700 by construction
@@ -179,7 +179,12 @@ def verifier_for(*, keygen_path, trusted_binary_sha256, allowed_signers, expecte
         finally:
             os.close(fd)
             if tmp is not None:
-                shutil.rmtree(tmp, ignore_errors=True)
+                try:
+                    shutil.rmtree(tmp)
+                except OSError:
+                    cleanup_failed = True  # never swallowed: see below
+        if cleanup_failed:
+            raise Stop("GORV_TEMP_CLEANUP_FAILED")  # key material may remain: no verdict is returned
         expected = ('Good "%s" signature for %s with ED25519 key %s\n'
                     % (NAMESPACE, PRINCIPAL, expected_fingerprint)).encode()
         return (type(done.returncode) is int and done.returncode == 0

@@ -174,6 +174,12 @@ class RootGoVerifyTests(unittest.TestCase):
                 self.stop("GORV_INPUT_INVALID", v, *args)
             boom.assert_not_called()
 
+    def test_a_temp_dir_that_cannot_be_removed_stops_instead_of_returning_a_verdict(self):
+        v = self.verifier()
+        sig = self.sign(self.key)
+        with unittest.mock.patch.object(self.m.shutil, "rmtree", side_effect=OSError("busy")):
+            self.stop("GORV_TEMP_CLEANUP_FAILED", v, GO, sig, self.key["fp"])
+
     def test_production_code_has_no_runner_injection_or_shell(self):
         import inspect
         self.assertNotIn("runner", inspect.signature(self.m.verifier_for).parameters)
