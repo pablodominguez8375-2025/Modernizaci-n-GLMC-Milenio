@@ -35,6 +35,14 @@ LAUNCHER_FIELDS = GO_FIELDS | frozenset({
 LAUNCHER_PIN_FIELDS = frozenset({
     "release_asset_sha256", "old_launcher_sha256", "candidate_operator_sha256",
 })
+# Signed G6 v2: a distinct per-command GO, never launcher or API/WEB authority.
+G6_SCOPE = "QA525_G6_V2_ONLY_NO_LAUNCHER_NO_API_WEB"
+G6_ENVIRONMENT = "QA_GLMDCH_ONLY"
+G6_OPERATOR = "soporte@glmdch"
+G6_COMMANDS = frozenset({"init", "backup", "restore", "review"})
+G6_FIELDS = GO_FIELDS | frozenset({"operator", "g6_command", "g6_operation_sha256"})
+G6_PIN_FIELDS = frozenset({"g6_command", "g6_operation_sha256"})
+MAX_G6_AGE_SECONDS = 900
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 MAX_LAUNCHER_AGE_SECONDS = 900
 OPS_FIELDS = frozenset({"schema", "status", "ops_source_sha", "program_sha256",
@@ -60,7 +68,7 @@ def _strict_pairs(pairs):
     return result
 
 
-def _parse(raw, *, launcher=False):
+def _parse(raw, *, launcher=False, g6=False):
     if type(raw) is not bytes or not 0 < len(raw) <= 65536:
         raise Stop("GO_CUT_INPUT_INVALID")
     try:
@@ -68,7 +76,7 @@ def _parse(raw, *, launcher=False):
                            parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
     except (ValueError, UnicodeDecodeError, RecursionError, TypeError):
         raise Stop("GO_CUT_JSON_INVALID") from None
-    if type(value) is not dict or set(value) != (LAUNCHER_FIELDS if launcher else GO_FIELDS):
+    if type(value) is not dict or set(value) != (LAUNCHER_FIELDS if launcher else G6_FIELDS if g6 else GO_FIELDS):
         raise Stop("GO_CUT_FIELDS_INVALID")
     # Canonical byte layout ensures Sponsor signs exactly the reviewed cut.
     expected = (json.dumps(value, sort_keys=True, separators=(",", ":"),
@@ -90,7 +98,7 @@ def _utc(raw):
 
 def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
               app_subject, now_utc, verify_go_signature, nonce_unused,
-              purpose="API_WEB_QA_ONLY", launcher_pins=None):
+              purpose="API_WEB_QA_ONLY", launcher_pins=None, g6_pins=None):
     """Require consistent signed-GO *claims* and an exact freshness window.
 
     verify_go_signature(go_bytes,signature_bytes,go_fingerprint) -> bool True
@@ -107,11 +115,14 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
             or now_utc.utcoffset() != dt.timedelta(0)
             or not callable(verify_go_signature) or not callable(nonce_unused)
             or type(purpose) is not str
-            or purpose not in ("API_WEB_QA_ONLY", "LAUNCHER_ONLY")
-            or (purpose == "API_WEB_QA_ONLY" and launcher_pins is not None)
+            or purpose not in ("API_WEB_QA_ONLY", "LAUNCHER_ONLY", "G6_V2_ONLY")
+            or (purpose == "API_WEB_QA_ONLY" and (launcher_pins is not None or g6_pins is not None))
             or (purpose == "LAUNCHER_ONLY"
-                and (type(launcher_pins) is not dict
-                     or set(launcher_pins) != LAUNCHER_PIN_FIELDS))):
+                and (g6_pins is not None or type(launcher_pins) is not dict
+                     or set(launcher_pins) != LAUNCHER_PIN_FIELDS))
+            or (purpose == "G6_V2_ONLY"
+                and (launcher_pins is not None or type(g6_pins) is not dict
+                     or set(g6_pins) != G6_PIN_FIELDS))):
         raise Stop("GO_CUT_INPUT_INVALID")
     frozen = dict(pins)
     if (any(type(frozen[k]) is not str or SHA40.fullmatch(frozen[k]) is None
@@ -123,20 +134,32 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
             or FP.fullmatch(frozen["go_fingerprint"]) is None):
         raise Stop("GO_CUT_PIN_INVALID")
     launcher = purpose == "LAUNCHER_ONLY"
+    g6 = purpose == "G6_V2_ONLY"
     if launcher and (type(launcher_pins["release_asset_sha256"]) is not str
                      or SHA256.fullmatch(launcher_pins["release_asset_sha256"]) is None
                      or any(type(launcher_pins[k]) is not str
                             or HEX64.fullmatch(launcher_pins[k]) is None
                             for k in ("old_launcher_sha256", "candidate_operator_sha256"))):
         raise Stop("GO_CUT_LAUNCHER_PIN_INVALID")
+    if g6 and (type(g6_pins["g6_command"]) is not str
+               or g6_pins["g6_command"] not in G6_COMMANDS
+               or type(g6_pins["g6_operation_sha256"]) is not str
+               or SHA256.fullmatch(g6_pins["g6_operation_sha256"]) is None):
+        raise Stop("GO_CUT_G6_PIN_INVALID")
     launcher_frozen = dict(launcher_pins) if launcher else None
-    acta = _parse(go_bytes, launcher=launcher)
+    g6_frozen = dict(g6_pins) if g6 else None
+    acta = _parse(go_bytes, launcher=launcher, g6=g6)
     expected = ({
         "schema": "qa525-go-launcher-v1",
         "host": "glmdch", "environment": LAUNCHER_ENVIRONMENT,
         "scope": LAUNCHER_SCOPE, "action": LAUNCHER_ACTION,
         "operator": LAUNCHER_OPERATOR,
     } if launcher else {
+        "schema": "qa525-go-g6-v1", "host": "glmdch",
+        "environment": G6_ENVIRONMENT, "scope": G6_SCOPE,
+        "action": "g6-v2-%s-supervised" % g6_frozen["g6_command"],
+        "operator": G6_OPERATOR,
+    } if g6 else {
         "schema": "qa525-go-cut-v1",
         "host": "glmdch", "environment": "QA_SYNTHETIC",
         "scope": "API_WEB_QA_ONLY", "action": "ADMIT_OFFLINE_APPLY",
@@ -153,12 +176,17 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
         if (any(acta[k] != launcher_frozen[k] for k in LAUNCHER_PIN_FIELDS)
                 or HEX64.fullmatch(acta["nonce"]) is None):
             raise Stop("GO_CUT_LAUNCHER_BINDING_MISMATCH")
+    if g6:
+        if (any(acta[k] != g6_frozen[k] for k in G6_PIN_FIELDS)
+                or HEX64.fullmatch(acta["nonce"]) is None):
+            raise Stop("GO_CUT_G6_BINDING_MISMATCH")
     issued = _utc(acta["issued_at"])
     expires = _utc(acta["expires_at"])
     if not (issued <= now_utc and
-            (now_utc < expires if launcher else now_utc <= expires) and
+            (now_utc < expires if launcher or g6 else now_utc <= expires) and
             0 < (expires - issued).total_seconds() <=
-            (MAX_LAUNCHER_AGE_SECONDS if launcher else MAX_GO_AGE_SECONDS)):
+            (MAX_G6_AGE_SECONDS if g6 else
+             MAX_LAUNCHER_AGE_SECONDS if launcher else MAX_GO_AGE_SECONDS)):
         raise Stop("GO_CUT_EXPIRED_OR_FUTURE")
     if (set(ops_v3_receipt) != OPS_FIELDS
             or ops_v3_receipt.get("schema") != "qa525-ops-v3"
@@ -182,18 +210,22 @@ def check_cut(*, go_bytes, go_signature_bytes, pins, ops_v3_receipt,
     except Exception:
         raise Stop("GO_CUT_SIGNATURE_DENIED") from None
     if (signature_ok is not True or pins != frozen
-            or (launcher and launcher_pins != launcher_frozen)):
+            or (launcher and launcher_pins != launcher_frozen)
+            or (g6 and g6_pins != g6_frozen)):
         raise Stop("GO_CUT_SIGNATURE_DENIED")
     try:
         unused = nonce_unused(acta["nonce"], frozen["admission_sha256"])
     except Exception:
         raise Stop("GO_CUT_NONCE_UNSAFE") from None
     if (unused is not True or pins != frozen
-            or (launcher and launcher_pins != launcher_frozen)):
+            or (launcher and launcher_pins != launcher_frozen)
+            or (g6 and g6_pins != g6_frozen)):
         raise Stop("GO_CUT_NONCE_UNSAFE")
     return {
         "status": STATUS,
         "purpose": purpose, "launcher_contract_shape_only": launcher,
+        "g6_contract_shape_only": g6,
+        "g6_command": g6_frozen["g6_command"] if g6 else None,
         "nonce": acta["nonce"], "go_bytes_sha256": "sha256:" + hashlib.sha256(go_bytes).hexdigest(),
         "ops_source_sha": frozen["ops_source_sha"],
         "app_source_sha": frozen["app_source_sha"],
