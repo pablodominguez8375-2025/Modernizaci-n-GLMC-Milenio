@@ -41,8 +41,10 @@ def _safe_dir(path, uid, anchor="/"):
             raise Stop("BOOT_DIR_UNSAFE")
 
 
-def _read_verified(path, uid, want, limit=MAX_FILE):
-    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+def _read_file(path, uid, limit=MAX_FILE):
+    """Open without following links or blocking (a FIFO/device never hangs us), judge the OPEN fd
+    (regular, owned, not group/other-writable, single link, 0 < size <= limit), read exactly its bytes."""
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
     fd = os.open(path, flags)
     try:
         info = os.fstat(fd)
@@ -55,8 +57,15 @@ def _read_verified(path, uid, want, limit=MAX_FILE):
             if not block:
                 raise Stop("BOOT_FILE_UNSAFE")
             data += block
+        if os.read(fd, 1) != b"":  # grew after fstat
+            raise Stop("BOOT_FILE_UNSAFE")
     finally:
         os.close(fd)
+    return data
+
+
+def _read_verified(path, uid, want, limit=MAX_FILE):
+    data = _read_file(path, uid, limit)
     if not hmac.compare_digest(hashlib.sha256(data).hexdigest(), want):
         raise Stop("BOOT_HASH_MISMATCH")
     return data
@@ -121,7 +130,7 @@ def _interpreter_real():
     return os.path.realpath(sys.executable)
 
 
-def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, anchor="/"):
+def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, anchor="/", os_uid=0):
     """Return {name: verified bytes} and the trust record. Raises Stop before anything is loaded."""
     files, interp, helpers = check_manifest_pin(manifest_bytes, external_pin)
     if sys.flags.isolated != 1 or sys.flags.no_site != 1 or sys.flags.ignore_environment != 1:
@@ -136,11 +145,11 @@ def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, anchor="
         hreal = os.path.realpath(h["path"])
         if hreal != h["path"]:
             raise Stop("BOOT_HELPER_PATH_UNSAFE")  # no symlinks in the pinned helper path
-        _safe_dir(os.path.dirname(hreal), 0)
-        _read_verified(hreal, 0, h["sha256"], MAX_INTERPRETER)
+        _safe_dir(os.path.dirname(hreal), os_uid, anchor)
+        _read_verified(hreal, os_uid, h["sha256"], MAX_INTERPRETER)
     code = {name: _read_verified(os.path.join(install_dir, name), uid, want)
             for name, want in sorted(files.items())}
-    record = {"schema": "qa525-pre-root-trust-v1", "manifest_pin": external_pin,
+    record = {"schema": "qa525-pre-root-trust-v2" if helpers else "qa525-pre-root-trust-v1", "manifest_pin": external_pin,
               "interpreter": {"real": real, "sha256": interp["sha256"]},
               "files": dict(sorted(files.items())),
               "helpers": {k: dict(v) for k, v in sorted(helpers.items())}}
@@ -186,22 +195,75 @@ LAUNCHER = "qa525-vnext-root-launcher.py"
 EVIDENCE_DIR = "/var/lib/pmgm-qa525/pre-root-trust"
 
 
-def launch(argv, stdin, *, euid, uid=0, anchor="/", evidence_dir=EVIDENCE_DIR):
+def _read_pin(stdin):
+    """One short line, never blocking past it. With a real descriptor the bytes are read UNBUFFERED one
+    at a time (a buffered reader could swallow trailing bytes unseen). TTY: echo is disabled for the read
+    and restored. Pipe or file: after the line only a NON-blocking look for trailing bytes (EOF or silence
+    are both fine). Objects without a descriptor (tests) use readline()/read(1)."""
+    try:
+        fd = stdin.fileno()
+    except (AttributeError, OSError, ValueError):
+        line = stdin.readline(100)
+        if stdin.read(1) != "":
+            raise Stop("BOOT_PIN_INVALID")
+        return line[:-1] if line.endswith("\n") else line
+    import select
+    tty = os.isatty(fd)
+    old = None
+    if tty:
+        import termios
+        old = termios.tcgetattr(fd)
+        new = list(old)
+        new[3] &= ~termios.ECHO  # lflags: no echo of the typed pin
+        termios.tcsetattr(fd, termios.TCSAFLUSH, new)
+    try:
+        raw = b""
+        while len(raw) < 100:
+            ch = os.read(fd, 1)
+            if ch in (b"", b"\n"):
+                break
+            raw += ch
+        else:
+            raise Stop("BOOT_PIN_INVALID")  # no newline within 100 bytes
+    finally:
+        if old is not None:
+            import termios
+            termios.tcsetattr(fd, termios.TCSAFLUSH, old)
+    if not tty and select.select([fd], [], [], 0)[0] and os.read(fd, 1) != b"":
+        raise Stop("BOOT_PIN_INVALID")
+    try:
+        return raw.decode("ascii")
+    except UnicodeDecodeError:
+        raise Stop("BOOT_PIN_INVALID") from None
+
+
+MANIFEST_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
+
+
+def launch(argv, stdin, *, euid, uid=0, anchor="/", evidence_dir=EVIDENCE_DIR, os_uid=0):
     """`python3 -I -S bootstrap.py run INSTALL_DIR MANIFEST` (root). The pin is read from stdin ONLY
-    (typed by the Sponsor from Bitwarden), never argv/env/file. Order: root -> pin -> verify every byte
-    -> durable pre-root-trust record -> ONLY THEN compile the launcher from the verified bytes and hand
-    it a loader that cannot reach disk. Any deviation is a fixed STOP before a single module exists."""
+    (typed by the Sponsor from Bitwarden), never argv/env/file. MANIFEST must be a regular root-owned
+    file directly inside the verified INSTALL_DIR. Order: root -> pin -> manifest (opened without
+    following links or blocking) -> verify every byte -> v2 manifest with a pinned ssh-keygen and the
+    launcher present -> durable pre-root-trust record -> ONLY THEN compile the launcher from the verified
+    bytes and hand it a loader that cannot reach disk. Any deviation is a fixed STOP before a single
+    module exists and before any record is written."""
     if len(argv) != 4 or argv[1] != "run":
         raise Stop("BOOT_USAGE")
     if euid != 0:
         raise Stop("BOOT_NOT_ROOT")
-    line = stdin.readline(100)
-    pin = line[:-1] if line.endswith("\n") else line
-    if stdin.read(1) != "":
-        raise Stop("BOOT_PIN_INVALID")  # exactly one short line, nothing after it
-    with open(argv[3], "rb") as f:
-        manifest = f.read(MAX_FILE)
-    verified = verify_install(argv[2], manifest, pin, uid=uid, anchor=anchor)
+    install, mpath = argv[2], argv[3]
+    if (type(install) is not str or type(mpath) is not str or os.path.dirname(mpath) != install
+            or MANIFEST_NAME.fullmatch(os.path.basename(mpath)) is None or mpath != os.path.normpath(mpath)):
+        raise Stop("BOOT_MANIFEST_PATH_INVALID")
+    pin = _read_pin(stdin)
+    _safe_dir(install, uid, anchor)
+    manifest = _read_file(mpath, uid)
+    verified = verify_install(install, manifest, pin, uid=uid, anchor=anchor, os_uid=os_uid)
+    if "ssh-keygen" not in verified.record["helpers"]:
+        raise Stop("BOOT_RUN_REQUIRES_V2")  # a v1 (check-only) manifest never authorises a root run
+    if LAUNCHER not in verified.record["files"]:
+        raise Stop("BOOT_MODULE_UNKNOWN")
     write_record(evidence_dir, verified.record, uid=uid, anchor=anchor)
     launcher = load_module(verified, LAUNCHER)
     return launcher.launch(lambda name: load_module(verified, name), dict(verified.record))
