@@ -336,6 +336,10 @@ def launch(argv, stdin, *, euid, uid=0, anchor="/", evidence_dir=EVIDENCE_DIR, o
 
     def load(name):
         return config_ns if name == CONFIG_MODULE else load_module(verified, name)  # the config never comes from disk
+    # In-memory Verified capability, never an untrusted path, CLI value or GO claim.
+    # The G6-only launcher branch requires this exact manifest-bound loader.
+    load._qa525_verified = verified
+    load._qa525_load_module = load_module
     return launcher.launch(load, dict(verified.record))
 
 

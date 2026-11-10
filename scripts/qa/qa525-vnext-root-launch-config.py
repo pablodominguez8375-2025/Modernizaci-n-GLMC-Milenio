@@ -76,8 +76,13 @@ def _validated(data):
             or not _shape(data["launcher_pins"], LAUNCHER_PIN_KEYS)
             or not _shape(data["authenticity"], AUTH_KEYS)
             or data["children"] != CHILD_MODULES
-            or type(data["children"]) is not dict
-            or data["g6_pins"] is not None):
+            or type(data["children"]) is not dict):
+        raise Stop("LAUNCH_CONFIG_INVALID")
+    g6 = data["g6_pins"]
+    if g6 is not None and (not _shape(g6, {"g6_command", "g6_operation_sha256"})
+                            or type(g6["g6_command"]) is not str
+                            or g6["g6_command"] not in ("preflight", "init", "backup", "restore", "review")
+                            or not _matches(g6["g6_operation_sha256"], SHA)):
         raise Stop("LAUNCH_CONFIG_INVALID")
 
     pins, launch, auth = data["pins"], data["launcher_pins"], data["authenticity"]

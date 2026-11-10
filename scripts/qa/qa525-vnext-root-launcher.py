@@ -45,8 +45,12 @@ MODULE = re.compile(r"qa525-vnext-[a-z0-9-]{1,60}\.py\Z")
 MAX_INPUT = 65536
 INBOX_FILES = ("go.json", "go.json.sig", "ops-v3.json", "app-subject.json",
                "ops-v3.json.sig", "app-bundle.json", "trusted-root.jsonl")
-INBOX_LIMITS = {"ops-v3.json.sig": 4096, "app-bundle.json": 1_000_000, "trusted-root.jsonl": 262144}
+INBOX_LIMITS = {"ops-v3.json.sig": 4096, "app-bundle.json": 1_000_000,
+                "trusted-root.jsonl": 262144, "g6-operation.json": 4096}
 MAX_ARCHIVE = 512 * 1024 * 1024
+G6_OPERATION_FILE = "g6-operation.json"
+G6_RUN = "qa525-vnext-g6-v2-run.py"
+G6_CHILD_CORE = "qa525-vnext-root-g6-child-core.py"
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256", "app_subject_sha256",
     "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
@@ -110,7 +114,7 @@ def _config(module):
 
 def _read_regular(directory, name, uid, anchor="/"):
     """Root-owned regular file directly inside `directory`, opened without following links or blocking."""
-    if name not in INBOX_FILES:
+    if name not in INBOX_FILES and name != G6_OPERATION_FILE:
         raise Stop("LAUNCH_INPUT_NAME")
     limit = INBOX_LIMITS.get(name, MAX_INPUT)
     try:
@@ -156,6 +160,26 @@ def _json(raw, code):
     if type(value) is not dict:
         raise Stop(code)
     return value
+
+
+def _g6_operation(raw, pins, runner):
+    """Canonical, GO-bound options from a root-owned file, never the peer's FD."""
+    doc = _json(raw, "LAUNCH_G6_OPERATION_INVALID")
+    if (set(doc) != {"schema", "g6_command", "argv"}
+            or doc["schema"] != "qa525-g6-operation-v1"
+            or doc["g6_command"] != pins["g6_command"]
+            or type(doc["argv"]) is not list or len(doc["argv"]) > 24
+            or any(type(v) is not str or len(v) > 256 for v in doc["argv"])
+            or json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode() != raw):
+        raise Stop("LAUNCH_G6_OPERATION_INVALID")
+    argv = [pins["g6_command"], *doc["argv"]]
+    try:
+        cmd, _ = runner.parse(argv)
+    except Exception:
+        raise Stop("LAUNCH_G6_OPERATION_INVALID") from None
+    if cmd != pins["g6_command"]:
+        raise Stop("LAUNCH_G6_OPERATION_INVALID")
+    return argv
 
 
 def _epoch(text):
@@ -298,6 +322,14 @@ def _compose(load, record, env):
             raise Stop("LAUNCH_G6_NOT_CONFIGURED")  # this release pins no G6 command: a G6 GO is not honoured
         g6_pins = dict(cfg["g6_pins"])
     child_key = "G6:" + g6_pins["g6_command"] if g6_pins else purpose
+    g6_runner = g6_bridge = g6_argv = None
+    if g6_pins is not None:
+        operation = _read_regular(cfg["inbox"], G6_OPERATION_FILE, env["os_uid"], env["anchor"])
+        if env["sha256"](operation) != g6_pins["g6_operation_sha256"]:
+            raise Stop("LAUNCH_G6_OPERATION_PIN_MISMATCH")
+        # Both modules come exclusively from the already Sponsor-pinned PRE-4 loader.
+        g6_runner, g6_bridge = load(G6_RUN), load(G6_CHILD_CORE)
+        g6_argv = _g6_operation(operation, g6_pins, g6_runner)
     ops, subject = _json(raw["ops-v3.json"], "LAUNCH_OPS_INVALID"), _json(raw["app-subject.json"], "LAUNCH_APP_INVALID")
     cut, verify, entry = load(CUT), load(VERIFY), load(ENTRY)
     build = getattr(load(AUTH), "port_from_release", None)  # Sigstore APP + OPS v3 under the Sponsor root
@@ -317,9 +349,23 @@ def _compose(load, record, env):
                 raise Stop("LAUNCH_CLAIMS_MISSING")
             return act_for(claims=dict(claims), launcher_pins=dict(cfg["launcher_pins"]))(fd)
     else:
-        act = getattr(child_mod, "act", None)
-        if not callable(act):
+        factory = getattr(child_mod, "act_for", None)
+        verified = getattr(load, "_qa525_verified", None)
+        verified_loader = getattr(load, "_qa525_load_module", None)
+        if (not callable(factory) or verified is None or not callable(verified_loader)
+                or getattr(verified, "record", None) != record):
+            raise Stop("LAUNCH_G6_VERIFIED_REQUIRED")
+        # Bind/check every G6 dependency and the closed argv before GO/nonce.
+        bound = factory(bridge=g6_bridge, runner=g6_runner, argv=g6_argv,
+                        g6_pins=dict(g6_pins), verified=verified, verified_loader=verified_loader)
+        if not callable(bound):
             raise Stop("LAUNCH_CHILD_INVALID")
+
+        def act(fd):
+            claims = granted.get("claims")
+            if claims is None:
+                raise Stop("LAUNCH_CLAIMS_MISSING")
+            return bound(claims=dict(claims), fd=fd)
     verifier = verify.verifier_for(
         keygen_path=keygen_path, trusted_binary_sha256=keygen_sha,
         allowed_signers=cfg["allowed_signers"], expected_fingerprint=cfg["go_fingerprint"],
@@ -357,6 +403,8 @@ def _compose(load, record, env):
         granted["claims"] = {"purpose": result["purpose"], "nonce": result["nonce"],
                              "app_source_sha": result["app_source_sha"],
                              "app_archive_sha256": result["app_archive_sha256"]}
+        if g6_pins is not None:
+            granted["claims"]["g6_command"] = result["g6_command"]
         return {"nonce": result["nonce"], "app_archive_sha256": result["app_archive_sha256"],
                 "ops": result["ops_source_sha"], "policy": cfg["pins"]["policy_hash"],
                 "plan": result["plan_sha256"], "admission": result["admission_sha256"],
