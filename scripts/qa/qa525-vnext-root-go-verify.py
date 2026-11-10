@@ -68,7 +68,7 @@ def _ident(st):
     return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
 
 
-def _open_binary(path, os_uid, want_sha):
+def _open_binary(path, os_uid, want_sha, limit=MAX_BIN):
     """Return (fd, identity) of a binary that matches the pin; the caller executes THIS fd."""
     if type(path) is not str or not os.path.isabs(path) or os.path.normpath(path) != path:
         raise Stop("GORV_BINARY_PATH_INVALID")
@@ -77,7 +77,7 @@ def _open_binary(path, os_uid, want_sha):
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
         st = os.fstat(fd)
         if (not stat.S_ISREG(st.st_mode) or st.st_uid != os_uid or st.st_nlink != 1
-                or st.st_mode & 0o022 or not st.st_mode & 0o111 or not 0 < st.st_size <= MAX_BIN):
+                or st.st_mode & 0o022 or not st.st_mode & 0o111 or not 0 < st.st_size <= limit):
             raise Stop("GORV_BINARY_UNTRUSTED")
         digest, total = hashlib.sha256(), 0
         while True:
@@ -85,7 +85,7 @@ def _open_binary(path, os_uid, want_sha):
             if not block:
                 break
             total += len(block)
-            if total > MAX_BIN:
+            if total > limit:
                 raise Stop("GORV_BINARY_UNTRUSTED")
             digest.update(block)
         if total != st.st_size or _ident(os.fstat(fd)) != _ident(st):
@@ -99,6 +99,14 @@ def _open_binary(path, os_uid, want_sha):
         if isinstance(exc, OSError):
             raise Stop("GORV_BINARY_UNAVAILABLE") from None
         raise
+
+
+def open_pinned_binary(path, os_uid, want_sha, limit=MAX_BIN):
+    """Public name of the one pinned-binary opener (returns `(fd, identity)`; the caller executes THAT fd).
+    `limit` lets a caller raise the 32 MiB default for a large static binary such as `gh`."""
+    if type(limit) is not int or isinstance(limit, bool) or not 0 < limit <= 256 * 1024 * 1024:
+        raise Stop("GORV_BINARY_PATH_INVALID")
+    return _open_binary(path, os_uid, want_sha, limit)
 
 
 def _private(path, payload):
