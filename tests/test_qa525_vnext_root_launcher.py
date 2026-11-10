@@ -244,8 +244,14 @@ class LauncherComposeTests(unittest.TestCase):
         self.assertEqual(len(self.spent), 1)
         nonce, binding, now, expires = self.spent[0]
         self.assertEqual((nonce, now, expires), (NONCE, NOW, NOW + 300))
-        self.assertEqual(binding, {"app": ARCHIVE, "ops": OPS_SHA, "policy": PINS["policy_hash"],
+        self.assertEqual(binding, {"app": ARCHIVE, "ops": "sha256:" + hashlib.sha256(self.files["ops-v3.json"]).hexdigest(), "policy": PINS["policy_hash"],
                                    "plan": PINS["plan_sha256"], "admission": PINS["admission_sha256"]})
+        # Rehearsal regression (10-11): the REAL nonce journal accepts digests only. With the old 40-hex
+        # `ops_source_sha` every real GO stopped at NONCE_BINDING_INVALID; the fake journal here hid it.
+        real_journal = load_file("qa525-vnext-go-nonce-journal.py")
+        self.assertEqual(real_journal._bind(binding), binding)
+        with self.assertRaises(real_journal.Stop):
+            real_journal._bind(dict(binding, ops=OPS_SHA))
         self.assertEqual(self.acted, [len(DATA)])
         (call,) = self.act_for_args  # the launcher child is built from the AUTHENTICATED claims + signed pins only
         self.assertEqual(set(call), {"claims", "launcher_pins"})
