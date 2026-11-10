@@ -130,7 +130,7 @@ class AuthenticityTests(unittest.TestCase):
     def app(self, gh_path=None, **over):
         gh_path = gh_path or self.gh()
         kw = dict(open_binary=self.v.open_pinned_binary, gh_path=gh_path, gh_sha256=sha(gh_path),
-                  trusted_root=ROOT, bundle=BUNDLE, open_archive=self.open_archive(), drop_uid=UID or 30033,
+                  trusted_root=ROOT, bundle=BUNDLE, open_archive=self.open_archive(), temp_root=self.tmp, drop_uid=UID or 30033,
                   drop_gid=GID or 30033, required_euid=UID, os_uid=UID)
         kw.update(over)
         return self.m.app_check_for(**kw)
@@ -176,8 +176,9 @@ class AuthenticityTests(unittest.TestCase):
                             ("--cert-oidc-issuer", "https://token.actions.githubusercontent.com"),
                             ("--signer-workflow", "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/.github/workflows/qa-silo-rebuild.yml")):
             self.assertEqual(argv[argv.index(flag) + 1], value)
-        for flag in ("--bundle", "--custom-trusted-root"):
-            self.assertRegex(argv[argv.index(flag) + 1], r"^/proc/self/fd/\d+$")
+        for flag, leaf in (("--bundle", "bundle.json"), ("--custom-trusted-root", "trusted-root.jsonl")):
+            self.assertRegex(argv[argv.index(flag) + 1], r"^/proc/self/fd/\d+/" + leaf.replace(".", r"\.") + "$")
+        self.assertEqual(os.listdir(self.tmp), [])
         self.assertIn("--deny-self-hosted-runners", argv)
         env = dict(line.split("=", 1) for line in Path(self.out, "env").read_text().splitlines() if "=" in line)
         self.assertNotIn("GH_TOKEN", env)
@@ -318,6 +319,96 @@ class AuthenticityTests(unittest.TestCase):
         os.chmod(gh, 0o755)
         app = self.app(gh_path=gh, bundle=b'{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}')
         self.stop("AUTH_APP_DENIED", app, ARCHIVE, APP_SRC)
+
+
+
+FX = Path(__file__).resolve().parent / "fixtures" / "sigstore-offline"
+FX_ID = dict(REPO="sigstore/sigstore-js", WORKFLOW="sigstore/sigstore-js/.github/workflows/release.yml",
+             ISSUER="https://token.actions.githubusercontent.com", DIGEST_ALG="sha512")
+FX_SOURCE = "26d16513386ffaa790b1c32f927544f1322e4194"
+
+
+@unittest.skipUnless(REAL_GH and os.path.exists(FX / "sigstore-js-2.1.0.tgz"), "real gh and fixtures required")
+class RealGhOfflineTests(unittest.TestCase):
+    """The pinned REAL gh, a REAL public Sigstore attestation, a local trusted root, no network needed:
+    positive and negative, fail-closed. (Run once under `unshare -n` to prove no network is used.)"""
+
+    def setUp(self):
+        self.m = load("qa525-vnext-root-authenticity.py", "qa525_auth_real")
+        self.v = load("qa525-vnext-root-go-verify.py", "qa525_auth_real_gorv")
+        self.dir = tempfile.mkdtemp(prefix="authreal")
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        os.chmod(self.dir, 0o755)
+        self.tmp = os.path.join(self.dir, "t")
+        os.mkdir(self.tmp, 0o700)
+        self.gh = os.path.join(self.dir, "gh")
+        shutil.copy(REAL_GH, self.gh)
+        os.chmod(self.gh, 0o755)
+        self.tgz = FX / "sigstore-js-2.1.0.tgz"
+        self.bundle = (FX / "sigstore-js-2.1.0-bundle.json").read_bytes()
+        self.root = (FX / "trusted-root-public-good.jsonl").read_bytes()
+        for name, value in FX_ID.items():
+            patcher = unittest.mock.patch.object(self.m, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def opener(self, path=None):
+        def go():
+            fd = os.open(path or self.tgz, os.O_RDONLY)
+            return fd, os.fstat(fd).st_size
+        return go
+
+    def check(self, **over):
+        kw = dict(open_binary=self.v.open_pinned_binary, gh_path=self.gh, gh_sha256=sha(self.gh),
+                  trusted_root=self.root, bundle=self.bundle, open_archive=self.opener(), temp_root=self.tmp,
+                  drop_uid=UID or 30033, drop_gid=GID or 30033, required_euid=UID, os_uid=UID)
+        kw.update(over)
+        return self.m.app_check_for(**kw)
+
+    @property
+    def digest(self):
+        return "sha256:" + hashlib.sha256(self.tgz.read_bytes()).hexdigest()
+
+    def denied(self, check, digest=None, source=FX_SOURCE):
+        with self.assertRaises(self.m.Stop) as ctx:
+            check(digest or self.digest, source)
+        self.assertEqual(str(ctx.exception), "AUTH_APP_DENIED")
+
+    def test_positive_real_attestation_verifies_offline(self):
+        self.assertIs(self.check()(self.digest, FX_SOURCE), True)
+
+    def test_wrong_source_digest_workflow_issuer_or_repo_is_denied(self):
+        self.denied(self.check(), source="0" * 40)
+        for name, value in (("WORKFLOW", "sigstore/sigstore-js/.github/workflows/other.yml"),
+                            ("ISSUER", "https://evil.example"), ("REPO", "evil/repo")):
+            with unittest.mock.patch.object(self.m, name, value):
+                self.denied(self.check())
+
+    def test_bundle_for_another_artifact_is_denied(self):
+        other = os.path.join(self.dir, "other.tgz")
+        Path(other).write_bytes(self.tgz.read_bytes() + b"\0")
+        digest = "sha256:" + hashlib.sha256(Path(other).read_bytes()).hexdigest()  # digest claim matches the bytes...
+        self.denied(self.check(open_archive=self.opener(other)), digest=digest)    # ...but the attestation is not for them
+
+    def test_tampered_bundle_or_missing_or_forged_root_is_denied(self):
+        bad = bytearray(self.bundle)
+        bad[len(bad) // 2] ^= 0x01
+        self.denied(self.check(bundle=bytes(bad)))
+        self.denied(self.check(bundle=b'{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}'))
+        self.denied(self.check(trusted_root=b'{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}\n'))
+        for edit in (lambda d: d.update(certificateAuthorities=[]),               # no CA can vouch for the certificate
+                     lambda d: d.update(tlogs=[]),                                 # no log can vouch for the entry
+                     lambda d: [t["publicKey"].update(rawBytes=t["publicKey"]["rawBytes"][::-1]) for t in d.get("tlogs", [])]):
+            lines = []
+            for line in self.root.splitlines():
+                doc = json.loads(line)
+                edit(doc)
+                lines.append(json.dumps(doc))
+            self.denied(self.check(trusted_root=("\n".join(lines) + "\n").encode()))
+
+    def test_the_wrong_digest_algorithm_is_denied(self):
+        with unittest.mock.patch.object(self.m, "DIGEST_ALG", "sha256"):
+            self.denied(self.check())  # subject is sha512: a sha256 policy must not accept it
 
 
 if __name__ == "__main__":
