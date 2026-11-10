@@ -49,7 +49,11 @@ PINS = {"ops_source_sha": OPS_SHA, "app_source_sha": APP_SHA, "app_archive_sha25
         "plan_sha256": D("6"), "admission_sha256": D("7"), "policy_hash": D("4")}
 
 
-G6_OP = D("5")
+G6_OPERATION = json.dumps({
+    "schema": "qa525-g6-operation-v1", "g6_command": "backup",
+    "argv": ["--restic-sha256", "a" * 64, "--repo-id", "b" * 64, "--key-epoch", "c" * 32],
+}, sort_keys=True, separators=(",", ":")).encode()
+G6_OP = "sha256:" + hashlib.sha256(G6_OPERATION).hexdigest()
 CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"}
 CHILDREN.update({"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in launcher.G6_COMMANDS})
 
@@ -111,7 +115,8 @@ class LauncherComposeTests(unittest.TestCase):
 
     def write_inbox(self, go=None, sig=None, ops=None, subject=None):
         go = self.go_bytes() if go is None else go
-        files = {"go.json": go, "go.json.sig": self.sign(go) if sig is None else sig,
+        files = {launcher.G6_OPERATION_FILE: G6_OPERATION,
+                 "go.json": go, "go.json.sig": self.sign(go) if sig is None else sig,
                  "ops-v3.json": json.dumps(ops or self.ops, sort_keys=True).encode(),
                  "app-subject.json": json.dumps(subject or self.subject, sort_keys=True).encode(),
                  "ops-v3.json.sig": b"-----BEGIN SSH SIGNATURE-----\nX\n-----END SSH SIGNATURE-----\n",
@@ -166,13 +171,27 @@ class LauncherComposeTests(unittest.TestCase):
             "qa525-vnext-root-plane.py": types.SimpleNamespace(launcher_flight=flight),
             "qa525-vnext-go-nonce-journal.py": journal,
             "qa525-vnext-root-launcher-child.py": child})
-        mods.update({"qa525-vnext-root-g6-%s.py" % c: child for c in launcher.G6_COMMANDS})
+        g6_child = types.SimpleNamespace(
+            act_for=lambda **kw: (tests.act_for_args.append(kw),
+                                  lambda *, claims, fd: act(fd))[1])
+        mods.update({"qa525-vnext-root-g6-%s.py" % c: g6_child for c in launcher.G6_COMMANDS})
+        g6_real = load_file("qa525-vnext-g6-v2-run.py")
+        mods.update({
+            launcher.G6_RUN: types.SimpleNamespace(
+                parse=g6_real.parse, ENTRYPOINT=launcher.G6_RUN, SIBLINGS={},
+                main=lambda *a, **kw: 0),
+            launcher.G6_CHILD_CORE: types.SimpleNamespace(
+                build=lambda **kw: lambda *, claims, fd: act(fd)),
+        })
         mods.update(extra)
 
         def load(name):
             if name not in mods:
                 raise RuntimeError("BOOT_MODULE_UNKNOWN")
             return mods[name]
+        # Test-double only: production supplies the genuine PRE-4 Verified token.
+        load._qa525_verified = types.SimpleNamespace(record=tests.record())
+        load._qa525_load_module = lambda verified, name: mods[name]
         return load
 
     def sender(self, frame_nonce=NONCE, data=DATA, sealed=True):
@@ -270,6 +289,31 @@ class LauncherComposeTests(unittest.TestCase):
             self.assertIn(str(err.exception), ("GO_CUT_MISMATCH", "GO_CUT_G6_BINDING_MISMATCH"))
         self.assertEqual((self.spent, self.acted), ([], []))
 
+    def test_g6_operation_digest_mismatch_never_consumes_nonce(self):
+        self.write_inbox(go=self.g6_go())
+        path = os.path.join(self.dir, "inbox", launcher.G6_OPERATION_FILE)
+        Path(path).write_bytes(G6_OPERATION + b" ")
+        self.stop("LAUNCH_G6_OPERATION_PIN_MISMATCH", load=self.loader(cfg=self.g6_cfg()))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_g6_operation_wrong_command_is_refused_before_nonce(self):
+        bad = json.dumps({"schema": "qa525-g6-operation-v1",
+                          "g6_command": "restore", "argv": []},
+                         sort_keys=True, separators=(",", ":")).encode()
+        op = "sha256:" + hashlib.sha256(bad).hexdigest()
+        self.write_inbox(go=self.g6_go(op=op))
+        path = os.path.join(self.dir, "inbox", launcher.G6_OPERATION_FILE)
+        Path(path).write_bytes(bad)
+        self.stop("LAUNCH_G6_OPERATION_INVALID", load=self.loader(cfg=self.g6_cfg(op=op)))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_g6_missing_pre4_capability_stops_before_nonce(self):
+        self.write_inbox(go=self.g6_go())
+        load = self.loader(cfg=self.g6_cfg())
+        del load._qa525_verified
+        self.stop("LAUNCH_G6_VERIFIED_REQUIRED", load=load)
+        self.assertEqual(self.spent, [])
+
     def test_g6_command_without_its_child_module_stops_before_the_nonce(self):
         self.write_inbox(go=self.g6_go())
         load = self.loader(cfg=self.g6_cfg())
@@ -288,9 +332,11 @@ class LauncherComposeTests(unittest.TestCase):
 
         def spy(name):
             mod = base(name)
-            if name.startswith("qa525-vnext-root-g6-"):
+            if name.startswith("qa525-vnext-root-g6-") and name != launcher.G6_CHILD_CORE:
                 ran.append(name)
             return mod
+        spy._qa525_verified = base._qa525_verified
+        spy._qa525_load_module = base._qa525_load_module
         self.compose(load=spy)  # launcher GO with a G6-pinned config
         self.assertNotIn("qa525-vnext-root-g6-backup.py", ran)
         self.write_inbox(go=self.g6_go())
