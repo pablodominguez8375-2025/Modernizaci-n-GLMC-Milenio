@@ -573,7 +573,7 @@ export class PmgmApiClient {
 
   async getCandidatePortal(): Promise<CandidatePortalResponse> { if (this.useMocks) { await sleep(120); return { culture: 'es-CL', portal: 'Insinuados en período de publicación', total: mockCandidates.length, items: mockCandidates } } return this.request<CandidatePortalResponse>('/api/ceremonias/portal-insinuados') }
   async getSystemInfo(): Promise<SystemInfo> { if (this.useMocks) return { project: 'Proyecto Milenio — Modernización Gran Logia Mixta de Chile', api: 'PMGM.Api', version: '0.12.1', runtime: '.NET 10', culture: 'es-CL', institutionalTimeZone: 'America/Santiago', defaultCurrency: 'CLP' }; return this.request<SystemInfo>('/api/system/info') }
-  async getSessionProfile(): Promise<SessionProfile> { if (this.useMocks) return mockSession; return this.request<SessionProfile>('/api/session/me') }
+  async getSessionProfile(): Promise<SessionProfile> { if (this.useMocks) { const demo = getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey); return { ...mockSession, accessScope: demo?.accessScope ?? mockSession.accessScope } } return this.request<SessionProfile>('/api/session/me') }
   async getOrganizationOptions(): Promise<OrganizationOptionsResponse> { if (this.useMocks) return { total: this.mockOrganizations.length, items: this.mockOrganizations.map(({id,name,number,type})=>({id,name,number,type})) }; return this.request<OrganizationOptionsResponse>('/api/institutional/organizations/options') }
   private mockZone(id:string):TreasuryTerritory|null{const org=this.mockOrganizations.find(x=>x.id===id);const geo=demoWorkshopLocation(id,org?.treasuryTerritory??null);return zoneFromLocation(geo.city,geo.country)}
   async getTariffAccess():Promise<TariffAccess>{
