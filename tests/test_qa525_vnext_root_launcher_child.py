@@ -30,16 +30,18 @@ class ChildTests(unittest.TestCase):
         (root / "sbin").mkdir(mode=0o755)
         (root / "state").mkdir()
         os.chmod(root / "state", 0o700)
+        self.root = str(root)
         self.launcher = str(root / "sbin/pmgm-qa-update")
         self.state = str(root / "state")
         fd = os.open(self.launcher, os.O_WRONLY | os.O_CREAT, 0o700)
         os.write(fd, OLD)
         os.close(fd)
         os.chmod(self.launcher, 0o700)
+        os.chmod(root / "sbin", 0o755)
 
     def swap(self, **kw):
         args = dict(launcher=self.launcher, state=self.state, nonce=NONCE, old_sha256=sha(OLD),
-                    new_bytes=NEW, uid=self.uid)
+                    expected_new_sha256=sha(NEW), new_bytes=NEW, uid=self.uid, anchor=self.root)
         args.update(kw)
         return child.swap(**args)
 
@@ -68,16 +70,16 @@ class ChildTests(unittest.TestCase):
 
     def test_replay_and_partial_state_stop(self):
         self.swap()
-        self.assertEqual(self.code(self.swap, old_sha256=sha(NEW), new_bytes=OLD), "CHILD_REPLAY_OR_PARTIAL_STATE")
+        self.assertEqual(self.code(self.swap, old_sha256=sha(NEW), expected_new_sha256=sha(OLD), new_bytes=OLD), "CHILD_REPLAY_OR_PARTIAL_STATE")
         open(os.path.join(self.state, "intent-%s.json" % ("b2" * 32)), "w").close()
-        self.assertEqual(self.code(self.swap, nonce="b2" * 32, old_sha256=sha(NEW), new_bytes=OLD),
+        self.assertEqual(self.code(self.swap, nonce="b2" * 32, old_sha256=sha(NEW), expected_new_sha256=sha(OLD), new_bytes=OLD),
                          "CHILD_REPLAY_OR_PARTIAL_STATE")
 
     def test_argument_shapes_are_closed(self):
         for kw in ({"nonce": "xyz"}, {"old_sha256": "abc"}, {"new_bytes": "text"}, {"new_bytes": b""},
                    {"launcher": "relative"}, {"state": "/a/../b"}, {"uid": True}):
             self.assertEqual(self.code(self.swap, **kw), "CHILD_ARGS_INVALID", kw)
-        self.assertEqual(self.code(self.swap, new_bytes=OLD), "CHILD_NEW_EQUALS_OLD")
+        self.assertEqual(self.code(self.swap, new_bytes=OLD, expected_new_sha256=sha(OLD)), "CHILD_NEW_EQUALS_OLD")
 
     def test_state_dir_must_be_private(self):
         os.chmod(self.state, 0o755)
@@ -100,12 +102,12 @@ class ChildTests(unittest.TestCase):
         real = child._read
         calls = {"n": 0}
 
-        def racing(path, uid, code):
-            if path == self.launcher:
+        def racing(dfd, name, uid, code):
+            if name == "pmgm-qa-update":
                 calls["n"] += 1
                 if calls["n"] == 2:  # the re-check right before os.replace
                     pathlib.Path(self.launcher).write_bytes(b"#!/bin/sh\necho intruder\n")
-            return real(path, uid, code)
+            return real(dfd, name, uid, code)
         with mock.patch.object(child, "_read", racing):
             self.assertEqual(self.code(self.swap), "CHILD_LAUNCHER_DRIFT_BEFORE_SWAP")
         self.assertEqual(self.read(self.launcher), b"#!/bin/sh\necho intruder\n")
@@ -114,11 +116,10 @@ class ChildTests(unittest.TestCase):
     def test_swap_that_does_not_land_is_reverted_from_backup(self):
         real = os.replace
 
-        def bad_replace(src, dst):
-            if dst == self.launcher and src.endswith(".tmp"):
-                pathlib.Path(src).write_bytes(b"#!/bin/sh\necho corrupted\n")
-                os.chmod(src, 0o700)
-            return real(src, dst)
+        def bad_replace(src, dst, **kw):
+            if dst == "pmgm-qa-update" and src.endswith(".tmp"):
+                pathlib.Path(self.launcher).with_name(src).write_bytes(b"#!/bin/sh\necho corrupted\n")
+            return real(src, dst, **kw)
         with mock.patch.object(child.os, "replace", bad_replace):
             self.assertEqual(self.code(self.swap), "CHILD_SWAP_REVERTED")
         self.assertEqual(self.read(self.launcher), OLD)
@@ -128,33 +129,32 @@ class ChildTests(unittest.TestCase):
         real = os.replace
         seen = {"n": 0}
 
-        def bad_replace(src, dst):
+        def bad_replace(src, dst, **kw):
             seen["n"] += 1
             if seen["n"] == 1:
-                pathlib.Path(src).write_bytes(b"#!/bin/sh\necho corrupted\n")
-                os.chmod(src, 0o700)
+                pathlib.Path(self.launcher).with_name(src).write_bytes(b"#!/bin/sh\necho corrupted\n")
             if seen["n"] == 2:
                 raise OSError("disk")
-            return real(src, dst)
+            return real(src, dst, **kw)
         with mock.patch.object(child.os, "replace", bad_replace):
             self.assertEqual(self.code(self.swap), "CHILD_RESTORE_UNPROVEN")
 
     def test_rollback_restores_old_and_is_single_use(self):
         self.swap()
-        out = child.rollback(launcher=self.launcher, state=self.state, nonce=NONCE, uid=self.uid)
+        out = child.rollback(launcher=self.launcher, state=self.state, nonce=NONCE, uid=self.uid, anchor=self.root)
         self.assertEqual(out["status"], "LAUNCHER_ROLLED_BACK")
         self.assertEqual(self.read(self.launcher), OLD)
         self.assertEqual(self.code(child.rollback, launcher=self.launcher, state=self.state, nonce=NONCE,
-                                   uid=self.uid), "CHILD_NEW_LAUNCHER_DRIFT")
+                                   uid=self.uid, anchor=self.root), "CHILD_NEW_LAUNCHER_DRIFT")
 
     def test_rollback_refuses_without_receipt_or_on_drift(self):
         self.assertEqual(self.code(child.rollback, launcher=self.launcher, state=self.state, nonce=NONCE,
-                                   uid=self.uid), "CHILD_RECEIPT_MISSING")
+                                   uid=self.uid, anchor=self.root), "CHILD_RECEIPT_MISSING")
         self.swap()
         pathlib.Path(self.launcher).write_bytes(b"#!/bin/sh\necho other\n")
         os.chmod(self.launcher, 0o700)
         self.assertEqual(self.code(child.rollback, launcher=self.launcher, state=self.state, nonce=NONCE,
-                                   uid=self.uid), "CHILD_NEW_LAUNCHER_DRIFT")
+                                   uid=self.uid, anchor=self.root), "CHILD_NEW_LAUNCHER_DRIFT")
 
     def test_rollback_refuses_tampered_backup(self):
         self.swap()
@@ -162,7 +162,7 @@ class ChildTests(unittest.TestCase):
         os.chmod(b, 0o700)
         pathlib.Path(b).write_bytes(b"#!/bin/sh\necho evil\n")
         self.assertEqual(self.code(child.rollback, launcher=self.launcher, state=self.state, nonce=NONCE,
-                                   uid=self.uid), "CHILD_BACKUP_UNVERIFIED")
+                                   uid=self.uid, anchor=self.root), "CHILD_BACKUP_UNVERIFIED")
         self.assertEqual(self.read(self.launcher), NEW)
 
     def test_receipt_is_canonical_json(self):
@@ -170,6 +170,61 @@ class ChildTests(unittest.TestCase):
         doc = json.loads(self.read(os.path.join(self.state, "receipt-%s.json" % NONCE)))
         self.assertEqual(doc["old_launcher_sha256"], sha(OLD))
         self.assertEqual(doc["new_launcher_sha256"], sha(NEW))
+
+    def test_candidate_digest_must_match_the_authenticated_pin_before_any_mutation(self):
+        other = b"#!/bin/sh\necho well-formed but different\n"
+        self.assertEqual(self.code(self.swap, new_bytes=other), "CHILD_CANDIDATE_MISMATCH")
+        self.assertEqual(self.code(self.swap, expected_new_sha256="sha256:" + "0" * 64), "CHILD_CANDIDATE_MISMATCH")
+        self.assertEqual(self.code(self.swap, expected_new_sha256=None), "CHILD_ARGS_INVALID")
+        self.assertEqual(os.listdir(self.state), [])
+        self.assertEqual(sorted(os.listdir(os.path.dirname(self.launcher))), ["pmgm-qa-update"])
+        self.assertEqual(self.read(self.launcher), OLD)
+
+    def test_group_writable_launcher_directory_is_refused(self):
+        os.chmod(os.path.dirname(self.launcher), 0o775)
+        self.assertEqual(self.code(self.swap), "CHILD_STATE_UNSAFE")
+        self.assertEqual(os.listdir(self.state), [])
+        self.assertEqual(self.read(self.launcher), OLD)
+
+    def test_group_writable_ancestor_is_refused(self):
+        os.chmod(self.root, 0o775)
+        self.assertEqual(self.code(self.swap), "CHILD_STATE_UNSAFE")
+        os.chmod(self.root, 0o700)
+
+    def test_symlinked_directories_are_refused(self):
+        sbin = os.path.dirname(self.launcher)
+        os.rename(sbin, sbin + ".real")
+        os.symlink(sbin + ".real", sbin)
+        self.assertEqual(self.code(self.swap), "CHILD_STATE_UNSAFE")
+        os.unlink(sbin)
+        os.rename(sbin + ".real", sbin)
+        os.rename(self.state, self.state + ".real")
+        os.symlink(self.state + ".real", self.state)
+        self.assertEqual(self.code(self.swap), "CHILD_STATE_UNSAFE")
+
+    def test_path_outside_anchor_is_refused(self):
+        self.assertEqual(self.code(self.swap, anchor=os.path.join(self.root, "state")), "CHILD_STATE_UNSAFE")
+
+    def test_directory_swapped_after_open_does_not_redirect_the_replace(self):
+        """The operations go through directory FDs: re-binding the path afterwards must not move the target."""
+        sbin = os.path.dirname(self.launcher)
+        decoy = sbin + ".decoy"
+        os.mkdir(decoy, 0o755)
+        pathlib.Path(decoy, "pmgm-qa-update").write_bytes(OLD)
+        os.chmod(os.path.join(decoy, "pmgm-qa-update"), 0o700)
+        real = child._write_once
+        done = {"n": 0}
+
+        def rebind(dfd, name, data, mode):
+            real(dfd, name, data, mode)
+            if name.endswith(".tmp") and not done["n"]:
+                done["n"] = 1
+                os.rename(sbin, sbin + ".moved")
+                os.rename(decoy, sbin)
+        with mock.patch.object(child, "_write_once", rebind):
+            self.swap()
+        self.assertEqual(self.read(os.path.join(sbin + ".moved", "pmgm-qa-update")), NEW)
+        self.assertEqual(self.read(os.path.join(sbin, "pmgm-qa-update")), OLD)
 
     def test_act_is_a_closed_stub(self):
         self.assertEqual(self.code(child.act, 3), "CHILD_NOT_WIRED")
