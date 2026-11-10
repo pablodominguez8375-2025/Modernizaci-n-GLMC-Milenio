@@ -104,6 +104,50 @@ class G6CoreTest(unittest.TestCase):
             self.invoke(bound)
         self.assertEqual(str(err.exception), "G6CH_RUN_FAILED")
 
+    def test_real_g6_runner_main_uses_verified_loader_and_closed_preflight_grammar(self):
+        """End-to-end real run.main + real parser; stub ONLY host IO and command body."""
+        import unittest.mock
+        actual = read("qa525-vnext-g6-v2-run.py")
+        self.verified.record["files"] = {
+            name: "a" * 64 for name in (
+                actual.ENTRYPOINT, *actual.SIBLINGS.values())}
+        seen = []
+        expected_env = object()
+        loader = lambda verified, name: (
+            self.assertIs(verified, self.verified), seen.append(("module", name)))[0]
+        def env_for(command, verified, load_module):
+            self.assertEqual(command, "preflight")
+            self.assertIs(verified, self.verified)
+            self.assertIs(load_module, loader)
+            seen.append(("env", command))
+            return expected_env
+        def preflight(env, opts):
+            self.assertIs(env, expected_env)
+            self.assertEqual(opts, {})
+            seen.append(("handler", "preflight"))
+            return 0
+        with unittest.mock.patch.object(actual, "env_from_verified", side_effect=env_for), \
+                unittest.mock.patch.dict(actual.HANDLERS, {"preflight": preflight}):
+            fn = self.bind(runner=actual, verified_loader=loader)
+            self.assertEqual(self.invoke(fn), "G6_PREFLIGHT_DONE")
+        self.assertEqual(seen[0][0], "module")
+        self.assertIn(("env", "preflight"), seen)
+        self.assertEqual(seen[-1], ("handler", "preflight"))
+
+    def test_actual_runner_parser_rejects_invalid_signed_options_before_nonce(self):
+        actual = read("qa525-vnext-g6-v2-run.py")
+        self.verified.record["files"] = {
+            name: "a" * 64 for name in (
+                actual.ENTRYPOINT, *actual.SIBLINGS.values())}
+        for argv in (["preflight", "--restic-sha256", "not-a-sha"],
+                     ["preflight", "--unlisted", "x"],
+                     ["backup"],
+                     ["preflight", "--restic-sha256", "a" * 64, "--restic-sha256", "a" * 64]):
+            with self.subTest(argv):
+                with self.assertRaises(core.Stop):
+                    self.bind(runner=actual, argv=argv)
+        self.assertEqual(self.calls, [])
+
     def test_wrong_fd_is_rejected(self):
         bound = self.bind()
         with self.assertRaises(core.Stop):
