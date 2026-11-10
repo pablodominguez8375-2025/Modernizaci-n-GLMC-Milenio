@@ -149,7 +149,10 @@ class LauncherComposeTests(unittest.TestCase):
         journal = types.SimpleNamespace(consume=lambda root, nonce, binding, *, uid, now, expires_at:
                                         (spent.append((nonce, binding, now, expires_at)),
                                          {"record_sha256": D("c")})[1])
-        child = types.SimpleNamespace(act=lambda fd: (acted.append(os.fstat(fd).st_size), "done")[1]) if child_ok \
+        tests.act_for_args = []
+        act = lambda fd: (acted.append(os.fstat(fd).st_size), "done")[1]
+        child = types.SimpleNamespace(
+            act=act, act_for=lambda **kw: (tests.act_for_args.append(kw), act)[1]) if child_ok \
             else types.SimpleNamespace()
         mods = dict(REAL)
         tests.release_args = {}
@@ -225,6 +228,11 @@ class LauncherComposeTests(unittest.TestCase):
         self.assertEqual(binding, {"app": ARCHIVE, "ops": OPS_SHA, "policy": PINS["policy_hash"],
                                    "plan": PINS["plan_sha256"], "admission": PINS["admission_sha256"]})
         self.assertEqual(self.acted, [len(DATA)])
+        (call,) = self.act_for_args  # the launcher child is built from the AUTHENTICATED claims + signed pins only
+        self.assertEqual(set(call), {"claims", "launcher_pins"})
+        self.assertEqual(call["claims"], {"purpose": "LAUNCHER_ONLY", "nonce": NONCE,
+                                          "app_source_sha": PINS["app_source_sha"], "app_archive_sha256": ARCHIVE})
+        self.assertEqual(call["launcher_pins"], LAUNCHER_PINS)
         self.assertFalse(out["may_apply"] or out["may_install"])
         self.assertEqual(self.flight_args[2], None, "the lease liveness view is never injected by the launcher")
 
@@ -413,6 +421,13 @@ class LauncherComposeTests(unittest.TestCase):
         mods_missing = lambda name: (_ for _ in ()).throw(RuntimeError("BOOT_MODULE_UNKNOWN")) \
             if name == "qa525-vnext-root-launcher-child.py" else load(name)
         self.stop("BOOT_MODULE_UNKNOWN", load=mods_missing)
+        self.assertEqual(self.spent, [])
+
+    def test_launcher_child_without_act_for_is_refused_before_the_nonce(self):
+        mods_child = types.SimpleNamespace(act=lambda fd: "done")  # the old stub shape is no longer enough
+        load = self.loader()
+        legacy = lambda name: mods_child if name == "qa525-vnext-root-launcher-child.py" else load(name)
+        self.stop("LAUNCH_CHILD_INVALID", load=legacy)
         self.assertEqual(self.spent, [])
 
     # ---- sender and plane failures

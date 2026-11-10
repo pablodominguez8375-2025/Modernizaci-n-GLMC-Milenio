@@ -305,9 +305,21 @@ def _compose(load, record, env):
         raise Stop("LAUNCH_AUTHENTICITY_PORT_MISSING")
     ops_signature = load(OPSSIG)
     child_mod = load(cfg["children"][child_key])  # resolved BEFORE any nonce can be spent
-    act = getattr(child_mod, "act", None)
-    if not callable(act):
-        raise Stop("LAUNCH_CHILD_INVALID")
+    granted = {}  # filled by verify_go() with the AUTHENTICATED claims, inside the plane, before the nonce is spent
+    if purpose == "LAUNCHER_ONLY":
+        act_for = getattr(child_mod, "act_for", None)  # the launcher child is built FROM the signed claims
+        if not callable(act_for):
+            raise Stop("LAUNCH_CHILD_INVALID")
+
+        def act(fd):
+            claims = granted.get("claims")
+            if claims is None:
+                raise Stop("LAUNCH_CLAIMS_MISSING")
+            return act_for(claims=dict(claims), launcher_pins=dict(cfg["launcher_pins"]))(fd)
+    else:
+        act = getattr(child_mod, "act", None)
+        if not callable(act):
+            raise Stop("LAUNCH_CHILD_INVALID")
     verifier = verify.verifier_for(
         keygen_path=keygen_path, trusted_binary_sha256=keygen_sha,
         allowed_signers=cfg["allowed_signers"], expected_fingerprint=cfg["go_fingerprint"],
@@ -342,6 +354,9 @@ def _compose(load, record, env):
         if (result.get("purpose") != purpose or type(result.get("nonce")) is not str
                 or HEX64.fullmatch(result["nonce"]) is None):
             raise Stop("LAUNCH_GO_CLAIMS_INVALID")
+        granted["claims"] = {"purpose": result["purpose"], "nonce": result["nonce"],
+                             "app_source_sha": result["app_source_sha"],
+                             "app_archive_sha256": result["app_archive_sha256"]}
         return {"nonce": result["nonce"], "app_archive_sha256": result["app_archive_sha256"],
                 "ops": result["ops_source_sha"], "policy": cfg["pins"]["policy_hash"],
                 "plan": result["plan_sha256"], "admission": result["admission_sha256"],
