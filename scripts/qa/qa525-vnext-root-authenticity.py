@@ -38,6 +38,7 @@ PREDICATE = "https://slsa.dev/provenance/v1"
 DIGEST_ALG = "sha256"  # the release subject is a sha256 digest (tests patch it for a sha512 public fixture)
 SHA256 = re.compile(r"sha256:[a-f0-9]{64}\Z")
 SHA40 = re.compile(r"[a-f0-9]{40}\Z")
+REPO_ID = re.compile(r"[1-9][0-9]{0,19}\Z")
 # `verify_ops_receipt` insists on a non-empty set of APP fingerprints distinct from the OPS key. Sigstore
 # identities have no SSH fingerprint, so the set holds one inert sentinel that no real key can equal.
 APP_FP_SENTINEL = "SHA256:" + "A" * 43
@@ -161,7 +162,7 @@ def _chunks_of_fd(fd, expected_size):
 
 
 def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open_archive, temp_root, drop_uid,
-                  drop_gid, required_euid=0, os_uid=0):
+                  drop_gid, source_repository_id, required_euid=0, os_uid=0):
     """`check(app_archive_sha256, app_source_sha) -> True` running the pinned `gh attestation verify` offline.
 
     open_binary   `go-verify.open_pinned_binary` (judged and hashed on the fd that is then executed);
@@ -169,6 +170,9 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
     open_archive  `() -> (fd, size)` of the root-owned archive file, opened by the launcher without links;
     temp_root     root-private (0700) directory for the verifier's two small input files (gh insists on a
                   `.json` / `.jsonl` extension, which a bare /proc/self/fd/N path cannot have);
+    source_repository_id  the STABLE numeric GitHub repository id, pinned by the Sponsor outside Git/Drive: offline
+                  `--repo` only compares historical NAMES (a renamed/re-registered repo would pass), so the id the
+                  verified certificate carries (`sourceRepositoryIdentifier`) must equal this pin in EVERY entry;
     drop_uid/gid  the unprivileged identity the verifier runs as (never 0)."""
     for value in (drop_uid, drop_gid):
         if type(value) is not int or isinstance(value, bool) or value <= 0:
@@ -176,7 +180,8 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
     if (type(trusted_root) is not bytes or not 0 < len(trusted_root) <= MAX_ROOT
             or type(bundle) is not bytes or not 0 < len(bundle) <= MAX_BUNDLE
             or not callable(open_binary) or not callable(open_archive) or not _digest_ok(gh_sha256)
-            or type(temp_root) is not str or not os.path.isabs(temp_root)):
+            or type(temp_root) is not str or not os.path.isabs(temp_root)
+            or type(source_repository_id) is not str or REPO_ID.fullmatch(source_repository_id) is None):
         raise Stop("AUTH_APP_INPUT_INVALID")
     if os.geteuid() != required_euid:
         raise Stop("AUTH_ROOT_REQUIRED")
@@ -263,6 +268,13 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
                 raise Stop("AUTH_APP_DENIED") from None
             if type(verified) is not list or not verified:
                 raise Stop("AUTH_APP_DENIED")
+            for entry in verified:  # EVERY verified attestation must come from the pinned repository id
+                try:
+                    found = entry["verificationResult"]["signature"]["certificate"]["sourceRepositoryIdentifier"]
+                except (KeyError, TypeError):
+                    raise Stop("AUTH_APP_DENIED") from None
+                if type(found) is not str or not hmac.compare_digest(found, source_repository_id):
+                    raise Stop("AUTH_APP_DENIED")
             return True
         finally:
             for fd in held:
