@@ -46,7 +46,7 @@ MAX_INPUT = 65536
 INBOX_FILES = ("go.json", "go.json.sig", "ops-v3.json", "app-subject.json",
                "ops-v3.json.sig", "app-bundle.json", "trusted-root.jsonl")
 INBOX_LIMITS = {"ops-v3.json.sig": 4096, "app-bundle.json": 1_000_000,
-                "trusted-root.jsonl": 262144, G6_OPERATION_FILE: 4096}
+                "trusted-root.jsonl": 262144, "g6-operation.json": 4096}
 MAX_ARCHIVE = 512 * 1024 * 1024
 G6_OPERATION_FILE = "g6-operation.json"
 G6_RUN = "qa525-vnext-g6-v2-run.py"
