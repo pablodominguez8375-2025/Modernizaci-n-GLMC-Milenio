@@ -406,7 +406,9 @@ def _compose(load, record, env):
         if g6_pins is not None:
             granted["claims"]["g6_command"] = result["g6_command"]
         return {"nonce": result["nonce"], "app_archive_sha256": result["app_archive_sha256"],
-                "ops": result["ops_source_sha"], "policy": cfg["pins"]["policy_hash"],
+                # the nonce journal binds DIGESTS only: the OPS half is the pinned sha256 of the signed v3 receipt
+                # (a 40-hex source sha here made every real consume() stop with NONCE_BINDING_INVALID)
+                "ops": cfg["ops_v3_sha256"], "policy": cfg["pins"]["policy_hash"],
                 "plan": result["plan_sha256"], "admission": result["admission_sha256"],
                 "expires_at": _epoch(result["expires_at"])}
 

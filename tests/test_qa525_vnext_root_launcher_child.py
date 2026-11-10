@@ -475,13 +475,20 @@ class InstallTests(unittest.TestCase):
             "dot": build_release(extra={"a/./b.py": b"x"}),
             "symlink": build_release(extra={"scripts/qa/link.py": link}),
             "file_and_dir": build_release(files={OPERATOR_REL: OPERATOR_BYTES, "scripts/qa/operators": b"x"}),
-            "bomb": build_release(files={OPERATOR_REL: OPERATOR_BYTES, "big.bin": b"\0" * (child.MAX_MEMBER // 4)}),
+            "bomb": build_release(files={OPERATOR_REL: OPERATOR_BYTES, "big.bin": b"\0" * (32 * 1024 * 1024)}),  # ratio bomb
             "not_a_zip": b"PK\x03\x04 not really a zip",
         }
         for label, data in cases.items():
             with self.subTest(label):
                 self.assertIn(self.code(data), ("CHILD_ARCHIVE_UNSAFE", "CHILD_MANIFEST_INVALID"), label)
                 self.clean()
+
+    def test_limits_admit_the_real_attested_release_shape(self):
+        """Rehearsal regression (10-11): release c952a4a0 carries storage-bundle/silo-qa-review-only.tar of
+        229 277 184 bytes and 245 MiB in total; a 128 MiB per-member cap refused it AFTER the nonce was spent."""
+        self.assertGreaterEqual(child.MAX_MEMBER, 1024 ** 3)
+        self.assertGreaterEqual(child.MAX_TOTAL, 2 * 1024 ** 3)
+        self.assertGreaterEqual(child.MAX_MEMBERS, 2488 * 2)
 
     def test_duplicate_member_names_are_refused(self):
         import warnings

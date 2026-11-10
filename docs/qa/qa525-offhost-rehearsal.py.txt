@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Off-host rehearsal of the QA525 LAUNCHER_ONLY chain with the REAL release sources (throwaway key).
+Run as root in a disposable container:  python3.12 harness.py prepare   then   run | debug | peer"""
+import base64, datetime as dt, hashlib, importlib.util, json, os, shutil, subprocess, sys, zipfile
+
+X = "/opt/reh/x"
+SRC = X + "/src"
+INST = "/opt/reh525/install"
+BASE = "/var/lib/reh525"
+INBOX, TMP, JOURNAL, LEASE, APPDIR = (BASE + s for s in ("/inbox", "/tmp", "/journal", "/lease", "/app"))
+SOCKDIR = "/run/reh525"
+SOCK = SOCKDIR + "/s.sock"
+KEYDIR = "/opt/reh/key"
+PY = "/usr/bin/python3.12"
+PEER_UID, DROP_UID = 30033, 30044  # tester, rehdrop
+SOURCE_SHA = "c952a4a0e2de9b204a55398ad88a5cddc2e8a300"
+LAUNCHER = "/usr/local/sbin/pmgm-qa-update"
+PATCHES = []
+LEGACY = ("/opt/centenario/qa-api-refresh/operation.lock", "/opt/centenario/qa-auto-lite/web-update.lock",
+          "/run/lock/pmgm-master-qa-604.lock", "/run/lock/pmgm-qa754-web-hotfix.lock",
+          "/run/lock/pmgm-qa754-api-activation.lock")
+
+
+def sha(b):
+    return hashlib.sha256(b).hexdigest()
+
+
+def rd(p):
+    with open(p, "rb") as f:
+        return f.read()
+
+
+def wr(p, data, mode=0o600):
+    if os.path.lexists(p):
+        os.unlink(p)
+    with open(p, "wb") as f:
+        f.write(data)
+    os.chmod(p, mode)
+
+
+def mod(name):
+    s = importlib.util.spec_from_file_location("m_" + name.replace("-", "_")[:-3], os.path.join(SRC, name))
+    m = importlib.util.module_from_spec(s)
+    s.loader.exec_module(m)
+    return m
+
+
+def canon(o):
+    return json.dumps(o, sort_keys=True, separators=(",", ":")).encode()
+
+
+def prepare(nonce_hex=None, minutes=14, g6=None):
+    for d, m in ((INST, 0o755), (BASE, 0o755), (INBOX, 0o700), (TMP, 0o700), (JOURNAL, 0o700), (LEASE, 0o700),
+                 (APPDIR, 0o700), (SOCKDIR, 0o755), (KEYDIR, 0o700), ("/opt/centenario", 0o755),
+                 ("/opt/centenario/qa-api-refresh", 0o700), ("/opt/centenario/qa-auto-lite", 0o700),
+                 ("/opt/centenario/qa525-signed-stage", 0o700), ("/opt/centenario/qa525-launcher-replacement", 0o700),
+                 (os.path.dirname(INST), 0o755)):
+        os.makedirs(d, exist_ok=True)
+        os.chmod(d, m)
+    for p in LEGACY:
+        if not os.path.exists(p):
+            wr(p, b"", 0o600)
+    if not os.path.exists(LEASE + "/.launcher-only.lease"):
+        wr(LEASE + "/.launcher-only.lease", b"", 0o600)
+    if not os.path.exists(LAUNCHER):
+        wr(LAUNCHER, b"#!/bin/sh\necho OLD-LAUNCHER\n", 0o700)
+    # --- sources
+    for n in sorted(x for x in os.listdir(SRC) if x.endswith(".py")):
+        data = rd(os.path.join(SRC, n))
+        for name, old, new in PATCHES:
+            if name == n:
+                assert data.count(old) == 1, (n, old)
+                data = data.replace(old, new)
+        wr(os.path.join(INST, n), data, 0o644)
+    inner = rd(X + "/inner.zip")
+    wr(APPDIR + "/inner.zip", inner, 0o600)
+    app_sha = "sha256:" + sha(inner)
+    root = "Proyecto-Centenario-QA-srv01-" + SOURCE_SHA[:12]
+    operator = zipfile.ZipFile(X + "/inner.zip").read(root + "/scripts/qa/operators/qa525-update.py")
+    # --- throwaway key
+    key = KEYDIR + "/k"
+    if not os.path.exists(key):
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "rehearsal", "-f", key], check=True)
+    pub = rd(key + ".pub").decode()
+    sign = mod("qa525-vnext-sponsor-signing.py")
+    fp = sign.fingerprint_of_public_key(pub)
+    go_line = sign.allowed_signers_line(pub, "qa525-go-cut-v1@pmgm", fp)
+    ops_line = sign.allowed_signers_line(pub, "qa525-ops-v2@pmgm", fp)
+    d = lambda c: "sha256:" + c * 64
+    policy = d("f")
+    ops = sign.build_ops_v3_receipt(ops_source_sha=SOURCE_SHA, program_sha256=d("1"), readiness_sha256=d("2"),
+                                    staging_sha256=d("3"), policy_hash=policy, app_archive_sha256=app_sha)
+    subject = canon({"source_sha": SOURCE_SHA, "subject_sha256": app_sha,
+                     "signer_workflow": "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/.github/workflows/qa-silo-rebuild.yml",
+                     "oidc_issuer": "https://token.actions.githubusercontent.com"})
+    lpins = {"release_asset_sha256": "sha256:" + sha(rd("/opt/reh/dl/rel.zip")),
+             "old_launcher_sha256": sha(rd(LAUNCHER)), "candidate_operator_sha256": sha(operator)}
+    now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+    f = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    nonce = nonce_hex or sign.new_launcher_nonce(os.urandom(32))
+    g6_pins, operation = None, None
+    if g6:
+        operation = json.dumps({"schema": "qa525-g6-operation-v1", "g6_command": g6, "argv": []}, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+        g6_pins = {"g6_command": g6, "g6_operation_sha256": "sha256:" + sha(operation)}
+    go = sign.build_go_cut(nonce=nonce, ops_source_sha=SOURCE_SHA, app_source_sha=SOURCE_SHA,
+                           app_archive_sha256=app_sha, plan_sha256=d("4"), admission_sha256=d("5"),
+                           policy_hash=policy, issued_at=f(now - dt.timedelta(seconds=30)),
+                           expires_at=f(now + dt.timedelta(minutes=minutes)),
+                           **(dict(purpose="G6_V2_ONLY", **g6_pins) if g6 else dict(purpose="LAUNCHER_ONLY", **lpins)))
+
+    def ssh_sign(data, ns):
+        p = KEYDIR + "/doc"
+        wr(p, data)
+        if os.path.exists(p + ".sig"):
+            os.unlink(p + ".sig")
+        subprocess.run(["ssh-keygen", "-q", "-Y", "sign", "-f", key, "-n", ns, p], check=True, capture_output=True)
+        return rd(p + ".sig")
+    files = {"go.json": go, "go.json.sig": ssh_sign(go, "qa525-go-cut-v1@pmgm"), "ops-v3.json": ops,
+             "ops-v3.json.sig": ssh_sign(ops, "qa525-ops-v2@pmgm"), "app-subject.json": subject,
+             "app-bundle.json": rd(X + "/bundle.json"), "trusted-root.jsonl": rd("/opt/reh/dl/trusted-root.jsonl")}
+    for n, b in files.items():
+        wr(os.path.join(INBOX, n), b, 0o600)
+    if operation:
+        wr(os.path.join(INBOX, "g6-operation.json"), operation, 0o600)
+    s256 = lambda n: "sha256:" + sha(files[n])
+    children = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+                    **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in ("preflight", "init", "backup", "restore", "review")})
+    cfg = {"pins": {"ops_source_sha": SOURCE_SHA, "app_source_sha": SOURCE_SHA, "app_archive_sha256": app_sha,
+                    "plan_sha256": d("4"), "admission_sha256": d("5"), "policy_hash": policy},
+           "launcher_pins": lpins, "allowed_signers": go_line if go_line.endswith("\n") else go_line + "\n",
+           "go_fingerprint": fp, "ops_v3_sha256": s256("ops-v3.json"), "app_subject_sha256": s256("app-subject.json"),
+           "inbox": INBOX, "temp_root": TMP, "socket_path": SOCK, "journal_root": JOURNAL, "lease_dir": LEASE,
+           "peer_uid": PEER_UID, "timeout": 60, "children": children, "g6_pins": g6_pins,
+           "authenticity": {"ops_allowed_signers": ops_line if ops_line.endswith("\n") else ops_line + "\n",
+                            "ops_signature_sha256": s256("ops-v3.json.sig"), "app_bundle_sha256": s256("app-bundle.json"),
+                            "trusted_root_sha256": s256("trusted-root.jsonl"), "app_archive_path": APPDIR + "/inner.zip",
+                            "drop_uid": DROP_UID, "drop_gid": DROP_UID, "source_repository_id": "1356543647"}}
+    cfg_raw = json.dumps(cfg, indent=1).encode()
+    wr(INST + "/sponsor-config.json", cfg_raw, 0o600)
+    names = sorted(n for n in os.listdir(INST) if n.endswith(".py"))
+    helpers = {"ssh-keygen": "/usr/bin/ssh-keygen", "gh": "/usr/local/bin/gh"}
+    man = canon({"files": {n: sha(rd(os.path.join(INST, n))) for n in names},
+                 "helpers": {k: {"path": v, "sha256": sha(rd(v))} for k, v in helpers.items()},
+                 "interpreter": {"path": PY, "sha256": sha(rd(PY))},
+                 "config": {"name": "sponsor-config.json", "sha256": sha(cfg_raw)}})
+    wr(INST + "/manifest.json", man, 0o644)
+    wr("/opt/reh/pin.txt", (sha(man) + "\n").encode())
+    wr("/opt/reh/nonce.txt", nonce.encode(), 0o644)
+    wr("/opt/reh/appsha.txt", app_sha.encode(), 0o644)
+    print("PREPARED nonce=%s pin=%s modules=%d" % (nonce[:8], sha(man)[:8], len(names)))
+
+
+def peer():
+    """Runs as the unprivileged peer: sealed memfd of the inner ZIP + the bound frame."""
+    import array, fcntl, socket, time
+    nonce, app = rd("/opt/reh/nonce.txt").decode(), rd("/opt/reh/appsha.txt").decode()
+    data = rd("/opt/reh/x/inner.zip")
+    fd = os.memfd_create("app", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+    os.write(fd, data) if len(data) < 2 ** 31 else None
+    assert os.fstat(fd).st_size == len(data)
+    fcntl.fcntl(fd, fcntl.F_ADD_SEALS, fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_SEAL)
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    for _ in range(600):
+        try:
+            s.connect(SOCK)
+            break
+        except OSError:
+            time.sleep(0.1)
+    else:
+        print("PEER_NO_SOCKET")
+        return 1
+    frame = b"QA525-BND-V1:" + nonce.encode() + b":" + app[7:].encode()
+    s.sendmsg([frame], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]).tobytes())])
+    print("PEER_SENT")
+    time.sleep(float(os.environ.get("PEER_LINGER", "0")))
+    return 0
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1]
+    if cmd == "prepare":
+        prepare(g6=(sys.argv[2] if len(sys.argv) > 2 else None))
+    elif cmd == "peer":
+        sys.exit(peer())

@@ -198,8 +198,19 @@ class BootstrapTests(unittest.TestCase):
         ev = os.path.join(self.base, "ev")
         os.mkdir(ev, 0o755)
         name = self.m.write_record(ev, record, uid=UID, anchor=self.base)
-        with self.assertRaises(FileExistsError):
+        self.assertEqual(self.m.write_record(ev, record, uid=UID, anchor=self.base), name)  # same evidence: idempotent
+        self.assertEqual(os.listdir(ev), [name])
+        good = rd(os.path.join(ev, name))
+        pathlib_write(os.path.join(ev, name), good + b" ")  # same name, other bytes: never accepted
+        with self.assertRaises(self.m.Stop) as ctx:
             self.m.write_record(ev, record, uid=UID, anchor=self.base)
+        self.assertEqual(str(ctx.exception), "BOOT_RECORD_CONFLICT")
+        os.chmod(os.path.join(ev, name), 0o666)  # nor an unsafe file
+        pathlib_write(os.path.join(ev, name), good)
+        os.chmod(os.path.join(ev, name), 0o666)
+        with self.assertRaises(self.m.Stop):
+            self.m.write_record(ev, record, uid=UID, anchor=self.base)
+        os.chmod(os.path.join(ev, name), 0o600)
         with unittest.mock.patch.object(os, "fsync", wraps=os.fsync) as fs:
             self.m.write_record(ev, dict(record, n=1), uid=UID, anchor=self.base)
         self.assertEqual(fs.call_count, 2)  # file AND parent directory
@@ -295,6 +306,14 @@ class BootstrapTests(unittest.TestCase):
         rec = json.loads(rd(os.path.join(self.ev, name)))
         self.assertEqual(rec["schema"], "qa525-pre-root-trust-v3")
         self.assertIn("ssh-keygen", rec["helpers"])
+
+    def test_same_manifest_can_run_again_after_a_failed_attempt(self):
+        """Rehearsal regression (10-11): the evidence name is the hash of its content, so a second `run` with
+        the same manifest and PIN (peer timeout, new GO) hit O_EXCL and died with BOOT_IO_ERROR for ever."""
+        self._launcher_install()
+        self.assertTrue(self._launch()["ok"])
+        self.assertTrue(self._launch()["ok"])
+        self.assertEqual(len(os.listdir(self.ev)), 1)
 
     def test_run_refuses_non_root_bad_pin_extra_stdin_and_wrong_argv_before_any_module(self):
         import io

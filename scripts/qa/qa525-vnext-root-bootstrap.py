@@ -236,8 +236,16 @@ def write_record(evidence_dir, record, uid=0, anchor="/"):
     _safe_dir(evidence_dir, uid, anchor)
     body = json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
     name = "pre-root-trust-%s.json" % hashlib.sha256(body).hexdigest()
-    fd = os.open(os.path.join(evidence_dir, name),
-                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        fd = os.open(os.path.join(evidence_dir, name),
+                     os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except FileExistsError:
+        # The name IS the sha256 of the body: an earlier run with the very same manifest already left this exact
+        # evidence. Accept it only if it is that same safe file byte for byte (a second attempt after e.g. a peer
+        # timeout must not need a new manifest and PIN); anything else stays a STOP.
+        if _read_file(os.path.join(evidence_dir, name), uid) != body:
+            raise Stop("BOOT_RECORD_CONFLICT") from None
+        return name
     try:
         off = 0
         while off < len(body):
