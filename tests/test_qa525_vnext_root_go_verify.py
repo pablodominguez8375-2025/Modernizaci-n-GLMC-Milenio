@@ -17,6 +17,23 @@ NS = "qa525-go-cut-v1@pmgm"
 GO = b'{"schema":"qa525-go-launcher-v1","nonce":"x"}\n'
 
 
+OPS_NS = "qa525-ops-v2@pmgm"
+OPS_SIG_SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-ops-signature.py"
+DIG = lambda c: "sha256:" + c * 64
+POLICY = DIG("4")
+ARCHIVE = DIG("8")
+RECEIPT = ('{"app_archive_sha256":"%s","policy_hash":"%s","program_sha256":"%s","readiness_sha256":"%s",'
+           '"schema":"qa525-ops-v3","staging_sha256":"%s","status":"OPS_SIGNED_VERIFIED",'
+           '"ops_source_sha":"%s"}' % (ARCHIVE, POLICY, DIG("1"), DIG("2"), DIG("3"), "a" * 40)).encode()
+
+
+def load_ops_signature():
+    spec = importlib.util.spec_from_file_location("qa525_ops_sig_test", OPS_SIG_SRC)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
 def load():
     spec = importlib.util.spec_from_file_location("qa525_gorv_test", SRC)
     m = importlib.util.module_from_spec(spec)
@@ -186,6 +203,80 @@ class RootGoVerifyTests(unittest.TestCase):
         src = SRC.read_text()
         self.assertNotIn("shell=True", src)
         self.assertNotIn("os.system", src)
+
+
+
+
+@unittest.skipUnless(os.path.exists(KEYGEN), "ssh-keygen not installed")
+class RootOpsPortTests(RootGoVerifyTests):
+    """The OPS-receipt port: same pinned ssh-keygen runner, DISTINCT namespace, fed to verify_ops_receipt."""
+
+    def setUp(self):
+        super().setUp()
+        self.ops = load_ops_signature()
+        pub = Path(self.key["path"] + ".pub").read_text().split()
+        self.ops_allowed = ('qa525-ops namespaces="%s" ssh-ed25519 %s\n' % (OPS_NS, pub[1])).encode()
+        self.okw = dict(self.kw, allowed_signers=self.ops_allowed)
+
+    def port(self, **over):
+        return self.m.ops_port_for(**dict(self.okw, **over))
+
+    def verify(self, receipt=RECEIPT, signature=None, **over):
+        kw = dict(receipt=receipt, signature=signature or self.sign(self.key, RECEIPT, ns=OPS_NS),
+                  allowed_signers=self.ops_allowed, ops_fingerprint=self.key["fp"],
+                  app_fingerprints=frozenset({self.other["fp"]}), policy_hash=POLICY,
+                  verifier=self.port(), expected_app_archive_sha256=ARCHIVE)
+        kw.update(over)
+        return self.ops.verify_ops_receipt(**kw)
+
+    def test_signed_v3_receipt_verifies_end_to_end_with_the_real_contract(self):
+        out = self.verify()
+        self.assertEqual((out["signature_verified_here"], out["may_apply"], out["app_archive_bound"]),
+                         (True, False, True))
+        self.assertEqual(os.listdir(self.tmp), [])
+
+    def test_go_namespace_signature_is_not_an_ops_signature_and_vice_versa(self):
+        with self.assertRaises(self.ops.Stop) as err:
+            self.verify(signature=self.sign(self.key, RECEIPT, ns=NS))
+        self.assertEqual(str(err.exception), "OPSSIG_NOT_VERIFIED")
+        v = self.verifier()  # the GO callback must not accept an OPS-namespace signature either
+        self.assertIs(v(GO, self.sign(self.key, GO, ns=OPS_NS), self.key["fp"]), False)
+
+    def test_tampered_receipt_or_other_signer_is_refused(self):
+        sig = self.sign(self.key, RECEIPT, ns=OPS_NS)
+        for kw in (dict(receipt=RECEIPT.replace(b"a" * 40, b"b" * 40), signature=sig),
+                   dict(signature=self.sign(self.other, RECEIPT, ns=OPS_NS))):
+            with self.assertRaises(self.ops.Stop) as err:
+                self.verify(**kw)
+            self.assertEqual(str(err.exception), "OPSSIG_NOT_VERIFIED")
+
+    def test_caller_cannot_choose_signers_principal_or_namespace(self):
+        port = self.port()
+        sig = self.sign(self.key, RECEIPT, ns=OPS_NS)
+        for args in ((self.other["allowed"], sig, "qa525-ops", OPS_NS, RECEIPT),
+                     (self.ops_allowed, sig, "someone", OPS_NS, RECEIPT),
+                     (self.ops_allowed, sig, "qa525-ops", NS, RECEIPT),
+                     ("text", sig, "qa525-ops", OPS_NS, RECEIPT)):
+            self.stop("GORV_INPUT_INVALID", port, *args)
+
+    def test_pins_are_enforced_for_the_ops_namespace(self):
+        self.stop("GORV_FINGERPRINT_PIN_MISMATCH", self.port, expected_fingerprint=self.other["fp"])
+        self.stop("GORV_SIGNERS_INVALID", self.port, allowed_signers=self.key["allowed"])  # GO-namespace line
+        self.stop("GORV_BINARY_PIN_MISMATCH", self.port(trusted_binary_sha256=DIG("0")), self.ops_allowed,
+                  self.sign(self.key, RECEIPT, ns=OPS_NS), "qa525-ops", OPS_NS, RECEIPT)
+        self.stop("GORV_ROOT_REQUIRED", self.port, required_euid=UID + 1)
+        self.stop("GORV_TEMP_ROOT_UNSAFE", self.port, os_uid=UID + 1)
+
+    def test_malformed_signature_never_reaches_ssh_keygen(self):
+        port = self.port()
+        for sig in (b"", b"junk", b"-----BEGIN SSH SIGNATURE-----\n"):
+            self.stop("GORV_INPUT_INVALID", port, self.ops_allowed, sig, "qa525-ops", OPS_NS, RECEIPT)
+        self.assertEqual(os.listdir(self.tmp), [])
+
+
+for _name in dir(RootGoVerifyTests):  # inherit only the fixtures: the GO tests run once, in their own class
+    if _name.startswith("test_") and _name not in RootOpsPortTests.__dict__:
+        setattr(RootOpsPortTests, _name, None)
 
 
 if __name__ == "__main__":
