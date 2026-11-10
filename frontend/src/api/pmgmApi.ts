@@ -1,4 +1,5 @@
 import { technicalGrant } from './dynamicAccess'
+import type { WorkshopRegistryApi, WorkshopRegistryClient } from './workshopRegistry'
 import { MockAssemblyStore, type AssemblyAttestationList, type AssemblyBalancesPayload, type AssemblyCloseResult, type AssemblyEvaluateResult, type AssemblyAttestationPayload, type AssemblyClosureReadiness, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
@@ -508,6 +509,9 @@ export class PmgmApiClient {
   private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin',demoViewAsAccounts,()=>this.demoAccessSubject,()=>this.demoAccessSubject==='demo:supportUser')
   async getUserAccountCandidates():Promise<AccountCandidates>{if(this.useMocks)return this.userAccountsDemo.candidatesForCreation();return this.request('/api/system/user-accounts/eligible-members')}
   async getUserAccounts():Promise<{items:AccountUser[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.list();return this.request('/api/system/user-accounts')}
+  /** Sistema › Talleres: su cliente se descarga al abrir la sección (presupuesto de carga inicial); recibe este cliente como contexto. */
+  private workshopRegistryInstance:Promise<WorkshopRegistryApi>|null=null
+  workshopRegistryApi(){return this.workshopRegistryInstance??=import('./workshopRegistry').then(m=>m.createWorkshopRegistryApi(this as unknown as WorkshopRegistryClient))}
   async getUserAccountInventory():Promise<{items:AccountInventoryItem[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.inventory();return this.request('/api/system/user-accounts/inventory')}
   async getUserAccountLifecyclePolicy():Promise<AccountLifecyclePolicy>{if(this.useMocks)return this.userAccountsDemo.lifecyclePolicy();return this.request('/api/system/user-accounts/lifecycle-policy')}
   async runUserAccountLifecycle(subject:string,action:AccountLifecycleAction,request:AccountLifecycleRequest):Promise<AccountLifecycleResult>{if(this.useMocks)return this.userAccountsDemo.lifecycleAction(subject,action,request);return this.postJson<AccountLifecycleResult>(`/api/system/user-accounts/${encodeURIComponent(subject)}/${action}`,request)}
