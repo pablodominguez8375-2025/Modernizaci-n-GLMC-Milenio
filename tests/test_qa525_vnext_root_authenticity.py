@@ -311,6 +311,39 @@ class AuthenticityTests(unittest.TestCase):
         self.stop("AUTH_OPS_INPUT_INVALID", check, "str", ARCHIVE)
         self.stop("AUTH_OPS_INPUT_INVALID", check, receipt(), "bad")
 
+    def release(self, **over):
+        gh = self.gh()
+        auth = {"ops_allowed_signers": self.key["ops_allowed"], "drop_uid": UID or 30033, "drop_gid": GID or 30033}
+        kw = dict(ops_signature=self.ops, go_verify=self.v, keygen=(self.keygen, sha(self.keygen)),
+                  gh=(gh, sha(gh)), policy_hash=POLICY, authenticity=auth,
+                  ops_signature_bytes=self.sign(self.key, receipt()), app_bundle=BUNDLE, trusted_root=ROOT,
+                  open_archive=self.open_archive(), temp_root=self.tmp, go_fingerprint=self.key["fp"],
+                  required_euid=UID, os_uid=UID)
+        kw.update(over)
+        return self.m.port_from_release(**kw)
+
+    def test_release_assembly_end_to_end_with_real_ssh_keygen_and_the_oracle_gh(self):
+        self.assertIs(self.call(port=self.release()), True)
+
+    def test_release_assembly_denies_what_each_pinned_input_would_deny(self):
+        cases = (
+            dict(ops_signature_bytes=self.sign(self.other, receipt())),            # OPS signed by another key
+            dict(ops_signature_bytes=self.sign(self.key, receipt(), ns=GO_NS)),    # GO namespace, not OPS
+            dict(app_bundle=b'{"mediaType":"other"}'),                             # bundle not the pinned one
+            dict(trusted_root=b"{}\n"),                                            # root not the pinned one
+            dict(open_archive=self.open_archive(os.path.join(self.dir, "gone.zip"))),
+        )
+        for over in cases:
+            with self.assertRaises(Exception):
+                self.call(port=self.release(**over))
+
+    def test_release_assembly_refuses_incomplete_or_malformed_release_material(self):
+        self.stop("AUTH_RELEASE_INVALID", self.release, authenticity=[])
+        self.stop("AUTH_RELEASE_INVALID", self.release, keygen=[self.keygen])
+        self.stop("AUTH_RELEASE_INVALID", self.release, authenticity={"drop_uid": 1, "drop_gid": 1})
+        self.stop("AUTH_DROP_IDENTITY_INVALID", self.release,
+                  authenticity={"ops_allowed_signers": self.key["ops_allowed"], "drop_uid": 0, "drop_gid": 0})
+
     @unittest.skipUnless(REAL_GH, "gh not installed")
     def test_real_gh_refuses_a_forged_bundle_offline(self):
         gh = os.path.join(self.dir, "realgh")

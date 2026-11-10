@@ -282,5 +282,33 @@ def port_for(*, ops_check, app_check):
     return verify
 
 
+def port_from_release(*, ops_signature, go_verify, keygen, gh, policy_hash, authenticity, ops_signature_bytes,
+                      app_bundle, trusted_root, open_archive, temp_root, go_fingerprint, required_euid=0,
+                      os_uid=0):
+    """Assemble the launcher's port from the Sponsor-pinned release material (everything already digest-checked).
+
+    keygen / gh   `(path, "sha256:<hex>")` pairs from the bootstrap's verified `helpers`;
+    authenticity  the config's `authenticity` section (OPS signers for the OPS namespace, drop identity);
+    go_fingerprint the Sponsor key fingerprint, which also pins the OPS-namespace signers line.
+    Nothing here is read from the host or the sender."""
+    if type(authenticity) is not dict or type(keygen) is not tuple or type(gh) is not tuple:
+        raise Stop("AUTH_RELEASE_INVALID")
+    try:
+        ops_port = go_verify.ops_port_for(
+            keygen_path=keygen[0], trusted_binary_sha256=keygen[1],
+            allowed_signers=authenticity["ops_allowed_signers"], expected_fingerprint=go_fingerprint,
+            temp_root=temp_root, required_euid=required_euid, os_uid=os_uid)
+    except KeyError:
+        raise Stop("AUTH_RELEASE_INVALID") from None
+    ops_check = ops_check_for(
+        ops_signature=ops_signature, ops_port=ops_port, signers=authenticity["ops_allowed_signers"],
+        ops_fingerprint=go_fingerprint, signature=ops_signature_bytes, policy_hash=policy_hash)
+    app_check = app_check_for(
+        open_binary=go_verify.open_pinned_binary, gh_path=gh[0], gh_sha256=gh[1], trusted_root=trusted_root,
+        bundle=app_bundle, open_archive=open_archive, drop_uid=authenticity.get("drop_uid"),
+        drop_gid=authenticity.get("drop_gid"), required_euid=required_euid, os_uid=os_uid)
+    return port_for(ops_check=ops_check, app_check=app_check)
+
+
 if __name__ == "__main__":
     raise SystemExit("QA525_ROOT_AUTHENTICITY_LIBRARY_ONLY_NO_ROOT_NO_GO")

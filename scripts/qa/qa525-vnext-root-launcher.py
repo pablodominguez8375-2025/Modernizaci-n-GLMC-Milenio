@@ -15,8 +15,11 @@ Order (each step a fixed STOP):
   5. the child module for that scope is resolved BEFORE any nonce can be spent;
   6. the one composed flight: 5 legacy locks + dedicated lease (#982) -> GO verified (#981 + `check_cut`)
      -> sealed FD received (#966) -> nonce spent (#967) -> fixed child -> plane re-checked (#975/#976).
-The OPS v3 / APP receipts are CLAIMS until the authenticity port (Sigstore APP ZIP inner + OPS v3 under
-the Sponsor root) confirms them: with no such module the launcher stops before the flight. `check_cut` only proves the GO's claims are consistent with the pins; the AUTHENTICITY is #981's
+The OPS v3 / APP receipts are CLAIMS until the authenticity port (`qa525-vnext-root-authenticity.py`:
+OPS v3 signature in its own namespace + offline Sigstore of the inner ZIP by the pinned `gh`, run unprivileged)
+confirms them. The launcher feeds it ONLY digest-pinned inputs (inbox files whose sha256 the Sponsor-signed
+config fixes, the `ssh-keygen` and `gh` helpers of the verified manifest, the release archive path) and stops
+before the flight if the port is absent or says anything but True. `check_cut` only proves the GO's claims are consistent with the pins; the AUTHENTICITY is #981's
 fingerprint-pinned `ssh-keygen -Y verify`. A GO's validity is never read from the host, the sender or Git.
 """
 import datetime as dt
@@ -30,6 +33,7 @@ import sys
 CONFIG = "qa525-vnext-root-launch-config.py"
 LOCKS, POSIX, PLANE = ("qa525-vnext-root-locks.py", "qa525-vnext-posix-port.py", "qa525-vnext-root-plane.py")
 AUTH = "qa525-vnext-root-authenticity.py"
+OPSSIG = "qa525-vnext-ops-signature.py"
 ENTRY, VERIFY, CUT = ("qa525-vnext-root-entry.py", "qa525-vnext-root-go-verify.py",
                       "qa525-vnext-go-cut-contract.py")
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
@@ -38,11 +42,16 @@ FP = re.compile(r"SHA256:[A-Za-z0-9+/]{43}\Z")
 CODE = re.compile(r"[A-Z0-9_]{3,64}\Z")
 MODULE = re.compile(r"qa525-vnext-[a-z0-9-]{1,60}\.py\Z")
 MAX_INPUT = 65536
-INBOX_FILES = ("go.json", "go.json.sig", "ops-v3.json", "app-subject.json")
+INBOX_FILES = ("go.json", "go.json.sig", "ops-v3.json", "app-subject.json",
+               "ops-v3.json.sig", "app-bundle.json", "trusted-root.jsonl")
+INBOX_LIMITS = {"ops-v3.json.sig": 4096, "app-bundle.json": 1_000_000, "trusted-root.jsonl": 262144}
+MAX_ARCHIVE = 512 * 1024 * 1024
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256", "app_subject_sha256",
     "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
-    "g6_pins"})
+    "g6_pins", "authenticity"})
+AUTH_KEYS = frozenset({"ops_allowed_signers", "ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256",
+                       "app_archive_path", "drop_uid", "drop_gid"})
 PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256",
                        "admission_sha256", "policy_hash"})
 # schema -> scope. One signed GO authorizes exactly one scope; a G6 GO authorizes exactly ONE G6 command.
@@ -78,6 +87,16 @@ def _config(module):
             or not 0 < cfg["timeout"] <= 60
             or cfg["children"] != CHILD_MODULES):  # exact, closed value mapping (dict equality: keys AND values)
         raise Stop("LAUNCH_CONFIG_INVALID")
+    auth = cfg["authenticity"]
+    if (type(auth) is not dict or set(auth) != AUTH_KEYS
+            or type(auth["ops_allowed_signers"]) is not bytes or not 0 < len(auth["ops_allowed_signers"]) <= 4096
+            or any(type(auth[k]) is not str or SHA256.fullmatch(auth[k]) is None
+                   for k in ("ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256"))
+            or not _abs(auth["app_archive_path"])
+            or any(type(auth[k]) is not int or isinstance(auth[k], bool) or auth[k] <= 0
+                   for k in ("drop_uid", "drop_gid"))
+            or auth["drop_uid"] == cfg["peer_uid"]):  # the verifier never runs as the peer that sends the archive
+        raise Stop("LAUNCH_CONFIG_INVALID")
     g6 = cfg["g6_pins"]
     if g6 is not None and (type(g6) is not dict or set(g6) != {"g6_command", "g6_operation_sha256"}
                            or g6["g6_command"] not in G6_COMMANDS
@@ -91,6 +110,7 @@ def _read_regular(directory, name, uid, anchor="/"):
     """Root-owned regular file directly inside `directory`, opened without following links or blocking."""
     if name not in INBOX_FILES:
         raise Stop("LAUNCH_INPUT_NAME")
+    limit = INBOX_LIMITS.get(name, MAX_INPUT)
     try:
         _chain(directory, uid, anchor)  # every ancestor, before any root I/O on the inbox
         dfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
@@ -107,9 +127,9 @@ def _read_regular(directory, name, uid, anchor="/"):
         try:
             info = os.fstat(fd)
             if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid or info.st_nlink != 1
-                    or info.st_mode & 0o022 or not 0 < info.st_size <= MAX_INPUT):
+                    or info.st_mode & 0o022 or not 0 < info.st_size <= limit):
                 raise Stop("LAUNCH_INPUT_UNSAFE")
-            data = os.read(fd, MAX_INPUT + 1)
+            data = os.read(fd, limit + 1)
             if len(data) != info.st_size or os.read(fd, 1) != b"":
                 raise Stop("LAUNCH_INPUT_UNSAFE")
             return data
@@ -140,8 +160,8 @@ def _epoch(text):
     return int(dt.datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc).timestamp())
 
 
-def _helper_pin(record):
-    helper = (record.get("helpers") or {}).get("ssh-keygen") if type(record) is dict else None
+def _helper_pin(record, name="ssh-keygen"):
+    helper = (record.get("helpers") or {}).get(name) if type(record) is dict else None
     if (type(helper) is not dict or not _abs(helper.get("path"))
             or type(helper.get("sha256")) is not str or HEX64.fullmatch(helper["sha256"]) is None):
         raise Stop("LAUNCH_HELPER_PIN_INVALID")
@@ -181,6 +201,23 @@ def _open_dir(path, uid, anchor):
         os.close(fd)
         raise Stop("LAUNCH_DIR_UNSAFE")
     return fd
+
+
+def _open_archive(path, uid, anchor):
+    """The release's inner archive: a root-owned regular file in a link-free root-owned chain; returns (fd, size)."""
+    if not _abs(path):
+        raise Stop("LAUNCH_ARCHIVE_UNSAFE")
+    try:
+        _chain(os.path.dirname(path), uid, anchor)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+    except (OSError, Stop):
+        raise Stop("LAUNCH_ARCHIVE_UNSAFE") from None
+    info = os.fstat(fd)
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid or info.st_nlink != 1 or info.st_mode & 0o022
+            or not 0 < info.st_size <= MAX_ARCHIVE):
+        os.close(fd)
+        raise Stop("LAUNCH_ARCHIVE_UNSAFE")
+    return fd, info.st_size
 
 
 def _accept(path, peer_uid, timeout, *, owner=0, anchor="/"):
@@ -239,9 +276,14 @@ def _compose(load, record, env):
         raise Stop("LAUNCH_NOT_ROOT")
     cfg = _config(load(CONFIG))
     keygen_path, keygen_sha = _helper_pin(record)
+    gh_path, gh_sha = _helper_pin(record, "gh")
     raw = {n: _read_regular(cfg["inbox"], n, env["os_uid"], env["anchor"]) for n in INBOX_FILES}
+    auth_cfg = cfg["authenticity"]
     if (env["sha256"](raw["ops-v3.json"]) != cfg["ops_v3_sha256"]
-            or env["sha256"](raw["app-subject.json"]) != cfg["app_subject_sha256"]):
+            or env["sha256"](raw["app-subject.json"]) != cfg["app_subject_sha256"]
+            or env["sha256"](raw["ops-v3.json.sig"]) != auth_cfg["ops_signature_sha256"]
+            or env["sha256"](raw["app-bundle.json"]) != auth_cfg["app_bundle_sha256"]
+            or env["sha256"](raw["trusted-root.jsonl"]) != auth_cfg["trusted_root_sha256"]):
         raise Stop("LAUNCH_RECEIPT_PIN_MISMATCH")
     go_doc = _json(raw["go.json"], "LAUNCH_GO_INVALID")
     schema = go_doc.get("schema")
@@ -256,9 +298,10 @@ def _compose(load, record, env):
     child_key = "G6:" + g6_pins["g6_command"] if g6_pins else purpose
     ops, subject = _json(raw["ops-v3.json"], "LAUNCH_OPS_INVALID"), _json(raw["app-subject.json"], "LAUNCH_APP_INVALID")
     cut, verify, entry = load(CUT), load(VERIFY), load(ENTRY)
-    port = getattr(load(AUTH), "verify", None)  # Sigstore APP + OPS v3 under the Sponsor root; absent => STOP
-    if not callable(port):
+    build = getattr(load(AUTH), "port_from_release", None)  # Sigstore APP + OPS v3 under the Sponsor root
+    if not callable(build):
         raise Stop("LAUNCH_AUTHENTICITY_PORT_MISSING")
+    ops_signature = load(OPSSIG)
     child_mod = load(cfg["children"][child_key])  # resolved BEFORE any nonce can be spent
     act = getattr(child_mod, "act", None)
     if not callable(act):
@@ -268,6 +311,16 @@ def _compose(load, record, env):
         allowed_signers=cfg["allowed_signers"], expected_fingerprint=cfg["go_fingerprint"],
         temp_root=cfg["temp_root"], required_euid=env["root_euid"], os_uid=env["os_uid"])
     pins = dict(cfg["pins"], go_fingerprint=cfg["go_fingerprint"])
+    port = build(
+        ops_signature=ops_signature, go_verify=verify, keygen=(keygen_path, keygen_sha), gh=(gh_path, gh_sha),
+        policy_hash=cfg["pins"]["policy_hash"], authenticity=dict(auth_cfg),
+        ops_signature_bytes=raw["ops-v3.json.sig"], app_bundle=raw["app-bundle.json"],
+        trusted_root=raw["trusted-root.jsonl"],
+        open_archive=lambda: _open_archive(auth_cfg["app_archive_path"], env["os_uid"], env["anchor"]),
+        temp_root=cfg["temp_root"], go_fingerprint=cfg["go_fingerprint"], required_euid=env["root_euid"],
+        os_uid=env["os_uid"])
+    if not callable(port):
+        raise Stop("LAUNCH_AUTHENTICITY_PORT_MISSING")
 
     def verify_go():
         now = env["now"]()

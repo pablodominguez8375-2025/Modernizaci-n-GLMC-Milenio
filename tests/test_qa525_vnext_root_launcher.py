@@ -35,7 +35,7 @@ launcher = load_file("qa525-vnext-root-launcher.py")
 sheet = load_file("qa525-vnext-sponsor-signing.py")
 REAL = {n: load_file(n) for n in (
     "qa525-vnext-go-cut-contract.py", "qa525-vnext-root-go-verify.py",
-    "qa525-vnext-root-entry.py", "qa525-vnext-root-boundary-recv.py")}
+    "qa525-vnext-root-entry.py", "qa525-vnext-root-boundary-recv.py", "qa525-vnext-ops-signature.py")}
 D = lambda c: "sha256:" + c * 64
 DATA = b"zip-inner-archive" * 100
 ARCHIVE = "sha256:" + hashlib.sha256(DATA).hexdigest()
@@ -83,6 +83,13 @@ class LauncherComposeTests(unittest.TestCase):
         cut = REAL["qa525-vnext-go-cut-contract.py"]
         self.subject = dict(source_sha=APP_SHA, subject_sha256=ARCHIVE,
                             signer_workflow=cut.APP_WORKFLOW, oidc_issuer=cut.ISSUER)
+        self.gh = os.path.join(self.dir, "gh")
+        Path(self.gh).write_bytes(b"#!/bin/sh\nexit 0\n")
+        os.chmod(self.gh, 0o755)
+        self.gh_sha = hashlib.sha256(Path(self.gh).read_bytes()).hexdigest()
+        self.archive_path = os.path.join(self.dir, "inner.zip")
+        Path(self.archive_path).write_bytes(DATA)
+        os.chmod(self.archive_path, 0o644)
         self.spent, self.acted, self.fds = [], [], []
         self.write_inbox()
 
@@ -106,7 +113,9 @@ class LauncherComposeTests(unittest.TestCase):
         go = self.go_bytes() if go is None else go
         files = {"go.json": go, "go.json.sig": self.sign(go) if sig is None else sig,
                  "ops-v3.json": json.dumps(ops or self.ops, sort_keys=True).encode(),
-                 "app-subject.json": json.dumps(subject or self.subject, sort_keys=True).encode()}
+                 "app-subject.json": json.dumps(subject or self.subject, sort_keys=True).encode(),
+                 "ops-v3.json.sig": b"-----BEGIN SSH SIGNATURE-----\nX\n-----END SSH SIGNATURE-----\n",
+                 "app-bundle.json": b'{"mediaType":"bundle"}', "trusted-root.jsonl": b'{"mediaType":"root"}\n'}
         for name, data in files.items():
             path = os.path.join(self.dir, "inbox", name)
             Path(path).write_bytes(data)
@@ -121,7 +130,12 @@ class LauncherComposeTests(unittest.TestCase):
                "inbox": os.path.join(self.dir, "inbox"), "temp_root": os.path.join(self.dir, "tmp"),
                "socket_path": os.path.join(self.dir, "s"), "journal_root": os.path.join(self.dir, "j"),
                "lease_dir": os.path.join(self.dir, "l"), "peer_uid": UID, "timeout": 5,
-               "children": dict(CHILDREN), "g6_pins": None}
+               "children": dict(CHILDREN), "g6_pins": None,
+               "authenticity": {"ops_allowed_signers": self.allowed.replace(NS.encode(), b"qa525-ops-v2@pmgm"),
+                                "ops_signature_sha256": sha(self.files["ops-v3.json.sig"]),
+                                "app_bundle_sha256": sha(self.files["app-bundle.json"]),
+                                "trusted_root_sha256": sha(self.files["trusted-root.jsonl"]),
+                                "app_archive_path": self.archive_path, "drop_uid": UID + 1, "drop_gid": UID + 1}}
         cfg.update(over)
         return cfg
 
@@ -138,9 +152,11 @@ class LauncherComposeTests(unittest.TestCase):
         child = types.SimpleNamespace(act=lambda fd: (acted.append(os.fstat(fd).st_size), "done")[1]) if child_ok \
             else types.SimpleNamespace()
         mods = dict(REAL)
+        tests.release_args = {}
         auth = tests.auth if hasattr(tests, "auth") else (lambda **kw: True)
         mods.update({
-            "qa525-vnext-root-authenticity.py": types.SimpleNamespace(verify=auth),
+            "qa525-vnext-root-authenticity.py": types.SimpleNamespace(
+                port_from_release=lambda **kw: (tests.release_args.update(kw), auth)[1]),
             "qa525-vnext-root-launch-config.py": types.SimpleNamespace(CONFIG=cfg or self.config()),
             "qa525-vnext-root-locks.py": types.SimpleNamespace(),
             "qa525-vnext-posix-port.py": types.SimpleNamespace(PosixPort=lambda: object()),
@@ -179,7 +195,8 @@ class LauncherComposeTests(unittest.TestCase):
         return env
 
     def record(self, **over):
-        rec = {"helpers": {"ssh-keygen": {"path": self.keygen, "sha256": self.keygen_sha}}}
+        rec = {"helpers": {"ssh-keygen": {"path": self.keygen, "sha256": self.keygen_sha},
+                           "gh": {"path": self.gh, "sha256": self.gh_sha}}}
         rec.update(over)
         return rec
 
@@ -313,6 +330,11 @@ class LauncherComposeTests(unittest.TestCase):
                   load=self.loader(cfg=self.config(ops_v3_sha256=D("0"))))
         self.stop("LAUNCH_RECEIPT_PIN_MISMATCH",
                   load=self.loader(cfg=self.config(app_subject_sha256=D("0"))))
+        for key in ("ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256"):
+            cfg = self.config()
+            cfg["authenticity"][key] = D("0")
+            self.stop("LAUNCH_RECEIPT_PIN_MISMATCH", load=self.loader(cfg=cfg))
+        self.assertEqual((self.spent, self.acted), ([], []))
 
     def test_helper_hash_is_converted_once_and_a_bad_helper_pin_stops(self):
         self.assertEqual(launcher._helper_pin(self.record()), (self.keygen, "sha256:" + self.keygen_sha))
@@ -336,7 +358,15 @@ class LauncherComposeTests(unittest.TestCase):
                     dict(cfg, g6_pins={"g6_command": "wipe", "g6_operation_sha256": D("5")}),
                     dict(cfg, g6_pins={"g6_command": "backup"}),
                     dict(cfg, g6_pins={"g6_command": "backup", "g6_operation_sha256": "5" * 64}),
-                    dict(cfg, inbox="relative"), dict(cfg, go_fingerprint="SHA256:short")):
+                    dict(cfg, inbox="relative"), dict(cfg, go_fingerprint="SHA256:short"),
+                    {k: v for k, v in cfg.items() if k != "authenticity"},
+                    dict(cfg, authenticity=dict(cfg["authenticity"], extra=1)),
+                    dict(cfg, authenticity=dict(cfg["authenticity"], drop_uid=0)),
+                    dict(cfg, authenticity=dict(cfg["authenticity"], drop_gid=True)),
+                    dict(cfg, authenticity=dict(cfg["authenticity"], drop_uid=UID)),  # the peer's own uid
+                    dict(cfg, authenticity=dict(cfg["authenticity"], app_archive_path="relative.zip")),
+                    dict(cfg, authenticity=dict(cfg["authenticity"], ops_allowed_signers=b"")),
+                    dict(cfg, authenticity=dict(cfg["authenticity"], app_bundle_sha256="x"))):
             self.stop("LAUNCH_CONFIG_INVALID", load=self.loader(cfg=bad))
 
     def test_children_mapping_is_exact_so_no_swap_duplicate_or_cross_scope_child_is_accepted(self):
@@ -531,6 +561,74 @@ class LauncherComposeTests(unittest.TestCase):
         self.auth = None
         self.stop("LAUNCH_AUTHENTICITY_PORT_MISSING")
         self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_release_material_reaches_the_authenticity_builder_only_from_pinned_sources(self):
+        self.compose()
+        got = self.release_args
+        self.assertEqual(got["keygen"], (self.keygen, "sha256:" + self.keygen_sha))
+        self.assertEqual(got["gh"], (self.gh, "sha256:" + self.gh_sha))
+        self.assertEqual(got["policy_hash"], PINS["policy_hash"])
+        self.assertEqual(got["go_fingerprint"], self.fp)
+        self.assertEqual(got["ops_signature_bytes"], self.files["ops-v3.json.sig"])
+        self.assertEqual(got["app_bundle"], self.files["app-bundle.json"])
+        self.assertEqual(got["trusted_root"], self.files["trusted-root.jsonl"])
+        self.assertEqual(got["authenticity"]["drop_uid"], UID + 1)
+        fd, size = got["open_archive"]()
+        self.addCleanup(os.close, fd)
+        self.assertEqual((size, os.read(fd, size + 1)), (len(DATA), DATA))
+        self.assertEqual(got["required_euid"], UID)
+
+    def test_a_missing_gh_helper_or_inbox_file_stops_before_authentication(self):
+        rec = self.record()
+        del rec["helpers"]["gh"]
+        self.stop("LAUNCH_HELPER_PIN_INVALID", record=rec)
+        for name in ("ops-v3.json.sig", "app-bundle.json", "trusted-root.jsonl"):
+            path = os.path.join(self.dir, "inbox", name)
+            data = Path(path).read_bytes()
+            os.unlink(path)
+            self.stop("LAUNCH_INPUT_MISSING")
+            Path(path).write_bytes(data)
+            os.chmod(path, 0o600)
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_bundle_and_root_are_read_with_their_own_larger_limits_and_no_more(self):
+        path = os.path.join(self.dir, "inbox", "app-bundle.json")
+        Path(path).write_bytes(b"x" * 200_000)
+        os.chmod(path, 0o600)
+        self.assertEqual(len(launcher._read_regular(os.path.join(self.dir, "inbox"), "app-bundle.json", UID, self.dir)), 200_000)
+        Path(path).write_bytes(b"x" * 1_000_001)
+        os.chmod(path, 0o600)
+        with self.assertRaises(launcher.Stop) as err:
+            launcher._read_regular(os.path.join(self.dir, "inbox"), "app-bundle.json", UID, self.dir)
+        self.assertEqual(str(err.exception), "LAUNCH_INPUT_UNSAFE")
+        big = os.path.join(self.dir, "inbox", "go.json")  # the small files keep the 64 KiB limit
+        Path(big).write_bytes(b"x" * 70_000)
+        os.chmod(big, 0o600)
+        with self.assertRaises(launcher.Stop):
+            launcher._read_regular(os.path.join(self.dir, "inbox"), "go.json", UID, self.dir)
+
+    def test_archive_opener_refuses_links_writable_hardlinked_foreign_or_oversized_files(self):
+        def stop(path, anchor=None):
+            with self.assertRaises(launcher.Stop) as err:
+                launcher._open_archive(path, UID, anchor or self.dir)
+            self.assertEqual(str(err.exception), "LAUNCH_ARCHIVE_UNSAFE")
+        link = os.path.join(self.dir, "link.zip")
+        os.symlink(self.archive_path, link)
+        stop(link)
+        os.chmod(self.archive_path, 0o664)
+        stop(self.archive_path)
+        os.chmod(self.archive_path, 0o644)
+        os.link(self.archive_path, os.path.join(self.dir, "twin.zip"))
+        stop(self.archive_path)
+        stop(os.path.join(self.dir, "absent.zip"))
+        stop("relative.zip")
+        stop(self.archive_path, anchor="/nonexistent")
+        os.unlink(os.path.join(self.dir, "twin.zip"))
+        with unittest.mock.patch.object(launcher, "MAX_ARCHIVE", 4):
+            stop(self.archive_path)
+        fd, size = launcher._open_archive(self.archive_path, UID, self.dir)
+        os.close(fd)
+        self.assertEqual(size, len(DATA))
 
     def test_fabricated_receipts_with_a_coherent_digest_are_still_denied_by_the_port(self):
         fake_ops = dict(self.ops, status="OPS_SIGNED_VERIFIED")  # coherent claims, no signature behind them
