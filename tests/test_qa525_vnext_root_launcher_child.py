@@ -1,10 +1,13 @@
 """Offline tests for the launcher child (temporary paths only; never touches a real launcher)."""
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
+import stat
 import tempfile
+import zipfile
 import unittest
 from unittest import mock
 
@@ -58,7 +61,7 @@ class ChildTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "LAUNCHER_ATOMIC_SWAP_COMMITTED")
         self.assertEqual(self.read(self.launcher), NEW)
         names = sorted(os.listdir(self.state))
-        self.assertEqual(names, ["inflight-%s.done" % NONCE, "intent-%s.superseded" % NONCE, "old-%s.bin" % NONCE,
+        self.assertEqual(names, ["inflight-swap-%s.done" % NONCE, "intent-%s.superseded" % NONCE, "old-%s.bin" % NONCE,
                                  "receipt-%s.json" % NONCE])
         self.assertEqual(self.read(os.path.join(self.state, "old-%s.bin" % NONCE)), OLD)
         self.assertEqual(os.stat(self.launcher).st_mode & 0o777, 0o700)
@@ -290,6 +293,302 @@ class ChildTests(unittest.TestCase):
     def test_act_is_a_closed_stub(self):
         self.assertEqual(self.code(child.act, 3), "CHILD_NOT_WIRED")
         self.assertEqual(self.read(self.launcher), OLD)
+
+
+TPL = importlib.util.spec_from_file_location(
+    "pinned_template", SRC.parent / "operators/qa525-launcher-pinned-template.py")
+template = importlib.util.module_from_spec(TPL)
+TPL.loader.exec_module(template)
+SRC40 = "c3" * 20
+OPERATOR_BYTES = b"print('qa525 operator')\n"
+OPERATOR_REL = "scripts/qa/operators/qa525-update.py"
+
+
+def hx(b):
+    return hashlib.sha256(b).hexdigest()
+
+
+def build_release(files=None, manifest=None, info=None, extra=None):
+    """Return ZIP bytes of a canonical release: BUILD-INFO.txt, MANIFEST.sha256 and the listed files."""
+    files = {OPERATOR_REL: OPERATOR_BYTES, "scripts/qa/other.py": b"x = 1\n"} if files is None else files
+    info = ("SOURCE_SHA=%s\nSTORAGE=x\n" % SRC40).encode() if info is None else info
+    members = dict(files, **{"BUILD-INFO.txt": info})
+    if manifest is None:
+        manifest = "".join("%s  ./%s\n" % (hx(v), k) for k, v in sorted(members.items())).encode()
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for k, v in sorted(members.items()):
+            z.writestr(k, v)
+        z.writestr("MANIFEST.sha256", manifest)
+        for name, data in (extra or {}).items():
+            if isinstance(data, zipfile.ZipInfo):
+                z.writestr(data, b"target")
+            else:
+                z.writestr(name, data)
+    return out.getvalue()
+
+
+class InstallTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = pathlib.Path(self.tmp.name)
+        self.uid, self.root = os.getuid(), str(root)
+        for d, mode in (("sbin", 0o755), ("state", 0o700), ("store", 0o700)):
+            (root / d).mkdir()
+            os.chmod(root / d, mode)
+        self.launcher, self.state, self.store = (str(root / "sbin/pmgm-qa-update"), str(root / "state"),
+                                                 str(root / "store"))
+        pathlib.Path(self.launcher).write_bytes(OLD)
+        os.chmod(self.launcher, 0o700)
+        self.fds = []
+        self.addCleanup(lambda: [os.close(f) for f in self.fds if f >= 0])
+
+    def memfd(self, data):
+        fd = os.memfd_create("zip")
+        os.write(fd, data)
+        self.fds.append(fd)
+        return fd
+
+    def claims(self, data, **over):
+        base = {"purpose": "LAUNCHER_ONLY", "nonce": NONCE, "app_source_sha": SRC40,
+                "app_archive_sha256": sha(data)}
+        base.update(over)
+        return base
+
+    def pins(self, **over):
+        base = {"release_asset_sha256": sha(b"asset"), "old_launcher_sha256": hx(OLD),
+                "candidate_operator_sha256": hx(OPERATOR_BYTES)}
+        base.update(over)
+        return base
+
+    def run_install(self, data=None, claims=None, pins=None):
+        data = build_release() if data is None else data
+        return child.install(fd=self.memfd(data), claims=claims or self.claims(data), launcher_pins=pins or self.pins(),
+                             uid=self.uid, anchor=self.root, launcher=self.launcher, store=self.store,
+                             state=self.state)
+
+    def code(self, *a, **kw):
+        with self.assertRaises(child.Stop) as cm:
+            self.run_install(*a, **kw)
+        return str(cm.exception)
+
+    def untouched(self):
+        self.assertEqual(pathlib.Path(self.launcher).read_bytes(), OLD)
+
+    def clean(self):
+        self.assertEqual(os.listdir(self.store), [])
+        self.assertEqual(os.listdir(self.state), [])
+        self.untouched()
+
+    def test_render_is_byte_identical_to_the_operators_template(self):
+        self.assertEqual(child.render(SRC40), template.render(SRC40))
+        self.assertEqual(template.inspect_template(SRC40, child.render(SRC40))["launcher_sha256"],
+                         hx(child.render(SRC40)))
+
+    def test_retains_the_release_then_swaps_the_shim(self):
+        data = build_release()
+        receipt = self.run_install(data)
+        shim = child.render(SRC40, self.store)
+        self.assertEqual(pathlib.Path(self.launcher).read_bytes(), shim)
+        tree = pathlib.Path(self.store, SRC40)
+        self.assertEqual((tree / OPERATOR_REL).read_bytes(), OPERATOR_BYTES)
+        self.assertEqual(sorted(p.relative_to(tree).as_posix() for p in tree.rglob("*") if p.is_file()),
+                         ["BUILD-INFO.txt", "MANIFEST.sha256", OPERATOR_REL, "scripts/qa/other.py"])
+        self.assertEqual(stat.S_IMODE((tree / OPERATOR_REL).stat().st_mode), 0o644)
+        self.assertEqual(stat.S_IMODE(tree.stat().st_mode), 0o755)
+        self.assertEqual(os.listdir(self.store), [SRC40])
+        ev = receipt["evidence"]
+        self.assertEqual(ev["shim_sha256"], sha(shim))
+        self.assertEqual(ev["candidate_operator_sha256"], "sha256:" + hx(OPERATOR_BYTES))
+        self.assertEqual(ev["app_archive_sha256"], sha(data))
+        self.assertEqual(ev["app_source_sha"], SRC40)
+        self.assertIn("inflight-swap-%s.done" % NONCE, os.listdir(self.state))
+        self.assertNotIn("inflight.json", os.listdir(self.state))
+
+    def test_rollback_restores_the_old_launcher_and_never_deletes_the_store(self):
+        self.run_install()
+        child.rollback(launcher=self.launcher, state=self.state, nonce=NONCE, uid=self.uid, anchor=self.root)
+        self.untouched()
+        self.assertEqual(os.listdir(self.store), [SRC40])
+        self.assertIn("inflight-rollback-%s.done" % NONCE, os.listdir(self.state))
+        self.assertIn("inflight-swap-%s.done" % NONCE, os.listdir(self.state))  # both audit records survive
+
+    def test_archive_that_is_not_the_signed_one_is_refused_before_any_write(self):
+        data = build_release()
+        self.assertEqual(self.code(data, claims=self.claims(data, app_archive_sha256=sha(b"other"))),
+                         "CHILD_ARCHIVE_DIGEST_MISMATCH")
+        self.clean()
+
+    def test_operator_that_differs_from_the_signed_pin_is_refused_before_any_write(self):
+        self.assertEqual(self.code(pins=self.pins(candidate_operator_sha256=hx(b"evil"))), "CHILD_CANDIDATE_MISMATCH")
+        evil = build_release(files={OPERATOR_REL: b"print('evil')\n"})
+        self.assertEqual(self.code(evil), "CHILD_CANDIDATE_MISMATCH")
+        self.clean()
+
+    def test_hostile_archives_are_refused_before_any_write(self):
+        link = zipfile.ZipInfo("scripts/qa/link.py")
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        cases = {
+            "traversal": build_release(extra={"../escape.py": b"x"}),
+            "absolute": build_release(extra={"/etc/x": b"x"}),
+            "backslash": build_release(extra={"a\\b.py": b"x"}),
+            "dot": build_release(extra={"a/./b.py": b"x"}),
+            "symlink": build_release(extra={"scripts/qa/link.py": link}),
+            "file_and_dir": build_release(files={OPERATOR_REL: OPERATOR_BYTES, "scripts/qa/operators": b"x"}),
+            "bomb": build_release(files={OPERATOR_REL: OPERATOR_BYTES, "big.bin": b"\0" * (child.MAX_MEMBER // 4)}),
+            "not_a_zip": b"PK\x03\x04 not really a zip",
+        }
+        for label, data in cases.items():
+            with self.subTest(label):
+                self.assertIn(self.code(data), ("CHILD_ARCHIVE_UNSAFE", "CHILD_MANIFEST_INVALID"), label)
+                self.clean()
+
+    def test_duplicate_member_names_are_refused(self):
+        import warnings
+        out = io.BytesIO()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with zipfile.ZipFile(out, "w") as z:
+                z.writestr("BUILD-INFO.txt", ("SOURCE_SHA=%s\n" % SRC40).encode())
+                z.writestr(OPERATOR_REL, OPERATOR_BYTES)
+                z.writestr(OPERATOR_REL, b"second")
+                z.writestr("MANIFEST.sha256", b"")
+        self.assertEqual(self.code(out.getvalue()), "CHILD_ARCHIVE_UNSAFE")
+        self.clean()
+
+    def test_manifest_must_list_exactly_the_files(self):
+        files = {OPERATOR_REL: OPERATOR_BYTES, "scripts/qa/other.py": b"x = 1\n"}
+        info = ("SOURCE_SHA=%s\n" % SRC40).encode()
+        allm = {**files, "BUILD-INFO.txt": info}
+        lines = ["%s  ./%s\n" % (hx(v), k) for k, v in sorted(allm.items())]
+        cases = {
+            "missing_manifest_line": "".join(lines[:-1]),
+            "extra_listed_file": "".join(lines) + "%s  ./ghost.py\n" % hx(b"g"),
+            "noncanonical": "".join(lines).replace("  ./", " ./"),
+            "empty": "",
+            "dup": "".join(lines) + lines[0],
+            "no_operator": "".join(l for l in lines if "qa525-update" not in l),
+        }
+        for label, manifest in cases.items():
+            with self.subTest(label):
+                self.assertEqual(self.code(build_release(files=files, manifest=manifest.encode())),
+                                 "CHILD_MANIFEST_INVALID")
+                self.clean()
+        extra_file = build_release(files=files, extra={"surprise.py": b"x"})
+        self.assertEqual(self.code(extra_file), "CHILD_MANIFEST_INVALID")
+        self.clean()
+
+    def test_build_info_must_bind_the_signed_source_sha(self):
+        self.assertEqual(self.code(build_release(info=b"SOURCE_SHA=" + b"d4" * 20 + b"\n")), "CHILD_MANIFEST_INVALID")
+        self.assertEqual(self.code(build_release(info=b"nothing\n")), "CHILD_MANIFEST_INVALID")
+        self.clean()
+
+    def test_member_bytes_that_do_not_match_the_manifest_stop_and_leave_the_marker(self):
+        files = {OPERATOR_REL: OPERATOR_BYTES, "scripts/qa/other.py": b"x = 1\n"}
+        allm = {**files, "BUILD-INFO.txt": ("SOURCE_SHA=%s\n" % SRC40).encode()}
+        manifest = "".join("%s  ./%s\n" % (hx(b"different" if k.endswith("other.py") else v), k)
+                           for k, v in sorted(allm.items())).encode()
+        self.assertEqual(self.code(build_release(files=files, manifest=manifest)), "CHILD_MANIFEST_MISMATCH")
+        self.untouched()
+        self.assertIn("inflight.json", os.listdir(self.state))  # recovery required, nothing cleaned automatically
+        self.assertIn(SRC40 + ".partial", os.listdir(self.store))
+        self.assertNotIn(SRC40, os.listdir(self.store))
+
+    def test_existing_store_target_is_never_replaced(self):
+        os.mkdir(os.path.join(self.store, SRC40), 0o755)
+        pathlib.Path(self.store, SRC40, "mine").write_bytes(b"keep")
+        self.assertEqual(self.code(), "CHILD_STORE_EXISTS")
+        self.assertEqual(pathlib.Path(self.store, SRC40, "mine").read_bytes(), b"keep")
+        self.assertEqual(os.listdir(self.state), [])
+        self.untouched()
+        os.rename(os.path.join(self.store, SRC40), os.path.join(self.store, "elsewhere"))
+        os.mkdir(os.path.join(self.store, SRC40 + ".partial"), 0o700)
+        self.assertEqual(self.code(), "CHILD_STORE_EXISTS")
+
+    def test_store_that_appears_right_before_the_rename_is_not_clobbered(self):
+        real = child._extract
+
+        def racing(zf, files, expected, pfd, uid):
+            real(zf, files, expected, pfd, uid)
+            os.mkdir(os.path.join(self.store, SRC40), 0o755)
+            pathlib.Path(self.store, SRC40, "mine").write_bytes(b"keep")
+        with mock.patch.object(child, "_extract", racing):
+            self.assertEqual(self.code(), "CHILD_STORE_EXISTS")
+        self.assertEqual(pathlib.Path(self.store, SRC40, "mine").read_bytes(), b"keep")
+        self.untouched()
+
+    def test_crash_after_the_store_rename_blocks_everything_until_reconciled(self):
+        with mock.patch.object(child, "_verify_retained", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_install()
+        self.untouched()
+        self.assertIn(SRC40, os.listdir(self.store))
+        self.assertIn("inflight.json", os.listdir(self.state))
+        self.assertEqual(self.code(), "CHILD_STORE_EXISTS")
+        other = "f6" * 20
+        data = build_release(info=("SOURCE_SHA=%s\n" % other).encode())
+        claims = self.claims(data, nonce="9a" * 32, app_source_sha=other)
+        self.assertEqual(self.code(data, claims=claims), "CHILD_RECOVERY_REQUIRED")
+        self.untouched()
+
+    def test_crash_mid_extraction_leaves_only_the_partial_and_the_marker(self):
+        with mock.patch.object(child, "_extract", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_install()
+        self.assertEqual(os.listdir(self.store), [SRC40 + ".partial"])
+        self.assertIn("inflight.json", os.listdir(self.state))
+        self.untouched()
+        self.assertEqual(self.code(), "CHILD_STORE_EXISTS")
+
+    def test_launcher_drift_is_refused_before_the_store_is_touched(self):
+        pathlib.Path(self.launcher).write_bytes(b"#!/bin/sh\necho drift\n")
+        os.chmod(self.launcher, 0o700)
+        self.assertEqual(self.code(), "CHILD_OLD_LAUNCHER_DRIFT")
+        self.assertEqual(os.listdir(self.store), [])
+        self.assertEqual(os.listdir(self.state), [])
+
+    def test_retained_tree_that_drifts_after_publish_stops_before_the_swap(self):
+        real = child._verify_retained
+
+        def tamper(store_fd, sha_, operator_hex, manifest_sha, uid):
+            os.chmod(os.path.join(self.store, SRC40, OPERATOR_REL), 0o666)  # group/other writable
+            return real(store_fd, sha_, operator_hex, manifest_sha, uid)
+        with mock.patch.object(child, "_verify_retained", tamper):
+            self.assertEqual(self.code(), "CHILD_RETAINED_DRIFT")
+        self.untouched()
+
+    def test_claims_and_pins_shapes_are_closed(self):
+        data = build_release()
+        bad_claims = [{"purpose": "G6_V2_ONLY"}, {"nonce": "zz"}, {"app_source_sha": "abc"},
+                      {"app_archive_sha256": "deadbeef"}]
+        for over in bad_claims:
+            with self.subTest(over):
+                self.assertEqual(self.code(data, claims=self.claims(data, **over)), "CHILD_CLAIMS_INVALID")
+        self.assertEqual(self.code(data, pins=self.pins(extra="x")), "CHILD_CLAIMS_INVALID")
+        self.assertEqual(self.code(data, pins=self.pins(old_launcher_sha256="sha256:" + hx(OLD))),
+                         "CHILD_CLAIMS_INVALID")
+        self.clean()
+
+    def test_act_for_builds_the_runner_only_from_valid_claims_and_uses_real_anchors(self):
+        data = build_release()
+        with self.assertRaises(child.Stop):
+            child.act_for(claims=self.claims(data, purpose="API_WEB_QA_ONLY"), launcher_pins=self.pins())
+        run = child.act_for(claims=self.claims(data), launcher_pins=self.pins())
+        with mock.patch.object(child, "LAUNCHER", self.launcher), mock.patch.object(child, "STORE", self.store), \
+                mock.patch.object(child, "STATE", self.state):
+            with self.assertRaises(child.Stop) as cm:
+                run(self.memfd(data))  # production anchor "/" : /tmp is not a trusted chain
+        self.assertEqual(str(cm.exception), "CHILD_STATE_UNSAFE")
+        self.clean()
+
+    def test_act_for_snapshots_its_inputs(self):
+        data = build_release()
+        claims, pins = self.claims(data), self.pins()
+        run = child.act_for(claims=claims, launcher_pins=pins)
+        claims["nonce"] = "zz"
+        pins["candidate_operator_sha256"] = "0" * 64
+        self.assertTrue(callable(run))
 
 
 if __name__ == "__main__":

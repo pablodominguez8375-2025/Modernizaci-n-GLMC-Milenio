@@ -31,15 +31,33 @@ rollback intent BEFORE the first byte moves, so a crash mid-rollback also blocks
 reconciliation. Nothing here reconciles or retries automatically.
 `act` here is a closed stub: wiring the pins, new bytes and paths from the verified release is a separate change.
 """
+import ctypes
+import errno
 import hashlib
+import io
 import json
 import os
 import re
 import stat
+import zipfile
 
 NONCE = re.compile(r"[0-9a-f]{64}\Z")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
 MAX_LAUNCHER = 1_048_576
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+SOURCE = re.compile(r"[0-9a-f]{40}\Z")
+MANIFEST_LINE = re.compile(r"([0-9a-f]{64})  \./([^\n]+)\Z")
+LAUNCHER = "/usr/local/sbin/pmgm-qa-update"  # fixed in code, never from config or the peer
+STORE = "/opt/centenario/qa525-signed-stage"
+STATE = "/opt/centenario/qa525-launcher-replacement"
+OPERATOR_REL = "scripts/qa/operators/qa525-update.py"
+MAX_ZIP = 512 * 1024 * 1024
+MAX_MEMBERS = 5000
+MAX_MEMBER = 128 * 1024 * 1024
+MAX_TOTAL = 1024 * 1024 * 1024
+MAX_RATIO = 200
+MAX_TEXT = 5_000_000
+EVIDENCE_KEYS = frozenset({"app_archive_sha256", "app_source_sha", "candidate_operator_sha256", "shim_sha256"})
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 
@@ -148,8 +166,11 @@ def _claim(sfd, n, op, nonce, uid):
         raise Stop("CHILD_RECOVERY_REQUIRED") from None
 
 
-def _release(sfd, n):
-    os.rename(n["marker"], n["marker_done"], src_dir_fd=sfd, dst_dir_fd=sfd)
+def _release(sfd, n, op):
+    done = n["done_swap"] if op == "swap" else n["done_rollback"]
+    if not _absent(sfd, done):
+        raise Stop("CHILD_REPLAY_OR_PARTIAL_STATE")
+    os.rename(n["marker"], done, src_dir_fd=sfd, dst_dir_fd=sfd)
     os.fsync(sfd)
 
 
@@ -161,8 +182,9 @@ def _names(launcher_name, nonce):
     return {"intent": "intent-" + nonce + ".json", "backup": "old-" + nonce + ".bin",
             "receipt": "receipt-" + nonce + ".json", "archived": "intent-" + nonce + ".superseded",
             "rolled": "rollback-" + nonce + ".json", "marker": "inflight.json",
+            "done_swap": "inflight-swap-" + nonce + ".done", "done_rollback": "inflight-rollback-" + nonce + ".done",
             "rb_intent": "rollback-intent-" + nonce + ".json", "rb_done": "rollback-intent-" + nonce + ".superseded",
-            "marker_done": "inflight-" + nonce + ".done",
+
             "staged": "." + launcher_name + "-" + nonce + ".tmp",
             "restore": "." + launcher_name + "-" + nonce + ".restore"}
 
@@ -175,7 +197,7 @@ def _check_args(launcher, state, anchor, nonce, *digests, uid):
         raise Stop("CHILD_ARGS_INVALID")
 
 
-def swap(*, launcher, state, nonce, old_sha256, expected_new_sha256, new_bytes, uid=0, anchor="/"):
+def swap(*, launcher, state, nonce, old_sha256, expected_new_sha256, new_bytes, uid=0, anchor="/", evidence=None):
     """Replace `launcher` (currently the pinned OLD bytes) by `new_bytes`. Returns the receipt record."""
     if type(new_bytes) is not bytes or not 0 < len(new_bytes) <= MAX_LAUNCHER:
         raise Stop("CHILD_ARGS_INVALID")
@@ -190,14 +212,14 @@ def swap(*, launcher, state, nonce, old_sha256, expected_new_sha256, new_bytes, 
     try:
         lfd = _open_dir(ldir, uid, anchor)
         try:
-            return _swap(lfd, lname, sfd, state, nonce, old_sha256, new_bytes, new_sha, uid)
+            return _swap(lfd, lname, sfd, nonce, old_sha256, new_bytes, new_sha, uid, evidence, claimed=False)
         finally:
             os.close(lfd)
     finally:
         os.close(sfd)
 
 
-def _swap(lfd, lname, sfd, state, nonce, old_sha256, new_bytes, new_sha, uid):
+def _swap(lfd, lname, sfd, nonce, old_sha256, new_bytes, new_sha, uid, evidence, claimed):
     old_bytes = _read(lfd, lname, uid, "CHILD_LAUNCHER_UNSAFE")
     if _digest(old_bytes) != old_sha256 or _mode(lfd, lname) != 0o700:
         raise Stop("CHILD_OLD_LAUNCHER_DRIFT")
@@ -205,9 +227,15 @@ def _swap(lfd, lname, sfd, state, nonce, old_sha256, new_bytes, new_sha, uid):
     if not (all(_absent(sfd, n[k]) for k in ("intent", "backup", "receipt", "archived", "rolled"))
             and all(_absent(lfd, n[k]) for k in ("staged", "restore"))):
         raise Stop("CHILD_REPLAY_OR_PARTIAL_STATE")
-    _claim(sfd, n, "swap", nonce, uid)  # before the first record or mutation
+    if not claimed:
+        _claim(sfd, n, "swap", nonce, uid)  # before the first record or mutation
     record = {"status": "SWAP_INTENT_NO_DEPLOYMENT", "nonce": nonce,
               "old_launcher_sha256": old_sha256, "new_launcher_sha256": new_sha}
+    if evidence:
+        if (type(evidence) is not dict or not set(evidence) <= EVIDENCE_KEYS
+                or any(type(v) is not str or len(v) > 100 for v in evidence.values())):
+            raise Stop("CHILD_ARGS_INVALID")
+        record["evidence"] = dict(evidence)
     _write_once(sfd, n["intent"], _json(record), 0o600)  # nothing touches the launcher before this exists
     _write_once(sfd, n["backup"], old_bytes, 0o700)
     if _digest(_read(sfd, n["backup"], uid, "CHILD_BACKUP_UNVERIFIED")) != old_sha256:
@@ -230,7 +258,7 @@ def _swap(lfd, lname, sfd, state, nonce, old_sha256, new_bytes, new_sha, uid):
     _write_once(sfd, n["receipt"], _json(receipt), 0o600)
     os.rename(n["intent"], n["archived"], src_dir_fd=sfd, dst_dir_fd=sfd)
     os.fsync(sfd)
-    _release(sfd, n)
+    _release(sfd, n, "swap")
     return receipt
 
 
@@ -279,12 +307,331 @@ def rollback(*, launcher, state, nonce, uid=0, anchor="/"):
             _write_once(sfd, n["rolled"], _json(dict(receipt, status="LAUNCHER_ROLLED_BACK")), 0o600)
             os.rename(n["rb_intent"], n["rb_done"], src_dir_fd=sfd, dst_dir_fd=sfd)
             os.fsync(sfd)
-            _release(sfd, n)
+            _release(sfd, n, "rollback")
         finally:
             os.close(lfd)
     finally:
         os.close(sfd)
     return {"status": "LAUNCHER_ROLLED_BACK", "nonce": nonce}
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Release retention + launcher replacement (`act_for`). The ZIP is the sealed FD whose digest the signed GO fixed
+# (`app_archive_sha256`, Sigstore-attested by the authenticity port); the operator inside must equal the GO's
+# `candidate_operator_sha256`; the new launcher is the deterministic shim for `app_source_sha`.
+# ---------------------------------------------------------------------------------------------------------------
+
+def render(source_sha, store=None):
+    """Byte-identical to `operators/qa525-launcher-pinned-template.render` (a test pins the equality)."""
+    if type(source_sha) is not str or SOURCE.fullmatch(source_sha) is None:
+        raise Stop("CHILD_ARGS_INVALID")
+    path = os.path.join(store or STORE, source_sha, OPERATOR_REL)
+    return ('#!/usr/bin/python3\nimport os,sys\n'
+            'os.execv("/usr/bin/python3", ["/usr/bin/python3", "-B", ' + repr(path) + ', *sys.argv[1:]])\n'
+            ).encode("utf-8")
+
+
+def _read_fd(fd):
+    try:
+        size = os.fstat(fd).st_size
+        if not 0 < size <= MAX_ZIP:
+            raise Stop("CHILD_ARCHIVE_INVALID")
+        chunks, got = [], 0
+        while got < size:
+            piece = os.pread(fd, min(1 << 20, size - got), got)
+            if not piece:
+                raise Stop("CHILD_ARCHIVE_INVALID")
+            chunks.append(piece)
+            got += len(piece)
+        if os.pread(fd, 1, size) != b"":
+            raise Stop("CHILD_ARCHIVE_INVALID")
+    except OSError:
+        raise Stop("CHILD_ARCHIVE_INVALID") from None
+    return b"".join(chunks)
+
+
+def _member_parts(name):
+    if (type(name) is not str or not name or "\0" in name or "\\" in name or name.startswith("/")
+            or len(name) > 1024):
+        raise Stop("CHILD_ARCHIVE_UNSAFE")
+    parts = name.rstrip("/").split("/") if name.endswith("/") else name.split("/")
+    if not parts or any(x in ("", ".", "..") for x in parts) or any(len(x) > 255 for x in parts):
+        raise Stop("CHILD_ARCHIVE_UNSAFE")
+    return parts
+
+
+def _scan_archive(zf):
+    """Closed policy over the central directory BEFORE any byte is extracted."""
+    infos = zf.infolist()
+    if not 0 < len(infos) <= MAX_MEMBERS:
+        raise Stop("CHILD_ARCHIVE_UNSAFE")
+    files, dirs, total = {}, set(), 0
+    for info in infos:
+        parts = _member_parts(info.filename)
+        mode = info.external_attr >> 16
+        if (info.flag_bits & 0x1 or info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+                or stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)):
+            raise Stop("CHILD_ARCHIVE_UNSAFE")  # encrypted / exotic codec / symlink / device / fifo
+        key = "/".join(parts)
+        if key in files or key in dirs:
+            raise Stop("CHILD_ARCHIVE_UNSAFE")  # duplicate names
+        if info.is_dir():
+            dirs.add(key)
+            continue
+        if (info.file_size > MAX_MEMBER or (info.compress_size and info.file_size / info.compress_size > MAX_RATIO)
+                or (not info.compress_size and info.file_size)):
+            raise Stop("CHILD_ARCHIVE_UNSAFE")  # oversize / compression bomb
+        total += info.file_size
+        files[key] = info
+    if total > MAX_TOTAL:
+        raise Stop("CHILD_ARCHIVE_UNSAFE")
+    parents = {"/".join(k.split("/")[:i]) for k in files for i in range(1, len(k.split("/")))}
+    if parents & set(files) or dirs & set(files):  # a name used both as file and directory
+        raise Stop("CHILD_ARCHIVE_UNSAFE")
+    return files
+
+
+def _small(zf, info, code):
+    if info.file_size > MAX_TEXT:
+        raise Stop(code)
+    with zf.open(info) as handle:
+        data = handle.read(MAX_TEXT + 1)
+    if len(data) != info.file_size:
+        raise Stop(code)
+    return data
+
+
+def _manifest(zf, files, source_sha):
+    """Canonical MANIFEST.sha256 (same grammar as qa-signed-staging) + BUILD-INFO bound to the signed source sha."""
+    if "MANIFEST.sha256" not in files or "BUILD-INFO.txt" not in files:
+        raise Stop("CHILD_MANIFEST_INVALID")
+    info = _small(zf, files["BUILD-INFO.txt"], "CHILD_MANIFEST_INVALID").decode("utf-8", "replace").splitlines()
+    if info.count("SOURCE_SHA=" + source_sha) != 1:
+        raise Stop("CHILD_MANIFEST_INVALID")
+    try:
+        text = _small(zf, files["MANIFEST.sha256"], "CHILD_MANIFEST_INVALID").decode("utf-8")
+    except UnicodeDecodeError:
+        raise Stop("CHILD_MANIFEST_INVALID") from None
+    expected = {}
+    for line in text.splitlines():
+        matched = MANIFEST_LINE.fullmatch(line)
+        if matched is None:
+            raise Stop("CHILD_MANIFEST_INVALID")
+        digest, path = matched.groups()
+        if path == "MANIFEST.sha256" or path in expected or any(x in ("", ".", "..") for x in path.split("/")):
+            raise Stop("CHILD_MANIFEST_INVALID")
+        expected[path] = digest
+    if not expected or set(expected) != set(files) - {"MANIFEST.sha256"}:  # exact list, nothing extra, nothing missing
+        raise Stop("CHILD_MANIFEST_INVALID")
+    if OPERATOR_REL not in expected:
+        raise Stop("CHILD_MANIFEST_INVALID")
+    return expected
+
+
+def _mkdirs(root_fd, parts, made):
+    """Open (creating, never following links) the directory chain `parts` under `root_fd`; returns its FD."""
+    cur = os.dup(root_fd)
+    try:
+        for i, part in enumerate(parts):
+            try:
+                os.mkdir(part, 0o700, dir_fd=cur)
+                created = True
+            except FileExistsError:
+                created = False
+            nxt = os.open(part, DIR_FLAGS, dir_fd=cur)
+            os.close(cur)
+            cur = nxt
+            if created:
+                os.fchmod(cur, 0o755)
+                made.append("/".join(parts[:i + 1]))
+        out, cur = cur, -1
+        return out
+    finally:
+        if cur >= 0:
+            os.close(cur)
+
+
+def _extract(zf, files, expected, partial_fd, uid):
+    made = []
+    for name, info in sorted(files.items()):
+        parts = name.split("/")
+        dfd = _mkdirs(partial_fd, parts[:-1], made)
+        try:
+            fd = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644, dir_fd=dfd)
+            try:
+                os.fchmod(fd, 0o644)
+                h, written = hashlib.sha256(), 0
+                with zf.open(info) as handle:
+                    while True:
+                        block = handle.read(1 << 20)
+                        if not block:
+                            break
+                        written += len(block)
+                        if written > info.file_size or written > MAX_MEMBER:
+                            raise Stop("CHILD_ARCHIVE_UNSAFE")  # lied about its size
+                        h.update(block)
+                        view = memoryview(block)
+                        while view:
+                            view = view[os.write(fd, view):]
+                if written != info.file_size:
+                    raise Stop("CHILD_ARCHIVE_UNSAFE")
+                if name != "MANIFEST.sha256" and h.hexdigest() != expected[name]:
+                    raise Stop("CHILD_MANIFEST_MISMATCH")
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        finally:
+            os.close(dfd)
+    for d in sorted(made, key=lambda x: -x.count("/")):  # durable directory entries, deepest first
+        dfd = _mkdirs(partial_fd, d.split("/"), [])
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
+    os.fsync(partial_fd)
+
+
+def _noclobber_rename(store_fd, src, dst):
+    """RENAME_NOREPLACE: a pre-existing destination is an error, never replaced."""
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        fn = libc.renameat2
+    except (OSError, AttributeError):
+        raise Stop("CHILD_NOCLOBBER_UNAVAILABLE") from None
+    fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    if fn(store_fd, src.encode(), store_fd, dst.encode(), 1) != 0:
+        err = ctypes.get_errno()
+        if err == errno.EEXIST:
+            raise Stop("CHILD_STORE_EXISTS")
+        if err in (errno.ENOSYS, errno.EINVAL):
+            raise Stop("CHILD_NOCLOBBER_UNAVAILABLE")
+        raise Stop("CHILD_STORE_RENAME_FAILED")
+    os.fsync(store_fd)
+
+
+def _verify_retained(store_fd, sha, operator_hex, manifest_sha, uid):
+    """Re-open what was published, through directory FDs: owners, modes, links and the pinned digests."""
+    cur = os.open(sha, DIR_FLAGS, dir_fd=store_fd)
+    try:
+        for part in OPERATOR_REL.split("/")[:-1]:
+            nxt = os.open(part, DIR_FLAGS, dir_fd=cur)
+            os.close(cur)
+            cur = nxt
+            info = os.fstat(cur)
+            if info.st_uid != uid or info.st_mode & 0o022:
+                raise Stop("CHILD_RETAINED_DRIFT")
+        info = os.fstat(cur)
+        if info.st_uid != uid or info.st_mode & 0o022:
+            raise Stop("CHILD_RETAINED_DRIFT")
+        operator = _read(cur, OPERATOR_REL.split("/")[-1], uid, "CHILD_RETAINED_DRIFT")
+    finally:
+        os.close(cur)
+    top = os.open(sha, DIR_FLAGS, dir_fd=store_fd)
+    try:
+        topinfo = os.fstat(top)
+        if topinfo.st_uid != uid or topinfo.st_mode & 0o022:
+            raise Stop("CHILD_RETAINED_DRIFT")
+        manifest = _read(top, "MANIFEST.sha256", uid, "CHILD_RETAINED_DRIFT")
+    finally:
+        os.close(top)
+    if hashlib.sha256(operator).hexdigest() != operator_hex or hashlib.sha256(manifest).hexdigest() != manifest_sha:
+        raise Stop("CHILD_RETAINED_DRIFT")
+
+
+def _claims_ok(claims, pins):
+    if (type(claims) is not dict or claims.get("purpose") != "LAUNCHER_ONLY"
+            or type(claims.get("nonce")) is not str or HEX64.fullmatch(claims["nonce"]) is None
+            or type(claims.get("app_source_sha")) is not str or SOURCE.fullmatch(claims["app_source_sha"]) is None
+            or type(claims.get("app_archive_sha256")) is not str or SHA256.fullmatch(claims["app_archive_sha256"]) is None
+            or type(pins) is not dict
+            or set(pins) != {"release_asset_sha256", "old_launcher_sha256", "candidate_operator_sha256"}
+            or any(type(pins[k]) is not str or HEX64.fullmatch(pins[k]) is None
+                   for k in ("old_launcher_sha256", "candidate_operator_sha256"))):
+        raise Stop("CHILD_CLAIMS_INVALID")
+
+
+def install(*, fd, claims, launcher_pins, uid=0, anchor="/", launcher=None, store=None, state=None):
+    """Retain the attested release, THEN replace the launcher shim. Runs inside the plane after the nonce is spent.
+
+    `claims` come from the signed GO (`check_cut` result, authenticated by the port inside the plane) and
+    `launcher_pins` from the Sponsor-signed config that `check_cut` already matched to the GO; nothing here is
+    read from the peer. A crash anywhere after the marker leaves it: no silent retry, no automatic cleanup."""
+    _claims_ok(claims, launcher_pins)
+    launcher, store, state = launcher or LAUNCHER, store or STORE, state or STATE
+    _check_args(launcher, state, anchor, claims["nonce"], uid=uid)
+    if not _abs(store):
+        raise Stop("CHILD_ARGS_INVALID")
+    sha, nonce = claims["app_source_sha"], claims["nonce"]
+    operator_hex, old_sha = launcher_pins["candidate_operator_sha256"], "sha256:" + launcher_pins["old_launcher_sha256"]
+    data = _read_fd(fd)
+    if _digest(data) != claims["app_archive_sha256"]:  # root re-hashes the sealed FD against the signed digest
+        raise Stop("CHILD_ARCHIVE_DIGEST_MISMATCH")
+    new_bytes = render(sha, store)
+    new_sha = _digest(new_bytes)
+    if new_sha == old_sha:
+        raise Stop("CHILD_NEW_EQUALS_OLD")
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except (zipfile.BadZipFile, OSError, ValueError):
+        raise Stop("CHILD_ARCHIVE_UNSAFE") from None
+    with zf:
+        files = _scan_archive(zf)
+        expected = _manifest(zf, files, sha)
+        if expected[OPERATOR_REL] != operator_hex:  # the GO-signed operator digest, checked before anything is created
+            raise Stop("CHILD_CANDIDATE_MISMATCH")
+        manifest_sha = hashlib.sha256(_small(zf, files["MANIFEST.sha256"], "CHILD_MANIFEST_INVALID")).hexdigest()
+        ldir, lname = os.path.split(launcher)
+        xfd = _open_dir(store, uid, anchor, exact_mode=0o700)
+        try:
+            sfd = _open_dir(state, uid, anchor, exact_mode=0o700)
+            try:
+                lfd = _open_dir(ldir, uid, anchor)
+                try:
+                    return _install(zf, files, expected, xfd, sfd, lfd, lname, sha, nonce, operator_hex, manifest_sha,
+                                    old_sha, new_bytes, new_sha, claims["app_archive_sha256"], uid)
+                finally:
+                    os.close(lfd)
+            finally:
+                os.close(sfd)
+        finally:
+            os.close(xfd)
+
+
+def _install(zf, files, expected, xfd, sfd, lfd, lname, sha, nonce, operator_hex, manifest_sha, old_sha,
+             new_bytes, new_sha, archive_sha, uid):
+    partial = sha + ".partial"
+    if not (_absent(xfd, sha) and _absent(xfd, partial)):
+        raise Stop("CHILD_STORE_EXISTS")
+    old_bytes = _read(lfd, lname, uid, "CHILD_LAUNCHER_UNSAFE")
+    if _digest(old_bytes) != old_sha or _mode(lfd, lname) != 0o700:
+        raise Stop("CHILD_OLD_LAUNCHER_DRIFT")
+    n = _names(lname, nonce)
+    if not (all(_absent(sfd, n[k]) for k in ("intent", "backup", "receipt", "archived", "rolled"))
+            and all(_absent(lfd, n[k]) for k in ("staged", "restore"))):
+        raise Stop("CHILD_REPLAY_OR_PARTIAL_STATE")
+    _claim(sfd, n, "swap", nonce, uid)  # before the first byte reaches the store; a crash from here blocks every nonce
+    os.mkdir(partial, 0o700, dir_fd=xfd)
+    pfd = os.open(partial, DIR_FLAGS, dir_fd=xfd)
+    try:
+        os.fchmod(pfd, 0o755)
+        _extract(zf, files, expected, pfd, uid)
+    finally:
+        os.close(pfd)
+    _noclobber_rename(xfd, partial, sha)
+    _verify_retained(xfd, sha, operator_hex, manifest_sha, uid)
+    evidence = {"app_archive_sha256": archive_sha, "app_source_sha": sha,
+                "candidate_operator_sha256": "sha256:" + operator_hex, "shim_sha256": new_sha}
+    return _swap(lfd, lname, sfd, nonce, old_sha, new_bytes, new_sha, uid, evidence, claimed=True)
+
+
+def act_for(*, claims, launcher_pins):
+    """Called by the launcher inside the plane with the AUTHENTICATED claims; returns the `act(fd)` it will run."""
+    _claims_ok(claims, launcher_pins)
+    claims, launcher_pins = dict(claims), dict(launcher_pins)
+
+    def run(fd):
+        return install(fd=fd, claims=claims, launcher_pins=launcher_pins)
+    return run
 
 
 def act(fd):  # noqa: ARG001 - closed stub until the verified-release wiring is reviewed
