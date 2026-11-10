@@ -308,25 +308,31 @@ def hx(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def build_release(files=None, manifest=None, info=None, extra=None):
-    """Return ZIP bytes of a canonical release: BUILD-INFO.txt, MANIFEST.sha256 and the listed files."""
+def build_release(files=None, manifest=None, info=None, extra=None, source_sha=SRC40, root_name=None):
+    """Signed app ZIP's real layout: one Proyecto-Centenario-QA-srv01-<sha12>/ folder."""
     files = {OPERATOR_REL: OPERATOR_BYTES, "scripts/qa/other.py": b"x = 1\n"} if files is None else files
-    info = ("SOURCE_SHA=%s\nSTORAGE=x\n" % SRC40).encode() if info is None else info
+    info = ("SOURCE_SHA=%s\nSTORAGE=x\n" % source_sha).encode() if info is None else info
     members = dict(files, **{"BUILD-INFO.txt": info})
     if manifest is None:
         manifest = "".join("%s  ./%s\n" % (hx(v), k) for k, v in sorted(members.items())).encode()
+    root = "Proyecto-Centenario-QA-srv01-" + source_sha[:12] if root_name is None else root_name
+    prefix = root + "/" if root else ""
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        if prefix:
+            z.writestr(prefix, b"")
         for k, v in sorted(members.items()):
-            z.writestr(k, v)
-        z.writestr("MANIFEST.sha256", manifest)
+            z.writestr(prefix + k, v)
+        z.writestr(prefix + "MANIFEST.sha256", manifest)
         for name, data in (extra or {}).items():
             if isinstance(data, zipfile.ZipInfo):
-                z.writestr(data, b"target")
+                entry = zipfile.ZipInfo(prefix + data.filename)
+                entry.external_attr = data.external_attr
+                entry.compress_type = data.compress_type
+                z.writestr(entry, b"target")
             else:
-                z.writestr(name, data)
+                z.writestr(prefix + name, data)
     return out.getvalue()
-
 
 class InstallTests(unittest.TestCase):
     def setUp(self):
@@ -406,6 +412,39 @@ class InstallTests(unittest.TestCase):
         self.assertIn("inflight-swap-%s.done" % NONCE, os.listdir(self.state))
         self.assertNotIn("inflight.json", os.listdir(self.state))
 
+    def test_published_zip_has_exact_source_bound_root(self):
+        data = build_release()
+        expected_root = "Proyecto-Centenario-QA-srv01-" + SRC40[:12]
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            self.assertIn(expected_root + "/", zf.namelist())
+            self.assertEqual(set(child._scan_archive(zf, SRC40)),
+                             {"MANIFEST.sha256", "BUILD-INFO.txt", OPERATOR_REL, "scripts/qa/other.py"})
+
+    def test_rejects_wrong_root_or_rootless_package_before_writes(self):
+        for root_name in ("", "Proyecto-Centenario-QA-srv01-" + "f" * 12, "stranger"):
+            with self.subTest(root_name=root_name):
+                self.assertEqual(self.code(build_release(root_name=root_name)), "CHILD_ARCHIVE_UNSAFE")
+                self.clean()
+
+    def test_rejects_mixed_root_member_even_with_correct_zip_hash(self):
+        data = io.BytesIO(build_release())
+        with zipfile.ZipFile(data, "a") as zf:
+            zf.writestr("outside.py", b"x=1")
+        self.assertEqual(self.code(data.getvalue()), "CHILD_ARCHIVE_UNSAFE")
+        self.clean()
+
+    def test_retained_manifest_read_supports_validation_limit(self):
+        payload = b"M" * (child.MAX_LAUNCHER + 1)
+        pathlib.Path(self.state, "MANIFEST.sha256").write_bytes(payload)
+        dfd = os.open(self.state, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            self.assertEqual(child._read(dfd, "MANIFEST.sha256", self.uid, "TEST", limit=child.MAX_TEXT),
+                             payload)
+            with self.assertRaises(child.Stop):
+                child._read(dfd, "MANIFEST.sha256", self.uid, "TEST")  # launcher-sized read remains strict
+        finally:
+            os.close(dfd)
+
     def test_rollback_restores_the_old_launcher_and_never_deletes_the_store(self):
         self.run_install()
         child.rollback(launcher=self.launcher, state=self.state, nonce=NONCE, uid=self.uid, anchor=self.root)
@@ -450,10 +489,11 @@ class InstallTests(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             with zipfile.ZipFile(out, "w") as z:
-                z.writestr("BUILD-INFO.txt", ("SOURCE_SHA=%s\n" % SRC40).encode())
-                z.writestr(OPERATOR_REL, OPERATOR_BYTES)
-                z.writestr(OPERATOR_REL, b"second")
-                z.writestr("MANIFEST.sha256", b"")
+                p = "Proyecto-Centenario-QA-srv01-" + SRC40[:12] + "/"
+                z.writestr(p + "BUILD-INFO.txt", ("SOURCE_SHA=%s\n" % SRC40).encode())
+                z.writestr(p + OPERATOR_REL, OPERATOR_BYTES)
+                z.writestr(p + OPERATOR_REL, b"second")
+                z.writestr(p + "MANIFEST.sha256", b"")
         self.assertEqual(self.code(out.getvalue()), "CHILD_ARCHIVE_UNSAFE")
         self.clean()
 
@@ -527,7 +567,7 @@ class InstallTests(unittest.TestCase):
         self.assertIn("inflight.json", os.listdir(self.state))
         self.assertEqual(self.code(), "CHILD_STORE_EXISTS")
         other = "f6" * 20
-        data = build_release(info=("SOURCE_SHA=%s\n" % other).encode())
+        data = build_release(info=("SOURCE_SHA=%s\n" % other).encode(), source_sha=other)
         claims = self.claims(data, nonce="9a" * 32, app_source_sha=other)
         self.assertEqual(self.code(data, claims=claims), "CHILD_RECOVERY_REQUIRED")
         self.untouched()
