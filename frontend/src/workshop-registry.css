@@ -1,0 +1,20 @@
+/* Sistema › Talleres (registro de Talleres para Máster y superusuarios). */
+.workshop-registry { display: grid; gap: .75rem; }
+.workshop-registry-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.workshop-registry-head h3 { margin: 0; color: var(--navy, #06148E); }
+.workshop-registry-summary { margin: .15rem 0 0; font-size: 1rem; }
+.workshop-registry-search { display: grid; gap: .3rem; max-width: 32rem; font-weight: 600; }
+.workshop-registry-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.workshop-registry-row { display: grid; gap: .3rem; align-content: start; overflow-wrap: anywhere; }
+.workshop-registry-row small { font-size: .95rem; }
+.workshop-registry-row.is-retired { background: #f4f5f8; }
+.workshop-registry-badges { display: flex; flex-wrap: wrap; gap: .35rem; }
+.workshop-badge-data, .workshop-badge-empty, .workshop-badge-retired { padding: .15rem .55rem; border-radius: 999px; font-size: .9rem; font-weight: 700; }
+.workshop-badge-data { background: #e8f1fb; color: #0b3d75; border: 1px solid #b7d0ee; }
+.workshop-badge-empty { background: #fdf3e7; color: #7a4100; border: 1px solid #e7c393; }
+.workshop-badge-retired { background: #eceff3; color: #3b4352; border: 1px solid #c8ced8; }
+.workshop-registry .action-bar { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .25rem; }
+@media (max-width: 640px) {
+  .workshop-registry-list { grid-template-columns: 1fr; }
+  .workshop-registry-head > button { width: 100%; }
+}

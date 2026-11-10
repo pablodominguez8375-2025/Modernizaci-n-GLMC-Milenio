@@ -8,11 +8,12 @@ import SystemSettingsCategoryPanel from './SystemSettingsCategoryPanel'
 import SupportDiagnosticsPanel from './SupportDiagnosticsPanel'
 import AreaCollaboratorsSection from './AreaCollaborators'
 import InstitutionalProfileMatrix from './InstitutionalProfileMatrix'
+import WorkshopRegistryPanel from './WorkshopRegistryPanel'
 import type { DocumentApiClient } from './api/documentApi'
 
 /* PMGM-UX administración ordenada (04-10-2026): un solo menú de secciones (antes había tres niveles de pestañas)
    y ningún formulario abierto: cada categoría se edita desde un único panel «Editar parámetros». */
-type Section=Area|'mail'|'support'|'profiles'|'settings'|'forms'|'bootstrap'
+type Section=Area|'mail'|'support'|'profiles'|'workshops'|'settings'|'forms'|'bootstrap'
 
 export default function SystemConfigurationPage({ api, bootstrapSlot, canManageProfiles = false, documentApi }: { api: PmgmApiClient; bootstrapSlot?: ReactNode; canManageProfiles?: boolean; documentApi?: DocumentApiClient }) {
   const [items,setItems]=useState<SystemSetting[]>([])
@@ -39,10 +40,12 @@ export default function SystemConfigurationPage({ api, bootstrapSlot, canManageP
   return <>
     <section className="page-heading"><div><p className="eyebrow">Administración · parámetros versionados</p><h1>Sistema</h1><p>Control central de reglas, flujos, catálogos, plazos, documentos y seguridad institucional.</p></div><span className="count-badge">{generalItems.length} parámetros</span></section>
     {message&&<div className="regularity-success" role="status">{message}</div>}{error&&<div className="error-banner" role="alert">{error}</div>}
-    <WorkspaceTabs label="Secciones de Sistema" active={tab} onChange={id=>setTab(id as Section)} hub={{ title: 'Parámetros del sistema', hideBack: tab==='settings'&&categoryOpen }} tabs={[{id:'backup',label:'Respaldos',icon:'archive' as const},{id:'users',label:'Usuarios',icon:'members' as const},{id:'profiles',label:'Perfiles y accesos',icon:'shield' as const},{id:'forms',label:'Formularios',icon:'settings' as const},{id:'mail',label:'Correo',icon:'mail' as const},{id:'brand',label:'Logos y colores',icon:'home' as const},{id:'audit',label:'Auditoría de accesos',icon:'check' as const},{id:'support',label:'Soporte técnico',icon:'shield' as const},{id:'settings',label:`Parámetros (${generalItems.length})`,icon:'settings' as const},...(bootstrapSlot?[{id:'bootstrap' as Section,label:'Configuración inicial',icon:'tasks' as const}]:[])].filter(t=>canManageProfiles||t.id!=='profiles')} />
+    <WorkspaceTabs label="Secciones de Sistema" active={tab} onChange={id=>setTab(id as Section)} hub={{ title: 'Parámetros del sistema', hideBack: tab==='settings'&&categoryOpen }} tabs={[{id:'backup',label:'Respaldos',icon:'archive' as const},{id:'users',label:'Usuarios',icon:'members' as const},{id:'profiles',label:'Perfiles y accesos',icon:'shield' as const},{id:'workshops',label:'Talleres',icon:'lodge' as const},{id:'forms',label:'Formularios',icon:'settings' as const},{id:'mail',label:'Correo',icon:'mail' as const},{id:'brand',label:'Logos y colores',icon:'home' as const},{id:'audit',label:'Auditoría de accesos',icon:'check' as const},{id:'support',label:'Soporte técnico',icon:'shield' as const},{id:'settings',label:`Parámetros (${generalItems.length})`,icon:'settings' as const},...(bootstrapSlot?[{id:'bootstrap' as Section,label:'Configuración inicial',icon:'tasks' as const}]:[])].filter(t=>canManageProfiles||(t.id!=='profiles'&&t.id!=='workshops'))} />
     {/* La consola queda montada (oculta) para conservar lo escrito al cambiar de sección. */}
     <div hidden={!isOps}><SystemOperationsPanel api={api} area={lastOps.current} canManageProfiles={canManageProfiles} /></div>
     <WorkspacePanel id="profiles" active={canManageProfiles&&tab==='profiles'}>{canManageProfiles&&tab==='profiles'&&<InstitutionalProfileMatrix api={api}/>}{canManageProfiles&&documentApi&&tab==='profiles'&&<><AreaCollaboratorsSection documentApi={documentApi} area="library" title="Colaboradores · Biblioteca Virtual"/><AreaCollaboratorsSection documentApi={documentApi} area="documentmanager" title="Colaboradores · Gestión Documental"/></>}</WorkspacePanel>
+    {/* Sistema › Talleres (PO 09-11-2026): ver y descargar Máster y superusuarios; eliminar o dar de baja solo el Máster (lo decide el servidor). */}
+    <WorkspacePanel id="workshops" active={canManageProfiles&&tab==='workshops'}>{canManageProfiles&&tab==='workshops'&&<WorkshopRegistryPanel api={api}/>}</WorkspacePanel>
     <WorkspacePanel id="support" active={tab==='support'}>{tab==='support' && <SupportDiagnosticsPanel api={api} onOpenAudit={() => setTab('audit')} />}</WorkspacePanel>
     <WorkspacePanel id="mail" active={tab==='mail'}>{tab==='mail'&&<SystemSettingsCategoryPanel api={api} category={MAIL} items={mailItems} onSaved={saved=>setItems(current=>current.map(value=>saved.find(x=>x.code===value.code)??value))} onMessage={setMessage} onError={setError} />}</WorkspacePanel>
     <WorkspacePanel id="forms" active={tab==='forms'}><FormSchemaAdminPanel api={api} /></WorkspacePanel>
