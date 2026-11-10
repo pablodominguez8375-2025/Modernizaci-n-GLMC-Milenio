@@ -334,7 +334,7 @@ def port_from_release(*, ops_signature, go_verify, keygen, gh, policy_hash, auth
         ops_fingerprint=go_fingerprint, signature=ops_signature_bytes, policy_hash=policy_hash)
     app_check = app_check_for(
         open_binary=go_verify.open_pinned_binary, gh_path=gh[0], gh_sha256=gh[1], trusted_root=trusted_root,
-        bundle=app_bundle, open_archive=open_archive, drop_uid=authenticity.get("drop_uid"),
+        bundle=app_bundle, open_archive=open_archive, temp_root=temp_root, drop_uid=authenticity.get("drop_uid"),
         drop_gid=authenticity.get("drop_gid"), required_euid=required_euid, os_uid=os_uid)
     return port_for(ops_check=ops_check, app_check=app_check)
 
