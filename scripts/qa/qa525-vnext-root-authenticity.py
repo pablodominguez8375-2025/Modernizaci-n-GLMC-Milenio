@@ -26,6 +26,7 @@ import json
 import fcntl
 import os
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -34,6 +35,7 @@ REPO = "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
 WORKFLOW = REPO + "/.github/workflows/qa-silo-rebuild.yml"
 ISSUER = "https://token.actions.githubusercontent.com"
 PREDICATE = "https://slsa.dev/provenance/v1"
+DIGEST_ALG = "sha256"  # the release subject is a sha256 digest (tests patch it for a sha512 public fixture)
 SHA256 = re.compile(r"sha256:[a-f0-9]{64}\Z")
 SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 # `verify_ops_receipt` insists on a non-empty set of APP fingerprints distinct from the OPS key. Sigstore
@@ -158,20 +160,23 @@ def _chunks_of_fd(fd, expected_size):
     return gen
 
 
-def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open_archive, drop_uid, drop_gid,
-                  required_euid=0, os_uid=0):
+def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open_archive, temp_root, drop_uid,
+                  drop_gid, required_euid=0, os_uid=0):
     """`check(app_archive_sha256, app_source_sha) -> True` running the pinned `gh attestation verify` offline.
 
     open_binary   `go-verify.open_pinned_binary` (judged and hashed on the fd that is then executed);
     trusted_root  the Sponsor-pinned `trusted_root.jsonl` bytes; bundle the pinned Sigstore bundle bytes;
     open_archive  `() -> (fd, size)` of the root-owned archive file, opened by the launcher without links;
+    temp_root     root-private (0700) directory for the verifier's two small input files (gh insists on a
+                  `.json` / `.jsonl` extension, which a bare /proc/self/fd/N path cannot have);
     drop_uid/gid  the unprivileged identity the verifier runs as (never 0)."""
     for value in (drop_uid, drop_gid):
         if type(value) is not int or isinstance(value, bool) or value <= 0:
             raise Stop("AUTH_DROP_IDENTITY_INVALID")
     if (type(trusted_root) is not bytes or not 0 < len(trusted_root) <= MAX_ROOT
             or type(bundle) is not bytes or not 0 < len(bundle) <= MAX_BUNDLE
-            or not callable(open_binary) or not callable(open_archive) or not _digest_ok(gh_sha256)):
+            or not callable(open_binary) or not callable(open_archive) or not _digest_ok(gh_sha256)
+            or type(temp_root) is not str or not os.path.isabs(temp_root)):
         raise Stop("AUTH_APP_INPUT_INVALID")
     if os.geteuid() != required_euid:
         raise Stop("AUTH_ROOT_REQUIRED")
@@ -183,6 +188,7 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
             raise Stop("AUTH_ROOT_REQUIRED")
         held = []
         gh_fd = None
+        workdir = None
         try:
             try:
                 archive_fd, size = open_archive()
@@ -197,17 +203,35 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
             held.append(zip_fd)
             if not hmac.compare_digest(got, app_archive_sha256):
                 raise Stop("AUTH_ARCHIVE_DIGEST_MISMATCH")  # the bytes are not the release the GO signed
-            bundle_fd, _ = _memfd("qa525-app-bundle", _chunks_of_bytes(bundle), MAX_BUNDLE)
-            held.append(bundle_fd)
-            root_fd, _ = _memfd("qa525-trusted-root", _chunks_of_bytes(trusted_root), MAX_ROOT)
-            held.append(root_fd)
+            try:
+                st = os.lstat(temp_root)
+            except OSError:
+                raise Stop("AUTH_TEMP_UNSAFE") from None
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid != os_uid or st.st_mode & 0o077:
+                raise Stop("AUTH_TEMP_UNSAFE")
+            try:
+                workdir = tempfile.mkdtemp(prefix="auth-", dir=temp_root)
+                for name, payload in (("bundle.json", bundle), ("trusted-root.jsonl", trusted_root)):
+                    out_fd = os.open(os.path.join(workdir, name),
+                                     os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644)
+                    try:
+                        view = memoryview(payload)
+                        while view:
+                            view = view[os.write(out_fd, view):]
+                    finally:
+                        os.close(out_fd)
+                os.chmod(workdir, 0o755)  # reached only through the inherited dir fd: ancestors stay private
+                dir_fd = os.open(workdir, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            except OSError:
+                raise Stop("AUTH_TEMP_UNSAFE") from None
+            held.append(dir_fd)
             gh_fd, before = open_binary(gh_path, os_uid, gh_sha256, MAX_GH)
             argv = ["gh", "attestation", "verify", "/proc/self/fd/%d" % zip_fd,
-                    "--repo", REPO, "--bundle", "/proc/self/fd/%d" % bundle_fd,
-                    "--custom-trusted-root", "/proc/self/fd/%d" % root_fd,
+                    "--repo", REPO, "--bundle", "/proc/self/fd/%d/bundle.json" % dir_fd,
+                    "--custom-trusted-root", "/proc/self/fd/%d/trusted-root.jsonl" % dir_fd,
                     "--signer-workflow", WORKFLOW, "--source-digest", app_source_sha,
                     "--cert-oidc-issuer", ISSUER, "--predicate-type", PREDICATE,
-                    "--deny-self-hosted-runners", "--format", "json"]
+                    "--deny-self-hosted-runners", "--digest-alg", DIGEST_ALG, "--format", "json"]
             env = {"PATH": "/nonexistent", "HOME": "/nonexistent", "GH_CONFIG_DIR": "/nonexistent",
                    "GH_PROMPT_DISABLED": "1", "GH_NO_UPDATE_NOTIFIER": "1", "NO_COLOR": "1", "LANG": "C"}
             # Production runs as root (required_euid == 0) and drop_uid > 0, so the child ALWAYS drops. Only when
@@ -218,7 +242,7 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
                 with tempfile.TemporaryFile(mode="w+b") as out:
                     done = subprocess.run(
                         argv, executable="/proc/self/fd/%d" % gh_fd,
-                        pass_fds=(gh_fd, zip_fd, bundle_fd, root_fd), env=env, cwd="/",
+                        pass_fds=(gh_fd, zip_fd, dir_fd), env=env, cwd="/",
                         stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.DEVNULL, shell=False,
                         close_fds=True, timeout=TIMEOUT, check=False, start_new_session=True, **drop)
                     out.seek(0, os.SEEK_END)
@@ -251,6 +275,11 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
                     os.close(gh_fd)
                 except OSError:
                     pass
+            if workdir is not None:
+                try:
+                    shutil.rmtree(workdir)
+                except OSError:
+                    raise Stop("AUTH_TEMP_CLEANUP_FAILED") from None
 
     return check
 
