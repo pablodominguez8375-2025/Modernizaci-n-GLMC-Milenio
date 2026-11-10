@@ -135,7 +135,7 @@ class LauncherComposeTests(unittest.TestCase):
                                 "ops_signature_sha256": sha(self.files["ops-v3.json.sig"]),
                                 "app_bundle_sha256": sha(self.files["app-bundle.json"]),
                                 "trusted_root_sha256": sha(self.files["trusted-root.jsonl"]),
-                                "app_archive_path": self.archive_path, "drop_uid": UID + 1, "drop_gid": UID + 1}}
+                                "app_archive_path": self.archive_path, "source_repository_id": "424242", "drop_uid": UID + 1, "drop_gid": UID + 1}}
         cfg.update(over)
         return cfg
 
@@ -366,7 +366,10 @@ class LauncherComposeTests(unittest.TestCase):
                     dict(cfg, authenticity=dict(cfg["authenticity"], drop_uid=UID)),  # the peer's own uid
                     dict(cfg, authenticity=dict(cfg["authenticity"], app_archive_path="relative.zip")),
                     dict(cfg, authenticity=dict(cfg["authenticity"], ops_allowed_signers=b"")),
-                    dict(cfg, authenticity=dict(cfg["authenticity"], app_bundle_sha256="x"))):
+                    dict(cfg, authenticity=dict(cfg["authenticity"], app_bundle_sha256="x")),
+                    dict(cfg, authenticity=dict(cfg["authenticity"], source_repository_id="0")),
+                    dict(cfg, authenticity=dict(cfg["authenticity"], source_repository_id=424242)),
+                    dict(cfg, authenticity={k: v for k, v in cfg["authenticity"].items() if k != "source_repository_id"})):
             self.stop("LAUNCH_CONFIG_INVALID", load=self.loader(cfg=bad))
 
     def test_children_mapping_is_exact_so_no_swap_duplicate_or_cross_scope_child_is_accepted(self):

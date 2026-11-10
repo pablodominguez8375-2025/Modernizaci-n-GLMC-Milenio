@@ -325,7 +325,7 @@ class AuthenticityTests(unittest.TestCase):
 
     def release(self, **over):
         gh = self.gh()
-        auth = {"ops_allowed_signers": self.key["ops_allowed"], "drop_uid": UID or 30033, "drop_gid": GID or 30033}
+        auth = {"ops_allowed_signers": self.key["ops_allowed"], "source_repository_id": REPO_ID, "drop_uid": UID or 30033, "drop_gid": GID or 30033}
         kw = dict(ops_signature=self.ops, go_verify=self.v, keygen=(self.keygen, sha(self.keygen)),
                   gh=(gh, sha(gh)), policy_hash=POLICY, authenticity=auth,
                   ops_signature_bytes=self.sign(self.key, receipt()), app_bundle=BUNDLE, trusted_root=ROOT,
@@ -354,7 +354,8 @@ class AuthenticityTests(unittest.TestCase):
         self.stop("AUTH_RELEASE_INVALID", self.release, keygen=[self.keygen])
         self.stop("AUTH_RELEASE_INVALID", self.release, authenticity={"drop_uid": 1, "drop_gid": 1})
         self.stop("AUTH_DROP_IDENTITY_INVALID", self.release,
-                  authenticity={"ops_allowed_signers": self.key["ops_allowed"], "drop_uid": 0, "drop_gid": 0})
+                  authenticity={"ops_allowed_signers": self.key["ops_allowed"], "source_repository_id": REPO_ID,
+                                 "drop_uid": 0, "drop_gid": 0})
 
     @unittest.skipUnless(REAL_GH, "gh not installed")
     def test_real_gh_refuses_a_forged_bundle_offline(self):

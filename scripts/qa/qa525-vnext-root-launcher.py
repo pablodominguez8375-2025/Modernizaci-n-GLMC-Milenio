@@ -36,6 +36,7 @@ AUTH = "qa525-vnext-root-authenticity.py"
 OPSSIG = "qa525-vnext-ops-signature.py"
 ENTRY, VERIFY, CUT = ("qa525-vnext-root-entry.py", "qa525-vnext-root-go-verify.py",
                       "qa525-vnext-go-cut-contract.py")
+REPO_ID = re.compile(r"[1-9][0-9]{0,19}\Z")  # stable numeric GitHub repository id (Sponsor pin)
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}\Z")
 FP = re.compile(r"SHA256:[A-Za-z0-9+/]{43}\Z")
@@ -51,7 +52,7 @@ CONFIG_KEYS = frozenset({
     "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
     "g6_pins", "authenticity"})
 AUTH_KEYS = frozenset({"ops_allowed_signers", "ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256",
-                       "app_archive_path", "drop_uid", "drop_gid"})
+                       "app_archive_path", "drop_uid", "drop_gid", "source_repository_id"})
 PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256",
                        "admission_sha256", "policy_hash"})
 # schema -> scope. One signed GO authorizes exactly one scope; a G6 GO authorizes exactly ONE G6 command.
@@ -93,6 +94,7 @@ def _config(module):
             or any(type(auth[k]) is not str or SHA256.fullmatch(auth[k]) is None
                    for k in ("ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256"))
             or not _abs(auth["app_archive_path"])
+            or type(auth["source_repository_id"]) is not str or REPO_ID.fullmatch(auth["source_repository_id"]) is None
             or any(type(auth[k]) is not int or isinstance(auth[k], bool) or auth[k] <= 0
                    for k in ("drop_uid", "drop_gid"))
             or auth["drop_uid"] == cfg["peer_uid"]):  # the verifier never runs as the peer that sends the archive
