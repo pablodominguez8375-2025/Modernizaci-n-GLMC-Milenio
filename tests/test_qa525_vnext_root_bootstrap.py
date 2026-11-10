@@ -12,6 +12,29 @@ import unittest
 import unittest.mock
 
 SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-root-bootstrap.py"
+CFG_SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-root-launch-config.py"
+CHILDREN = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+                **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in ("preflight", "init", "backup", "restore", "review")})
+
+
+def good_config():
+    """Shape-valid private config as the Sponsor's JSON file carries it (key blobs are TEXT in JSON)."""
+    sha = lambda c: "sha256:" + c * 64
+    return {
+        "pins": {"ops_source_sha": "a" * 40, "app_source_sha": "b" * 40, "app_archive_sha256": sha("c"),
+                 "plan_sha256": sha("d"), "admission_sha256": sha("e"), "policy_hash": sha("f")},
+        "launcher_pins": {"release_asset_sha256": sha("1"), "old_launcher_sha256": "2" * 64,
+                          "candidate_operator_sha256": "3" * 64},
+        "allowed_signers": "go ssh-ed25519 AAAA\n", "go_fingerprint": "SHA256:" + "A" * 43,
+        "ops_v3_sha256": sha("4"), "app_subject_sha256": sha("5"),
+        "inbox": "/var/lib/x/inbox", "temp_root": "/var/lib/x/tmp", "socket_path": "/run/x/s.sock",
+        "journal_root": "/var/lib/x/journal", "lease_dir": "/var/lib/x/lease", "peer_uid": 1001, "timeout": 30,
+        "children": dict(CHILDREN), "g6_pins": None,
+        "authenticity": {"ops_allowed_signers": "ops ssh-ed25519 BBBB\n", "ops_signature_sha256": sha("6"),
+                         "app_bundle_sha256": sha("7"), "trusted_root_sha256": sha("8"),
+                         "app_archive_path": "/var/lib/x/app.zip", "drop_uid": 1002, "drop_gid": 1002,
+                         "source_repository_id": "123456789"},
+    }
 UID = os.getuid()
 
 
@@ -219,14 +242,22 @@ class BootstrapTests(unittest.TestCase):
         os.chmod(helper, 0o755)
         return helper
 
-    def _v2(self, helper_sha=None, helpers=True):
-        """Build a v2 manifest (helpers.ssh-keygen pinned) and store it INSIDE the install dir."""
+    def _v2(self, helper_sha=None, helpers=True, config=True, cfg=None, cfg_raw=None):
+        """Build a v3 manifest (helpers.ssh-keygen + Sponsor config pinned) INSIDE the install dir.
+        config=False gives the v2 shape; helpers=False the v1 shape."""
         helper = self._fake_helper()
+        config = config and helpers
+        if config:
+            self.write(self.m.CONFIG_MODULE, rd(CFG_SRC))
+            self.cfg_raw = cfg_raw if cfg_raw is not None else json.dumps(cfg or good_config()).encode()
+            self.write("sponsor-config.json", self.cfg_raw)
         files = {n: sha(rd(os.path.join(self.inst, n))) for n in sorted(os.listdir(self.inst))
                  if n.endswith(".py")}
         body = {"files": files, "interpreter": {"path": self.real, "sha256": sha(rd(self.real))}}
         if helpers:
             body["helpers"] = {"ssh-keygen": {"path": helper, "sha256": helper_sha or sha(rd(helper))}}
+        if config:
+            body["config"] = {"name": "sponsor-config.json", "sha256": sha(self.cfg_raw)}
         self.manifest = canon(body)
         self.pin = sha(self.manifest)
         self.mf = os.path.join(self.inst, "manifest.json")
@@ -262,7 +293,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(out["ok"])
         (name,) = os.listdir(self.ev)  # pre-root-trust evidence exists
         rec = json.loads(rd(os.path.join(self.ev, name)))
-        self.assertEqual(rec["schema"], "qa525-pre-root-trust-v2")
+        self.assertEqual(rec["schema"], "qa525-pre-root-trust-v3")
         self.assertIn("ssh-keygen", rec["helpers"])
 
     def test_run_refuses_non_root_bad_pin_extra_stdin_and_wrong_argv_before_any_module(self):
@@ -337,6 +368,158 @@ class BootstrapTests(unittest.TestCase):
         self.pin = sha(self.manifest)
         pathlib_write(self.mf, self.manifest)
         self.assertEqual(self.code(), "BOOT_HELPER_PATH_UNSAFE")
+
+    # ---- PRE-SUDO config seam: manifest v3 pins the Sponsor's private config; it is DATA, hashed before root ----
+    CFG_LAUNCH = (b"SEEN = []\ndef launch(load, record):\n    ns = load('qa525-vnext-root-launch-config.py')\n"
+                  b"    SEEN.append(ns.CONFIG)\n    return {'ok': True, 'cfg': ns.CONFIG, 'again': load('qa525-vnext-root-launch-config.py') is ns}\n")
+
+    def test_v3_run_gives_the_launcher_the_materialized_config_and_records_only_its_hash(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        out = self._launch()
+        self.assertTrue(out["ok"] and out["again"])
+        cfg = out["cfg"]
+        self.assertEqual(cfg["allowed_signers"], b"go ssh-ed25519 AAAA\n")  # text in JSON, bytes in CONFIG
+        self.assertEqual(cfg["authenticity"]["ops_allowed_signers"], b"ops ssh-ed25519 BBBB\n")
+        self.assertEqual(cfg["children"], CHILDREN)
+        self.assertIsNone(cfg["g6_pins"])
+        (name,) = os.listdir(self.ev)
+        raw = rd(os.path.join(self.ev, name))
+        rec = json.loads(raw)
+        self.assertEqual(rec["config"], {"name": "sponsor-config.json", "sha256": sha(self.cfg_raw)})
+        for secret in (b"AAAA", b"BBBB", b"123456789", b"/var/lib/x/inbox", b"1001"):
+            self.assertNotIn(secret, raw)  # the content never reaches the evidence record
+
+    def test_run_without_a_pinned_config_never_starts_the_launcher(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        self._v2(config=False)  # v2 shape: valid for `check`, never for a root run
+        self.assertEqual(self.verify(os_uid=UID).record["schema"], "qa525-pre-root-trust-v2")
+        self.assertEqual(self.code(), "BOOT_RUN_REQUIRES_V3")
+        self.assertEqual(os.listdir(self.ev), [])
+
+    def test_config_bytes_changed_before_root_stops_before_any_module_or_record(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        self.write("sponsor-config.json", json.dumps(dict(good_config(), peer_uid=1003)).encode())
+        self.assertEqual(self.code(), "BOOT_HASH_MISMATCH")
+        self.assertEqual(os.listdir(self.ev), [])
+        self.write("sponsor-config.json", self.cfg_raw)
+        self.assertTrue(self._launch()["ok"])
+
+    def test_config_file_is_judged_like_code_owner_mode_links_size(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        path = os.path.join(self.inst, "sponsor-config.json")
+        os.chmod(path, 0o666)
+        self.assertEqual(self.code(), "BOOT_FILE_UNSAFE")
+        os.chmod(path, 0o644)
+        os.link(path, os.path.join(self.base, "cfg-hardlink"))
+        self.assertEqual(self.code(), "BOOT_FILE_UNSAFE")
+        os.unlink(os.path.join(self.base, "cfg-hardlink"))
+        self._v2(cfg_raw=b" " * (self.m.MAX_CONFIG + 1))
+        self.assertEqual(self.code(), "BOOT_FILE_UNSAFE")
+        self.assertEqual(os.listdir(self.ev), [])
+
+    def test_config_json_must_be_strict(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        good = json.dumps(good_config())
+        bad = {
+            "duplicate": good[:-1] + ', "peer_uid": 2}',
+            "nan": good.replace('"timeout": 30', '"timeout": NaN'),
+            "infinity": good.replace('"timeout": 30', '"timeout": Infinity'),
+            "not_object": "[]",
+            "truncated": good[:40],
+            "not_utf8": None,
+            "signers_not_text": good.replace('"go ssh-ed25519 AAAA\\n"', "7"),
+            "signers_non_ascii": good.replace("AAAA", "\u00e9\u00e9"),
+            "missing_blob": json.dumps({k: v for k, v in good_config().items() if k != "allowed_signers"}),
+        }
+        for label, text in bad.items():
+            with self.subTest(label):
+                self._v2(cfg_raw=b"\xff\xfe{}" if text is None else text.encode())
+                self.assertEqual(self.code(), "BOOT_CONFIG_INVALID")
+                self.assertEqual(os.listdir(self.ev), [])
+
+    def test_config_wrong_shape_or_extra_keys_stop_via_the_verified_module(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        variants = {
+            "extra_top_key": dict(good_config(), live=True),
+            "g6_pins_set": dict(good_config(), g6_pins={"g6_command": "init", "g6_operation_sha256": "sha256:" + "9" * 64}),
+            "children_swapped": dict(good_config(), children=dict(CHILDREN, LAUNCHER_ONLY="evil.py")),
+            "bad_sha": dict(good_config(), ops_v3_sha256="sha256:zz"),
+            "relative_path": dict(good_config(), inbox="inbox"),
+            "timeout_too_big": dict(good_config(), timeout=61),
+            "same_uid": dict(good_config(), peer_uid=1002),
+        }
+        for label, cfg in variants.items():
+            with self.subTest(label):
+                self._v2(cfg=cfg)
+                self.assertEqual(self.code(), "BOOT_CONFIG_INVALID")
+                self.assertEqual(os.listdir(self.ev), [])
+
+    def test_config_module_changed_or_missing_stops(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        self.write(self.m.CONFIG_MODULE, rd(CFG_SRC) + b"\n# tampered\n")
+        self.assertEqual(self.code(), "BOOT_HASH_MISMATCH")
+        os.unlink(os.path.join(self.inst, self.m.CONFIG_MODULE))
+        files = {n: sha(rd(os.path.join(self.inst, n))) for n in sorted(os.listdir(self.inst)) if n.endswith(".py")}
+        self.manifest = canon({"files": files, "helpers": json.loads(self.manifest)["helpers"],
+                               "config": {"name": "sponsor-config.json", "sha256": sha(self.cfg_raw)},
+                               "interpreter": {"path": self.real, "sha256": sha(rd(self.real))}})
+        self.pin = sha(self.manifest)
+        pathlib_write(self.mf, self.manifest)
+        self.assertEqual(self.code(), "BOOT_MODULE_UNKNOWN")
+        self.assertEqual(os.listdir(self.ev), [])
+
+    def test_failing_config_compiles_neither_launcher_nor_children(self):
+        marker = os.path.join(self.base, "launcher-ran")
+        self._launcher_install(("open(%r, 'w').write('x')\ndef launch(load, record):\n    return 1\n" % marker).encode())
+        self._v2(cfg=dict(good_config(), live=True))
+        self.assertEqual(self.code(), "BOOT_CONFIG_INVALID")
+        self.assertFalse(os.path.exists(marker))  # the launcher body never ran
+        self._v2()
+        self._launch()
+        self.assertTrue(os.path.exists(marker))
+
+    def test_config_manifest_key_is_strict_and_not_loadable_as_code(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        base = json.loads(self.manifest)
+        for label, cfg in {"extra": {"name": "c.json", "sha256": "1" * 64, "x": 1},
+                           "py_name": {"name": "c.py", "sha256": "1" * 64},
+                           "traversal": {"name": "../c.json", "sha256": "1" * 64},
+                           "bad_sha": {"name": "c.json", "sha256": "z" * 64},
+                           "not_dict": "c.json", "null": None}.items():
+            with self.subTest(label):
+                raw = canon(dict(base, config=cfg))
+                self.stop("BOOT_MANIFEST_INVALID", manifest_bytes=raw, external_pin=sha(raw))
+        raw = canon(dict({k: v for k, v in base.items() if k != "helpers"}, config=base["config"]))
+        self.stop("BOOT_MANIFEST_INVALID", manifest_bytes=raw, external_pin=sha(raw))  # config needs helpers (v3 ⊃ v2)
+        v = self.verify(os_uid=UID)
+        with self.assertRaises(self.m.Stop):
+            self.m.load_module(v, "sponsor-config.json")  # data is not a module
+
+    def test_forged_verified_cannot_materialize(self):
+        with self.assertRaises(self.m.Stop) as ctx:
+            self.m.materialize_config(object())
+        self.assertEqual(str(ctx.exception), "BOOT_VERIFIED_FORGED")
+
+    def test_check_cli_dry_runs_the_config_and_prints_only_fixed_text(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        import io
+        import contextlib
+        out = io.StringIO()
+        real_verify = self.m.verify_install
+        check = lambda d, m, p, **kw: real_verify(d, m, p, uid=UID, anchor=self.base, os_uid=UID)  # test host != root
+        with unittest.mock.patch.object(self.m, "verify_install", check), \
+                unittest.mock.patch.object(self.m.sys, "flags", type("F", (), self.flags)()), \
+                contextlib.redirect_stdout(out):
+            rc = self.m.main(["b", "check", self.inst, self.mf, self.pin])
+        self.assertEqual((rc, out.getvalue().strip()), (0, "BOOT_CHECK_OK manifest_pin=%s files=%d config=%s" % (
+            self.pin, 3, sha(self.cfg_raw))))
+        # in-process: the same dry run STOPs on a bad config and never echoes its content
+        self._v2(cfg=dict(good_config(), peer_uid=-5))
+        with unittest.mock.patch.object(self.m.sys, "flags", type("F", (), self.flags)()):
+            v = self.m.verify_install(self.inst, self.manifest, self.pin, uid=UID, anchor=self.base, os_uid=UID)
+        with self.assertRaises(self.m.Stop) as ctx:
+            self.m.materialize_config(v)
+        self.assertEqual(str(ctx.exception), "BOOT_CONFIG_INVALID")
 
     def test_helpers_key_shape_is_strict(self):
         files = {n: sha(rd(os.path.join(self.inst, n))) for n in sorted(os.listdir(self.inst))}

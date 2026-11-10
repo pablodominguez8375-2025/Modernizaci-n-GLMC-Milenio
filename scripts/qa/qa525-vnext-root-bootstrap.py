@@ -7,6 +7,7 @@ the package, never a self-hash). Code is compiled from the very bytes that were 
 the path => no TOCTOU), so a sibling swapped after verification is never executed.
 It grants NO authority: no GO, no nonce consumption, no sudo, no network, no commands.
 """
+import copy
 import hashlib
 import hmac
 import json
@@ -20,6 +21,10 @@ NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.py\Z")
 NAME_H = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}\Z")
 MAX_FILE = 4 * 1024 * 1024
 MAX_INTERPRETER = 128 * 1024 * 1024
+MAX_CONFIG = 64 * 1024
+CONFIG_FILE = re.compile(r"[A-Za-z0-9_-]{1,64}\.json\Z")
+CONFIG_MODULE = "qa525-vnext-root-launch-config.py"  # the module the launcher asks for as its config
+BYTES_FIELDS = (("allowed_signers",), ("authenticity", "ops_allowed_signers"))  # JSON text -> bytes
 
 
 class Stop(Exception):
@@ -87,7 +92,8 @@ def check_manifest_pin(manifest_bytes, external_pin):
     except (ValueError, TypeError):
         raise Stop("BOOT_MANIFEST_INVALID") from None
     if (not isinstance(manifest, dict)
-            or set(manifest) not in ({"files", "interpreter"}, {"files", "helpers", "interpreter"})
+            or set(manifest) not in ({"files", "interpreter"}, {"files", "helpers", "interpreter"},
+                                     {"config", "files", "helpers", "interpreter"})
             or json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() != manifest_bytes):
         raise Stop("BOOT_MANIFEST_INVALID")  # exact keys, canonical form only
     helpers = manifest.get("helpers", {})
@@ -98,6 +104,11 @@ def check_manifest_pin(manifest_bytes, external_pin):
                    or type(v["sha256"]) is not str or SHA.fullmatch(v["sha256"]) is None
                    for k, v in helpers.items())):
         raise Stop("BOOT_MANIFEST_INVALID")
+    config = manifest.get("config")
+    if "config" in manifest and (type(config) is not dict or set(config) != {"name", "sha256"}
+                               or type(config["name"]) is not str or CONFIG_FILE.fullmatch(config["name"]) is None
+                               or type(config["sha256"]) is not str or SHA.fullmatch(config["sha256"]) is None):
+        raise Stop("BOOT_MANIFEST_INVALID")
     files = manifest.get("files") if isinstance(manifest, dict) else None
     interp = manifest.get("interpreter") if isinstance(manifest, dict) else None
     if (not isinstance(files, dict) or not files or not isinstance(interp, dict)
@@ -106,7 +117,7 @@ def check_manifest_pin(manifest_bytes, external_pin):
             or any(NAME.fullmatch(k) is None or type(v) is not str or SHA.fullmatch(v) is None
                    for k, v in files.items())):
         raise Stop("BOOT_MANIFEST_INVALID")
-    return files, interp, helpers
+    return files, interp, helpers, config
 
 
 _TOKEN = object()
@@ -114,16 +125,43 @@ _TOKEN = object()
 
 class Verified:
     """Opaque product of verify_install(): the ONLY thing load_module() accepts."""
-    __slots__ = ("_code", "record")
+    __slots__ = ("_code", "_config", "record")
 
-    def __init__(self, token, code, record):
+    def __init__(self, token, code, record, config=None):
         if token is not _TOKEN:
             raise Stop("BOOT_VERIFIED_FORGED")
         object.__setattr__(self, "_code", dict(code))
+        object.__setattr__(self, "_config", config)  # DATA, never compiled; the content is not in `record`
         object.__setattr__(self, "record", dict(record))
 
     def __setattr__(self, name, value):
         raise Stop("BOOT_VERIFIED_FORGED")
+
+
+def parse_config(raw):
+    """Strict JSON for the Sponsor's private config: bounded, UTF-8, no duplicate keys, no NaN/Infinity.
+    The two public-key blobs are text in JSON and bytes in CONFIG. The shape itself is judged by the
+    (hash-verified) launch-config module; this only turns bytes into a plain dict."""
+    def pairs(items):
+        keys = [k for k, _ in items]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate key")
+        return dict(items)
+
+    def refuse(_):
+        raise ValueError("non-finite number")
+    try:
+        data = json.loads(raw.decode("utf-8"), object_pairs_hook=pairs, parse_constant=refuse)
+        if type(data) is not dict:
+            raise ValueError("not an object")
+        for path in BYTES_FIELDS:
+            holder = data
+            for key in path[:-1]:
+                holder = holder[key]
+            holder[path[-1]] = holder[path[-1]].encode("ascii")  # AttributeError/KeyError/Unicode -> STOP
+    except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
+        raise Stop("BOOT_CONFIG_INVALID") from None
+    return data
 
 
 def _interpreter_real():
@@ -132,7 +170,7 @@ def _interpreter_real():
 
 def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, anchor="/", os_uid=0):
     """Return {name: verified bytes} and the trust record. Raises Stop before anything is loaded."""
-    files, interp, helpers = check_manifest_pin(manifest_bytes, external_pin)
+    files, interp, helpers, config = check_manifest_pin(manifest_bytes, external_pin)
     if sys.flags.isolated != 1 or sys.flags.no_site != 1 or sys.flags.ignore_environment != 1:
         raise Stop("BOOT_NOT_ISOLATED")  # requires python -I -S
     _safe_dir(install_dir, uid, anchor)
@@ -149,11 +187,35 @@ def verify_install(install_dir, manifest_bytes, external_pin, *, uid=0, anchor="
         _read_verified(hreal, os_uid, h["sha256"], MAX_INTERPRETER)
     code = {name: _read_verified(os.path.join(install_dir, name), uid, want)
             for name, want in sorted(files.items())}
-    record = {"schema": "qa525-pre-root-trust-v2" if helpers else "qa525-pre-root-trust-v1", "manifest_pin": external_pin,
+    parsed = None
+    if config is not None:  # read from the root-owned install dir and hashed BEFORE any module exists
+        parsed = parse_config(_read_verified(os.path.join(install_dir, config["name"]), uid, config["sha256"], MAX_CONFIG))
+    record = {"schema": ("qa525-pre-root-trust-v3" if config else "qa525-pre-root-trust-v2" if helpers
+                         else "qa525-pre-root-trust-v1"), "manifest_pin": external_pin,
               "interpreter": {"real": real, "sha256": interp["sha256"]},
               "files": dict(sorted(files.items())),
               "helpers": {k: dict(v) for k, v in sorted(helpers.items())}}
-    return Verified(_TOKEN, code, record)
+    if config:
+        record["config"] = {"name": config["name"], "sha256": config["sha256"]}  # hash only, never content
+    return Verified(_TOKEN, code, record, parsed)
+
+
+def materialize_config(verified):
+    """Dry-run or real: hand the verified DATA to the verified launch-config module and return its
+    namespace. Any failure (module absent, wrong shape, anything raised) is one fixed STOP."""
+    if type(verified) is not Verified:
+        raise Stop("BOOT_VERIFIED_FORGED")
+    data = object.__getattribute__(verified, "_config")
+    if data is None:
+        raise Stop("BOOT_RUN_REQUIRES_V3")
+    if CONFIG_MODULE not in verified.record["files"]:
+        raise Stop("BOOT_MODULE_UNKNOWN")
+    try:
+        ns = load_module(verified, CONFIG_MODULE).materialize(preverified_config=copy.deepcopy(data))
+    except Exception:  # noqa: BLE001 - one opaque code, nothing from the config is echoed
+        raise Stop("BOOT_CONFIG_INVALID") from None
+    return ns
+
 
 
 def load_module(verified, name):
@@ -244,10 +306,12 @@ def launch(argv, stdin, *, euid, uid=0, anchor="/", evidence_dir=EVIDENCE_DIR, o
     """`python3 -I -S bootstrap.py run INSTALL_DIR MANIFEST` (root). The pin is read from stdin ONLY
     (typed by the Sponsor from Bitwarden), never argv/env/file. MANIFEST must be a regular root-owned
     file directly inside the verified INSTALL_DIR. Order: root -> pin -> manifest (opened without
-    following links or blocking) -> verify every byte -> v2 manifest with a pinned ssh-keygen and the
-    launcher present -> durable pre-root-trust record -> ONLY THEN compile the launcher from the verified
-    bytes and hand it a loader that cannot reach disk. Any deviation is a fixed STOP before a single
-    module exists and before any record is written."""
+    following links or blocking) -> verify every byte, including the Sponsor config DATA file ->
+    v3 manifest (pinned ssh-keygen + config) with the launcher present -> compile ONLY the hash-verified
+    launch-config module and materialize the config from the verified data -> durable pre-root-trust
+    record (config hash, never content) -> ONLY THEN compile the launcher from the verified bytes and hand
+    it a loader that serves the materialized config and cannot reach disk. Any deviation is a fixed STOP
+    before the launcher exists and before any record is written."""
     if len(argv) != 4 or argv[1] != "run":
         raise Stop("BOOT_USAGE")
     if euid != 0:
@@ -262,11 +326,17 @@ def launch(argv, stdin, *, euid, uid=0, anchor="/", evidence_dir=EVIDENCE_DIR, o
     verified = verify_install(install, manifest, pin, uid=uid, anchor=anchor, os_uid=os_uid)
     if "ssh-keygen" not in verified.record["helpers"]:
         raise Stop("BOOT_RUN_REQUIRES_V2")  # a v1 (check-only) manifest never authorises a root run
+    if "config" not in verified.record:
+        raise Stop("BOOT_RUN_REQUIRES_V3")  # no Sponsor config pinned in the manifest: nothing may run as root
     if LAUNCHER not in verified.record["files"]:
         raise Stop("BOOT_MODULE_UNKNOWN")
+    config_ns = materialize_config(verified)  # shape-checked BEFORE a receipt, a launcher, a nonce or a child exist
     write_record(evidence_dir, verified.record, uid=uid, anchor=anchor)
     launcher = load_module(verified, LAUNCHER)
-    return launcher.launch(lambda name: load_module(verified, name), dict(verified.record))
+
+    def load(name):
+        return config_ns if name == CONFIG_MODULE else load_module(verified, name)  # the config never comes from disk
+    return launcher.launch(load, dict(verified.record))
 
 
 def main(argv):
@@ -289,8 +359,12 @@ def main(argv):
         with open(argv[3], "rb") as f:
             manifest = f.read(MAX_FILE)
         verified = verify_install(argv[2], manifest, argv[4], uid=0)
-        print("BOOT_CHECK_OK manifest_pin=%s files=%d" % (verified.record["manifest_pin"],
-                                                          len(verified.record["files"])))
+        extra = ""
+        if "config" in verified.record:
+            materialize_config(verified)  # dry run: same gate as `run`, nothing is stored or executed beyond it
+            extra = " config=%s" % verified.record["config"]["sha256"]
+        print("BOOT_CHECK_OK manifest_pin=%s files=%d%s" % (verified.record["manifest_pin"],
+                                                           len(verified.record["files"]), extra))
         return 0
     except Stop as exc:
         print(str(exc))
