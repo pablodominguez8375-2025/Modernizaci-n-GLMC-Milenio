@@ -441,7 +441,7 @@ class BootstrapTests(unittest.TestCase):
         self._launcher_install(self.CFG_LAUNCH)
         variants = {
             "extra_top_key": dict(good_config(), live=True),
-            "g6_pins_set": dict(good_config(), g6_pins={"g6_command": "init", "g6_operation_sha256": "sha256:" + "9" * 64}),
+            "g6_wrong_command": dict(good_config(), g6_pins={"g6_command": "erase", "g6_operation_sha256": "sha256:" + "9" * 64}),
             "children_swapped": dict(good_config(), children=dict(CHILDREN, LAUNCHER_ONLY="evil.py")),
             "bad_sha": dict(good_config(), ops_v3_sha256="sha256:zz"),
             "relative_path": dict(good_config(), inbox="inbox"),
@@ -453,6 +453,15 @@ class BootstrapTests(unittest.TestCase):
                 self._v2(cfg=cfg)
                 self.assertEqual(self.code(), "BOOT_CONFIG_INVALID")
                 self.assertEqual(os.listdir(self.ev), [])
+
+    def test_valid_pinned_g6_command_materializes_only_under_the_v3_manifest(self):
+        self._launcher_install(self.CFG_LAUNCH)
+        cfg = dict(good_config(), g6_pins={
+            "g6_command": "preflight", "g6_operation_sha256": "sha256:" + "9" * 64})
+        self._v2(cfg=cfg)
+        out = self._launch()
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["cfg"]["g6_pins"], cfg["g6_pins"])
 
     def test_config_module_changed_or_missing_stops(self):
         self._launcher_install(self.CFG_LAUNCH)
