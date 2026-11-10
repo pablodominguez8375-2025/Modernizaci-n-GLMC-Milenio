@@ -101,7 +101,7 @@ def _open_dir(path, uid, anchor, exact_mode=None):
     return fd
 
 
-def _read(dfd, name, uid, code):
+def _read(dfd, name, uid, code, limit=MAX_LAUNCHER):
     """Single-link regular file owned by `uid`, not group/other writable, opened inside `dfd` without links."""
     try:
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=dfd)
@@ -110,9 +110,9 @@ def _read(dfd, name, uid, code):
     try:
         info = os.fstat(fd)
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid or info.st_nlink != 1
-                or info.st_mode & 0o022 or not 0 < info.st_size <= MAX_LAUNCHER):
+                or info.st_mode & 0o022 or not 0 < info.st_size <= limit):
             raise Stop(code)
-        data = os.read(fd, MAX_LAUNCHER + 1)
+        data = os.read(fd, limit + 1)
         if len(data) != info.st_size or os.read(fd, 1) != b"":
             raise Stop(code)
         return data
@@ -360,36 +360,47 @@ def _member_parts(name):
     return parts
 
 
-def _scan_archive(zf):
-    """Closed policy over the central directory BEFORE any byte is extracted."""
+def _scan_archive(zf, source_sha):
+    """Accept exactly the signed installable layout produced by qa-signed-staging:
+    Proyecto-Centenario-QA-srv01-<source12>/..., then retain paths relative to that
+    one authenticated root. Never silently flatten arbitrary/mixed ZIP directories."""
+    if type(source_sha) is not str or SOURCE.fullmatch(source_sha) is None:
+        raise Stop("CHILD_CLAIMS_INVALID")
+    root = "Proyecto-Centenario-QA-srv01-" + source_sha[:12]
     infos = zf.infolist()
     if not 0 < len(infos) <= MAX_MEMBERS:
         raise Stop("CHILD_ARCHIVE_UNSAFE")
-    files, dirs, total = {}, set(), 0
+    files, dirs, total, root_seen = {}, set(), 0, False
     for info in infos:
         parts = _member_parts(info.filename)
         mode = info.external_attr >> 16
         if (info.flag_bits & 0x1 or info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
                 or stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)):
-            raise Stop("CHILD_ARCHIVE_UNSAFE")  # encrypted / exotic codec / symlink / device / fifo
-        key = "/".join(parts)
+            raise Stop("CHILD_ARCHIVE_UNSAFE")
+        if parts[0] != root or info.filename.endswith("//"):
+            raise Stop("CHILD_ARCHIVE_UNSAFE")
+        if len(parts) == 1:
+            if not info.is_dir() or root_seen:
+                raise Stop("CHILD_ARCHIVE_UNSAFE")
+            root_seen = True
+            continue
+        key = "/".join(parts[1:])
         if key in files or key in dirs:
-            raise Stop("CHILD_ARCHIVE_UNSAFE")  # duplicate names
+            raise Stop("CHILD_ARCHIVE_UNSAFE")
         if info.is_dir():
             dirs.add(key)
             continue
         if (info.file_size > MAX_MEMBER or (info.compress_size and info.file_size / info.compress_size > MAX_RATIO)
                 or (not info.compress_size and info.file_size)):
-            raise Stop("CHILD_ARCHIVE_UNSAFE")  # oversize / compression bomb
+            raise Stop("CHILD_ARCHIVE_UNSAFE")
         total += info.file_size
         files[key] = info
     if total > MAX_TOTAL:
         raise Stop("CHILD_ARCHIVE_UNSAFE")
     parents = {"/".join(k.split("/")[:i]) for k in files for i in range(1, len(k.split("/")))}
-    if parents & set(files) or dirs & set(files):  # a name used both as file and directory
+    if parents & set(files) or dirs & set(files):
         raise Stop("CHILD_ARCHIVE_UNSAFE")
     return files
-
 
 def _small(zf, info, code):
     if info.file_size > MAX_TEXT:
@@ -531,7 +542,7 @@ def _verify_retained(store_fd, sha, operator_hex, manifest_sha, uid):
         topinfo = os.fstat(top)
         if topinfo.st_uid != uid or topinfo.st_mode & 0o022:
             raise Stop("CHILD_RETAINED_DRIFT")
-        manifest = _read(top, "MANIFEST.sha256", uid, "CHILD_RETAINED_DRIFT")
+        manifest = _read(top, "MANIFEST.sha256", uid, "CHILD_RETAINED_DRIFT", limit=MAX_TEXT)
     finally:
         os.close(top)
     if hashlib.sha256(operator).hexdigest() != operator_hex or hashlib.sha256(manifest).hexdigest() != manifest_sha:
@@ -575,7 +586,7 @@ def install(*, fd, claims, launcher_pins, uid=0, anchor="/", launcher=None, stor
     except (zipfile.BadZipFile, OSError, ValueError):
         raise Stop("CHILD_ARCHIVE_UNSAFE") from None
     with zf:
-        files = _scan_archive(zf)
+        files = _scan_archive(zf, sha)
         expected = _manifest(zf, files, sha)
         if expected[OPERATOR_REL] != operator_hex:  # the GO-signed operator digest, checked before anything is created
             raise Stop("CHILD_CANDIDATE_MISMATCH")
