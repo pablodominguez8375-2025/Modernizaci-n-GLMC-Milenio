@@ -3,7 +3,7 @@ import { ActionDrawer, HelpNote } from './actionKit'
 import type { PmgmApiClient } from './api/pmgmApi'
 import {
   WORKSHOP_ACTION_LABELS, availableWorkshopActions, workshopActionDescription, workshopConfirmationText, workshopLabel, workshopOriginLabel, workshopRequestValid,
-  type WorkshopRegistry, type WorkshopRegistryAction, type WorkshopRegistryItem,
+  workshopRegistryFor, type WorkshopRegistry, type WorkshopRegistryAction, type WorkshopRegistryItem,
 } from './api/workshopRegistry'
 import './account-inventory.css'
 import './workshop-registry.css'
@@ -22,7 +22,7 @@ function ActionForm({ api, item, action, policy, onDone }: { api: PmgmApiClient;
   const submit = async () => {
     setBusy(true); setError('')
     try {
-      await (await api.workshopRegistryApi()).run(item.id, action, { reason: reason.trim(), confirmation: needsConfirmation ? typed.trim() : undefined })
+      await workshopRegistryFor(api).run(item.id, action, { reason: reason.trim(), confirmation: needsConfirmation ? typed.trim() : undefined })
       onDone(action === 'delete' ? `Se eliminó el Taller ${workshopLabel(item)}.` : action === 'retire' ? `El Taller ${workshopLabel(item)} quedó de baja.` : `El Taller ${workshopLabel(item)} volvió a estar activo.`)
     } catch (reason) { setError(errorText(reason)) } finally { setBusy(false) }
   }
@@ -57,7 +57,7 @@ export default function WorkshopRegistryPanel({ api }: { api: PmgmApiClient }) {
   useEffect(() => {
     let live = true
     setError('')
-    void api.workshopRegistryApi().then(client => client.registry()).then(result => { if (live) setRegistry(result) }).catch(reason => { if (live) { setRegistry(null); setError(errorText(reason)) } })
+    void workshopRegistryFor(api).registry().then(result => { if (live) setRegistry(result) }).catch(reason => { if (live) { setRegistry(null); setError(errorText(reason)) } })
     return () => { live = false }
   }, [api, reload])
   const finished = useCallback((message: string) => { setDone(message); setReload(value => value + 1) }, [])
@@ -69,7 +69,7 @@ export default function WorkshopRegistryPanel({ api }: { api: PmgmApiClient }) {
   const download = async () => {
     setDownloading(true); setError('')
     try {
-      const { blob, fileName } = await (await api.workshopRegistryApi()).downloadCsv()
+      const { blob, fileName } = await workshopRegistryFor(api).downloadCsv()
       const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = fileName; anchor.click(); URL.revokeObjectURL(url)
     } catch (reason) { setError(errorText(reason)) } finally { setDownloading(false) }
   }

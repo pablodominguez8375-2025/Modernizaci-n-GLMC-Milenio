@@ -99,7 +99,7 @@ export class WorkshopRegistryDemo {
   }
 }
 
-/** Miembros del cliente principal (PmgmApiClient) que usa este módulo cargado bajo demanda. Si cambian sus nombres, fallan las pruebas de WorkshopRegistryPanel. */
+/** Miembros del cliente principal (PmgmApiClient, incluidos privados) que usa este módulo cargado bajo demanda. Si cambian sus nombres, fallan las pruebas de WorkshopRegistryPanel y la de contrato en workshopRegistry. */
 export interface WorkshopRegistryClient {
   useMocks: boolean
   demoAccessSubject: string
@@ -115,6 +115,13 @@ export interface WorkshopRegistryApi {
   downloadCsv(): Promise<{ blob: Blob; fileName: string }>
 }
 /** Contrato de servidor (Issue para ChatGPT): GET /api/system/workshops · POST /api/system/workshops/{id}/{delete|retire|reactivate} · GET /api/system/workshops/export.csv */
+const clients = new WeakMap<object, WorkshopRegistryApi>()
+/** Cliente de Sistema › Talleres para un PmgmApiClient (uno por cliente, así la demo conserva sus cambios). No vive en pmgmApi.ts para no sumar a la carga inicial. */
+export function workshopRegistryFor(api: object): WorkshopRegistryApi {
+  let client = clients.get(api)
+  if (!client) { client = createWorkshopRegistryApi(api as unknown as WorkshopRegistryClient); clients.set(api, client) }
+  return client
+}
 export function createWorkshopRegistryApi(client: WorkshopRegistryClient): WorkshopRegistryApi {
   if (client.useMocks) {
     const demo = new WorkshopRegistryDemo(() => client.demoAccessSubject === 'demo:systemAdmin', () => client.demoAccessSubject === 'demo:systemAdmin' || client.demoAccessSubject === 'demo:supportUser')

@@ -35,6 +35,10 @@ describe('reglas del registro de Talleres', () => {
     expect(csv).toContain('Tiene datos asociados')
     expect(csv).not.toMatch(/hermanos/i)
   })
+  it('el cliente principal conserva los miembros que usa el registro de Talleres', () => {
+    const source = readFileSync('src/api/pmgmApi.ts', 'utf8')
+    for (const member of ['readonly useMocks', 'demoAccessSubject', 'readonly baseUrl', 'readonly getAccessToken', 'readonly onUnauthorized', 'private async request<T>', 'private postJson<T>']) expect(source).toContain(member)
+  })
   it('la sección «Talleres» solo aparece para quien gestiona perfiles (Máster y superusuarios)', () => {
     const source = readFileSync('src/SystemConfigurationPage.tsx', 'utf8')
     expect(source).toContain("{id:'workshops',label:'Talleres',icon:'lodge' as const}")
