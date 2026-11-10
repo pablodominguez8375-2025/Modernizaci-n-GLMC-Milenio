@@ -53,6 +53,9 @@ def subject(**over):
     return json.dumps(doc).encode()
 
 
+REPO_ID = "424242"
+ENTRY = '{"verificationResult":{"signature":{"certificate":{"sourceRepositoryIdentifier":"%s"}}}}'
+OK_JSON = "echo '[" + ENTRY % REPO_ID + "]'"
 STUB = """#!/bin/sh
 # Oracle gh: it only says yes when the three inputs arrive, through inherited fds, with the pinned bytes.
 OUT=%(out)s
@@ -113,7 +116,7 @@ class AuthenticityTests(unittest.TestCase):
         run(KEYGEN, "-Y", "sign", "-f", key["path"], "-n", ns, doc)
         return Path(doc + ".sig").read_bytes()
 
-    def gh(self, tail="echo '[{}]'", bundle=BUNDLE, root=ROOT, zipbytes=ARCHIVE_BYTES):
+    def gh(self, tail=OK_JSON, bundle=BUNDLE, root=ROOT, zipbytes=ARCHIVE_BYTES):
         path = os.path.join(self.dir, "gh")
         text = STUB % dict(out=self.out, zipsum=hashlib.sha256(zipbytes).hexdigest(),
                            bsum=hashlib.sha256(bundle).hexdigest(), rsum=hashlib.sha256(root).hexdigest(), tail=tail)
@@ -130,7 +133,7 @@ class AuthenticityTests(unittest.TestCase):
     def app(self, gh_path=None, **over):
         gh_path = gh_path or self.gh()
         kw = dict(open_binary=self.v.open_pinned_binary, gh_path=gh_path, gh_sha256=sha(gh_path),
-                  trusted_root=ROOT, bundle=BUNDLE, open_archive=self.open_archive(), temp_root=self.tmp, drop_uid=UID or 30033,
+                  trusted_root=ROOT, bundle=BUNDLE, open_archive=self.open_archive(), temp_root=self.tmp, source_repository_id=REPO_ID, drop_uid=UID or 30033,
                   drop_gid=GID or 30033, required_euid=UID, os_uid=UID)
         kw.update(over)
         return self.m.app_check_for(**kw)
@@ -228,7 +231,12 @@ class AuthenticityTests(unittest.TestCase):
 
     # ---- APP execution ------------------------------------------------------------------------------
     def test_gh_rejection_or_garbage_output_is_refused(self):
-        for tail in ("exit 1", "echo 'not json'", "echo '[]'", "echo '{}'", "exit 0"):
+        for tail in ("exit 1", "echo 'not json'", "echo '[]'", "echo '{}'", "exit 0",
+                     "echo '[{}]'",                                              # no certificate fields at all
+                     "echo '[" + ENTRY % "1" + "]'",                             # another repository id
+                     "echo '[" + ENTRY % REPO_ID + "," + ENTRY % "1" + "]'",     # one good entry hides a bad one
+                     "echo '[" + (ENTRY % REPO_ID).replace('"' + REPO_ID + '"', REPO_ID) + "]'",  # id as a number
+                     "echo '[null]'", "echo '[" + ENTRY % "" + "]'"):
             gh = self.gh(tail=tail)
             self.stop("AUTH_APP_DENIED", self.app(gh_path=gh), ARCHIVE, APP_SRC)
 
@@ -292,7 +300,10 @@ class AuthenticityTests(unittest.TestCase):
 
     def test_bad_static_inputs_are_refused_before_anything_runs(self):
         for over in (dict(trusted_root=b""), dict(bundle=b""), dict(bundle=b"x" * 2_000_000),
-                     dict(gh_sha256="nope"), dict(open_archive=None), dict(open_binary=None)):
+                     dict(gh_sha256="nope"), dict(open_archive=None), dict(open_binary=None),
+                     dict(source_repository_id=""), dict(source_repository_id="0"),
+                     dict(source_repository_id="12ab"), dict(source_repository_id=424242),
+                     dict(source_repository_id="1" * 21)):
             self.stop("AUTH_APP_INPUT_INVALID", self.app, **over)
         self.stop("AUTH_APP_INPUT_INVALID", self.app(), "x", APP_SRC)
         self.stop("AUTH_APP_INPUT_INVALID", self.app(), ARCHIVE, "short")
@@ -394,7 +405,7 @@ class RealGhOfflineTests(unittest.TestCase):
     def check(self, **over):
         kw = dict(open_binary=self.v.open_pinned_binary, gh_path=self.gh, gh_sha256=sha(self.gh),
                   trusted_root=self.root, bundle=self.bundle, open_archive=self.opener(), temp_root=self.tmp,
-                  drop_uid=UID or 30033, drop_gid=GID or 30033, required_euid=UID, os_uid=UID)
+                  source_repository_id="495574555", drop_uid=UID or 30033, drop_gid=GID or 30033, required_euid=UID, os_uid=UID)
         kw.update(over)
         return self.m.app_check_for(**kw)
 
@@ -438,6 +449,10 @@ class RealGhOfflineTests(unittest.TestCase):
                 edit(doc)
                 lines.append(json.dumps(doc))
             self.denied(self.check(trusted_root=("\n".join(lines) + "\n").encode()))
+
+    def test_renamed_or_reused_repository_name_is_not_enough_without_the_stable_id(self):
+        self.denied(self.check(source_repository_id="495574556"))   # same name, different repository id
+        self.denied(self.check(source_repository_id="71096353"))    # the OWNER id is not the repository id
 
     def test_the_wrong_digest_algorithm_is_denied(self):
         with unittest.mock.patch.object(self.m, "DIGEST_ALG", "sha256"):
