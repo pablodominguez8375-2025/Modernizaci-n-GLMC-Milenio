@@ -485,7 +485,7 @@ class BootstrapTests(unittest.TestCase):
                            "py_name": {"name": "c.py", "sha256": "1" * 64},
                            "traversal": {"name": "../c.json", "sha256": "1" * 64},
                            "bad_sha": {"name": "c.json", "sha256": "z" * 64},
-                           "not_dict": "c.json"}.items():
+                           "not_dict": "c.json", "null": None}.items():
             with self.subTest(label):
                 raw = canon(dict(base, config=cfg))
                 self.stop("BOOT_MANIFEST_INVALID", manifest_bytes=raw, external_pin=sha(raw))

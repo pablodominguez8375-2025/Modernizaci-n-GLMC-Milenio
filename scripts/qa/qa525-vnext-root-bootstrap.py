@@ -105,7 +105,7 @@ def check_manifest_pin(manifest_bytes, external_pin):
                    for k, v in helpers.items())):
         raise Stop("BOOT_MANIFEST_INVALID")
     config = manifest.get("config")
-    if config is not None and (type(config) is not dict or set(config) != {"name", "sha256"}
+    if "config" in manifest and (type(config) is not dict or set(config) != {"name", "sha256"}
                                or type(config["name"]) is not str or CONFIG_FILE.fullmatch(config["name"]) is None
                                or type(config["sha256"]) is not str or SHA.fullmatch(config["sha256"]) is None):
         raise Stop("BOOT_MANIFEST_INVALID")
@@ -306,10 +306,12 @@ def launch(argv, stdin, *, euid, uid=0, anchor="/", evidence_dir=EVIDENCE_DIR, o
     """`python3 -I -S bootstrap.py run INSTALL_DIR MANIFEST` (root). The pin is read from stdin ONLY
     (typed by the Sponsor from Bitwarden), never argv/env/file. MANIFEST must be a regular root-owned
     file directly inside the verified INSTALL_DIR. Order: root -> pin -> manifest (opened without
-    following links or blocking) -> verify every byte -> v2 manifest with a pinned ssh-keygen and the
-    launcher present -> durable pre-root-trust record -> ONLY THEN compile the launcher from the verified
-    bytes and hand it a loader that cannot reach disk. Any deviation is a fixed STOP before a single
-    module exists and before any record is written."""
+    following links or blocking) -> verify every byte, including the Sponsor config DATA file ->
+    v3 manifest (pinned ssh-keygen + config) with the launcher present -> compile ONLY the hash-verified
+    launch-config module and materialize the config from the verified data -> durable pre-root-trust
+    record (config hash, never content) -> ONLY THEN compile the launcher from the verified bytes and hand
+    it a loader that serves the materialized config and cannot reach disk. Any deviation is a fixed STOP
+    before the launcher exists and before any record is written."""
     if len(argv) != 4 or argv[1] != "run":
         raise Stop("BOOT_USAGE")
     if euid != 0:
