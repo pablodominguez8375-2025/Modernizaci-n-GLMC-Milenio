@@ -13,6 +13,9 @@ new bytes come from the caller (Sponsor-signed config + authenticated release), 
      checked real / owned by `uid` / not group-or-other writable, and re-identified by (dev, ino); from then on
      every create, read, replace, rename and fsync goes through those directory FDs (openat semantics), so a
      path cannot be re-bound between the checks and the replace;
+  1b. ONE global in-flight marker (`inflight.json`, created `O_EXCL` + fsync BEFORE the first record or mutation,
+     archived only after the receipt is durable) and a scan of the state dir for any unarchived intent: a pending
+     operation of ANY nonce (swap or rollback) stops every other nonce with `CHILD_RECOVERY_REQUIRED`;
   2. launcher bytes read without following links; digest must equal the pinned OLD digest;
   3. intent, backup, receipt and staged names must not exist (replay / partial state => STOP);
   4. durable intent -> backup of the old bytes (re-read and compared) -> staged new bytes next to the launcher
@@ -23,7 +26,9 @@ new bytes come from the caller (Sponsor-signed config + authenticated release), 
   7. receipt written; intent archived. An interruption (SIGKILL, power) between 4 and 7 leaves the intent: NO automatic retry or rollback;
      the next run STOPs on `CHILD_REPLAY_OR_PARTIAL_STATE` and recovery needs a separately authorized action.
 `rollback` (a separate, separately authorized action; `act` never calls it) restores the backup only if the
-launcher still holds NEW and the backup still holds OLD.
+launcher still holds NEW and the backup still holds OLD; it takes the same global marker and writes a durable
+rollback intent BEFORE the first byte moves, so a crash mid-rollback also blocks every nonce until a supervised
+reconciliation. Nothing here reconciles or retries automatically.
 `act` here is a closed stub: wiring the pins, new bytes and paths from the verified release is a separate change.
 """
 import hashlib
@@ -128,6 +133,26 @@ def _write_once(dfd, name, data, mode):
     os.fsync(dfd)
 
 
+def _claim(sfd, n, op, nonce, uid):
+    """Global in-flight marker: any pending operation (any nonce, swap or rollback) blocks every other one."""
+    try:
+        names = os.listdir(sfd)
+    except OSError:
+        raise Stop("CHILD_STATE_UNSAFE") from None
+    if any(x == "inflight.json" or (x.startswith("intent-") and x.endswith(".json"))
+           or (x.startswith("rollback-intent-") and x.endswith(".json")) for x in names):
+        raise Stop("CHILD_RECOVERY_REQUIRED")
+    try:
+        _write_once(sfd, n["marker"], _json({"op": op, "nonce": nonce, "status": "IN_FLIGHT"}), 0o600)
+    except Stop:
+        raise Stop("CHILD_RECOVERY_REQUIRED") from None
+
+
+def _release(sfd, n):
+    os.rename(n["marker"], n["marker_done"], src_dir_fd=sfd, dst_dir_fd=sfd)
+    os.fsync(sfd)
+
+
 def _json(record):
     return (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii")
 
@@ -135,7 +160,9 @@ def _json(record):
 def _names(launcher_name, nonce):
     return {"intent": "intent-" + nonce + ".json", "backup": "old-" + nonce + ".bin",
             "receipt": "receipt-" + nonce + ".json", "archived": "intent-" + nonce + ".superseded",
-            "rolled": "rollback-" + nonce + ".json",
+            "rolled": "rollback-" + nonce + ".json", "marker": "inflight.json",
+            "rb_intent": "rollback-intent-" + nonce + ".json", "rb_done": "rollback-intent-" + nonce + ".superseded",
+            "marker_done": "inflight-" + nonce + ".done",
             "staged": "." + launcher_name + "-" + nonce + ".tmp",
             "restore": "." + launcher_name + "-" + nonce + ".restore"}
 
@@ -178,6 +205,7 @@ def _swap(lfd, lname, sfd, state, nonce, old_sha256, new_bytes, new_sha, uid):
     if not (all(_absent(sfd, n[k]) for k in ("intent", "backup", "receipt", "archived", "rolled"))
             and all(_absent(lfd, n[k]) for k in ("staged", "restore"))):
         raise Stop("CHILD_REPLAY_OR_PARTIAL_STATE")
+    _claim(sfd, n, "swap", nonce, uid)  # before the first record or mutation
     record = {"status": "SWAP_INTENT_NO_DEPLOYMENT", "nonce": nonce,
               "old_launcher_sha256": old_sha256, "new_launcher_sha256": new_sha}
     _write_once(sfd, n["intent"], _json(record), 0o600)  # nothing touches the launcher before this exists
@@ -202,6 +230,7 @@ def _swap(lfd, lname, sfd, state, nonce, old_sha256, new_bytes, new_sha, uid):
     _write_once(sfd, n["receipt"], _json(receipt), 0o600)
     os.rename(n["intent"], n["archived"], src_dir_fd=sfd, dst_dir_fd=sfd)
     os.fsync(sfd)
+    _release(sfd, n)
     return receipt
 
 
@@ -244,8 +273,13 @@ def rollback(*, launcher, state, nonce, uid=0, anchor="/"):
                 raise Stop("CHILD_NEW_LAUNCHER_DRIFT")
             if not (_absent(lfd, n["restore"]) and _absent(sfd, n["rolled"])):
                 raise Stop("CHILD_REPLAY_OR_PARTIAL_STATE")
+            _claim(sfd, n, "rollback", nonce, uid)  # durable intent BEFORE the first byte of the launcher moves
+            _write_once(sfd, n["rb_intent"], _json(dict(receipt, status="ROLLBACK_INTENT")), 0o600)
             _restore(lfd, lname, sfd, n, receipt["old_launcher_sha256"], uid)
             _write_once(sfd, n["rolled"], _json(dict(receipt, status="LAUNCHER_ROLLED_BACK")), 0o600)
+            os.rename(n["rb_intent"], n["rb_done"], src_dir_fd=sfd, dst_dir_fd=sfd)
+            os.fsync(sfd)
+            _release(sfd, n)
         finally:
             os.close(lfd)
     finally:

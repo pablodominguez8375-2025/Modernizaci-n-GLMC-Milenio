@@ -58,7 +58,8 @@ class ChildTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "LAUNCHER_ATOMIC_SWAP_COMMITTED")
         self.assertEqual(self.read(self.launcher), NEW)
         names = sorted(os.listdir(self.state))
-        self.assertEqual(names, ["intent-%s.superseded" % NONCE, "old-%s.bin" % NONCE, "receipt-%s.json" % NONCE])
+        self.assertEqual(names, ["inflight-%s.done" % NONCE, "intent-%s.superseded" % NONCE, "old-%s.bin" % NONCE,
+                                 "receipt-%s.json" % NONCE])
         self.assertEqual(self.read(os.path.join(self.state, "old-%s.bin" % NONCE)), OLD)
         self.assertEqual(os.stat(self.launcher).st_mode & 0o777, 0o700)
         self.assertEqual(os.listdir(os.path.dirname(self.launcher)), ["pmgm-qa-update"])
@@ -225,6 +226,66 @@ class ChildTests(unittest.TestCase):
             self.swap()
         self.assertEqual(self.read(os.path.join(sbin + ".moved", "pmgm-qa-update")), NEW)
         self.assertEqual(self.read(os.path.join(sbin, "pmgm-qa-update")), OLD)
+
+    def test_crash_after_intent_of_A_blocks_any_other_nonce(self):
+        B = "b2" * 32
+        real = child._write_once
+
+        def crash(dfd, name, data, mode):
+            real(dfd, name, data, mode)
+            if name == "old-%s.bin" % NONCE:
+                raise KeyboardInterrupt  # SIGKILL stand-in: nothing after this line runs
+        with mock.patch.object(child, "_write_once", crash):
+            with self.assertRaises(KeyboardInterrupt):
+                self.swap()
+        before = sorted(os.listdir(self.state))
+        self.assertIn("intent-%s.json" % NONCE, before)
+        self.assertEqual(self.code(self.swap, nonce=B), "CHILD_RECOVERY_REQUIRED")
+        self.assertEqual(self.code(self.swap, nonce=NONCE), "CHILD_REPLAY_OR_PARTIAL_STATE")
+        self.assertEqual(sorted(os.listdir(self.state)), before)  # no new writes at all
+        self.assertEqual(self.read(self.launcher), OLD)
+
+    def test_stray_unarchived_intent_blocks_even_without_marker(self):
+        open(os.path.join(self.state, "intent-%s.json" % ("c3" * 32)), "w").close()
+        self.assertEqual(self.code(self.swap), "CHILD_RECOVERY_REQUIRED")
+        self.assertEqual(len(os.listdir(self.state)), 1)
+
+    def test_reverted_swap_keeps_the_marker_until_supervised_reconciliation(self):
+        real = os.replace
+
+        def bad_replace(src, dst, **kw):
+            if dst == "pmgm-qa-update" and src.endswith(".tmp"):
+                pathlib.Path(self.launcher).with_name(src).write_bytes(b"#!/bin/sh\necho corrupted\n")
+            return real(src, dst, **kw)
+        with mock.patch.object(child.os, "replace", bad_replace):
+            self.assertEqual(self.code(self.swap), "CHILD_SWAP_REVERTED")
+        self.assertEqual(self.code(self.swap, nonce="d4" * 32), "CHILD_RECOVERY_REQUIRED")
+
+    def test_crash_during_rollback_blocks_everything_until_reconciled(self):
+        self.swap()
+        real = child._restore
+
+        def crash(*a, **kw):
+            raise KeyboardInterrupt
+        with mock.patch.object(child, "_restore", crash):
+            with self.assertRaises(KeyboardInterrupt):
+                child.rollback(launcher=self.launcher, state=self.state, nonce=NONCE, uid=self.uid, anchor=self.root)
+        names = os.listdir(self.state)
+        self.assertIn("rollback-intent-%s.json" % NONCE, names)
+        self.assertIn("inflight.json", names)
+        self.assertEqual(self.code(child.rollback, launcher=self.launcher, state=self.state, nonce=NONCE,
+                                   uid=self.uid, anchor=self.root), "CHILD_RECOVERY_REQUIRED")
+        n2 = "e5" * 32
+        self.assertEqual(self.code(self.swap, nonce=n2, old_sha256=sha(NEW), expected_new_sha256=sha(OLD),
+                                   new_bytes=OLD), "CHILD_RECOVERY_REQUIRED")
+        self.assertEqual(self.read(self.launcher), NEW)
+
+    def test_rollback_leaves_no_pending_marker_on_success(self):
+        self.swap()
+        child.rollback(launcher=self.launcher, state=self.state, nonce=NONCE, uid=self.uid, anchor=self.root)
+        names = os.listdir(self.state)
+        self.assertNotIn("inflight.json", names)
+        self.assertIn("rollback-intent-%s.superseded" % NONCE, names)
 
     def test_act_is_a_closed_stub(self):
         self.assertEqual(self.code(child.act, 3), "CHILD_NOT_WIRED")
