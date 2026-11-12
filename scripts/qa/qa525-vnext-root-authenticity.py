@@ -220,6 +220,10 @@ def app_check_for(*, open_binary, gh_path, gh_sha256, trusted_root, bundle, open
                     out_fd = os.open(os.path.join(workdir, name),
                                      os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644)
                     try:
+                        # Explicit mode: the unprivileged verifier must read these two files whatever umask the
+                        # root process inherited (sudo-rs keeps the caller's 077; a 0600 file made `gh` fail and
+                        # the first physical GO stopped at LAUNCH_AUTHENTICITY_DENIED, 12-11-2026).
+                        os.fchmod(out_fd, 0o644)
                         view = memoryview(payload)
                         while view:
                             view = view[os.write(out_fd, view):]
