@@ -7,3 +7,4 @@ Cada guion solo se ejecuta tras la revisión de ChatGPT y la decisión del Spons
 - G6 `init` (#525 comentario 6835837067): `qa525-g6-init-kit-A`, `qa525-g6-init-kit-B`, `qa525-g6-go-termux`, `qa525-g6-init-go-host`.
 
 `SHA256SUMS` contiene los hashes declarados en el Issue.
+- G6 `backup` (propuesta v2, pendiente de revisión en #525): `qa525-g6-backup-kit-A`, `qa525-g6-backup-kit-B`, `qa525-g6-backup-go-host` (ventana MinIO en una sesión; GO-T es el mismo de `init`).
