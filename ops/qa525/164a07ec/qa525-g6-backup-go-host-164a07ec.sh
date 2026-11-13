@@ -1,8 +1,9 @@
-# QA525 GO-H-G6-BACKUP v2 — ARTEFACTO=GLMDCH_OPERATIVO_CORTE_164a07ec — COMANDO=backup — en glmdch como soporte: `bash qa525-go-host-<sha8>.sh`. UNA sesión: recibe la línea firmada de Termux,
+# QA525 GO-H-G6-BACKUP v3 — ARTEFACTO=GLMDCH_OPERATIVO_CORTE_164a07ec — COMANDO=backup — en glmdch como soporte: `bash qa525-go-host-<sha8>.sh`. UNA sesión: recibe la línea firmada de Termux,
 # la verifica completa, la instala SIN sobrescribir en el inbox root, emite el ZIP y ejecuta el bootstrap (pide el PIN).
 # VENTANA MINIO: este guion arma el reinicio independiente (systemd), DETIENE MinIO cuando el respaldo lo pide y lo
 # ARRANCA al terminar la copia del Silo (tope 600 s). Requiere la autorización escrita del Sponsor para ese día.
 # Pide solo el PIN (la clave de Restic ya está en custodia root desde `init`). No toca el launcher ni API/WEB.
+# v3: el PIN se pide y se COTEJA con el manifiesto root ANTES de armar el reinicio o instalar el GO (un PIN equivocado, p.ej. el de init, ya no gasta el GO).
 # v2: el éxito exige LECTURA FINAL real: MinIO running+healthy, reinicio independiente inactive, marcadores del respaldo y GO archivado. La validación con autoridad es la del launcher bajo PRE-root; esto es un filtro previo.
 set -euo pipefail
 SHA="164a07ecd36eb45428b6aeac4854a17e339ca525"
@@ -130,6 +131,12 @@ print(go["nonce"])
 # -B: no escribir __pycache__ dentro de modules/ (rompería el conjunto exacto de 24 módulos que exigen los KIT-A siguientes).
 # Reinicio independiente ANTES de instalar el GO: si no se puede armar o leer, no se gasta nada.
 sudo -v || stop SUDO
+echo "Pega el MANIFEST_PIN de BACKUP (el que imprimio KIT-G6-A de backup; NO el de init) y pulsa Enter. No se muestra en pantalla:"
+IFS= read -rs PIN; echo
+PIN="$(printf '%s' "$PIN" | tr -d '[:space:]')"; PIN="${PIN#MANIFEST_PIN=}"
+[ "${#PIN}" = "64" ] && [ -z "$(printf '%s' "$PIN" | tr -d '0-9a-f')" ] || stop PIN_SHAPE_NOTHING_SPENT
+[ "$(sudo /usr/bin/sha256sum "$T/manifest-g6-$CMD.json" | cut -d' ' -f1)" = "$PIN" ] || stop PIN_IS_NOT_THE_BACKUP_MANIFEST_PIN_NOTHING_SPENT
+echo "PIN_COINCIDE_CON_MANIFIESTO_ROOT=si"
 ARMED=1   # desde aquí, cualquier salida pasa por settle_minio (aunque systemd-run falle a medias)
 sudo "$SYSTEMD_RUN" --on-active=15min --unit="$WD" --collect "$DOCKER" start "$MINIO" >/dev/null 2>&1 || stop RESTART_TIMER_NOT_ARMED
 QA_RUN="$D/modules/qa525-vnext-g6-v2-run.py" QA_WD="$WD" QA_DOCKER="$DOCKER" QA_MINIO="$MINIO" QA_SYSTEMCTL="$SYSTEMCTL" "$PY" -B -I -S -c '
@@ -207,7 +214,6 @@ sys.exit(1)
 ' </dev/null >/dev/null 2>&1 9>&- &
 EMITTER=$!
 rm -f "$D/app-inner.zip.sent"
-echo "Ahora pega el PIN del manifiesto (desde Bitwarden) y pulsa Enter. No se muestra en pantalla."
 set +e
 # umask 022 SOLO para el proceso root del bootstrap: el verificador de autenticidad escribe bundle.json y
 # trusted-root.jsonl con modo 0644 para que los lea el uid sin privilegios que ejecuta `gh`; con umask 077 heredado
@@ -216,7 +222,7 @@ echo "UMASK_ROOT_HEREDADO=$(sudo /bin/sh -c umask)"
 sudo -v || true
 # -u: salida sin búfer, para ver STOP/START en el momento. Solo se canaliza stdout; PIN y clave siguen por la terminal.
 OUT="$W/bootstrap.out"; : > "$OUT"
-sudo /bin/sh -c 'umask 022; exec "$@"' sh "$PY" -I -S -u "$T/qa525-vnext-root-bootstrap.py" run "$T" "$T/manifest-g6-$CMD.json" | while IFS= read -r line; do
+printf '%s\n' "$PIN" | sudo /bin/sh -c 'umask 022; exec "$@"' sh "$PY" -I -S -u "$T/qa525-vnext-root-bootstrap.py" run "$T" "$T/manifest-g6-$CMD.json" | while IFS= read -r line; do
   printf '%s\n' "$line"; printf '%s\n' "$line" >> "$OUT"
   case "$line" in
     G6RUN_ACTION=STOP_MINIO_NOW)
@@ -227,7 +233,8 @@ sudo /bin/sh -c 'umask 022; exec "$@"' sh "$PY" -I -S -u "$T/qa525-vnext-root-bo
       echo "$L"; echo "$L" >> "$OUT" ;;
   esac
 done
-RC=${PIPESTATUS[0]}
+RC=${PIPESTATUS[1]}
+PIN=""
 set -e
 kill "$EMITTER" 2>/dev/null || true
 EMITTER=""
@@ -269,4 +276,3 @@ if [ "$MARKERS" != "si" ]; then echo "QA525_GO_H_G6=backup_COMMAND_EXIT_0_BUT_MA
 echo "QA525_GO_H_G6=backup_COMPLETE_MINIO_HEALTHY_RESTART_TIMER_INACTIVE_MARKERS_OK"
 echo "GO_H_G6_EXIT=0"
 exit 0
-
