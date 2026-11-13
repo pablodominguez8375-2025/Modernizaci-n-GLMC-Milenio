@@ -160,5 +160,10 @@ class QaReadonlyTests(unittest.TestCase):
 # unittest discovers this imported TestCase alongside QaReadonlyTests.
 from test_qa525_status_snapshot_check import QA525StatusSnapshotTests
 
+
+# G6 backup final-state acceptance: imported into the existing QA readonly CI suite.
+# This keeps the tests deterministic/off-host and avoids editing a hot Actions workflow.
+from test_qa525_g6_backup_finalize_guard import GuardTests
+
 if __name__ == '__main__':
     unittest.main()
