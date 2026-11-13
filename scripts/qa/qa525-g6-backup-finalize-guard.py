@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import re
 
-HEX64 = re.compile(r"[0-9a-f]{64}\\Z")
-SNAPSHOT = re.compile(r"[0-9a-f]{8,64}\\Z")
-ARCHIVE = re.compile(r"centenario-qa-g6-v2-CIFRADO-\\d{8}T\\d{6}Z\\.tar\\.gz\\Z")
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+SNAPSHOT = re.compile(r"[0-9a-f]{8,64}\Z")
+ARCHIVE = re.compile(r"centenario-qa-g6-v2-CIFRADO-\d{8}T\d{6}Z\.tar\.gz\Z")
 
 def final_status(evidence: dict) -> str:
     """Return an unambiguous result code; never infer success from missing data.
