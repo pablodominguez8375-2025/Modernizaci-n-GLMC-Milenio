@@ -103,16 +103,27 @@ class G6CaptorHappyAndArgvTests(G6CaptorBase):
             h + ["inspect", "--format",
                  '{{index .Config.Labels "com.docker.compose.project"}}|'
                  '{{index .Config.Labels "com.docker.compose.service"}}|{{.State.Running}}', c],
-            h + ["exec", "--user", "postgres", c, "pg_dump", "--format=custom", "--no-owner",
-                 "--no-acl", "--dbname", "pmgm"],
+            h + ["exec", "--user", "postgres", c, "pg_dump", "--username", "pmgm_app",
+                 "--format=custom", "--no-owner", "--no-acl", "--dbname", "pmgm"],
             h + ["exec", "-i", "--user", "postgres", c, "pg_restore", "--list"],
-            h + ["exec", "--user", "postgres", c, "pg_dump", "--format=custom", "--no-owner",
-                 "--no-acl", "--dbname", "pmgm_keycloak"],
+            h + ["exec", "--user", "postgres", c, "pg_dump", "--username", "pmgm_app",
+                 "--format=custom", "--no-owner", "--no-acl", "--dbname", "pmgm_keycloak"],
             h + ["exec", "-i", "--user", "postgres", c, "pg_restore", "--list"],
-            h + ["exec", "--user", "postgres", c, "pg_dumpall", "--globals-only",
-                 "--no-role-passwords"],
+            h + ["exec", "--user", "postgres", c, "pg_dumpall", "--username", "pmgm_app",
+                 "--globals-only", "--no-role-passwords"],
         ]
         self.assertEqual(self.runner.calls, expected)
+
+    def test_database_role_is_explicitly_pinned_for_every_server_dump(self):
+        self.assertEqual(cap.POSTGRES_ROLE, "pmgm_app")
+        for argv in (cap.argv_pg_dump(DOCKER, cap.POSTGRES_CONTAINER, "pmgm"),
+                     cap.argv_pg_dump(DOCKER, cap.POSTGRES_CONTAINER, "pmgm_keycloak"),
+                     cap.argv_globals(DOCKER, cap.POSTGRES_CONTAINER)):
+            with self.subTest(argv=argv):
+                self.assertIn("--username", argv)
+                pos = argv.index("--username")
+                self.assertEqual(argv[pos + 1], cap.POSTGRES_ROLE)
+                self.assertNotEqual(argv[pos + 1], "postgres")
 
     def test_unexpected_container_or_label_or_stopped_is_refused_before_any_dump(self):
         for out in (b"centenario-qa-lab|postgres|true\n", b"centenario-qa-lab2|api|true\n",
