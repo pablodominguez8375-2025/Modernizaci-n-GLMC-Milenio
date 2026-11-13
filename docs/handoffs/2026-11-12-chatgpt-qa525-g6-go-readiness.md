@@ -36,3 +36,11 @@
 - Issue https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525
 - PR https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/1002
 - HEAD `dev` y `main` deben consultarse de nuevo al cierre, no presumirse.
+
+## Corrección de coordinación posterior — PR sustituto (2026-11-12)
+
+- **PR vigente:** [#1004](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/1004), draft `[CHATGPT]`, rama conforme a GOV-003 `fix/g6-backup-guard-tests-20261112-gpt`; deriva del código de #1002, a su vez creado desde `dev` observado. **PR #1002 CLOSED sin merge** (conservado como historial, no continuar allí).
+- **Cambio importante respecto al corte anterior:** los checks verdes generales de #1002 no probaban ejecutar sus tests G6 porque estaban bajo `scripts/qa/`. Se migraron a `tests/test_qa525_g6_backup_finalize_guard.py` y se incluyeron expresamente en la suite `tests/test_qa_readonly.py` que ejecuta workflow `QA readonly contract tests`. Se quitó solo la copia redundante del test en esta rama; Git conserva historia. El workflow no se modificó.
+- **Archivos actuales:** `scripts/qa/qa525-g6-backup-finalize-guard.py`, `tests/test_qa525_g6_backup_finalize_guard.py`, `tests/test_qa_readonly.py`, este handoff. Solapamiento con PR #1 (promoción bloqueada) en tests/test_qa_readonly.py es no-hot y registrado; no tocarlo para merge a main.
+- **CI:** verificar checks específicos del último HEAD de #1004. No atribuir PASS a ejecución de tests mientras el check `QA readonly contract tests` no finalice SUCCESS. Sin integración en GO-H ni prueba real de SIGTERM, watchdog o MinIO.
+- **QA FÍSICO:** G6 backup NO_GO, no sudo ni parada. Sponsor autoriza específicamente la ventana sólo después de entrega autenticada revisada.
