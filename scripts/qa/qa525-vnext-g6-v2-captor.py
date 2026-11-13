@@ -27,6 +27,9 @@ DOCKER = "/usr/bin/docker"
 PROJECT = "centenario-qa-lab2"
 POSTGRES_SERVICE = "postgres"
 POSTGRES_CONTAINER = PROJECT + "-postgres-1"
+# QA glmdch initializes PostgreSQL with this database role; never rely on the
+# container OS user becoming the libpq role implicitly.
+POSTGRES_ROLE = "pmgm_app"
 SOCKET = "unix:///var/run/docker.sock"
 DBS = ("pmgm", "pmgm_keycloak")
 MAX_DUMP_BYTES = 4 * 1024**3
@@ -58,12 +61,13 @@ def argv_inspect(binary, container):
 
 def argv_pg_dump(binary, container, db):
     return _docker(binary, "exec", "--user", "postgres", container, "pg_dump",
-                   "--format=custom", "--no-owner", "--no-acl", "--dbname", db)
+                   "--username", POSTGRES_ROLE, "--format=custom", "--no-owner",
+                   "--no-acl", "--dbname", db)
 
 
 def argv_globals(binary, container):
     return _docker(binary, "exec", "--user", "postgres", container, "pg_dumpall",
-                   "--globals-only", "--no-role-passwords")
+                   "--username", POSTGRES_ROLE, "--globals-only", "--no-role-passwords")
 
 
 def argv_restore_list(binary, container):
