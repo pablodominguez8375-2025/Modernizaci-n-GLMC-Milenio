@@ -18,6 +18,8 @@ ARCHIVE="centenario-qa-g6-v2-CIFRADO-20261113T165400Z.tar.gz"
 ARCHIVE_SHA="b0c77c1c26ba48e1c6942abab3ea5d5b1a9aaa3228cbd65753bc274a775276fe"
 IMAGE="postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3"
 STAMP="20261113T165400Z"
+CUT_EPOCH="$(date -u -d '2026-11-13T16:54:00Z' +%s)"
+RESTORE_DEADLINE_EPOCH="$((CUT_EPOCH + 172800))"
 RESULT_EXPECTED="G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY"
 STATE_ROOT="/var/lib/pmgm-qa525-g6-v2"
 DOWNLOAD="$STATE_ROOT/downloads-v2/$ARCHIVE"
@@ -108,6 +110,9 @@ MINIO_BEFORE="$(identity "$MINIO")"
 POSTGRES_BEFORE="$(identity "$POSTGRES")"
 [ "$MINIO_BEFORE" = "centenario-qa-lab2|minio|true|healthy" ] || stop PRODUCTION_MINIO_NOT_HEALTHY_BEFORE
 [ "$POSTGRES_BEFORE" = "centenario-qa-lab2|postgres|true|healthy" ] || stop PRODUCTION_POSTGRES_NOT_HEALTHY_BEFORE
+NOW_EPOCH="$(date -u +%s)"
+[ "$NOW_EPOCH" -ge "$CUT_EPOCH" ] && [ "$NOW_EPOCH" -lt "$((RESTORE_DEADLINE_EPOCH - 1800))" ] || stop RESTORE_WINDOW_LESS_THAN_30_MIN_NOTHING_SPENT
+echo "RESTORE_WINDOW_SECONDS_REMAINING=$((RESTORE_DEADLINE_EPOCH - NOW_EPOCH))"
 
 echo "Este restore es AISLADO: no detiene MinIO, no modifica las BD activas y usa solo downloads-v2."
 echo "Para autorizar esta única ejecución escribe exactamente: AUTORIZO RESTORE AISLADO G6 164a07ec"
@@ -220,9 +225,18 @@ if [ "$RESULT" = "$RESULT_EXPECTED" ] && [ "$HASH" = "$ARCHIVE_SHA" ] \
    && printf '%s' "$SO" | grep -Eq '^[1-9][0-9]*$' \
    && [ "$PROD" = "false" ] && ! grep -q '^G6RUN_STOP=' "$OUT"; then MARKERS=si; fi
 
-MINIO_AFTER="$(identity "$MINIO" || true)"; POSTGRES_AFTER="$(identity "$POSTGRES" || true)"
+MINIO_AFTER=""; POSTGRES_AFTER=""
+for _ in $(seq 1 24); do
+  MINIO_AFTER="$(identity "$MINIO" 2>/dev/null || true)"
+  POSTGRES_AFTER="$(identity "$POSTGRES" 2>/dev/null || true)"
+  [ "$MINIO_AFTER" = "$MINIO_BEFORE" ] && [ "$POSTGRES_AFTER" = "$POSTGRES_BEFORE" ] && break
+  sleep 5
+done
 PRODUCTION_OK=no
 [ "$MINIO_AFTER" = "$MINIO_BEFORE" ] && [ "$POSTGRES_AFTER" = "$POSTGRES_BEFORE" ] && PRODUCTION_OK=si
+DOWNLOAD_FINAL_OK=no
+if [ "$(sudo /usr/bin/stat -c '%u:%g:%a:%F:%h' "$DOWNLOAD" 2>/dev/null || true)" = "0:0:600:regular file:1" ] \
+   && [ "$(sudo /usr/bin/sha256sum "$DOWNLOAD" 2>/dev/null | cut -d' ' -f1)" = "$ARCHIVE_SHA" ]; then DOWNLOAD_FINAL_OK=si; fi
 VERIFIER_ABSENT=no; sudo "$DOCKER" inspect "$VERIFY_CONTAINER" >/dev/null 2>&1 || VERIFIER_ABSENT=si
 WORKDIR_ABSENT=no; sudo /usr/bin/test ! -e "$WORKDIR" -a ! -L "$WORKDIR" && WORKDIR_ABSENT=si
 REPORT_OK=no
@@ -249,13 +263,14 @@ fi
 
 echo "RESTORE_MARKERS_COMPLETE=$MARKERS"
 echo "PRODUCTION_CONTAINERS_UNCHANGED_HEALTHY=$PRODUCTION_OK"
+echo "DOWNLOAD_FINAL_ROOT_0600_HASH_OK=$DOWNLOAD_FINAL_OK"
 echo "VERIFIER_CONTAINER_FINAL_ABSENT=$VERIFIER_ABSENT"
 echo "PLAINTEXT_WORKDIR_FINAL_ABSENT=$WORKDIR_ABSENT"
 echo "RESTORE_REPORT_ROOT_0600_VALID=$REPORT_OK"
 
 if [ "$RC" != "0" ] || [ "$FD_SENT" != "si" ]; then echo "QA525_GO_H_G6_RESTORE=COMMAND_FAILED_DO_NOT_RETRY_WITHOUT_REVIEW"; echo "GO_H_G6_RESTORE_EXIT=4"; exit 4; fi
 if [ "$ARCHIVED" != "si" ]; then echo "QA525_GO_H_G6_RESTORE=EXIT_0_BUT_GO_NOT_ARCHIVED"; echo "GO_H_G6_RESTORE_EXIT=3"; exit 3; fi
-if [ "$MARKERS" != "si" ] || [ "$PRODUCTION_OK" != "si" ] || [ "$VERIFIER_ABSENT" != "si" ] || [ "$WORKDIR_ABSENT" != "si" ] || [ "$REPORT_OK" != "si" ]; then
+if [ "$MARKERS" != "si" ] || [ "$PRODUCTION_OK" != "si" ] || [ "$DOWNLOAD_FINAL_OK" != "si" ] || [ "$VERIFIER_ABSENT" != "si" ] || [ "$WORKDIR_ABSENT" != "si" ] || [ "$REPORT_OK" != "si" ]; then
   echo "QA525_GO_H_G6_RESTORE=EXIT_0_BUT_FINAL_READBACK_FAILED_DO_NOT_RETRY_WITHOUT_REVIEW"
   echo "GO_H_G6_RESTORE_EXIT=7"
   exit 7
