@@ -138,7 +138,10 @@ def validate_inbox(path, expected_command):
         assert set(value) == required
         assert value["action"] == "g6-v2-%s-supervised" % expected_command
         assert value["g6_command"] == expected_command
-        assert value["app_source_sha"] == value["ops_source_sha"] == "164a07ecd36eb45428b6aeac4854a17e339ca525"
+        source_sha = value["app_source_sha"]
+        assert source_sha == value["ops_source_sha"]
+        assert isinstance(source_sha, str) and len(source_sha) == 40
+        assert not set(source_sha) - set("0123456789abcdef")
         assert value["environment"] == "QA_GLMDCH_ONLY"
         assert value["host"] == "glmdch" and value["operator"] == "soporte@glmdch"
         assert value["schema"] == "qa525-go-g6-v1"
@@ -150,8 +153,9 @@ def validate_inbox(path, expected_command):
             digest = value[key]
             assert isinstance(digest, str) and len(digest) == 71 and digest.startswith("sha256:")
             assert not set(digest[7:]) - set("0123456789abcdef")
-        matched += 1
-    assert matched >= 1
+        if source_sha == "164a07ecd36eb45428b6aeac4854a17e339ca525":
+            matched += 1
+    assert matched == 1
 
 try:
     archive_raw = open_regular(archive_path)
