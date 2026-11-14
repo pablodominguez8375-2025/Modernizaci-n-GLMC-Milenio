@@ -70,3 +70,20 @@ Nada de esto construye, descarga, carga ni arranca nada.
 `apiweb.baseline_sha256` = resumen canónico del baseline que `qa525-vnext-state-reader` produce al leer los 10 contenedores del proyecto
 `centenario-qa-lab2` (inspector del host). El Sponsor lo obtiene con el inventario de solo lectura ya aprobado en la misma ventana en que
 fija los layers; el vuelo lo vuelve a comparar bajo los 5 locks y se detiene si difiere.
+
+## Captura del baseline canónico (helper de solo lectura)
+`scripts/qa/operators/qa525-apiweb-baseline-capture.py --capture` (root en glmdch; único flag) lee los 10 contenedores de `centenario-qa-lab2`
+con el MISMO guardia docker de solo lectura (`ps -a`, `inspect --format`, `image inspect --format`; argv exactos) y el MISMO
+`StateReader.capture_baseline` del vuelo, dos veces; si las lecturas difieren, STOP. Imprime el baseline canónico y su resumen
+`sha256:<hex>` = valor de `apiweb.baseline_sha256`. No escribe archivos, no arranca/detiene/construye/descarga nada y no gasta GO
+(`may_apply=false`). Exige 2 targets running, 5 dependencias running y 3 one-shots `exited 0`; si no, STOP. Gate de root: ANTES de importar cualquier módulo exige `hostname == glmdch`, euid 0 y cadena de código confiable (el propio helper,
+`qa525-vnext-host-adapters`, `-containment`, `-state-reader`, `-baseline-plan`: cada componente de la ruta root-owned, sin symlink, sin
+escritura de grupo/otros); imprime el sha256 de cada archivo para compararlo con el manifiesto de la release firmada (evidencia, no una
+raíz de confianza nueva). Los módulos se ejecutan con los MISMOS bytes que se hashearon y se cargan sin `__file__` (mecánica del bootstrap real) y `containment` se INYECTA con `bind_dependencies` desde el mismo conjunto verificado: no se lee nada del disco tras el hash. La ruta de invocación del helper no se normaliza con `resolve()`: un entrypoint o directorio symlink se rechaza (`TRUST_PATH_UNSAFE`). `docker` corre con `/usr/bin/docker` verificado (root, sin symlink, sin escritura de grupo/otros) y entorno limpio, sin `DOCKER_HOST`/`DOCKER_CONFIG`/`DOCKER_CONTEXT` del invocador. Ejecutar DESPUÉS de `--prepare`.
+`apiweb.target.layers` es INDEPENDIENTE y sigue pendiente: NO se derivan copiando el baseline ni inventando overlays; se fijan desde las rutas
+absolutas Compose efectivas y las imágenes target autorizadas, validadas con `baseline-plan.validate_target(base, target)` y una lectura física
+bajo locks que compruebe los paths y la ausencia de migrator (decisión de ChatGPT).
+
+Secuencia obligatoria antes de cualquier ejecución root física del helper (NO_GO sigue vigente): (1) release firmada del SHA final verificada en el host
+(Sigstore); (2) comparar el `module_sha256` que imprime el helper con el manifiesto firmado y los pins; solo si coinciden, (3) usar el baseline.
+El `module_sha256` es evidencia, NO autoriza ni aplica nada.
