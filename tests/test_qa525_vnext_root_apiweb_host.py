@@ -46,7 +46,7 @@ def row(i, name, state="running"):
             "/opt/q", layers, [], {}, {}, 0]
 
 
-class FakeDocker:
+class ApiwebHostFakeDocker:
     def __init__(self):
         self.calls = []
         self.rows = {n: row(i + 1, n) for i, n in enumerate(SERVICES)}
@@ -62,7 +62,7 @@ class FakeDocker:
         raise AssertionError(args)
 
 
-class Fx:
+class ApiwebHostFx:
     def __init__(self, docker):
         self.docker, self.log = docker, []
 
@@ -88,7 +88,7 @@ class Fx:
         return fetch
 
 
-class Base(unittest.TestCase):
+class ApiwebHostBase(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
         self.addCleanup(lambda: __import__("shutil").rmtree(self.dir, ignore_errors=True))
@@ -96,8 +96,8 @@ class Base(unittest.TestCase):
         self.files = {}
         for key, name in host.EVIDENCE.items():
             self.write(name, ("evidence-" + key).encode())
-        self.docker = FakeDocker()
-        self.fx = Fx(self.docker)
+        self.docker = ApiwebHostFakeDocker()
+        self.fx = ApiwebHostFx(self.docker)
         self.authority = self.make_authority()
 
     def write(self, name, data):
@@ -137,7 +137,7 @@ class Base(unittest.TestCase):
         self.assertEqual(str(err.exception), code)
 
 
-class Authority(Base):
+class ApiwebHostAuthority(ApiwebHostBase):
     def test_every_missing_extra_or_malformed_authority_field_is_refused(self):
         def mutate(fn):
             a = json.loads(json.dumps(self.authority))
@@ -161,7 +161,7 @@ class Authority(Base):
         self.stop("APIWEB_HOST_BINDING_INVALID", archive_bytes="zip")
 
 
-class Evidence(Base):
+class ApiwebHostEvidence(ApiwebHostBase):
     def test_evidence_must_match_its_pin_and_be_root_private_and_present(self):
         self.write("g6-review.json", b"tampered")
         self.stop("APIWEB_EVIDENCE_PIN_MISMATCH")
@@ -185,7 +185,7 @@ class Evidence(Base):
         self.assertEqual(a["g6_evidence"], b["g6_evidence"])
 
 
-class Assembled(Base):
+class ApiwebHostAssembled(ApiwebHostBase):
     def test_inputs_cover_exactly_what_run_held_requires_and_nothing_executes_at_build(self):
         held = load("qa525-vnext-held-flight-bridge.py")
         built = self.build()
@@ -240,7 +240,7 @@ class Assembled(Base):
         self.assertEqual((kw["plane"], kw["boundary"], kw["report"]), (plane, "HELD", "REPORT"))
 
 
-class Effects(unittest.TestCase):
+class ApiwebHostEffects(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
         self.addCleanup(lambda: __import__("shutil").rmtree(self.dir, ignore_errors=True))

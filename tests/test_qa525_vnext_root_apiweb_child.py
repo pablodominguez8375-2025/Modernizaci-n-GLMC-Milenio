@@ -17,7 +17,7 @@ NONCE = "e" * 64
 CLAIMS = {"purpose": "API_WEB_QA_ONLY", "nonce": NONCE, "app_source_sha": "b" * 40, "app_archive_sha256": ARCHIVE}
 
 
-class FakePlane:
+class ApiwebChildFakePlane:
     def __init__(self, port=None, journal=None, lease=None, entries=()):
         self.port, self.journal, self.lease, self._entries = port, journal, lease, entries
         self.held = True
@@ -27,7 +27,7 @@ class FakePlane:
             raise RuntimeError("ROOTLOCK_LOST")
 
 
-class Lease:
+class ApiwebChildLease:
     def __init__(self):
         self.closed = 0
 
@@ -35,9 +35,9 @@ class Lease:
         self.closed += 1
 
 
-class Journal:
+class ApiwebChildJournal:
     def __init__(self):
-        self.lease = Lease()
+        self.lease = ApiwebChildLease()
         self.begun = []
 
     def begin(self, root, admission, sha, now):
@@ -51,10 +51,10 @@ def fd_with(data):
     return fd
 
 
-class Env(unittest.TestCase):
+class ApiwebChildEnv(unittest.TestCase):
     def setUp(self):
-        self.rl = types.SimpleNamespace(RootPlane=FakePlane, Stop=Exception, STATUS="s", LEGACY_LOCKS=())
-        self.outer = FakePlane(entries=(("lock-a", 11, None), ("lock-b", 12, None)))
+        self.rl = types.SimpleNamespace(RootPlane=ApiwebChildFakePlane, Stop=Exception, STATUS="s", LEGACY_LOCKS=())
+        self.outer = ApiwebChildFakePlane(entries=(("lock-a", 11, None), ("lock-b", 12, None)))
         self.calls, self.fds = [], []
         self.result = {"terminal_outcome": "APPLIED"}
         self.built = []
@@ -104,7 +104,7 @@ class Env(unittest.TestCase):
         self.assertEqual(str(err.exception), code)
 
 
-class ClaimsAndBinding(Env):
+class ApiwebChildClaimsAndBinding(ApiwebChildEnv):
     def test_only_the_api_web_scope_with_the_exact_claim_shape(self):
         for bad in (dict(CLAIMS, purpose="LAUNCHER_ONLY"), dict(CLAIMS, purpose="G6_V2_ONLY"),
                     dict(CLAIMS, g6_command="backup"), {k: v for k, v in CLAIMS.items() if k != "nonce"},
@@ -125,7 +125,7 @@ class ClaimsAndBinding(Env):
                   lambda: self.act(modules=dict(self.modules, run_held=types.SimpleNamespace())))
 
 
-class ArchiveAndHost(Env):
+class ApiwebChildArchiveAndHost(ApiwebChildEnv):
     def test_archive_that_differs_from_the_signed_digest_never_reaches_the_host(self):
         self.stop("APIWEB_ARCHIVE_MISMATCH", lambda: self.act()(self.fd(DATA + b"x")))
         self.assertEqual((self.built, self.calls), ([], []))
@@ -151,7 +151,7 @@ class ArchiveAndHost(Env):
         self.assertEqual(self.calls, [])
 
 
-class Flight(Env):
+class ApiwebChildFlight(ApiwebChildEnv):
     def test_applied_runs_the_held_flight_once_with_reentrant_locks_and_the_injected_port(self):
         self.assertEqual(self.act()(self.fd()), "APIWEB_APPLIED")
         self.assertEqual(len(self.calls), 1)
@@ -185,15 +185,15 @@ class Flight(Env):
         self.assertEqual(self.built[0][1]["purpose"], "API_WEB_QA_ONLY")
 
 
-class ReentrantPlane(Env):
+class ApiwebChildReentrantPlane(ApiwebChildEnv):
     def enter(self, outer=None, journal=None):
         rl = child.Reentrant(self.rl, lambda: outer or self.outer)
-        return rl, journal or Journal()
+        return rl, journal or ApiwebChildJournal()
 
     def test_it_reuses_the_held_locks_and_takes_only_the_flight_lease(self):
         rl, journal = self.enter()
         with rl.root_flight("P", journal, "root", b"adm", "sha256:" + "1" * 64, 5) as plane:
-            self.assertIsInstance(plane, FakePlane)
+            self.assertIsInstance(plane, ApiwebChildFakePlane)
             self.assertEqual(plane._entries, self.outer._entries)
             self.assertIs(plane.lease, journal.lease)
             self.assertEqual(journal.lease.closed, 0)
