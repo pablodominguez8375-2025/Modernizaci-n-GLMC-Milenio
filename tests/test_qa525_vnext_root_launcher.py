@@ -54,7 +54,7 @@ G6_OPERATION = json.dumps({
     "argv": ["--restic-sha256", "a" * 64, "--repo-id", "b" * 64, "--key-epoch", "c" * 32],
 }, sort_keys=True, separators=(",", ":")).encode()
 G6_OP = "sha256:" + hashlib.sha256(G6_OPERATION).hexdigest()
-CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"}
+CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py", "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"}
 CHILDREN.update({"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in launcher.G6_COMMANDS})
 
 
@@ -270,11 +270,52 @@ class LauncherComposeTests(unittest.TestCase):
         return self.config(g6_pins={"g6_command": command, "g6_operation_sha256": op})
 
     def test_unknown_schema_never_reaches_a_child(self):
-        for schema in ("qa525-go-cut-v1", "x"):
+        for schema in ("x", "qa525-go-cut-v2", ""):
             go = json.dumps(dict(json.loads(self.go_bytes()), schema=schema), sort_keys=True,
                             separators=(",", ":")).encode()
             self.write_inbox(go=go)
             self.stop("LAUNCH_SCOPE_UNKNOWN", load=self.loader(cfg=self.config()))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def apiweb_go(self):
+        return self.go_bytes(purpose="API_WEB_QA_ONLY", release_asset_sha256=None,
+                             old_launcher_sha256=None, candidate_operator_sha256=None)
+
+    def apiweb_loader(self, host=True):
+        seen = self.apiweb_seen = []
+        act = lambda fd: (self.acted.append(os.fstat(fd).st_size), "apiweb")[1]
+        child = types.SimpleNamespace(act_for=lambda **kw: (seen.append(kw), act)[1])
+        extra = {"qa525-vnext-root-apiweb-child.py": child}
+        extra.update({v: types.SimpleNamespace(name=k) for k, v in launcher.APIWEB_MODULES.items()
+                      if v not in ("qa525-vnext-root-locks.py",)})
+        if host:
+            extra[launcher.APIWEB_HOST] = types.SimpleNamespace(build=lambda *a: {})
+        cfg = self.config()
+        return self.loader(cfg=cfg, **extra)
+
+    def test_apiweb_go_dispatches_to_the_closed_apiweb_child_exactly_once(self):
+        self.write_inbox(go=self.apiweb_go())
+        out = self.compose(load=self.apiweb_loader())
+        self.assertEqual((out["child_outcome"], len(self.spent), self.acted), ("apiweb", 1, [len(DATA)]))
+        kw = self.apiweb_seen[0]
+        self.assertEqual(kw["claims"]["purpose"], "API_WEB_QA_ONLY")
+        self.assertEqual(set(kw["modules"]), set(launcher.APIWEB_MODULES))
+        self.assertTrue(callable(kw["outer_plane"]) and kw["host"] is not None)
+
+    def test_apiweb_go_without_the_pinned_host_module_stops_before_any_nonce(self):
+        self.write_inbox(go=self.apiweb_go())
+        self.stop("BOOT_MODULE_UNKNOWN", load=self.apiweb_loader(host=False))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_launcher_go_never_reaches_the_apiweb_child(self):
+        out = self.compose(load=self.apiweb_loader())
+        self.assertEqual(out["child_outcome"], "done")
+        self.assertEqual(self.apiweb_seen, [])
+
+    def test_apiweb_go_with_launcher_pins_in_the_document_is_refused(self):
+        self.write_inbox(go=self.go_bytes(purpose="LAUNCHER_ONLY").replace(b"LAUNCHER_ONLY", b"API_WEB_QA_ONLY"))
+        with self.assertRaises(Exception):
+            self.compose(load=self.apiweb_loader())
         self.assertEqual((self.spent, self.acted), ([], []))
 
     def test_g6_go_runs_only_the_one_command_the_release_pins(self):
@@ -450,7 +491,9 @@ class LauncherComposeTests(unittest.TestCase):
 
     def test_children_mapping_is_the_code_constant(self):
         self.assertEqual(launcher.CHILD_MODULES["G6:backup"], "qa525-vnext-root-g6-backup.py")
-        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 6)
+        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 7)
+        self.assertEqual(launcher.CHILD_MODULES["API_WEB_QA_ONLY"], "qa525-vnext-root-apiweb-child.py")
+        self.assertEqual(launcher.SCOPES["qa525-go-cut-v1"], "API_WEB_QA_ONLY")
         self.assertEqual(self.config()["children"], launcher.CHILD_MODULES)
 
     def test_inbox_files_must_be_plain_owned_files(self):

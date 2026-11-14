@@ -51,6 +51,12 @@ MAX_ARCHIVE = 512 * 1024 * 1024
 G6_OPERATION_FILE = "g6-operation.json"
 G6_RUN = "qa525-vnext-g6-v2-run.py"
 G6_CHILD_CORE = "qa525-vnext-root-g6-child-core.py"
+APIWEB_HOST = "qa525-vnext-root-apiweb-host.py"  # pinned host-effects module (readers/runner/target); fail closed if absent
+APIWEB_MODULES = {"root_locks": LOCKS, "bridge": "qa525-vnext-admission-bridge.py",
+                  "boundary": "qa525-vnext-b7-root-boundary.py", "b7": "qa525-vnext-b7-held-readonly.py",
+                  "observer": "qa525-vnext-observer.py", "scopes": "qa525-vnext-scope-store.py",
+                  "switch": "qa525-vnext-switch.py", "flight": "qa525-vnext-flight.py",
+                  "g6_anchor": "qa525-vnext-g6-anchor.py", "run_held": "qa525-vnext-held-flight-bridge.py"}
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256", "app_subject_sha256",
     "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
@@ -60,11 +66,13 @@ AUTH_KEYS = frozenset({"ops_allowed_signers", "ops_signature_sha256", "app_bundl
 PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256",
                        "admission_sha256", "policy_hash"})
 # schema -> scope. One signed GO authorizes exactly one scope; a G6 GO authorizes exactly ONE G6 command.
-SCOPES = {"qa525-go-launcher-v1": "LAUNCHER_ONLY", "qa525-go-g6-v1": "G6_V2_ONLY"}
+SCOPES = {"qa525-go-launcher-v1": "LAUNCHER_ONLY", "qa525-go-g6-v1": "G6_V2_ONLY",
+          "qa525-go-cut-v1": "API_WEB_QA_ONLY"}
 G6_COMMANDS = ("preflight", "init", "backup", "restore", "review")
 # The ONLY scope/command -> child mapping. It lives in code, not in the configuration: an authentic but
 # mis-bound config (swap, duplicate, alternative child) is refused before authentication, nonce or child.
-CHILD_MODULES = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+CHILD_MODULES = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py",
+                      "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
                      **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in G6_COMMANDS})
 
 
@@ -348,6 +356,21 @@ def _compose(load, record, env):
             if claims is None:
                 raise Stop("LAUNCH_CLAIMS_MISSING")
             return act_for(claims=dict(claims), launcher_pins=dict(cfg["launcher_pins"]))(fd)
+    elif purpose == "API_WEB_QA_ONLY":
+        act_for = getattr(child_mod, "act_for", None)
+        if not callable(act_for):
+            raise Stop("LAUNCH_CHILD_INVALID")
+        apiweb_modules = {k: load(v) for k, v in APIWEB_MODULES.items()}  # ALL pinned before any nonce is spent
+        apiweb_host = load(APIWEB_HOST)
+        apiweb_port = getattr(load(POSIX), "PosixPort")()
+        outer = {}
+
+        def act(fd):
+            claims = granted.get("claims")
+            if claims is None or outer.get("fp") is None:
+                raise Stop("LAUNCH_CLAIMS_MISSING")
+            return act_for(claims=dict(claims), modules=apiweb_modules, host=apiweb_host,
+                           outer_plane=lambda: outer["fp"]._plane, port=apiweb_port)(fd)
     else:
         factory = getattr(child_mod, "act_for", None)
         verified = getattr(load, "_qa525_verified", None)
@@ -388,7 +411,7 @@ def _compose(load, record, env):
             go_bytes=raw["go.json"], go_signature_bytes=raw["go.json.sig"], pins=pins,
             ops_v3_receipt=ops, app_subject=subject, now_utc=dt.datetime.fromtimestamp(now, dt.timezone.utc),
             verify_go_signature=verifier, nonce_unused=lambda _n, _a: True,  # #967 consume is the ONLY marker
-            purpose=purpose, launcher_pins=None if g6_pins else dict(cfg["launcher_pins"]), g6_pins=g6_pins)
+            purpose=purpose, launcher_pins=dict(cfg["launcher_pins"]) if purpose == "LAUNCHER_ONLY" else None, g6_pins=g6_pins)
         try:
             authentic = port(ops_bytes=raw["ops-v3.json"], app_subject_bytes=raw["app-subject.json"], claims=dict(result))
         except Exception:  # noqa: BLE001
@@ -416,8 +439,11 @@ def _compose(load, record, env):
     flight = plane_mod.launcher_flight(locks, posix.PosixPort(), cfg["lease_dir"], uid=0)  # genuine view only
     sock = env["accept"](cfg["socket_path"], cfg["peer_uid"], cfg["timeout"])
     try:
+        flight_plane = entry.FlightPlane(flight)
+        if purpose == "API_WEB_QA_ONLY":
+            outer["fp"] = flight_plane
         return entry.run(
-            load, plane=entry.FlightPlane(flight), verify_go=verify_go, sock=sock,
+            load, plane=flight_plane, verify_go=verify_go, sock=sock,
             peer_uid=cfg["peer_uid"], peer_pid=None, timeout=cfg["timeout"],
             journal_root=cfg["journal_root"], uid=0, clock=env["now"], child=act)
     finally:

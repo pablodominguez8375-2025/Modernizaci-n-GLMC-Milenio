@@ -13,7 +13,7 @@ import unittest.mock
 
 SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-root-bootstrap.py"
 CFG_SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-root-launch-config.py"
-CHILDREN = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+CHILDREN = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py", "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
                 **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in ("preflight", "init", "backup", "restore", "review")})
 
 

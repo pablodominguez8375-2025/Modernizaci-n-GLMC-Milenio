@@ -42,7 +42,8 @@ AUTH_KEYS = frozenset({
     "source_repository_id",
 })
 CHILD_MODULES = dict(
-    {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+    {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py",
+     "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
     **{"G6:" + cmd: "qa525-vnext-root-g6-%s.py" % cmd
        for cmd in ("preflight", "init", "backup", "restore", "review")}
 )
