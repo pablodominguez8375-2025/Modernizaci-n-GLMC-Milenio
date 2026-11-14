@@ -40,15 +40,15 @@ stop() {
 [ -t 0 ] || stop NEEDS_TERMINAL
 [ "$(readlink -f "$PY")" = "$PY" ] && [ "$(sha256sum "$PY" | cut -d' ' -f1)" = "$PY_SHA" ] || stop INTERPRETER_PIN
 [ "$(readlink -f "$DOCKER")" = "$DOCKER" ] || stop DOCKER_PATH
-[ "$(date -u +%s)" -lt "$DEADLINE_EPOCH" ] || stop G6_48H_WINDOW_EXPIRED
+[ "$(date -u +%s)" -lt "$((DEADLINE_EPOCH - 300))" ] || stop G6_48H_WINDOW_LESS_THAN_5_MIN
 sudo -v || stop SUDO
 
 identity() {
   sudo "$DOCKER" inspect -f '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{.State.Running}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}no-health{{end}}' "$1"
 }
 
-MINIO_BEFORE="$(identity "$MINIO")"
-POSTGRES_BEFORE="$(identity "$POSTGRES")"
+MINIO_BEFORE="$(identity "$MINIO")" || stop PRODUCTION_MINIO_READ_FAILED
+POSTGRES_BEFORE="$(identity "$POSTGRES")" || stop PRODUCTION_POSTGRES_READ_FAILED
 [ "$MINIO_BEFORE" = "centenario-qa-lab2|minio|true|healthy" ] || stop PRODUCTION_MINIO_NOT_HEALTHY
 [ "$POSTGRES_BEFORE" = "centenario-qa-lab2|postgres|true|healthy" ] || stop PRODUCTION_POSTGRES_NOT_HEALTHY
 sudo "$DOCKER" inspect "$VERIFY_CONTAINER" >/dev/null 2>&1 && stop VERIFIER_CONTAINER_PRESENT
@@ -110,7 +110,7 @@ def canonical_json(path, expected_sha):
     assert encoded == raw
     return value
 
-def validate_inbox(path):
+def validate_inbox(path, expected_command):
     info = os.lstat(path)
     assert stat.S_ISDIR(info.st_mode)
     assert info.st_uid == expected_uid and info.st_gid == expected_uid
@@ -120,9 +120,38 @@ def validate_inbox(path):
     used = [name for name in os.listdir(path)
             if name.startswith(".used-go-") and name.endswith(".json")]
     assert used
+    matched = 0
     for name in used:
-        for candidate in (name, name + ".sig"):
-            open_regular(os.path.join(path, candidate), 65536)
+        raw = open_regular(os.path.join(path, name), 65536)
+        open_regular(os.path.join(path, name + ".sig"), 65536)
+        value = json.loads(raw, object_pairs_hook=unique)
+        assert type(value) is dict
+        encoded = (json.dumps(value, sort_keys=True, separators=(",", ":"),
+                              ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
+        assert encoded == raw
+        required = {
+            "action", "admission_sha256", "app_archive_sha256", "app_source_sha",
+            "environment", "expires_at", "g6_command", "g6_operation_sha256", "host",
+            "issued_at", "nonce", "operator", "ops_source_sha", "plan_sha256",
+            "policy_hash", "schema", "scope",
+        }
+        assert set(value) == required
+        assert value["action"] == "g6-v2-%s-supervised" % expected_command
+        assert value["g6_command"] == expected_command
+        assert value["app_source_sha"] == value["ops_source_sha"] == "164a07ecd36eb45428b6aeac4854a17e339ca525"
+        assert value["environment"] == "QA_GLMDCH_ONLY"
+        assert value["host"] == "glmdch" and value["operator"] == "soporte@glmdch"
+        assert value["schema"] == "qa525-go-g6-v1"
+        assert value["scope"] == "QA525_G6_V2_ONLY_NO_LAUNCHER_NO_API_WEB"
+        assert isinstance(value["nonce"], str) and len(value["nonce"]) == 64
+        assert not set(value["nonce"]) - set("0123456789abcdef")
+        for key in ("admission_sha256", "app_archive_sha256", "g6_operation_sha256",
+                    "plan_sha256", "policy_hash"):
+            digest = value[key]
+            assert isinstance(digest, str) and len(digest) == 71 and digest.startswith("sha256:")
+            assert not set(digest[7:]) - set("0123456789abcdef")
+        matched += 1
+    assert matched >= 1
 
 try:
     archive_raw = open_regular(archive_path)
@@ -161,16 +190,17 @@ try:
         "key_epoch": epoch,
     }
     assert not os.path.lexists(workdir)
-    for inbox in (backup_inbox, restore_inbox, review_inbox):
-        validate_inbox(inbox)
+    for inbox, command in ((backup_inbox, "backup"), (restore_inbox, "restore"),
+                           (review_inbox, "review")):
+        validate_inbox(inbox, command)
 except Exception:
     sys.exit(1)
 PY_EVIDENCE
 }
 validate_chain || stop EVIDENCE_CHAIN_INVALID
 
-MINIO_AFTER="$(identity "$MINIO")"
-POSTGRES_AFTER="$(identity "$POSTGRES")"
+MINIO_AFTER="$(identity "$MINIO")" || stop PRODUCTION_MINIO_READ_FAILED_AFTER
+POSTGRES_AFTER="$(identity "$POSTGRES")" || stop PRODUCTION_POSTGRES_READ_FAILED_AFTER
 [ "$MINIO_AFTER" = "$MINIO_BEFORE" ] || stop PRODUCTION_MINIO_CHANGED
 [ "$POSTGRES_AFTER" = "$POSTGRES_BEFORE" ] || stop PRODUCTION_POSTGRES_CHANGED
 sudo "$DOCKER" inspect "$VERIFY_CONTAINER" >/dev/null 2>&1 && stop VERIFIER_CONTAINER_PRESENT_AFTER
