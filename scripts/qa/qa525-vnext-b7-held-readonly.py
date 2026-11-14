@@ -18,7 +18,10 @@ import importlib.util
 from pathlib import Path
 import re
 
-HERE = Path(__file__).resolve().parent
+try:
+    HERE = Path(__file__).resolve().parent
+except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED by bind_dependencies, never read from disk
+    HERE = None
 SHA256 = re.compile(r"sha256:[a-f0-9]{64}\Z")
 STATUS = "B7_HELD_READONLY_PREFLIGHT_NO_HOST_AUTHORITY"
 SHAPE_STATUS = "QA525_VNEXT_READONLY_SHAPE_STABLE_NOT_AUTHORIZED"
@@ -42,7 +45,19 @@ def _load(name, path):
     return module
 
 
-root_locks = _load("qa525_b7_held_root_locks", "qa525-vnext-root-locks.py")
+root_locks = _load("qa525_b7_held_root_locks", "qa525-vnext-root-locks.py") if HERE is not None else None
+
+SIBLING_MODULES = {"root_locks": "qa525-vnext-root-locks.py"}
+_BOUND = []
+
+
+def bind_dependencies(mapping):
+    """PRE-4 ONLY: receive the exact sibling modules (one verified instance per file, shared by the whole flight)."""
+    if (HERE is not None or _BOUND or type(mapping) is not dict or set(mapping) != set(SIBLING_MODULES)
+            or any(type(m).__name__ != "module" or type(m).__module__ != "builtins" for m in mapping.values())):
+        raise Stop("DEPENDENCY_BINDING_INVALID")
+    globals().update(mapping)
+    _BOUND.append(True)
 
 
 def _held(plane):

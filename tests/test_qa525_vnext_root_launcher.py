@@ -54,7 +54,7 @@ G6_OPERATION = json.dumps({
     "argv": ["--restic-sha256", "a" * 64, "--repo-id", "b" * 64, "--key-epoch", "c" * 32],
 }, sort_keys=True, separators=(",", ":")).encode()
 G6_OP = "sha256:" + hashlib.sha256(G6_OPERATION).hexdigest()
-CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"}
+CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py", "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"}
 CHILDREN.update({"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in launcher.G6_COMMANDS})
 
 
@@ -135,7 +135,7 @@ class LauncherComposeTests(unittest.TestCase):
                "inbox": os.path.join(self.dir, "inbox"), "temp_root": os.path.join(self.dir, "tmp"),
                "socket_path": os.path.join(self.dir, "s"), "journal_root": os.path.join(self.dir, "j"),
                "lease_dir": os.path.join(self.dir, "l"), "peer_uid": UID, "timeout": 5,
-               "children": dict(CHILDREN), "g6_pins": None,
+               "children": dict(CHILDREN), "g6_pins": None, "apiweb": None,
                "authenticity": {"ops_allowed_signers": self.allowed.replace(NS.encode(), b"qa525-ops-v2@pmgm"),
                                 "ops_signature_sha256": sha(self.files["ops-v3.json.sig"]),
                                 "app_bundle_sha256": sha(self.files["app-bundle.json"]),
@@ -270,11 +270,139 @@ class LauncherComposeTests(unittest.TestCase):
         return self.config(g6_pins={"g6_command": command, "g6_operation_sha256": op})
 
     def test_unknown_schema_never_reaches_a_child(self):
-        for schema in ("qa525-go-cut-v1", "x"):
+        for schema in ("x", "qa525-go-cut-v2", ""):
             go = json.dumps(dict(json.loads(self.go_bytes()), schema=schema), sort_keys=True,
                             separators=(",", ":")).encode()
             self.write_inbox(go=go)
             self.stop("LAUNCH_SCOPE_UNKNOWN", load=self.loader(cfg=self.config()))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def apiweb_go(self):
+        return self.go_bytes(purpose="API_WEB_QA_ONLY", release_asset_sha256=None,
+                             old_launcher_sha256=None, candidate_operator_sha256=None)
+
+    precheck_error = None
+
+    def apiweb_loader(self, host=True, configured=True):
+        seen = self.apiweb_seen = []
+        act = lambda fd: (self.acted.append(os.fstat(fd).st_size), "apiweb")[1]
+        child = types.SimpleNamespace(act_for=lambda **kw: (seen.append(kw), act)[1])
+        extra = {"qa525-vnext-root-apiweb-child.py": child, launcher.APIWEB_EFFECTS: types.SimpleNamespace(name="fx")}
+        extra.update({v: types.SimpleNamespace(name=k) for k, v in
+                      list(launcher.APIWEB_MODULES.items()) + list(launcher.APIWEB_HOST_MODULES.items())
+                      if v not in ("qa525-vnext-root-locks.py",)})
+        if host:
+            self.precheck_calls = []
+            extra[launcher.APIWEB_HOST] = types.SimpleNamespace(build=lambda *a: {}, precheck=lambda **kw: (self.precheck_calls.append(kw), self.precheck_error and (_ for _ in ()).throw(self.precheck_error))[0])
+        cfg = self.config()
+        cfg["apiweb"] = {"marker": 1} if configured else None
+        return self.loader(cfg=cfg, **extra)
+
+    def test_apiweb_go_dispatches_to_the_closed_apiweb_child_exactly_once(self):
+        self.write_inbox(go=self.apiweb_go())
+        out = self.compose(load=self.apiweb_loader())
+        self.assertEqual((out["child_outcome"], len(self.spent), self.acted), ("apiweb", 1, [len(DATA)]))
+        kw = self.apiweb_seen[0]
+        self.assertEqual(kw["claims"]["purpose"], "API_WEB_QA_ONLY")
+        self.assertEqual(kw["claims"]["expires_at"], NOW + 300)  # the signed GO expiry travels to the host gate
+        self.assertEqual(set(kw["modules"]), set(launcher.APIWEB_MODULES))
+        self.assertTrue(callable(kw["outer_plane"]) and kw["host"] is not None)
+        # the authority is the bootstrap-pinned section PLUS the GO-bound admission/policy digests, never the ZIP
+        self.assertEqual(kw["authority"], {"marker": 1, "admission_sha256": PINS["admission_sha256"],
+                                           "policy_hash": PINS["policy_hash"]})
+        self.assertEqual(set(kw["host_modules"]), set(launcher.APIWEB_HOST_MODULES))
+
+    def test_apiweb_modules_are_one_object_per_pinned_file_even_if_the_loader_builds_fresh_modules(self):
+        # the REAL bootstrap load_module execs the verified bytes into a NEW module on every call: shared files must
+        # still resolve to a single object per invocation or every exact-type check (RootPlane, Boundary) fails
+        import copy
+        self.write_inbox(go=self.apiweb_go())
+        base, calls = self.apiweb_loader(), []
+
+        def fresh(name):
+            calls.append(name)
+            m = base(name)
+            return types.SimpleNamespace(**vars(m)) if isinstance(m, types.ModuleType) else copy.copy(m)
+        self.compose(load=fresh)
+        kw = self.apiweb_seen[0]
+        for name in set(launcher.APIWEB_MODULES.values()) & set(launcher.APIWEB_HOST_MODULES.values()):
+            a = [k for k, v in launcher.APIWEB_MODULES.items() if v == name]
+            b = [k for k, v in launcher.APIWEB_HOST_MODULES.items() if v == name]
+            self.assertTrue(a and b)
+            self.assertIs(kw["modules"][a[0]], kw["host_modules"][b[0]], name)
+        self.assertEqual(len(calls), len(set(calls)))  # each pinned file is materialised exactly once
+
+    def test_real_bootstrap_style_loader_needs_the_per_invocation_cache_for_exact_type_checks(self):
+        # same mechanics as bootstrap.load_module: exec the bytes into a NEW ModuleType on every call
+        def fresh(name):
+            mod = types.ModuleType("qa525_boot_" + name[:-3].replace("-", "_"))
+            src = (Path(__file__).resolve().parents[1] / "scripts" / "qa" / name).read_bytes()
+            exec(compile(src, "<verified:%s>" % name, "exec"), mod.__dict__)
+            return mod
+        a, b = fresh(launcher.LOCKS), fresh(launcher.LOCKS)
+        self.assertIsNot(a.RootPlane, b.RootPlane)  # BEFORE: two loads => two RootPlane types => exact-type checks fail
+        once = launcher._once(fresh)
+        c, d = once(launcher.LOCKS), once(launcher.LOCKS)
+        self.assertIs(c, d)
+        plane = c.RootPlane(None, None, None, ())
+        self.assertIs(type(plane), d.RootPlane)  # AFTER: the type held by the plane is the one bind() compares to
+
+    def test_apiweb_verified_loader_reuses_module_identity_within_flight(self):
+        # PRE-4 load_module creates a fresh ModuleType each time. This must
+        # NOT split RootPlane/Boundary/Scopes between child and host.
+        self.write_inbox(go=self.apiweb_go())
+        base = self.apiweb_loader()
+        calls = {}
+        shared = set(launcher.APIWEB_MODULES.values()) & set(launcher.APIWEB_HOST_MODULES.values())
+
+        def fresh_load(name):
+            if name in shared:
+                calls[name] = calls.get(name, 0) + 1
+                # A distinct namespace each time, retaining the fake module's
+                # callable contract so the launcher can finish its flight.
+                return types.SimpleNamespace(**vars(base(name)))
+            return base(name)
+
+        out = self.compose(load=fresh_load)
+        self.assertEqual(out["child_outcome"], "apiweb")
+        self.assertEqual(set(calls), shared)
+        self.assertTrue(all(count == 1 for count in calls.values()))
+        kw = self.apiweb_seen[0]
+        for key, path in launcher.APIWEB_MODULES.items():
+            for host_key, host_path in launcher.APIWEB_HOST_MODULES.items():
+                if path == host_path:
+                    self.assertIs(kw["modules"][key], kw["host_modules"][host_key])
+
+    def test_apiweb_precheck_runs_before_the_nonce_and_its_failure_never_spends_the_go(self):
+        self.write_inbox(go=self.apiweb_go())
+        self.precheck_error = RuntimeError("APIWEB_STAGED_IMAGE_MISSING")
+        with self.assertRaises(RuntimeError):
+            self.compose(load=self.apiweb_loader())
+        self.assertEqual((self.spent, self.acted), ([], []))  # nonce unspent, nothing ran
+        (call,) = self.precheck_calls
+        self.assertEqual(call["app_source_sha"], self.apiweb_seen[0]["claims"]["app_source_sha"] if self.apiweb_seen else call["app_source_sha"])
+        self.assertEqual(set(call["modules"]), set(launcher.APIWEB_HOST_MODULES))
+        self.assertEqual(call["authority"]["admission_sha256"], PINS["admission_sha256"])
+
+    def test_apiweb_go_is_not_honoured_when_the_release_pins_no_apiweb_authority(self):
+        self.write_inbox(go=self.apiweb_go())
+        self.stop("LAUNCH_APIWEB_NOT_CONFIGURED", load=self.apiweb_loader(configured=False))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_apiweb_go_without_the_pinned_host_module_stops_before_any_nonce(self):
+        self.write_inbox(go=self.apiweb_go())
+        self.stop("BOOT_MODULE_UNKNOWN", load=self.apiweb_loader(host=False))
+        self.assertEqual((self.spent, self.acted), ([], []))
+
+    def test_launcher_go_never_reaches_the_apiweb_child(self):
+        out = self.compose(load=self.apiweb_loader())
+        self.assertEqual(out["child_outcome"], "done")
+        self.assertEqual(self.apiweb_seen, [])
+
+    def test_apiweb_go_with_launcher_pins_in_the_document_is_refused(self):
+        self.write_inbox(go=self.go_bytes(purpose="LAUNCHER_ONLY").replace(b"LAUNCHER_ONLY", b"API_WEB_QA_ONLY"))
+        with self.assertRaises(Exception):
+            self.compose(load=self.apiweb_loader())
         self.assertEqual((self.spent, self.acted), ([], []))
 
     def test_g6_go_runs_only_the_one_command_the_release_pins(self):
@@ -450,7 +578,9 @@ class LauncherComposeTests(unittest.TestCase):
 
     def test_children_mapping_is_the_code_constant(self):
         self.assertEqual(launcher.CHILD_MODULES["G6:backup"], "qa525-vnext-root-g6-backup.py")
-        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 6)
+        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 7)
+        self.assertEqual(launcher.CHILD_MODULES["API_WEB_QA_ONLY"], "qa525-vnext-root-apiweb-child.py")
+        self.assertEqual(launcher.SCOPES["qa525-go-cut-v1"], "API_WEB_QA_ONLY")
         self.assertEqual(self.config()["children"], launcher.CHILD_MODULES)
 
     def test_inbox_files_must_be_plain_owned_files(self):

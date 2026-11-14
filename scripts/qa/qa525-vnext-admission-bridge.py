@@ -24,7 +24,10 @@ Rules enforced here:
 import importlib.util
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+try:
+    HERE = Path(__file__).resolve().parent
+except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED by bind_dependencies, never read from disk
+    HERE = None
 STATUS = "ADMISSION_BRIDGE_NOT_AUTHENTICATED_NOT_AUTHORIZED_FOR_PHYSICAL_APPLY"
 
 
@@ -39,7 +42,19 @@ def _load(name: str, filename: str):
     return module
 
 
-binding = _load("qa525_vnext_trust_binding_for_bridge", "qa525-vnext-trust-binding.py")
+binding = _load("qa525_vnext_trust_binding_for_bridge", "qa525-vnext-trust-binding.py") if HERE is not None else None
+
+SIBLING_MODULES = {"binding": "qa525-vnext-trust-binding.py"}
+_BOUND = []
+
+
+def bind_dependencies(mapping):
+    """PRE-4 ONLY: receive the exact sibling modules (one verified instance per file, shared by the whole flight)."""
+    if (HERE is not None or _BOUND or type(mapping) is not dict or set(mapping) != set(SIBLING_MODULES)
+            or any(type(m).__name__ != "module" or type(m).__module__ != "builtins" for m in mapping.values())):
+        raise Stop("DEPENDENCY_BINDING_INVALID")
+    globals().update(mapping)
+    _BOUND.append(True)
 
 
 class BoundJournal:
