@@ -81,6 +81,21 @@ class AutoWebF4bAnalyzerTests(unittest.TestCase):
         new = BASE_TSX.replace("useState(0)", "useState(0); const i = new Image(); i.src = 'https://evil/p'")
         self.assertTrue(self.facts(new)["new_sinks"])
 
+    def test_second_review_p2_additions(self):
+        for change in ('<img {...{src: "x"}} />', '<img srcSet="https://evil/a.png 1x" />', '<a ping="/api/t">x</a>',
+                       '<div style={{backgroundImage: "url(" + u + ")"}} />'):
+            with self.subTest(change=change):
+                new = BASE_TSX.replace("<h2>Talleres</h2>", "<h2>Talleres</h2>" + change)
+                self.assertTrue(self.facts(new)["new_sinks"], change)
+        for stmt in ("history.pushState({}, '', '/x')", "el.setAttribute('onclick', 'x')",
+                     "CSS.paintWorklet.addModule(u)", "void new URL(x, import.meta.url)"):
+            with self.subTest(stmt=stmt):
+                new = BASE_TSX.replace("  const [n, setN]", f"  {stmt}\n  const [n, setN]")
+                self.assertTrue(self.facts(new)["new_sinks"], stmt)
+        for css in (".b{background:url(/api/x)}", ".b{background:url(x.php?a)}"):
+            with self.subTest(css=css):
+                self.assertTrue(analyze("frontend/src/a.css", ".a{}", ".a{}\n" + css)["new_sinks"])
+
     def test_benign_member_access_still_clean(self):
         new = BASE_TSX.replace("useState(0)", "useState(0); const rows = [1, 2]; const k = 'a'; const m: Record<string, number> = {}; void rows[0]; void m[k]")
         self.assertEqual(self.facts(new)["new_sinks"], {})

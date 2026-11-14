@@ -24,7 +24,10 @@ const SINK_PROPERTIES = new Set(['sendBeacon', 'postMessage', 'innerHTML', 'oute
 const GLOBAL_ESCAPES = new Set(['globalThis', 'self', 'Reflect', 'Proxy', 'frames', 'parent', 'top', 'opener']);
 const GLOBAL_OBJECTS = new Set(['window', 'document', 'navigator', 'globalThis', 'self']);
 // JSX attributes that make the browser send a request or load active content.
-const JSX_URL_ATTRS = new Set(['action', 'formAction', 'srcDoc', 'srcdoc', 'src', 'href', 'data', 'poster']);
+const JSX_URL_ATTRS = new Set(['action', 'formAction', 'srcDoc', 'srcdoc', 'src', 'href', 'data', 'poster',
+  'srcSet', 'srcset', 'ping', 'background', 'manifest', 'codebase', 'cite']);
+// Calls that navigate, install code or attach handlers without a URL literal.
+const SINK_CALLS = new Set(['pushState', 'replaceState', 'setAttribute', 'addModule', 'registerProperty']);
 const URL_LITERAL = /^\s*((https?:|wss?:|ftp:)?\/\/|\/api(\/|$)|data:|javascript:)/i;
 const API_SPEC = /(^|\/)(api|auth|accounts|oidc|keycloak)(\/|$)|api(\.ts)?$/i;
 const MUTATING_PROP = /^on(?=[A-Z])\w*?(Submit|Save|Delete|Approve|Confirm|Reject|Remove|Create|Update|Send|Pay|Close)$/;
@@ -67,6 +70,11 @@ function analyzeTs(text, fileName) {
     if (ts.isMetaProperty(node) && node.name.text === 'meta' && parent && ts.isPropertyAccessExpression(parent)
         && parent.name.text === 'env') inc(sinks, 'import_meta_env');
     if (ts.isJsxAttribute(node) && node.name.getText(sf) === 'dangerouslySetInnerHTML') inc(sinks, 'dangerouslySetInnerHTML');
+    if (ts.isJsxSpreadAttribute(node)) inc(sinks, 'jsx_spread');
+    if (ts.isJsxAttribute(node) && node.name.getText(sf) === 'style' && /url\s*\(|image-set|@import/i.test(node.getText(sf))) inc(sinks, 'jsx_style_url');
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+        && SINK_CALLS.has(node.expression.name.text)) inc(sinks, 'call:' + node.expression.name.text);
+    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'URL') inc(sinks, 'new_URL');
     if (ts.isJsxAttribute(node) && JSX_URL_ATTRS.has(node.name.getText(sf)) && node.initializer) {
       const init = node.initializer;
       const lit = ts.isStringLiteral(init) ? init.text
@@ -132,6 +140,8 @@ function analyzeCss(text) {
   count(/\\/g, 'css:escape');
   count(/(^|[^:])\/\/|https?:|data:/gi, 'css:absolute_url');
   count(/image-set\s*\(/gi, 'css:image-set');
+  count(/url\s*\(\s*['"]?\s*\/api(\/|\b)/gi, 'css:url_api');
+  count(/url\s*\(\s*['"]?[^)'"]*\?/gi, 'css:url_query');
   count(/@(?!media\b|supports\b|keyframes\b|-webkit-keyframes\b|font-face\b|layer\b|container\b)[a-z-]+/gi, 'css:at_rule');
   return { parseOk: true, imports: new Set(), sinks, apiRefs: 0, mutatingCalls: 0 };
 }

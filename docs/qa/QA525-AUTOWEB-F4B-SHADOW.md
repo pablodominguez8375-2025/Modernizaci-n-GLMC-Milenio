@@ -46,6 +46,7 @@ Siguiente mejora posible (F4-B v2, a decidir con datos de la sombra): admitir im
 ## Lo que F4-B NO detecta (P2 conocidos; por eso sigue en sombra)
 - Llamadas a funciones de API que llegan **por props, contexto o hooks** (`props.api.deleteMember()`, `ctx.save()`), salvo los callbacks `on…Save/Delete/…`. Tampoco nombres nuevos que vienen de un módulo no-API ya importado.
 - Rutas que se arman sin literal de URL, por ejemplo concatenando variables.
+- También se marcan (v1.1, segunda revisión independiente): spread de props en JSX, `srcSet`/`ping`/`style` con `url()`, `pushState`/`replaceState`, `setAttribute`, `addModule`, `new URL(…)` y en CSS `url(/api…)` o con `?`.
 - El gate E2E aún no está conectado: en la calibración se supuso `e2e_passed=True`.
 
 La sombra existe justamente para medir si estos casos aparecen en releases reales antes de pasar a supervisado.
@@ -53,7 +54,7 @@ La sombra existe justamente para medir si estos casos aparecen en releases reale
 ## Límite honesto
 Ningún análisis estático prueba que una pantalla no cambie datos. El riesgo lo acotan otras dos cosas:
 1. Toda escritura pasa por la API, que aplica permisos y auditoría en el servidor y que no cambia en `auto-web` (capas idénticas y `web_only_port`).
-2. F4-B impide que una pantalla agregue caminos **nuevos** hacia la API, el almacenamiento o la red sin que una persona lo mire.
+2. F4-B **detecta los patrones listados en §3** cuando una pantalla agrega caminos nuevos hacia la API, el almacenamiento o la red. No detecta lo enumerado en «Lo que F4-B NO detecta»; por eso solo opera en sombra.
 
 ## Código
 - `scripts/qa/qa525-vnext-autoweb-f4b-analyze.cjs`: analizador AST, solo en CI.
