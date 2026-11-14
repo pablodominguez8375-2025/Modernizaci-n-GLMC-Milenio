@@ -344,6 +344,30 @@ class LauncherComposeTests(unittest.TestCase):
         plane = c.RootPlane(None, None, None, ())
         self.assertIs(type(plane), d.RootPlane)  # AFTER: the type held by the plane is the one bind() compares to
 
+    def test_apiweb_verified_loader_reuses_module_identity_within_flight(self):
+        # PRE-4 load_module creates a fresh ModuleType each time. This must
+        # NOT split RootPlane/Boundary/Scopes between child and host.
+        self.write_inbox(go=self.apiweb_go())
+        base = self.apiweb_loader()
+        calls = {}
+        shared = set(launcher.APIWEB_MODULES.values()) & set(launcher.APIWEB_HOST_MODULES.values())
+
+        def fresh_load(name):
+            if name in shared:
+                calls[name] = calls.get(name, 0) + 1
+                return types.SimpleNamespace(instance=calls[name])
+            return base(name)
+
+        out = self.compose(load=fresh_load)
+        self.assertEqual(out["child_outcome"], "apiweb")
+        self.assertEqual(set(calls), shared)
+        self.assertTrue(all(count == 1 for count in calls.values()))
+        kw = self.apiweb_seen[0]
+        for key, path in launcher.APIWEB_MODULES.items():
+            for host_key, host_path in launcher.APIWEB_HOST_MODULES.items():
+                if path == host_path:
+                    self.assertIs(kw["modules"][key], kw["host_modules"][host_key])
+
     def test_apiweb_go_is_not_honoured_when_the_release_pins_no_apiweb_authority(self):
         self.write_inbox(go=self.apiweb_go())
         self.stop("LAUNCH_APIWEB_NOT_CONFIGURED", load=self.apiweb_loader(configured=False))
