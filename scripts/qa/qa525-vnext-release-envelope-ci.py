@@ -112,7 +112,7 @@ def load_facts(path):
         return []
     try:
         facts = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return []
     return facts if type(facts) is list else []
 
@@ -123,7 +123,7 @@ def e2e_passed(report_path):
         return False
     try:
         report = json.loads(Path(report_path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return False
     return (type(report) is dict and report.get("schema") == "pmgm-showcase-console-errors-v1"
             and report.get("walk_completed") is True and report.get("count") == 0)
@@ -189,8 +189,12 @@ def main(argv=None):
     (out / "envelope.json").write_bytes(raw)
     # F4-B SHADOW: recorded next to the envelope, never inside it; the host ignores it.
     lin = json.loads(raw)["lineage"]
-    shadow = F4B.shadow_verdict(lin["changed_files"], load_facts(a.f4b_facts),
-                                e2e_passed=e2e_passed(a.e2e_report), complete=lin["changed_files_complete"])
+    try:  # the shadow must never cost the F4-A envelope its attestation (independent review P2)
+        shadow = F4B.shadow_verdict(lin["changed_files"], load_facts(a.f4b_facts),
+                                    e2e_passed=e2e_passed(a.e2e_report), complete=lin["changed_files_complete"])
+    except Exception:
+        shadow = {"profile": F4B.PROFILE, "shadow": True, "may_apply": False, "result": F4B.WOULD_MANUAL,
+                  "reasons": ["F4B_FACTS_INVALID"], "added_lines": 0}
     shadow["release_id"] = json.loads(raw)["release_id"]
     shadow["f4a_result"] = json.loads(raw)["classifier"]["result"]
     (out / "f4b-shadow.json").write_bytes(ENVELOPE.canonical(shadow))

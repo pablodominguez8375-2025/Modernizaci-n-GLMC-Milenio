@@ -166,6 +166,9 @@ class AutoWebWorkflowStaticTests(unittest.TestCase):
         self.assertEqual(CI.load_facts(None), [])
         (tmp / "f.json").write_text("{not json")
         self.assertEqual(CI.load_facts(str(tmp / "f.json")), [])
+        (tmp / "deep.json").write_text("[" * 100000 + "]" * 100000)
+        self.assertEqual(CI.load_facts(str(tmp / "deep.json")), [])
+        self.assertFalse(CI.e2e_passed(str(tmp / "deep.json")))
 
     def test_showcase_walker_records_console_errors(self):
         walker = (ROOT / ".github/scripts/capture-showcase-views.mjs").read_text()

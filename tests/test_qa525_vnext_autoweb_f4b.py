@@ -186,6 +186,7 @@ class AutoWebF4bVerdictTests(unittest.TestCase):
         self.assertIn("F4B_FILE_COUNT", self.verdict(many, [FACT(e["path"]) for e in many])["reasons"])
         self.assertIn("COMPARISON_INCOMPLETE", self.verdict([F(self.P)], [FACT(self.P)], complete=False)["reasons"])
         self.assertIn("F4B_FACTS_INVALID", self.verdict([F(self.P)], [FACT(self.P), FACT(self.P)])["reasons"])
+        self.assertIn("F4B_FACTS_INVALID", self.verdict([F(self.P)], [FACT(["x"])])["reasons"])  # unhashable path
 
     def test_f4a_denylist_still_applies_to_screens(self):
         for p, why in (("frontend/src/api/lodgeApi.ts", "DENIED_DIRECTORY"), ("frontend/src/auth/session.ts", "DENIED_DIRECTORY"),

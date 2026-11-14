@@ -72,7 +72,8 @@ def shadow_verdict(files, facts, *, e2e_passed, complete=True):
         files = files if type(files) is list else []
     by_path = {}
     for fact in facts if type(facts) is list else []:
-        if type(fact) is not dict or set(fact) != FACT_KEYS or fact["path"] in by_path:
+        if (type(fact) is not dict or set(fact) != FACT_KEYS or type(fact["path"]) is not str
+                or fact["path"] in by_path):
             reasons.add("F4B_FACTS_INVALID")
             continue
         by_path[fact["path"]] = fact
