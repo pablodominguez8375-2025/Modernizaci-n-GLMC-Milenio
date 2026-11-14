@@ -301,6 +301,7 @@ class LauncherComposeTests(unittest.TestCase):
         self.assertEqual((out["child_outcome"], len(self.spent), self.acted), ("apiweb", 1, [len(DATA)]))
         kw = self.apiweb_seen[0]
         self.assertEqual(kw["claims"]["purpose"], "API_WEB_QA_ONLY")
+        self.assertEqual(kw["claims"]["expires_at"], NOW + 300)  # the signed GO expiry travels to the host gate
         self.assertEqual(set(kw["modules"]), set(launcher.APIWEB_MODULES))
         self.assertTrue(callable(kw["outer_plane"]) and kw["host"] is not None)
         # the authority is the bootstrap-pinned section PLUS the GO-bound admission/policy digests, never the ZIP

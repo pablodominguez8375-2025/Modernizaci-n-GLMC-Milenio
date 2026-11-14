@@ -444,6 +444,8 @@ def _compose(load, record, env):
                              "app_archive_sha256": result["app_archive_sha256"]}
         if g6_pins is not None:
             granted["claims"]["g6_command"] = result["g6_command"]
+        if purpose == "API_WEB_QA_ONLY":
+            granted["claims"]["expires_at"] = _epoch(result["expires_at"])  # the host gate refuses any stage after it
         return {"nonce": result["nonce"], "app_archive_sha256": result["app_archive_sha256"],
                 # the nonce journal binds DIGESTS only: the OPS half is the pinned sha256 of the signed v3 receipt
                 # (a 40-hex source sha here made every real consume() stop with NONCE_BINDING_INVALID)

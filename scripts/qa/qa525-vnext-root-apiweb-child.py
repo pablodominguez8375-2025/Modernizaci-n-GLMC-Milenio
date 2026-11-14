@@ -14,7 +14,7 @@ import re
 import stat
 
 PURPOSE = "API_WEB_QA_ONLY"
-CLAIM_KEYS = frozenset({"purpose", "nonce", "app_source_sha", "app_archive_sha256"})
+CLAIM_KEYS = frozenset({"purpose", "nonce", "app_source_sha", "app_archive_sha256", "expires_at"})
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 SOURCE = re.compile(r"[0-9a-f]{40}\Z")
 SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -61,7 +61,8 @@ def _claims(claims):
     if (type(claims) is not dict or set(claims) != CLAIM_KEYS or claims["purpose"] != PURPOSE
             or type(claims["nonce"]) is not str or HEX.fullmatch(claims["nonce"]) is None
             or type(claims["app_source_sha"]) is not str or SOURCE.fullmatch(claims["app_source_sha"]) is None
-            or type(claims["app_archive_sha256"]) is not str or SHA.fullmatch(claims["app_archive_sha256"]) is None):
+            or type(claims["app_archive_sha256"]) is not str or SHA.fullmatch(claims["app_archive_sha256"]) is None
+            or type(claims["expires_at"]) is not int or claims["expires_at"] <= 0):
         raise Stop("APIWEB_GO_CLAIMS_INVALID")
     return dict(claims)
 

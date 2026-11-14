@@ -14,7 +14,8 @@ spec.loader.exec_module(child)
 DATA = b"signed-release-zip" * 50
 ARCHIVE = "sha256:" + hashlib.sha256(DATA).hexdigest()
 NONCE = "e" * 64
-CLAIMS = {"purpose": "API_WEB_QA_ONLY", "nonce": NONCE, "app_source_sha": "b" * 40, "app_archive_sha256": ARCHIVE}
+CLAIMS = {"purpose": "API_WEB_QA_ONLY", "nonce": NONCE, "app_source_sha": "b" * 40, "app_archive_sha256": ARCHIVE,
+          "expires_at": 1800000300}
 
 
 class ApiwebChildFakePlane:
@@ -109,7 +110,7 @@ class ApiwebChildClaimsAndBinding(ApiwebChildEnv):
         for bad in (dict(CLAIMS, purpose="LAUNCHER_ONLY"), dict(CLAIMS, purpose="G6_V2_ONLY"),
                     dict(CLAIMS, g6_command="backup"), {k: v for k, v in CLAIMS.items() if k != "nonce"},
                     dict(CLAIMS, nonce="x"), dict(CLAIMS, app_source_sha="b" * 39),
-                    dict(CLAIMS, app_archive_sha256="b" * 64), None, []):
+                    dict(CLAIMS, app_archive_sha256="b" * 64), dict(CLAIMS, expires_at="9"), dict(CLAIMS, expires_at=0), None, []):
             with self.subTest(bad=bad):
                 self.stop("APIWEB_GO_CLAIMS_INVALID", lambda: self.act(claims=bad))
         self.assertEqual(self.calls, [])

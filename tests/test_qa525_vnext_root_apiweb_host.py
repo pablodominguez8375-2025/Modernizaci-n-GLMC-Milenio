@@ -127,9 +127,10 @@ class ApiwebHostBase(unittest.TestCase):
                      "evidence_dir": self.dir}}
 
     def build(self, **over):
-        kw = dict(archive_bytes=b"zip", claims={}, authority=self.authority, modules=M, effects=self.fx)
+        kw = dict(archive_bytes=b"zip", claims={"expires_at": 1800000300}, authority=self.authority, modules=M,
+                  effects=self.fx, now=None)
         kw.update(over)
-        return host.build(kw["archive_bytes"], kw["claims"], kw["authority"], kw["modules"], kw["effects"])
+        return host.build(kw["archive_bytes"], kw["claims"], kw["authority"], kw["modules"], kw["effects"], kw["now"])
 
     def stop(self, code, **over):
         with self.assertRaises(host.Stop) as err:
@@ -220,9 +221,38 @@ class ApiwebHostAssembled(ApiwebHostBase):
     def test_gate_scope_settle_and_clock_are_the_reviewed_adapters(self):
         i = self.build()["inputs"]
         self.assertIs(i["scope_factory"], M["host_adapters"].cgroup_scope)
-        self.assertTrue(i["external_gate"]("API_SWITCHING"))
-        self.assertFalse(i["external_gate"](None))
         self.assertEqual(i["clock"]().tzinfo is not None, True)
+
+    def test_gate_refuses_every_stage_once_the_signed_go_has_expired(self):
+        import datetime as dt
+        at = {"t": 1800000000}
+        clock = lambda: dt.datetime.fromtimestamp(at["t"], dt.timezone.utc)
+        gate = self.build(now=clock)["inputs"]["external_gate"]
+        self.assertTrue(gate("API_SWITCHING"))
+        self.assertTrue(gate("WEB_SWITCHING"))
+        self.assertFalse(gate(None))
+        at["t"] = 1800000299
+        self.assertTrue(gate("ROLLING_BACK"))
+        at["t"] = 1800000300  # exactly at expiry: closed
+        self.assertFalse(gate("API_SWITCHING"))
+        self.assertFalse(gate("ROLLING_BACK"))
+        bad = lambda: (_ for _ in ()).throw(RuntimeError("clock"))
+        self.assertFalse(self.build(now=bad)["inputs"]["external_gate"]("API_SWITCHING"))
+
+    def test_claims_without_a_valid_expiry_never_build(self):
+        for claims in ({}, {"expires_at": "9"}, {"expires_at": 0}, {"expires_at": True}):
+            self.stop("APIWEB_HOST_BINDING_INVALID", claims=claims)
+
+    def test_no_compiled_python_is_tracked_by_git(self):
+        import subprocess
+        try:
+            out = subprocess.run(["git", "ls-files"], cwd=BASE, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            self.skipTest("git unavailable")
+        if out.returncode != 0:
+            self.skipTest("not a git checkout")
+        bad = [n for n in out.stdout.splitlines() if "__pycache__" in n or n.endswith((".pyc", ".pyo"))]
+        self.assertEqual(bad, [])
 
     def test_runner_factory_binds_the_four_command_runner_with_pinned_exec_effects(self):
         calls = []

@@ -108,6 +108,9 @@ def build(archive_bytes, claims, authority, modules, effects, now=None):
             or not MODULE_KEYS <= set(modules) or any(not callable(getattr(effects, m, None)) for m in EFFECT_METHODS)):
         raise Stop("APIWEB_HOST_BINDING_INVALID")
     _shape(authority)
+    expires = claims.get("expires_at")
+    if type(expires) is not int or isinstance(expires, bool) or expires <= 0:
+        raise Stop("APIWEB_HOST_BINDING_INVALID")
     a = authority
     host_cfg, g6 = a["host"], a["g6"]
     data = {}
@@ -177,8 +180,15 @@ def build(archive_bytes, claims, authority, modules, effects, now=None):
                              verify_pins=verify_pins, execute=execute)
 
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
+
+    def gate(stage):
+        """Every transition (and every rollback step) is refused once the signed GO has expired."""
+        try:
+            return type(stage) is str and clock().timestamp() < expires
+        except Exception:  # noqa: BLE001
+            return False
     inputs = {
-        "clock": clock, "external_gate": lambda stage: type(stage) is str, "runner_factory": runner_factory,
+        "clock": clock, "external_gate": gate, "runner_factory": runner_factory,
         "scope_factory": adapters.cgroup_scope, "settle": lambda: adapters.settle_pause(2.0),
         "inspector": inspector, "reader": reader, "root": Path(a["journal_root"]),
         "admission": Path(host_cfg["evidence_dir"]) / EVIDENCE["admission"],
