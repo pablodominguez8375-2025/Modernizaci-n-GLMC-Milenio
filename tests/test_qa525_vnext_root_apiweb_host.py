@@ -223,21 +223,30 @@ class ApiwebHostAssembled(ApiwebHostBase):
         self.assertIs(i["scope_factory"], M["host_adapters"].cgroup_scope)
         self.assertEqual(i["clock"]().tzinfo is not None, True)
 
-    def test_gate_refuses_every_stage_once_the_signed_go_has_expired(self):
+    def test_expiry_closes_forward_stages_only_and_never_blocks_rollback(self):
         import datetime as dt
         at = {"t": 1800000000}
         clock = lambda: dt.datetime.fromtimestamp(at["t"], dt.timezone.utc)
         gate = self.build(now=clock)["inputs"]["external_gate"]
         self.assertTrue(gate("API_SWITCHING"))
         self.assertTrue(gate("WEB_SWITCHING"))
-        self.assertFalse(gate(None))
+        for stage in (None, "API_VERIFIED", "VERIFYING", "RECOVERY_REQUIRED", "x", 5):
+            self.assertFalse(gate(stage))
         at["t"] = 1800000299
-        self.assertTrue(gate("ROLLING_BACK"))
-        at["t"] = 1800000300  # exactly at expiry: closed
+        self.assertTrue(gate("WEB_SWITCHING"))
+        at["t"] = 1800000300  # exactly at expiry: forward closed, recovery still open
         self.assertFalse(gate("API_SWITCHING"))
-        self.assertFalse(gate("ROLLING_BACK"))
+        self.assertFalse(gate("WEB_SWITCHING"))
+        self.assertTrue(gate("ROLLING_BACK"))
+        at["t"] = 9_999_999_999
+        self.assertTrue(gate("ROLLING_BACK"))
+
+    def test_a_clock_fault_closes_forward_but_not_recovery(self):
         bad = lambda: (_ for _ in ()).throw(RuntimeError("clock"))
-        self.assertFalse(self.build(now=bad)["inputs"]["external_gate"]("API_SWITCHING"))
+        gate = self.build(now=bad)["inputs"]["external_gate"]
+        self.assertFalse(gate("API_SWITCHING"))
+        self.assertFalse(gate("WEB_SWITCHING"))
+        self.assertTrue(gate("ROLLING_BACK"))
 
     def test_claims_without_a_valid_expiry_never_build(self):
         for claims in ({}, {"expires_at": "9"}, {"expires_at": 0}, {"expires_at": True}):

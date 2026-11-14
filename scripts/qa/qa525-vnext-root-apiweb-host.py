@@ -103,6 +103,29 @@ def _sha(data):
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
+FORWARD_STAGES = frozenset({"API_SWITCHING", "WEB_SWITCHING"})
+RECOVERY_STAGES = frozenset({"ROLLING_BACK"})
+
+
+def make_gate(clock, expires_at):
+    """Forward authority (new API/WEB mutation) ends when the signed GO expires or the clock fails. Recovery
+    (rollback to the exact baseline) is NEVER blocked by TTL or by a clock fault: the flight/bridge still demand the
+    five locks, the lease, the exact B7 record, pins, recorded scopes and the journal before each rollback command.
+    Unknown stages are always refused. An expired GO is never a permission to advance."""
+    def gate(stage):
+        if type(stage) is not str:
+            return False
+        if stage in RECOVERY_STAGES:
+            return True
+        if stage in FORWARD_STAGES:
+            try:
+                return clock().timestamp() < expires_at
+            except Exception:  # noqa: BLE001
+                return False
+        return False
+    return gate
+
+
 def build(archive_bytes, claims, authority, modules, effects, now=None):
     if (type(archive_bytes) is not bytes or type(claims) is not dict or type(modules) is not dict
             or not MODULE_KEYS <= set(modules) or any(not callable(getattr(effects, m, None)) for m in EFFECT_METHODS)):
@@ -181,12 +204,7 @@ def build(archive_bytes, claims, authority, modules, effects, now=None):
 
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
 
-    def gate(stage):
-        """Every transition (and every rollback step) is refused once the signed GO has expired."""
-        try:
-            return type(stage) is str and clock().timestamp() < expires
-        except Exception:  # noqa: BLE001
-            return False
+    gate = make_gate(clock, expires)
     inputs = {
         "clock": clock, "external_gate": gate, "runner_factory": runner_factory,
         "scope_factory": adapters.cgroup_scope, "settle": lambda: adapters.settle_pause(2.0),

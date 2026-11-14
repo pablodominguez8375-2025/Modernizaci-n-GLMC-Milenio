@@ -8,10 +8,16 @@ import types
 import unittest
 from pathlib import Path
 
+import datetime as dt
+
 import test_qa525_vnext_held_flight_bridge as held_t
 from test_qa525_vnext_root_locks import Port, rl
 
 BASE = Path(__file__).resolve().parents[1] / "scripts" / "qa"
+hspec = importlib.util.spec_from_file_location("qa525_t_apiweb_host_int", Path(__file__).resolve().parents[1]
+                                               / "scripts" / "qa" / "qa525-vnext-root-apiweb-host.py")
+apiweb_host = importlib.util.module_from_spec(hspec)
+hspec.loader.exec_module(apiweb_host)
 spec = importlib.util.spec_from_file_location("qa525_t_apiweb_child_int", BASE / "qa525-vnext-root-apiweb-child.py")
 child = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(child)
@@ -86,6 +92,47 @@ class ApiwebIntegrationTests(unittest.TestCase):
         with self.assertRaises(child.Stop):
             self.act(external_gate=lambda stage: False)(self.fd())
         self.assertEqual(self.t.h.runs, [])
+
+    def expiring_gate(self, expire_when, clock_fault_after=None):
+        """REAL host gate over a clock that is valid until `expire_when()` is true (e.g. after the first switch)."""
+        state = {"t": 1800000000}
+
+        def clock():
+            if clock_fault_after is not None and clock_fault_after():
+                raise RuntimeError("clock")
+            if expire_when():
+                state["t"] = 1800000301
+            return dt.datetime.fromtimestamp(state["t"], dt.timezone.utc)
+        return apiweb_host.make_gate(clock, CLAIMS["expires_at"])
+
+    def test_go_expiring_after_the_first_switch_forbids_web_forward_but_rolls_back_to_baseline(self):
+        h = self.t.h
+        gate = self.expiring_gate(lambda: ("api", "target") in h.runs)
+        with self.assertRaises(child.Stop) as err:
+            self.act(external_gate=gate)(self.fd())
+        self.assertEqual(str(err.exception), "APIWEB_ROLLED_BACK")
+        self.assertNotIn(("web", "target"), h.runs)  # no new forward mutation after expiry
+        self.assertEqual(h.runs, [("api", "target"), ("web", "baseline"), ("api", "baseline")])  # dual rollback, no forward web
+        self.assertEqual(h.world, {"api": "baseline", "web": "baseline"})
+        self.assertEqual(len(self.port.fds), 5)
+
+    def test_expiry_plus_induced_failure_still_restores_both_services(self):
+        h = self.t.h
+        h.fail.add(("web", "target"))
+        gate = self.expiring_gate(lambda: ("api", "target") in h.runs)
+        with self.assertRaises(child.Stop) as err:
+            self.act(external_gate=gate)(self.fd())
+        self.assertEqual(str(err.exception), "APIWEB_ROLLED_BACK")
+        self.assertEqual(h.world, {"api": "baseline", "web": "baseline"})
+
+    def test_clock_fault_during_recovery_does_not_block_the_rollback(self):
+        h = self.t.h
+        h.fail.add(("web", "target"))
+        gate = self.expiring_gate(lambda: False, clock_fault_after=lambda: ("web", "target") in h.runs)
+        with self.assertRaises(child.Stop) as err:
+            self.act(external_gate=gate)(self.fd())
+        self.assertEqual(str(err.exception), "APIWEB_ROLLED_BACK")
+        self.assertEqual(h.world, {"api": "baseline", "web": "baseline"})
 
     def test_a_lost_outer_lock_stops_before_any_lease_or_effect(self):
         path, fd, _ = self.outer._entries[2]
