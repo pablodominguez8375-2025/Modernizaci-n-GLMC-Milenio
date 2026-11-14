@@ -69,13 +69,73 @@ class BaselineCaptureTests(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(2, mod.main([]))
-            with patch.object(mod.os, "geteuid", return_value=1000):
+            with patch.object(mod.os, "geteuid", return_value=1000), \
+                    patch.object(mod.socket, "gethostname", return_value="glmdch"):
                 self.assertEqual(2, mod.main(["--capture"]))
-            with patch.object(mod.os, "geteuid", return_value=0), \
+            with patch.object(mod, "verify_chain", return_value={}), \
                     patch.object(mod, "capture", side_effect=RuntimeError("TOKEN=secret")):
                 self.assertEqual(2, mod.main(["--capture"]))
         self.assertIn("ROOT_REQUIRED", out.getvalue())
         self.assertNotIn("secret", out.getvalue())
+
+    def test_wrong_host_is_refused_before_any_import_or_docker(self):
+        with patch.object(mod.socket, "gethostname", return_value="srv01"), \
+                patch.object(mod, "_load", side_effect=AssertionError("must not import")), \
+                patch.object(mod, "_docker", side_effect=AssertionError("must not run docker")):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), patch.object(mod.os, "geteuid", return_value=0):
+                self.assertEqual(2, mod.main(["--capture"]))
+        self.assertIn("HOST_NOT_AUTHORIZED", out.getvalue())
+
+    def make_chain(self, tmp):
+        files = []
+        for name in ("self.py", "adapters.py", "containment.py", "reader.py", "plan.py"):
+            p = Path(tmp) / name
+            p.write_text("x = 1\n")
+            files.append(p)
+        return tuple(files)
+
+    def test_chain_trust_rejects_tampered_symlinked_or_writable_dependency(self):
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            chain = self.make_chain(tmp)
+            # non-root test user owns the files: the root-ownership rule must refuse them
+            with patch.object(mod.socket, "gethostname", return_value="glmdch"):
+                with self.assertRaisesRegex(mod.Blocked, "TRUST_PATH_UNSAFE"):
+                    mod.verify_chain(chain, euid=0)
+            # simulate a fully trusted tree (root-owned, 0755) by faking lstat, then break one rule at a time
+            real = Path.lstat
+
+            def fake(kind):
+                def lstat(self_):
+                    st = real(self_)
+                    mode, uid = st.st_mode & ~0o7022, 0  # a clean root-owned tree, then break ONE rule
+                    if kind == "writable" and self_ == chain[2]:
+                        mode |= 0o002
+                    if kind == "symlink" and self_ == chain[3]:
+                        mode = (mode & 0o7777) | stat.S_IFLNK
+                    return os.stat_result((mode, st.st_ino, st.st_dev, st.st_nlink, uid, st.st_gid, st.st_size,
+                                           st.st_atime, st.st_mtime, st.st_ctime))
+                return lstat
+            import stat
+            with patch.object(mod.socket, "gethostname", return_value="glmdch"):
+                with patch.object(Path, "lstat", fake("ok")):
+                    digests = mod.verify_chain(chain, euid=0)
+                    self.assertEqual(5, len(digests))
+                for kind in ("writable", "symlink"):
+                    with self.subTest(kind), patch.object(Path, "lstat", fake(kind)):
+                        with self.assertRaisesRegex(mod.Blocked, "TRUST_PATH_UNSAFE"):
+                            mod.verify_chain(chain, euid=0)
+                missing = chain[:4] + (Path(tmp) / "gone.py",)
+                with patch.object(Path, "lstat", fake("ok")):
+                    with self.assertRaisesRegex(mod.Blocked, "TRUST_PATH_MISSING"):
+                        mod.verify_chain(missing, euid=0)
+
+    def test_chain_covers_every_module_the_helper_executes(self):
+        names = {p.name for p in mod.CHAIN}
+        self.assertEqual({"qa525-apiweb-baseline-capture.py", "qa525-vnext-host-adapters.py", "qa525-vnext-containment.py",
+                          "qa525-vnext-state-reader.py", "qa525-vnext-baseline-plan.py"}, names)
 
     def test_source_is_read_only(self):
         text = SRC.read_text()

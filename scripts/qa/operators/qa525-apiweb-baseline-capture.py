@@ -11,16 +11,54 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import socket
+import stat
 import subprocess
 import sys
 
 QA = Path(__file__).resolve().parents[1]
 DOCKER = "/usr/bin/docker"
+HOST = "glmdch"
+# Everything this helper executes AS ROOT: itself plus the exact sibling modules it loads (and the one host-adapters loads).
+CHAIN = (Path(__file__).resolve(), QA / "qa525-vnext-host-adapters.py", QA / "qa525-vnext-containment.py",
+         QA / "qa525-vnext-state-reader.py", QA / "qa525-vnext-baseline-plan.py")
 STATUS = "BASELINE_CAPTURED_READ_ONLY_NO_APPLY"
 
 
 class Blocked(Exception):
     pass
+
+
+def trusted(path):
+    """Every path component must be root-owned, not a symlink and not group/world-writable; the file a regular file.
+    Run BEFORE any sibling module is imported/executed as root (same rule as qa525-current-image-preparation)."""
+    path = Path(path)
+    if not path.is_absolute():
+        raise Blocked("TRUST_PATH_NOT_ABSOLUTE")
+    for segment in (path, *path.parents):
+        try:
+            st = segment.lstat()
+        except OSError:
+            raise Blocked("TRUST_PATH_MISSING") from None
+        if stat.S_ISLNK(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+            raise Blocked("TRUST_PATH_UNSAFE")
+    if not path.is_file():
+        raise Blocked("TRUST_PATH_TYPE")
+    return path
+
+
+def verify_chain(chain=CHAIN, host_ok=None, euid=None):
+    """Fail closed BEFORE importing anything: right host, root, and a trusted source chain. Returns the sha256 of every
+    file so the operator can compare them with the signed release manifest (evidence, not a new trust root)."""
+    if (socket.gethostname() == HOST) is not (True if host_ok is None else host_ok):
+        raise Blocked("HOST_NOT_AUTHORIZED")
+    if (os.geteuid() if euid is None else euid) != 0:
+        raise Blocked("ROOT_REQUIRED")
+    digests = {}
+    for path in chain:
+        trusted(path)
+        digests[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return digests
 
 
 def _load(name, filename):
@@ -35,7 +73,7 @@ def _docker(args):
     return subprocess.run([DOCKER, *args], check=True, capture_output=True, text=True, timeout=30).stdout
 
 
-def capture(run=_docker, modules=None):
+def capture(run=_docker, modules=None, module_sha256=None):
     adapters, sr, plan = modules or (_load("qa525_cap_adapters", "qa525-vnext-host-adapters.py"),
                                      _load("qa525_cap_reader", "qa525-vnext-state-reader.py"),
                                      _load("qa525_cap_plan", "qa525-vnext-baseline-plan.py"))
@@ -63,7 +101,7 @@ def capture(run=_docker, modules=None):
     if plan.canonical(first) != plan.canonical(second):
         raise Blocked("BASELINE_UNSTABLE_BETWEEN_READS")
     plan.validate_baseline(first)
-    return {"status": STATUS, "baseline_sha256": plan.digest(first), "baseline": first,
+    return {"status": STATUS, "module_sha256": module_sha256 or {}, "baseline_sha256": plan.digest(first), "baseline": first,
             "canonical_sha256_of_bytes": hashlib.sha256(plan.canonical(first)).hexdigest(),
             "reads": 2, "wrote_files": False, "may_apply": False, "go_spent": False}
 
@@ -73,9 +111,8 @@ def main(argv=None):
     try:
         if args != ["--capture"]:
             raise Blocked("ONLY_EXPLICIT_CAPTURE_SUPPORTED")
-        if os.geteuid() != 0:
-            raise Blocked("ROOT_REQUIRED")
-        print(json.dumps(capture(), sort_keys=True))
+        digests = verify_chain()  # host + root + trusted chain BEFORE any sibling import
+        print(json.dumps(capture(module_sha256=digests), sort_keys=True))
         return 0
     except Exception as exc:  # noqa: BLE001
         code = str(exc) if isinstance(exc, Blocked) else "BASELINE_NOT_CAPTURED"

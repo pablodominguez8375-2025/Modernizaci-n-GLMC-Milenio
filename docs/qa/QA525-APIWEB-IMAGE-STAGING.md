@@ -76,6 +76,10 @@ fija los layers; el vuelo lo vuelve a comparar bajo los 5 locks y se detiene si 
 con el MISMO guardia docker de solo lectura (`ps -a`, `inspect --format`, `image inspect --format`; argv exactos) y el MISMO
 `StateReader.capture_baseline` del vuelo, dos veces; si las lecturas difieren, STOP. Imprime el baseline canónico y su resumen
 `sha256:<hex>` = valor de `apiweb.baseline_sha256`. No escribe archivos, no arranca/detiene/construye/descarga nada y no gasta GO
-(`may_apply=false`). Exige 2 targets running, 5 dependencias running y 3 one-shots `exited 0`; si no, STOP. Ejecutar DESPUÉS de `--prepare`
-(las imágenes target ya no cambian el baseline porque no se aplican). `apiweb.target.layers` NO lo calcula este helper: lo confirma ChatGPT
-(los layers target son los del baseline más los overlays imagen-sola del corte; el vuelo los vuelve a comparar bajo los 5 locks).
+(`may_apply=false`). Exige 2 targets running, 5 dependencias running y 3 one-shots `exited 0`; si no, STOP. Gate de root: ANTES de importar cualquier módulo exige `hostname == glmdch`, euid 0 y cadena de código confiable (el propio helper,
+`qa525-vnext-host-adapters`, `-containment`, `-state-reader`, `-baseline-plan`: cada componente de la ruta root-owned, sin symlink, sin
+escritura de grupo/otros); imprime el sha256 de cada archivo para compararlo con el manifiesto de la release firmada (evidencia, no una
+raíz de confianza nueva). Ejecutar DESPUÉS de `--prepare`.
+`apiweb.target.layers` es INDEPENDIENTE y sigue pendiente: NO se derivan copiando el baseline ni inventando overlays; se fijan desde las rutas
+absolutas Compose efectivas y las imágenes target autorizadas, validadas con `baseline-plan.validate_target(base, target)` y una lectura física
+bajo locks que compruebe los paths y la ausencia de migrator (decisión de ChatGPT).
