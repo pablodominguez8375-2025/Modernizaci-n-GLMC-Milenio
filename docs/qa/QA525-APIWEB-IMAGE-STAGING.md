@@ -22,8 +22,17 @@ staging, en la sección `apiweb.target.images` de la configuración que el Spons
 verifica la fuente firmada y el host, construye API y WEB con `--pull=false` y etiqueta `org.opencontainers.image.revision=<sha>`,
 comprueba que el snapshot de los 7 servicios en ejecución es idéntico antes y después, y escribe `prepared.json`
 (`may_apply=false`) con `api_image_id` y `web_image_id`.
-- Bloqueo conocido: si ya existe `prepared.json` (recibo del corte 6eed4) devuelve `PREPARE_ALREADY_EXISTS`. Se **mueve** a una carpeta de archivo (no se borra);
-  decisión del Sponsor.
+- Bloqueo conocido: si ya existe `prepared.json` (recibo del corte 6eed4) devuelve `PREPARE_ALREADY_EXISTS`.
+  **Prohibido** mover, renombrar o borrar `prepared.json` a mano y prohibido ejecutar el legado sin autenticar. La única vía es el
+  archivado autorizado ya existente en `scripts/qa/operators/qa525-update.py --archive-expired-prepared` (contrato estricto de
+  `archive_expired_prepared()`): actas prepared/review/post/GO coherentes, nonce NO consumido, jornales reconciliados, imágenes
+  prebuilt intactas, snapshot y salud del WEB anterior antes y después, marcador write-ahead durable
+  (`expired-prepared-archive-pending.json`), fsync, y todas las actas quedan en `review-archive-*` (nada se borra ni se oculta).
+  Requiere `--source`, `--digest` y `--operator-name soporte@glmdch` explícitos, autorización expresa del Sponsor y revisión de ChatGPT.
+- Si el estado de 6eed4 NO cumple el contrato: STOP. Se usa `--status` (solo lectura, `archive_reconciliation_required`) y
+  `--inspect-pending-archive` para ver un archivado interrumpido; la recuperación es `--reconcile-pending-dual` con revisión firmada,
+  nunca una edición manual. Un archivado interrumpido deja el marcador y bloquea toda actualización hasta reconciliar.
+- Una sola preparación target por SHA X: no se repite `--prepare` si ya existe un `prepared.json` válido para X.
 - Pendiente de ChatGPT: confirmar que la cadena de fuentes pinneada de ese operador acepta el corte X (toma el «SHA firmado actual»).
 - Lectura posterior (solo lectura, un comando por vez): `docker image inspect --format '{{.Id}} {{index .Config.Labels "org.opencontainers.image.revision"}}' <id>` para cada id de `prepared.json`.
   Los ids de imagen son públicos (no son secretos) y se registran en el handoff.
