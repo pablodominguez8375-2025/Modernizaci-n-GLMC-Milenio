@@ -57,6 +57,8 @@ def _shape(authority):
               and all(type(v) is str and SHA.fullmatch(v) for v in a["exec_pins"].values())
               and type(a["exec_paths"]) is dict and set(a["exec_paths"]) == set(EXEC_KEYS)
               and all(_abs(v) for v in a["exec_paths"].values())
+              and a["exec_paths"]["systemd_run_sha256"] == "/usr/bin/systemd-run"  # the pinned file IS the executed one
+              and a["exec_paths"]["docker_sha256"] == "/usr/bin/docker"
               and type(target) is dict and set(target) == {"images", "layers", "web_sha"}
               and type(target["images"]) is dict and set(target["images"]) == {"api", "web"}
               and all(type(v) is str and re.fullmatch(r"(?:sha256:)?[0-9a-f]{64}", v) for v in target["images"].values())

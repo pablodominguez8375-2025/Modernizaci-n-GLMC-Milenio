@@ -309,6 +309,41 @@ class LauncherComposeTests(unittest.TestCase):
                                            "policy_hash": PINS["policy_hash"]})
         self.assertEqual(set(kw["host_modules"]), set(launcher.APIWEB_HOST_MODULES))
 
+    def test_apiweb_modules_are_one_object_per_pinned_file_even_if_the_loader_builds_fresh_modules(self):
+        # the REAL bootstrap load_module execs the verified bytes into a NEW module on every call: shared files must
+        # still resolve to a single object per invocation or every exact-type check (RootPlane, Boundary) fails
+        import copy
+        self.write_inbox(go=self.apiweb_go())
+        base, calls = self.apiweb_loader(), []
+
+        def fresh(name):
+            calls.append(name)
+            m = base(name)
+            return types.SimpleNamespace(**vars(m)) if isinstance(m, types.ModuleType) else copy.copy(m)
+        self.compose(load=fresh)
+        kw = self.apiweb_seen[0]
+        for name in set(launcher.APIWEB_MODULES.values()) & set(launcher.APIWEB_HOST_MODULES.values()):
+            a = [k for k, v in launcher.APIWEB_MODULES.items() if v == name]
+            b = [k for k, v in launcher.APIWEB_HOST_MODULES.items() if v == name]
+            self.assertTrue(a and b)
+            self.assertIs(kw["modules"][a[0]], kw["host_modules"][b[0]], name)
+        self.assertEqual(len(calls), len(set(calls)))  # each pinned file is materialised exactly once
+
+    def test_real_bootstrap_style_loader_needs_the_per_invocation_cache_for_exact_type_checks(self):
+        # same mechanics as bootstrap.load_module: exec the bytes into a NEW ModuleType on every call
+        def fresh(name):
+            mod = types.ModuleType("qa525_boot_" + name[:-3].replace("-", "_"))
+            src = (Path(__file__).resolve().parents[1] / "scripts" / "qa" / name).read_bytes()
+            exec(compile(src, "<verified:%s>" % name, "exec"), mod.__dict__)
+            return mod
+        a, b = fresh(launcher.LOCKS), fresh(launcher.LOCKS)
+        self.assertIsNot(a.RootPlane, b.RootPlane)  # BEFORE: two loads => two RootPlane types => exact-type checks fail
+        once = launcher._once(fresh)
+        c, d = once(launcher.LOCKS), once(launcher.LOCKS)
+        self.assertIs(c, d)
+        plane = c.RootPlane(None, None, None, ())
+        self.assertIs(type(plane), d.RootPlane)  # AFTER: the type held by the plane is the one bind() compares to
+
     def test_apiweb_go_is_not_honoured_when_the_release_pins_no_apiweb_authority(self):
         self.write_inbox(go=self.apiweb_go())
         self.stop("LAUNCH_APIWEB_NOT_CONFIGURED", load=self.apiweb_loader(configured=False))

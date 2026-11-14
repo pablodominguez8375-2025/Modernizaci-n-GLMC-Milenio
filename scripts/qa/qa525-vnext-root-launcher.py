@@ -312,8 +312,26 @@ def _accept(path, peer_uid, timeout, *, owner=0, anchor="/"):
     return conn
 
 
+def _once(load):
+    """One module object per pinned name PER INVOCATION. The bootstrap `load_module` execs the verified bytes into a
+    brand-new module on every call, so two loads of the same name give distinct classes and every exact-type check
+    (`type(plane) is root_locks.RootPlane`, Boundary, scope-store) would fail on the real path. The cache is local to
+    this call, holds only bytes-verified modules, never reads disk and is never global."""
+    seen = {}
+
+    def load_once(name):
+        if name not in seen:
+            seen[name] = load(name)
+        return seen[name]
+    for attr in ("_qa525_verified", "_qa525_load_module"):  # the G6 path reads these off the loader
+        if hasattr(load, attr):
+            setattr(load_once, attr, getattr(load, attr))
+    return load_once
+
+
 def _compose(load, record, env):
     """`env` is built ONLY by launch() below; tests build their own for the private seam."""
+    load = _once(load)
     if env["euid"]() != env["root_euid"]:
         raise Stop("LAUNCH_NOT_ROOT")
     cfg = _config(load(CONFIG))
