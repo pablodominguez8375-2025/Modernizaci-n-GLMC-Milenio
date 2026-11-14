@@ -60,6 +60,10 @@ Se eliminan como pasos humanos: copiar SHA/digests, descargar ZIP, ejecutar pref
 - Tiempo automático objetivo después de CI: descarga/carga + un apply + health, normalmente **5–15 minutos**, sin espera de chat.
 - Ruta crítica del host: **un preflight, un efecto WEB, una verificación**; rollback solo ante fallo.
 
+## Cobertura útil, no solo segura
+
+El clasificador F4-A ya integrado prueba el mecanismo, pero su alcance de assets estáticos no habría automatizado ninguno de los siete cambios WEB recientes analizados. Por eso no debe confundirse “seguro” con “útil”. La siguiente ampliación, en un PR separado, será F4-B: cambios frontend acotados, sin imports nuevos, sin nuevos destinos de red/API, sin secretos, sin cambios de contrato y con E2E sin errores de consola. Primero operará en sombra; solo avanzará a supervisado si no produce falsos `auto-web`.
+
 ## Gates antes de activar
 
-Contrato, política, journal/terminal, runner WEB, orquestador, recuperación por crash y timer deben quedar 0 P0/P1; F2 sombra debe demostrar que no gasta nada; F3 supervisada debe probar apply y rollback reales. La unidad y el timer nacen apagados. `main`, producción, API, BD e identidad quedan fuera.
+Contrato, política, journal/terminal, runner WEB, orquestador, recuperación por crash y timer deben quedar 0 P0/P1; F2 sombra debe demostrar que no gasta nada; F3 supervisada debe probar apply y rollback reales. El orquestador deberá conectar el puerto #1019 al runner real protegido; ninguna llamada directa al switcher será válida. La unidad y el timer nacen apagados. `main`, producción, API, BD e identidad quedan fuera.
