@@ -31,6 +31,16 @@ comprueba que el snapshot de los 7 servicios en ejecución es idéntico antes y 
   `review-archive-<hex24>`, fsync, marcador borrado como commit, rollback byte a byte ante fallo) `prepared.json` y las actas
   `/etc/pmgm/qa525-sensitive-reviewed.json`, `qa525-single-operator-postdb-approved.json` y `qa525-supervised-cut.json` que existan, y publica el
   nuevo `prepared.json` con un único rename. El jornal `dual-<sha>` y la evidencia se conservan. No aplica, no gasta GO, no toca contenedores.
+- Autoridad sobre actas externas (`/etc/pmgm`): solo se archivan las actas del predecesor ya APPLIED (el acta de corte debe tener
+  `target_sha` == SHA del predecesor, si no `PREPARE_ACTA_NOT_PREDECESSOR` y no se mueve nada). Nada se borra: todo queda en
+  `review-archive-<hex24>`. Antes del primer cambio se exige mismo dispositivo (`st_dev`) entre estado y actas
+  (`PREPARE_ARCHIVE_CROSS_DEVICE`, evita EXDEV no atómico). Se re-hashea lo archivado (TOCTOU) y justo antes de publicar se
+  revalida snapshot Docker idéntico, salud del predecesor y `prepared.json` sin cambios (`PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT`).
+- Recuperación (marcador propio `prepared-successor-archive-pending.json`, estado `ARCHIVE_INCOMPLETE_NO_DEPLOYMENT`; bloquea
+  `--prepare` y `qa525-update.py`): `qa525-current-image-preparation.py --recover-prepare-archive` (root, glmdch, locks, supervisado).
+  Plan completo antes de mover: si el recibo nuevo está publicado (digest == marcador) avanza (roll-forward, antiguos quedan
+  archivados); si no, devuelve cada archivo byte a byte (roll-back). Cualquier ambigüedad = STOP sin cambios y marcador intacto.
+  NUNCA usar `--reconcile-pending-dual` para este marcador ni borrar/mover a mano.
 - `--archive-expired-prepared` y `--reconcile-pending-dual` NO aplican a ese caso (son para actas vencidas/archivado interrumpido).
   **Prohibido** mover, renombrar o borrar `prepared.json` a mano y prohibido ejecutar el legado sin autenticar. Si queda
   `expired-prepared-archive-pending.json` tras un corte, usar `--inspect-pending-archive` y `--reconcile-pending-dual` (revisión firmada).

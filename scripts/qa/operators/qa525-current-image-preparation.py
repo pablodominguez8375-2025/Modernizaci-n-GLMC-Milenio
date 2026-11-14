@@ -211,7 +211,8 @@ def exclusive():
         yield
 
 
-PENDING = "expired-prepared-archive-pending.json"  # SAME durable blocker the existing recovery tooling reads
+PENDING = "prepared-successor-archive-pending.json"  # own marker: never confused with the legacy expired-archive one
+LEGACY_PENDING = ("expired-prepared-archive-pending.json", "pending-dual-reconciliation.json")
 ACTAS = (Path("/etc/pmgm/qa525-sensitive-reviewed.json"),
          Path("/etc/pmgm/qa525-single-operator-postdb-approved.json"),
          Path("/etc/pmgm/qa525-supervised-cut.json"))
@@ -235,12 +236,11 @@ def applied_predecessor(state, update, entry_mod, live, health, now_sha):
     """READ-ONLY. The existing prepared.json must be the legitimate, APPLIED, LIVE and HEALTHY predecessor of a NEW
     target (qa525-update.previous_prepared_is_applied + every journal APPLIED); anything else is a STOP with nothing
     moved. Returns the predecessor record (or None when there is no prepared.json)."""
+    require(not any(os.path.lexists(state / n) for n in (PENDING, *LEGACY_PENDING)),
+            "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED")
     receipt = state / "prepared.json"
     if not (receipt.exists() or receipt.is_symlink()):
         return None
-    require(not (state / PENDING).exists() and not (state / PENDING).is_symlink()
-            and not os.path.lexists(state / "pending-dual-reconciliation.json"),
-            "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED")
     previous = entry_mod.private_json(receipt)
     require(type(previous) is dict and type(previous.get("source_sha")) is str
             and SHA.fullmatch(previous["source_sha"]), "PREPARE_PREDECESSOR_INVALID")
@@ -257,42 +257,132 @@ def applied_predecessor(state, update, entry_mod, live, health, now_sha):
     return previous
 
 
-def install_prepared_archiving_predecessor(state, previous, prepared, actas=ACTAS, now=None, fsync_dir=_fsync_dir):
-    """Atomic + durable + reversible: write the NEW receipt aside, archive EVERY predecessor acta (rename only, never
-    delete), then publish the new receipt with one rename. A durable write-ahead marker exists from before the first
-    rename until commit; a crash leaves it (blocking any further prepare/update) so nothing is silently lost. A normal
-    failure restores every file byte-for-byte and removes the marker only after verified restoration."""
+class _Noop:
+    def __call__(self, label):
+        return None
+
+
+def _read_marker(state):
+    marker = state / PENDING
+    require(marker.is_file() and not marker.is_symlink(), "PREPARE_ARCHIVE_MARKER_INVALID")
+    data = json.loads(marker.read_text())
+    require(type(data) is dict and data.get("status") == "ARCHIVE_INCOMPLETE_NO_DEPLOYMENT"
+            and type(data.get("items")) is list and type(data.get("archive_name")) is str
+            and re.fullmatch(r"review-archive-[0-9a-f]{24}", data["archive_name"])
+            and type(data.get("new_receipt_sha256")) is str, "PREPARE_ARCHIVE_MARKER_INVALID")
+    for item in data["items"]:
+        require(type(item) is dict and type(item.get("origin")) is str and type(item.get("sha256")) is str
+                and item["origin"].startswith("/") and Path(item["origin"]).name == item.get("name"),
+                "PREPARE_ARCHIVE_MARKER_INVALID")
+    return data
+
+
+def recover_prepare_archive(state, fsync_dir=_fsync_dir):
+    """Deterministic, supervised recovery of an interrupted successor archive (marker ARCHIVE_INCOMPLETE_NO_DEPLOYMENT).
+    The plan is fully computed from the marker and the physical state BEFORE anything moves; any ambiguity is a STOP
+    that changes nothing. Nothing is ever deleted except our own aside file, empty archive dir and the marker.
+      PUBLISHED  (new receipt in place, byte-identical to the marker digest): roll FORWARD, old receipt+actas stay archived.
+      otherwise  (old receipt still, or all of it back at origin): roll BACK, every file returns byte-for-byte."""
+    marker = _read_marker(state)
+    archive = state / marker["archive_name"]
+    receipt, aside = state / "prepared.json", state / "prepared.json.next"
+    require(archive.is_dir() and not archive.is_symlink(), "PREPARE_ARCHIVE_RECOVERY_UNSAFE")
+    items = marker["items"]
+    published = (receipt.is_file() and not receipt.is_symlink() and not aside.exists()
+                 and _digest(receipt) == marker["new_receipt_sha256"])
+    plan = []
+    for item in items:
+        origin, saved = Path(item["origin"]), archive / item["name"]
+        at_origin = origin.is_file() and not origin.is_symlink()
+        archived = saved.is_file() and not saved.is_symlink()
+        if published:
+            require(archived and (item["name"] == "prepared.json" or not os.path.lexists(origin)),
+                    "PREPARE_ARCHIVE_RECOVERY_UNSAFE")
+            require(_digest(saved) == item["sha256"], "PREPARE_ARCHIVE_RECOVERY_UNSAFE")
+        elif at_origin and not archived:
+            require(_digest(origin) == item["sha256"], "PREPARE_ARCHIVE_RECOVERY_UNSAFE")
+        elif archived and not os.path.lexists(origin):
+            require(_digest(saved) == item["sha256"], "PREPARE_ARCHIVE_RECOVERY_UNSAFE")
+            plan.append((saved, origin))
+        else:
+            raise Blocked("PREPARE_ARCHIVE_RECOVERY_UNSAFE")
+    if aside.exists() or aside.is_symlink():
+        require(aside.is_file() and not aside.is_symlink() and _digest(aside) == marker["new_receipt_sha256"],
+                "PREPARE_ARCHIVE_RECOVERY_UNSAFE")
+    result = archive / "applied-predecessor-archive.json"
+    if published:
+        status = "ROLLED_FORWARD"
+        if not os.path.lexists(result):
+            fd = os.open(result, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "w") as stream:
+                json.dump({"status": "APPLIED_PREDECESSOR_ARCHIVED_NO_DEPLOYMENT", "recovered": True,
+                           "files_sha256": {i["name"]: i["sha256"] for i in items}}, stream, sort_keys=True)
+                stream.flush()
+                os.fsync(stream.fileno())
+    else:
+        status = "ROLLED_BACK"
+        for saved, origin in reversed(plan):
+            saved.rename(origin)
+        if aside.exists():
+            aside.unlink()
+        if os.path.lexists(result):
+            result.unlink()
+        archive.rmdir()
+    for directory in {state, archive if archive.exists() else state, *[Path(i["origin"]).parent for i in items]}:
+        fsync_dir(directory)
+    (state / PENDING).unlink()
+    fsync_dir(state)
+    return status
+
+
+def install_prepared_archiving_predecessor(state, previous, prepared, actas=ACTAS, now=None, fsync_dir=_fsync_dir,
+                                           revalidate=None, hook=_Noop()):
+    """Write-ahead marker -> aside receipt -> rename (never delete) receipt + actas into review-archive-<hex24>
+    -> revalidate (drift/TOCTOU) -> ONE rename publishes the new receipt -> fsync -> marker unlink (commit).
+    Normal failure BEFORE publication rolls back through recover_prepare_archive(); a hard crash (BaseException) or a
+    failure AFTER publication leaves the marker (fail-closed) and recover_prepare_archive() resolves it deterministically."""
     receipt, aside, marker = state / "prepared.json", state / "prepared.json.next", state / PENDING
     paths = [receipt] + [p for p in actas if p.exists() or p.is_symlink()]
+    devices = {state.stat().st_dev}
     hashes = {}
     for p in paths:
-        require(p.is_file() and not p.is_symlink(), "PREPARE_ACTA_UNTRUSTED")
+        require(p.is_file() and not p.is_symlink() and not p.parent.is_symlink(), "PREPARE_ACTA_UNTRUSTED")
+        devices.add(p.parent.stat().st_dev)
         hashes[p.name] = _digest(p)
+    for p in paths[1:]:  # an acta that names a target must belong to THIS predecessor: never archive a live authorization
+        target = json.loads(p.read_text()).get("target_sha")
+        require(target is None or target == previous["source_sha"], "PREPARE_ACTA_NOT_PREDECESSOR")
+    require(len(devices) == 1, "PREPARE_ARCHIVE_CROSS_DEVICE")  # rename must stay atomic: refuse BEFORE any change
+    new_bytes = json.dumps(prepared, sort_keys=True).encode()
+    import hashlib
+    new_sha = hashlib.sha256(new_bytes).hexdigest()
     archive = state / ("review-archive-" + secrets.token_hex(12))
     archive.mkdir(mode=0o700)
-    moved, marker_made, aside_made, committed = [], False, False, False
+    published = False
     try:
         fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        marker_made = True
         with os.fdopen(fd, "w") as stream:
             json.dump({"status": "ARCHIVE_INCOMPLETE_NO_DEPLOYMENT", "source_sha": previous["source_sha"],
                        "source_asset_sha256": previous.get("source_asset_sha256"),
-                       "archive_name": archive.name, "files_sha256": hashes,
-                       "reason": "APPLIED_PREDECESSOR_REPLACED_BY_NEW_PREPARE",
-                       "new_source_sha": prepared["source_sha"]}, stream, sort_keys=True)
+                       "archive_name": archive.name, "new_source_sha": prepared["source_sha"],
+                       "new_receipt_sha256": new_sha, "reason": "APPLIED_PREDECESSOR_REPLACED_BY_NEW_PREPARE",
+                       "items": [{"name": p.name, "origin": str(p), "sha256": hashes[p.name]} for p in paths]},
+                      stream, sort_keys=True)
             stream.flush()
             os.fsync(stream.fileno())
         fsync_dir(state)
+        hook("marker")
         fd = os.open(aside, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        aside_made = True
-        with os.fdopen(fd, "w") as stream:
-            json.dump(prepared, stream, sort_keys=True)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(new_bytes)
             stream.flush()
             os.fsync(stream.fileno())
-        for p in paths:
-            dest = archive / p.name
-            p.rename(dest)
-            moved.append((p, dest))
+        hook("aside")
+        for index, p in enumerate(paths):
+            p.rename(archive / p.name)
+            hook("moved-%d" % index)
+        for p in paths:  # TOCTOU: the bytes that were archived are the bytes that were hashed
+            require(_digest(archive / p.name) == hashes[p.name], "PREPARE_ACTA_CHANGED_DURING_ARCHIVE")
         fd = os.open(archive / "applied-predecessor-archive.json",
                      os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as stream:
@@ -301,37 +391,25 @@ def install_prepared_archiving_predecessor(state, previous, prepared, actas=ACTA
                        "new_source_sha": prepared["source_sha"], "archived_at": now}, stream, sort_keys=True)
             stream.flush()
             os.fsync(stream.fileno())
+        hook("result")
+        if revalidate is not None:
+            revalidate()  # Docker running/health/baseline drift last check, immediately before publication
+        hook("revalidated")
         aside.rename(receipt)  # the only publication step: atomic
+        published = True
+        hook("published")
         for directory in {archive, state, *[p.parent for p in paths]}:
             fsync_dir(directory)
+        hook("synced")
         marker.unlink()  # commit boundary
-        committed = True
         fsync_dir(state)
-    except BaseException:
-        if committed:
-            raise Blocked("PREPARE_ARCHIVE_COMMIT_SYNC_UNCERTAIN") from None
-        restored = True
+    except Exception:
+        if published:
+            raise Blocked("PREPARE_ARCHIVE_PUBLISHED_RECOVERY_REQUIRED") from None
         try:
-            if receipt.exists() and not any(src == receipt for src, _ in moved):
-                restored = False  # unexpected receipt present: leave the blocker in place
-            if aside_made and aside.exists():
-                aside.unlink()
-            for src, dest in reversed(moved):
-                if dest.exists() and not src.exists() and not src.is_symlink():
-                    dest.rename(src)
-            result = archive / "applied-predecessor-archive.json"
-            if result.exists():
-                result.unlink()
-            try:
-                archive.rmdir()
-            except OSError:
-                restored = False
-            restored = restored and all(p.is_file() for p in paths)
-            if marker_made and restored:
-                marker.unlink()
-                fsync_dir(state)
+            recover_prepare_archive(state, fsync_dir)  # same deterministic code as the supervised recovery
         except BaseException:
-            pass  # the durable marker stays: nothing is lost, the next run is blocked until reconciled
+            pass  # marker stays: nothing lost, further prepare/update blocked until recovered
         raise
 
 
@@ -340,7 +418,7 @@ def prepare():
             "HOST_NOT_AUTHORIZED")
     bootstrap_import_trust()
     trusted_state()
-    require(not (STATE / PENDING).exists() and not (STATE / PENDING).is_symlink(),
+    require(not any(os.path.lexists(STATE / n) for n in (PENDING, *LEGACY_PENDING)),
             "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED")
     with exclusive():
         before = snapshot(builder.transport.docker)
@@ -385,7 +463,12 @@ def prepare():
         if previous is not None:
             # signed release + host already re-verified above: only now archive the APPLIED predecessor
             require(previous["source_sha"] != prepared["source_sha"], "PREPARE_TARGET_ALREADY_APPLIED")
-            install_prepared_archiving_predecessor(STATE, previous, prepared, now=int(__import__("time").time()))
+            def revalidate():
+                require(snapshot(builder.transport.docker) == before, "PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT")
+                require(entry_mod.health(previous["source_sha"]) is True, "PREPARE_PREDECESSOR_HEALTH_UNVERIFIED")
+                require(entry_mod.private_json(STATE / "prepared.json") == previous, "PREPARE_PREDECESSOR_CHANGED")
+            install_prepared_archiving_predecessor(STATE, previous, prepared, now=int(__import__("time").time()),
+                                                   revalidate=revalidate)
         else:
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
             fd = os.open(STATE / "prepared.json", flags, 0o600)
@@ -404,11 +487,21 @@ def prepare():
         }
 
 
+def recover():
+    """Explicit supervised recovery: only resolves prepared-successor-archive-pending.json, nothing else."""
+    require(os.geteuid() == 0 and socket.gethostname() == "glmdch", "HOST_NOT_AUTHORIZED")
+    bootstrap_import_trust()
+    trusted_state()
+    with exclusive():
+        status = recover_prepare_archive(STATE)
+    return {"status": "PREPARE_ARCHIVE_" + status, "scope": SCOPE, "may_apply": False}
+
+
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
     try:
-        require(args == ["--prepare"], "ONLY_EXPLICIT_PREPARE_SUPPORTED")
-        print(json.dumps(prepare(), sort_keys=True))
+        require(args in (["--prepare"], ["--recover-prepare-archive"]), "ONLY_EXPLICIT_PREPARE_SUPPORTED")
+        print(json.dumps(prepare() if args == ["--prepare"] else recover(), sort_keys=True))
         return 0
     except Blocked as exc:
         print(json.dumps({"status": "BLOCKED_QA525_IMAGE_PREPARATION",
