@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import socket
 import stat
 import sys
@@ -28,6 +29,8 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 SERVICES = ("api", "web", "keycloak", "postgres", "minio", "gateway", "clamav")
 SOURCE_CHAIN = (
     OPS / "qa525-current-image-preparation.py",
+    OPS / "qa525-update.py",
+    OPS / "qa525-supervised-dual-entrypoint.py",
     OPS / "qa525-current-host-staging.py",
     OPS / "qa525-current-host-preflight.py",
     OPS / "qa525-current-change-policy.py",
@@ -208,16 +211,145 @@ def exclusive():
         yield
 
 
+PENDING = "expired-prepared-archive-pending.json"  # SAME durable blocker the existing recovery tooling reads
+ACTAS = (Path("/etc/pmgm/qa525-sensitive-reviewed.json"),
+         Path("/etc/pmgm/qa525-single-operator-postdb-approved.json"),
+         Path("/etc/pmgm/qa525-supervised-cut.json"))
+
+
+def _fsync_dir(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _digest(path):
+    import hashlib
+    with open(path, "rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def applied_predecessor(state, update, entry_mod, live, health, now_sha):
+    """READ-ONLY. The existing prepared.json must be the legitimate, APPLIED, LIVE and HEALTHY predecessor of a NEW
+    target (qa525-update.previous_prepared_is_applied + every journal APPLIED); anything else is a STOP with nothing
+    moved. Returns the predecessor record (or None when there is no prepared.json)."""
+    receipt = state / "prepared.json"
+    if not (receipt.exists() or receipt.is_symlink()):
+        return None
+    require(not (state / PENDING).exists() and not (state / PENDING).is_symlink()
+            and not os.path.lexists(state / "pending-dual-reconciliation.json"),
+            "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED")
+    previous = entry_mod.private_json(receipt)
+    require(type(previous) is dict and type(previous.get("source_sha")) is str
+            and SHA.fullmatch(previous["source_sha"]), "PREPARE_PREDECESSOR_INVALID")
+    for journal_path in state.glob("dual-*.json"):
+        require(entry_mod.private_json(journal_path).get("status") == "APPLIED",
+                "PREPARE_JOURNAL_REQUIRES_RECONCILIATION")
+    journal = entry_mod.private_json(state / ("dual-" + previous["source_sha"] + ".json"))
+    try:
+        update.previous_prepared_is_applied(previous, journal, live)
+    except Exception:
+        raise Blocked("PREPARE_PREDECESSOR_NOT_APPLIED_AND_LIVE") from None
+    require(now_sha is None or previous["source_sha"] != now_sha, "PREPARE_TARGET_ALREADY_APPLIED")
+    require(health(previous["source_sha"]) is True, "PREPARE_PREDECESSOR_HEALTH_UNVERIFIED")
+    return previous
+
+
+def install_prepared_archiving_predecessor(state, previous, prepared, actas=ACTAS, now=None, fsync_dir=_fsync_dir):
+    """Atomic + durable + reversible: write the NEW receipt aside, archive EVERY predecessor acta (rename only, never
+    delete), then publish the new receipt with one rename. A durable write-ahead marker exists from before the first
+    rename until commit; a crash leaves it (blocking any further prepare/update) so nothing is silently lost. A normal
+    failure restores every file byte-for-byte and removes the marker only after verified restoration."""
+    receipt, aside, marker = state / "prepared.json", state / "prepared.json.next", state / PENDING
+    paths = [receipt] + [p for p in actas if p.exists() or p.is_symlink()]
+    hashes = {}
+    for p in paths:
+        require(p.is_file() and not p.is_symlink(), "PREPARE_ACTA_UNTRUSTED")
+        hashes[p.name] = _digest(p)
+    archive = state / ("review-archive-" + secrets.token_hex(12))
+    archive.mkdir(mode=0o700)
+    moved, marker_made, aside_made, committed = [], False, False, False
+    try:
+        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        marker_made = True
+        with os.fdopen(fd, "w") as stream:
+            json.dump({"status": "ARCHIVE_INCOMPLETE_NO_DEPLOYMENT", "source_sha": previous["source_sha"],
+                       "source_asset_sha256": previous.get("source_asset_sha256"),
+                       "archive_name": archive.name, "files_sha256": hashes,
+                       "reason": "APPLIED_PREDECESSOR_REPLACED_BY_NEW_PREPARE",
+                       "new_source_sha": prepared["source_sha"]}, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        fsync_dir(state)
+        fd = os.open(aside, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        aside_made = True
+        with os.fdopen(fd, "w") as stream:
+            json.dump(prepared, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        for p in paths:
+            dest = archive / p.name
+            p.rename(dest)
+            moved.append((p, dest))
+        fd = os.open(archive / "applied-predecessor-archive.json",
+                     os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as stream:
+            json.dump({"status": "APPLIED_PREDECESSOR_ARCHIVED_NO_DEPLOYMENT",
+                       "predecessor_source_sha": previous["source_sha"], "files_sha256": hashes,
+                       "new_source_sha": prepared["source_sha"], "archived_at": now}, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        aside.rename(receipt)  # the only publication step: atomic
+        for directory in {archive, state, *[p.parent for p in paths]}:
+            fsync_dir(directory)
+        marker.unlink()  # commit boundary
+        committed = True
+        fsync_dir(state)
+    except BaseException:
+        if committed:
+            raise Blocked("PREPARE_ARCHIVE_COMMIT_SYNC_UNCERTAIN") from None
+        restored = True
+        try:
+            if receipt.exists() and not any(src == receipt for src, _ in moved):
+                restored = False  # unexpected receipt present: leave the blocker in place
+            if aside_made and aside.exists():
+                aside.unlink()
+            for src, dest in reversed(moved):
+                if dest.exists() and not src.exists() and not src.is_symlink():
+                    dest.rename(src)
+            result = archive / "applied-predecessor-archive.json"
+            if result.exists():
+                result.unlink()
+            try:
+                archive.rmdir()
+            except OSError:
+                restored = False
+            restored = restored and all(p.is_file() for p in paths)
+            if marker_made and restored:
+                marker.unlink()
+                fsync_dir(state)
+        except BaseException:
+            pass  # the durable marker stays: nothing is lost, the next run is blocked until reconciled
+        raise
+
+
 def prepare():
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
             "HOST_NOT_AUTHORIZED")
     bootstrap_import_trust()
     trusted_state()
-    require(not (STATE / "prepared.json").exists()
-            and not (STATE / "prepared.json").is_symlink(),
-            "PREPARE_ALREADY_EXISTS")
+    require(not (STATE / PENDING).exists() and not (STATE / PENDING).is_symlink(),
+            "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED")
     with exclusive():
         before = snapshot(builder.transport.docker)
+        previous = None
+        if (STATE / "prepared.json").exists() or (STATE / "prepared.json").is_symlink():
+            update = load("qa525_update_for_prepare", OPS / "qa525-update.py")
+            entry_mod = update.load_entry()
+            live = {n: [before[n]["container_fingerprint"], before[n]["image_id"], "running"] for n in ("api", "web")}
+            previous = applied_predecessor(STATE, update, entry_mod, live, entry_mod.health, None)
         with tempfile.TemporaryDirectory(prefix=".qa525-source-", dir=STATE) as tmp:
             package = Path(tmp) / "verified-source"
             receipt = stage.stage_current(package)
@@ -250,12 +382,17 @@ def prepare():
                 "signed_stage_ephemeral": True,
                 "actual_rollback_drill_completed": False,
             }
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
-        fd = os.open(STATE / "prepared.json", flags, 0o600)
-        with os.fdopen(fd, "w") as stream:
-            json.dump(prepared, stream, sort_keys=True)
-            stream.flush()
-            os.fsync(stream.fileno())
+        if previous is not None:
+            # signed release + host already re-verified above: only now archive the APPLIED predecessor
+            require(previous["source_sha"] != prepared["source_sha"], "PREPARE_TARGET_ALREADY_APPLIED")
+            install_prepared_archiving_predecessor(STATE, previous, prepared, now=int(__import__("time").time()))
+        else:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+            fd = os.open(STATE / "prepared.json", flags, 0o600)
+            with os.fdopen(fd, "w") as stream:
+                json.dump(prepared, stream, sort_keys=True)
+                stream.flush()
+                os.fsync(stream.fileno())
         return {
             "status": prepared["status"], "scope": SCOPE,
             "source_sha": prepared["source_sha"],
