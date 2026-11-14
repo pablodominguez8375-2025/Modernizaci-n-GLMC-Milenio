@@ -33,7 +33,7 @@ class AutoWebPortTests(unittest.TestCase):
         def real_runner(argv):
             self.calls.append(list(argv))
             return self.code
-        return P.WebOnlyPort.from_plan(
+        return P.web_only_port(
             plan, nonce=NONCE, project="centenario-qa-lab2", workdir="/opt/centenario",
             env_file="/etc/pmgm/qa.env", runner=runner or real_runner,
             scope_factory=AutoWebPortScope, record_unit=lambda unit: None,
@@ -78,39 +78,75 @@ class AutoWebPortTests(unittest.TestCase):
             self.port(bad)
         self.assertEqual(self.calls, [])
 
-    def test_mutant_api_argv_never_reaches_real_runner(self):
+    def introspected_switchers(self, port):
+        found = []
+        for fn in (port.apply_web, port.rollback_web):
+            for cell in fn.__closure__ or ():
+                obj = cell.cell_contents
+                if callable(getattr(obj, "switch", None)):
+                    found.append(obj)
+        self.assertEqual(len(found), 2)
+        return found
+
+    def test_mutant_introspected_switcher_cannot_run_anything(self):
+        """Review 5904937432 P1-1: no permit => even the exact WEB argv is rejected."""
         port = self.port()
-        guarded = port.apply_web.__closure__  # white-box: reach the guarded runner of the forward switcher
-        runners = [c.cell_contents for c in guarded if callable(getattr(c.cell_contents, "switch", None))]
-        self.assertTrue(runners)
-        sw = runners[0]
-        with self.assertRaisesRegex(P.switch.Stop, "SWITCH_RUNNER_FAILED"):
-            sw.switch("api")  # the switcher builds an api argv; the guard refuses it
+        for sw in self.introspected_switchers(port):
+            for attempt in (lambda: sw.switch("api"), lambda: sw.switch("web"), sw.switch_all,
+                            sw.switch_api, sw.switch_web):
+                with self.assertRaisesRegex(P.switch.Stop, "SWITCH_RUNNER_FAILED"):
+                    attempt()
         self.assertEqual(self.calls, [])
-        with self.assertRaisesRegex(P.switch.Stop, "SWITCH_RUNNER_FAILED"):
-            sw.switch_all()  # web leg may run (it is the allowed argv); the api leg is refused
-        self.assertTrue(all(argv[-1] == "web" for argv in self.calls))
+
+    def test_mutant_second_web_after_apply_via_introspection(self):
+        port = self.port()
+        port.apply_web()
+        for sw in self.introspected_switchers(port):
+            with self.assertRaisesRegex(P.switch.Stop, "SWITCH_RUNNER_FAILED"):
+                sw.switch("web")
+        self.assertEqual(len(self.calls), 1)
+
+    def test_mutant_rollback_first_is_rejected(self):
+        """Review 5904937432 P1-2."""
+        port = self.port()
+        with self.assertRaisesRegex(P.Stop, "WEB_PORT_ROLLBACK_BEFORE_APPLY"):
+            port.rollback_web()
+        self.assertEqual(self.calls, [])
+        port.apply_web()
+        port.rollback_web()
+        self.assertEqual(len(self.calls), 2)
+
+    def test_rollback_allowed_after_failed_apply(self):
+        self.code = 1
+        port = self.port()
+        with self.assertRaises(P.Stop):
+            port.apply_web()
+        self.code = 0
+        port.rollback_web()
+        self.assertEqual(self.calls[-1], self.expected("baseline"))
 
     def test_port_exposes_no_switcher_or_runner(self):
         port = self.port()
         public = {n for n in dir(port) if not n.startswith("_")}
-        self.assertEqual(public, {"apply_web", "rollback_web", "from_plan"})
-        for name in ("switch_api", "switch_all", "switch", "runner", "forward"):
+        self.assertEqual(public, {"apply_web", "rollback_web"})  # review P1-3: no factory on the instance
+        for name in ("switch_api", "switch_all", "switch", "runner", "forward", "from_plan"):
             self.assertFalse(hasattr(port, name), name)
         with self.assertRaises(AttributeError):
             port.switch_all = lambda: None
-        with self.assertRaisesRegex(P.Stop, "WEB_PORT_USE_FROM_PLAN"):
+        with self.assertRaisesRegex(P.Stop, "WEB_PORT_USE_FACTORY"):
             P.WebOnlyPort()
+        with self.assertRaisesRegex(P.Stop, "WEB_PORT_USE_FACTORY"):
+            type(port)()
 
     def test_malformed_inputs_rejected(self):
         with self.assertRaisesRegex(P.Stop, "WEB_PORT_PLAN_INVALID"):
             self.port({"baseline": {}})
         with self.assertRaisesRegex(P.Stop, "WEB_PORT_ADAPTER_INVALID"):
-            P.WebOnlyPort.from_plan(PLAN, nonce=NONCE, project="p", workdir="/w", env_file="/e",
+            P.web_only_port(PLAN, nonce=NONCE, project="p", workdir="/w", env_file="/e",
                                     runner=None, scope_factory=AutoWebPortScope, record_unit=print,
                                     observe=dict, settle=dict)
         with self.assertRaisesRegex(P.Stop, "WEB_PORT_COMMAND_INVALID"):
-            P.WebOnlyPort.from_plan(PLAN, nonce="short", project="centenario-qa-lab2",
+            P.web_only_port(PLAN, nonce="short", project="centenario-qa-lab2",
                                     workdir="/opt/centenario", env_file="/etc/pmgm/qa.env",
                                     runner=lambda a: 0, scope_factory=AutoWebPortScope,
                                     record_unit=print, observe=dict, settle=dict)

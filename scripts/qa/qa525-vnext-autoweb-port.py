@@ -6,7 +6,11 @@ The auto-web lane must never be able to touch the API. `ServiceSwitcher` can rec
 `WebOnlyPort`, which exposes exactly two capabilities:
 
 * ``apply_web()``    -> recreate WEB with the plan's TARGET layers   (at most once)
-* ``rollback_web()`` -> recreate WEB with the plan's BASELINE layers (at most once, contract §1)
+* ``rollback_web()`` -> recreate WEB with the plan's BASELINE layers (at most once, only after
+                        apply_web was attempted; contract §1)
+
+Build it with the module factory ``web_only_port(plan, ...)``; the returned object's public
+surface is exactly those two callables (review 5904937432 P1-3).
 
 Guarantees, each tested as a mutant that is rejected BEFORE the real runner is reached:
 1. The plan's API layers are identical in baseline and target (auto-web never changes API).
@@ -15,7 +19,12 @@ Guarantees, each tested as a mutant that is rejected BEFORE the real runner is r
 3. The port object has no attribute leading to a switcher or to the raw runner (__slots__,
    closures). Python closures stay introspectable, so guarantee 2 is the hard boundary:
    even a switcher reached by introspection cannot get an API argv past the guard.
-4. After a rollback the port is spent: no second rollback and no apply after rollback.
+4. Single use is enforced INSIDE the runner guard (review 5904937432 P1-1): each of apply and
+   rollback grants one internal permit, consumed by the guard before the real runner. A
+   switcher reached by introspection has no permit, so even the exact WEB argv is rejected,
+   and a second `switch("web")` is rejected too.
+5. Rollback is refused unless apply was attempted (review P1-2); after a rollback the port is
+   spent: no second rollback and no apply after rollback.
 
 This module starts no process. It does not authorize an apply: locks, lease, journal,
 policy and envelope checks belong to the future `qa525-vnext-auto.py`.
@@ -73,74 +82,89 @@ def _plan_layers(plan):
 
 
 class WebOnlyPort:
-    """Only `apply_web` / `rollback_web`; build with `WebOnlyPort.from_plan(...)`."""
+    """Only `apply_web` / `rollback_web`; built by the module factory `web_only_port(...)`."""
 
-    __slots__ = ("apply_web", "rollback_web", "__weakref__")
+    __slots__ = ("apply_web", "rollback_web")
 
     def __init__(self):
-        raise Stop("WEB_PORT_USE_FROM_PLAN")
+        raise Stop("WEB_PORT_USE_FACTORY")
 
-    @classmethod
-    def from_plan(cls, plan, *, nonce, project, workdir, env_file, runner, scope_factory,
+
+def web_only_port(plan, *, nonce, project, workdir, env_file, runner, scope_factory,
                   record_unit, observe, settle, samples=3):
-        if not callable(runner):
-            raise Stop("WEB_PORT_ADAPTER_INVALID")
-        layers = _plan_layers(plan)
+    cls = WebOnlyPort
+    if not callable(runner):
+        raise Stop("WEB_PORT_ADAPTER_INVALID")
+    layers = _plan_layers(plan)
+    try:
+        unit = containment.unit_name(nonce, "web")
+        expected = {which: containment.systemd_run_argv(unit, project, workdir, env_file,
+                                                        layers[which]["web"], "web")
+                    for which in ("target", "baseline")}
+    except containment.Stop:
+        raise Stop("WEB_PORT_COMMAND_INVALID") from None
+    state = {"applied": False, "rolled_back": False}
+    permits = {"target": False, "baseline": False}
+
+    def guarded(which):
+        want = list(expected[which])
+
+        def runner_web_only(argv):
+            if type(argv) is not list or argv != want or argv[-1] != "web":
+                raise Stop("WEB_PORT_ARGV_NOT_WEB")
+            if permits[which] is not True:
+                raise Stop("WEB_PORT_NO_PERMIT")
+            permits[which] = False  # consumed before the real runner: never twice
+            return runner(list(want))
+        return runner_web_only
+
+    def make(which):
+        kwargs = dict(nonce=nonce, project=project, workdir=workdir, env_file=env_file,
+                      runner=guarded(which), scope_factory=scope_factory,
+                      record_unit=record_unit, observe=observe, settle=settle, samples=samples)
         try:
-            unit = containment.unit_name(nonce, "web")
-            expected = {which: containment.systemd_run_argv(unit, project, workdir, env_file,
-                                                            layers[which]["web"], "web")
-                        for which in ("target", "baseline")}
-        except containment.Stop:
+            return switch.ServiceSwitcher.for_plan(plan, which, **kwargs)
+        except switch.Stop:
             raise Stop("WEB_PORT_COMMAND_INVALID") from None
-        state = {"applied": False, "rolled_back": False}
 
-        def guarded(which):
-            want = list(expected[which])
+    forward, backward = make("target"), make("baseline")
 
-            def runner_web_only(argv):
-                if type(argv) is not list or argv != want or argv[-1] != "web":
-                    raise Stop("WEB_PORT_ARGV_NOT_WEB")
-                return runner(list(want))
-            return runner_web_only
+    def run(sw):
+        try:
+            result = sw.switch("web")
+        except switch.Stop as exc:
+            raise Stop("WEB_PORT_" + str(exc)) from None
+        if type(result) is not dict or result.get("service") != "web" or result.get("unit") != unit:
+            raise Stop("WEB_PORT_RESULT_INVALID")
+        return {"status": STATUS, "service": "web", "unit": unit,
+                "settled_sha256": result.get("settled_sha256"), "may_apply": False}
 
-        def make(which):
-            kwargs = dict(nonce=nonce, project=project, workdir=workdir, env_file=env_file,
-                          runner=guarded(which), scope_factory=scope_factory,
-                          record_unit=record_unit, observe=observe, settle=settle, samples=samples)
-            try:
-                return switch.ServiceSwitcher.for_plan(plan, which, **kwargs)
-            except switch.Stop:
-                raise Stop("WEB_PORT_COMMAND_INVALID") from None
-
-        forward, backward = make("target"), make("baseline")
-
-        def run(sw):
-            try:
-                result = sw.switch("web")
-            except switch.Stop as exc:
-                raise Stop("WEB_PORT_" + str(exc)) from None
-            if type(result) is not dict or result.get("service") != "web" or result.get("unit") != unit:
-                raise Stop("WEB_PORT_RESULT_INVALID")
-            return {"status": STATUS, "service": "web", "unit": unit,
-                    "settled_sha256": result.get("settled_sha256"), "may_apply": False}
-
-        def apply_web():
-            if state["applied"] or state["rolled_back"]:
-                raise Stop("WEB_PORT_APPLY_SPENT")
-            state["applied"] = True  # spent before the attempt: a failed apply is never retried
+    def apply_web():
+        if state["applied"] or state["rolled_back"]:
+            raise Stop("WEB_PORT_APPLY_SPENT")
+        state["applied"] = True  # spent before the attempt: a failed apply is never retried
+        permits["target"] = True
+        try:
             return run(forward)
+        finally:
+            permits["target"] = False
 
-        def rollback_web():
-            if state["rolled_back"]:
-                raise Stop("WEB_PORT_ROLLBACK_SPENT")
-            state["rolled_back"] = True
+    def rollback_web():
+        if not state["applied"]:
+            raise Stop("WEB_PORT_ROLLBACK_BEFORE_APPLY")
+        if state["rolled_back"]:
+            raise Stop("WEB_PORT_ROLLBACK_SPENT")
+        state["rolled_back"] = True
+        permits["baseline"] = True
+        try:
             return run(backward)
+        finally:
+            permits["baseline"] = False
 
-        port = object.__new__(cls)
-        object.__setattr__(port, "apply_web", apply_web)
-        object.__setattr__(port, "rollback_web", rollback_web)
-        return port
+    port = object.__new__(cls)
+    object.__setattr__(port, "apply_web", apply_web)
+    object.__setattr__(port, "rollback_web", rollback_web)
+    return port
 
 
 if __name__ == "__main__":
