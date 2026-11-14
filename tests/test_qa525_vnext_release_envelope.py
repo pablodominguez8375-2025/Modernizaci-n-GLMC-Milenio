@@ -283,6 +283,10 @@ class AutoWebEnvelopeTests(unittest.TestCase):
         both = dict(image_config(), config={"Entrypoint": ["/bin/sh"]})
         with self.assertRaisesRegex(E.Stop, "IMAGE_CONFIG_AMBIGUOUS"):
             E.image_binding(both, 2)
+        nested = image_config()
+        nested["RootFS"]["diff_ids"] = list(LAYERS)
+        with self.assertRaisesRegex(E.Stop, "IMAGE_CONFIG_AMBIGUOUS"):
+            E.image_binding(nested, 2)
 
     def test_p2_issued_at_lower_bound(self):
         with self.assertRaisesRegex(E.Stop, "ENVELOPE_WINDOW_INVALID"):

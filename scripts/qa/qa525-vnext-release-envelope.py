@@ -126,6 +126,8 @@ def image_binding(image_config, content_layer_count):
     osname = image_config.get("os", image_config.get("Os"))
     if type(cfg) is not dict or type(rootfs) is not dict or type(arch) is not str or type(osname) is not str:
         raise Stop("IMAGE_CONFIG_INVALID")
+    if "diff_ids" in rootfs and "Layers" in rootfs:
+        raise Stop("IMAGE_CONFIG_AMBIGUOUS")
     diff_ids = rootfs.get("diff_ids", rootfs.get("Layers"))
     if (type(diff_ids) is not list or len(diff_ids) <= content_layer_count
             or any(type(d) is not str or DIGEST.fullmatch(d) is None for d in diff_ids)):
