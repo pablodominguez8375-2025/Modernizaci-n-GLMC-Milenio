@@ -68,7 +68,10 @@ class ApiwebHostFakeDocker:
 
 class ApiwebHostFx:
     def __init__(self, docker):
-        self.docker, self.log = docker, []
+        self.docker, self.log, self.abort = docker, [], False
+
+    def abort_requested(self):
+        return self.abort
 
     def docker_reader(self):
         return self.docker
@@ -323,6 +326,54 @@ class ApiwebHostStagedImages(ApiwebHostBase):
         self.assertTrue(all(c[1] == "inspect" for c in self.docker.calls if c[0] == "image"))
 
 
+class ApiwebHostPrecheck(ApiwebHostBase):
+    """PRE-NONCE: abort marker + staged images, read-only; any failure happens while the GO is still unspent."""
+    def run_precheck(self, **over):
+        return host.precheck(app_source_sha=over.get("sha", "b" * 40), authority=self.authority, modules=M, effects=self.fx)
+
+    def test_passes_with_both_staged_images_and_no_abort_marker(self):
+        self.run_precheck()
+        verbs = [c for c in self.docker.calls if c[:2] == ["image", "inspect"]]
+        self.assertEqual([c[4] for c in verbs], [D("7"), D("8")])
+        self.assertEqual(self.fx.log, [])  # no command was executed
+
+    def test_abort_marker_stops_before_any_docker_read(self):
+        self.fx.abort = True
+        with self.assertRaises(host.Stop) as err:
+            self.run_precheck()
+        self.assertEqual(str(err.exception), "APIWEB_ABORT_REQUESTED")
+        self.assertEqual([c for c in self.docker.calls if c[:2] == ["image", "inspect"]], [])
+
+    def test_an_abort_probe_that_fails_or_is_not_a_plain_false_counts_as_abort(self):
+        for bad in (lambda: (_ for _ in ()).throw(RuntimeError()), lambda: None, lambda: 0):
+            self.fx.abort_requested = bad
+            with self.subTest(bad=bad), self.assertRaises(host.Stop) as err:
+                self.run_precheck()
+            self.assertEqual(str(err.exception), "APIWEB_ABORT_REQUESTED")
+
+    def test_missing_image_wrong_label_and_bad_source_stop(self):
+        self.docker.missing.add(D("8"))
+        with self.assertRaises(host.Stop) as err:
+            self.run_precheck()
+        self.assertEqual(str(err.exception), "APIWEB_STAGED_IMAGE_MISSING")
+        self.docker.missing.clear()
+        with self.assertRaises(host.Stop) as err:
+            self.run_precheck(sha="c" * 40)
+        self.assertEqual(str(err.exception), "APIWEB_STAGED_IMAGE_LABEL_MISMATCH")
+        with self.assertRaises(host.Stop):
+            self.run_precheck(sha="nope")
+
+    def test_the_abort_marker_blocks_forward_stages_but_never_the_rollback(self):
+        state = {"abort": False}
+        clock = lambda: __import__("datetime").datetime.fromtimestamp(1800000000, __import__("datetime").timezone.utc)  # noqa: E731
+        gate = host.make_gate(clock, 1800000300, lambda: state["abort"])
+        self.assertTrue(gate("API_SWITCHING"))
+        state["abort"] = True
+        self.assertFalse(gate("API_SWITCHING"))
+        self.assertFalse(gate("WEB_SWITCHING"))
+        self.assertTrue(gate("ROLLING_BACK"))
+
+
 class ApiwebHostEffects(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -350,6 +401,22 @@ class ApiwebHostEffects(unittest.TestCase):
         self.assertFalse(verify(self.expected))
         self.assertFalse(verify(dict(self.expected, extra=1)))
         self.assertFalse(verify(None))
+
+    def test_abort_marker_probe_is_read_only_and_fails_closed(self):
+        marker = os.path.join(self.dir, "abort")
+        old = fx.ABORT_PATH
+        fx.ABORT_PATH = marker
+        self.addCleanup(lambda: setattr(fx, "ABORT_PATH", old))
+        self.assertIs(fx.abort_requested(), False)
+        self.assertFalse(os.path.lexists(marker))  # probing never creates it
+        Path(marker).write_bytes(b"")
+        self.assertIs(fx.abort_requested(), True)
+        os.unlink(marker)
+        os.symlink("/nonexistent", marker)  # even a dangling symlink is a marker
+        self.assertIs(fx.abort_requested(), True)
+        os.unlink(marker)
+        fx.ABORT_PATH = os.path.join(marker, "x\0y")  # unusable path => not "absent" => abort
+        self.assertIs(fx.abort_requested(), True)
 
     def test_pin_verifier_paths_are_closed(self):
         for bad in (None, {}, dict(self.paths, extra="/x"), dict(self.paths, docker_sha256="rel")):

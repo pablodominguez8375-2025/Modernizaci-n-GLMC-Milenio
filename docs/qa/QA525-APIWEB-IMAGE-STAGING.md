@@ -37,6 +37,12 @@ comprueba que el snapshot de los 7 servicios en ejecución es idéntico antes y 
 - Lectura posterior (solo lectura, un comando por vez): `docker image inspect --format '{{.Id}} {{index .Config.Labels "org.opencontainers.image.revision"}}' <id>` para cada id de `prepared.json`.
   Los ids de imagen son públicos (no son secretos) y se registran en el handoff.
 
+## Verificación previa al nonce y archivo de aborto (código, #1016)
+Antes de gastar el GO (dentro de la verificación del GO, con los 5 locks retenidos) el host ejecuta `precheck`: (1) el archivo de aborto
+`/root/.qa525-apiweb-abort` NO debe existir (cualquier tipo de archivo, también un symlink, cuenta como aborto; un error de lectura también);
+(2) las dos imágenes target deben existir con el id exacto y la etiqueta de revisión esperada. Si algo falla: STOP con el GO sin consumir.
+El Sponsor crea ese archivo (root, 0600) para detener un vuelo: bloquea solo las etapas hacia adelante, nunca el rollback.
+
 ## Verificación dentro del vuelo (código, #1016)
 Antes de enlazar cualquier comando de mutación, `require_staged_images` (host) comprueba, dentro del plano retenido y por el
 guardia de solo lectura (`image inspect` por id), que existan EXACTAMENTE `target.images.api` y `target.images.web` y que

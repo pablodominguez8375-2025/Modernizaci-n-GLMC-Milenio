@@ -497,6 +497,9 @@ def _compose(load, record, env):
             authentic = False
         if authentic is not True:  # check_cut is consistency only; receipts are claims until this port says so
             raise Stop("LAUNCH_AUTHENTICITY_DENIED")
+        if purpose == "API_WEB_QA_ONLY":  # abort marker + staged images, read-only, BEFORE the nonce can be spent
+            apiweb_host.precheck(app_source_sha=result["app_source_sha"], authority=dict(apiweb_authority),
+                                 modules=apiweb_host_modules, effects=apiweb_effects)
         if g6_pins and result.get("g6_command") != g6_pins["g6_command"]:
             raise Stop("LAUNCH_GO_CLAIMS_INVALID")
         if (result.get("purpose") != purpose or type(result.get("nonce")) is not str

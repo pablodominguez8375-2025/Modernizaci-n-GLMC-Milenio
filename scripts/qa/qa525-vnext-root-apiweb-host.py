@@ -34,7 +34,7 @@ ROOT_UID = 0  # tests may rebind; production semantics are root-owned evidence o
 MODULE_KEYS = frozenset({"root_locks", "boundary", "scopes", "containment", "host_adapters",
                          "state_reader", "health", "plan", "b7", "physical_runner"})
 REVISION_FORMAT = '{{index .Config.Labels "org.opencontainers.image.revision"}}'
-EFFECT_METHODS = ("docker_reader", "executor", "pin_verifier", "https_fetch")
+EFFECT_METHODS = ("docker_reader", "executor", "pin_verifier", "https_fetch", "abort_requested")
 
 
 class Stop(Exception):
@@ -110,7 +110,7 @@ FORWARD_STAGES = frozenset({"API_SWITCHING", "WEB_SWITCHING"})
 RECOVERY_STAGES = frozenset({"ROLLING_BACK"})
 
 
-def make_gate(clock, expires_at):
+def make_gate(clock, expires_at, abort=None):
     """Forward authority (new API/WEB mutation) ends when the signed GO expires or the clock fails. Recovery
     (rollback to the exact baseline) is NEVER blocked by TTL or by a clock fault: the flight/bridge still demand the
     five locks, the lease, the exact B7 record, pins, recorded scopes and the journal before each rollback command.
@@ -122,6 +122,8 @@ def make_gate(clock, expires_at):
             return True
         if stage in FORWARD_STAGES:
             try:
+                if abort is not None and abort() is not False:  # the root abort marker stops FORWARD stages only
+                    return False
                 return clock().timestamp() < expires_at
             except Exception:  # noqa: BLE001
                 return False
@@ -144,6 +146,24 @@ def require_staged_images(read, target, app_source_sha):
             raise Stop("APIWEB_STAGED_IMAGE_MISSING") from None
         if type(label) is not str or label.strip() != expected[service]:
             raise Stop("APIWEB_STAGED_IMAGE_LABEL_MISMATCH")
+
+
+def precheck(*, app_source_sha, authority, modules, effects):
+    """PRE-NONCE, read-only, under the five locks (called from the launcher's GO verification): the abort marker must
+    be absent and both target images must already exist with the exact pinned id + revision label. Any failure is a
+    STOP while the GO is still unspent. Nothing is built, pulled, loaded, started or written."""
+    if (type(modules) is not dict or type(app_source_sha) is not str or SOURCE.fullmatch(app_source_sha) is None
+            or "host_adapters" not in modules or any(not callable(getattr(effects, m, None)) for m in EFFECT_METHODS)):
+        raise Stop("APIWEB_HOST_BINDING_INVALID")
+    _shape(authority)
+    try:
+        aborted = effects.abort_requested()
+    except Exception:  # noqa: BLE001
+        aborted = True
+    if aborted is not False:
+        raise Stop("APIWEB_ABORT_REQUESTED")
+    read = modules["host_adapters"].read_only_docker(effects.docker_reader())
+    require_staged_images(read, authority["target"], app_source_sha)
 
 
 def build(archive_bytes, claims, authority, modules, effects, now=None):
@@ -226,7 +246,7 @@ def build(archive_bytes, claims, authority, modules, effects, now=None):
 
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
 
-    gate = make_gate(clock, expires)
+    gate = make_gate(clock, expires, effects.abort_requested)
     inputs = {
         "clock": clock, "external_gate": gate, "runner_factory": runner_factory,
         "scope_factory": adapters.cgroup_scope, "settle": lambda: adapters.settle_pause(2.0),

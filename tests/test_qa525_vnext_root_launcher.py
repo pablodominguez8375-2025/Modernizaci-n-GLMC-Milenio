@@ -281,6 +281,8 @@ class LauncherComposeTests(unittest.TestCase):
         return self.go_bytes(purpose="API_WEB_QA_ONLY", release_asset_sha256=None,
                              old_launcher_sha256=None, candidate_operator_sha256=None)
 
+    precheck_error = None
+
     def apiweb_loader(self, host=True, configured=True):
         seen = self.apiweb_seen = []
         act = lambda fd: (self.acted.append(os.fstat(fd).st_size), "apiweb")[1]
@@ -290,7 +292,8 @@ class LauncherComposeTests(unittest.TestCase):
                       list(launcher.APIWEB_MODULES.items()) + list(launcher.APIWEB_HOST_MODULES.items())
                       if v not in ("qa525-vnext-root-locks.py",)})
         if host:
-            extra[launcher.APIWEB_HOST] = types.SimpleNamespace(build=lambda *a: {})
+            self.precheck_calls = []
+            extra[launcher.APIWEB_HOST] = types.SimpleNamespace(build=lambda *a: {}, precheck=lambda **kw: (self.precheck_calls.append(kw), self.precheck_error and (_ for _ in ()).throw(self.precheck_error))[0])
         cfg = self.config()
         cfg["apiweb"] = {"marker": 1} if configured else None
         return self.loader(cfg=cfg, **extra)
@@ -369,6 +372,17 @@ class LauncherComposeTests(unittest.TestCase):
             for host_key, host_path in launcher.APIWEB_HOST_MODULES.items():
                 if path == host_path:
                     self.assertIs(kw["modules"][key], kw["host_modules"][host_key])
+
+    def test_apiweb_precheck_runs_before_the_nonce_and_its_failure_never_spends_the_go(self):
+        self.write_inbox(go=self.apiweb_go())
+        self.precheck_error = RuntimeError("APIWEB_STAGED_IMAGE_MISSING")
+        with self.assertRaises(RuntimeError):
+            self.compose(load=self.apiweb_loader())
+        self.assertEqual((self.spent, self.acted), ([], []))  # nonce unspent, nothing ran
+        (call,) = self.precheck_calls
+        self.assertEqual(call["app_source_sha"], self.apiweb_seen[0]["claims"]["app_source_sha"] if self.apiweb_seen else call["app_source_sha"])
+        self.assertEqual(set(call["modules"]), set(launcher.APIWEB_HOST_MODULES))
+        self.assertEqual(call["authority"]["admission_sha256"], PINS["admission_sha256"])
 
     def test_apiweb_go_is_not_honoured_when_the_release_pins_no_apiweb_authority(self):
         self.write_inbox(go=self.apiweb_go())

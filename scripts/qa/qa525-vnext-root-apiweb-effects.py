@@ -21,11 +21,24 @@ ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
 READ_TIMEOUT, EXEC_TIMEOUT, HTTP_TIMEOUT = 60, 600, 10
 MAX_OUT, MAX_BODY = 262144, 262144
 ROOT_UID = 0  # tests may rebind
+ABORT_PATH = "/root/.qa525-apiweb-abort"  # tests may rebind; the Sponsor creates it (root, 0600) to stop a flight
 PIN_FILES = ("systemd_run_sha256", "docker_sha256", "python_sha256", "child_sha256", "compose_stack_sha256")
 
 
 class Stop(Exception):
     """Fixed codes only."""
+
+
+def abort_requested():
+    """True when the root abort marker EXISTS (any file type counts). Absent is the only False; any other error is
+    True (fail closed). Read-only: one lstat, nothing is created, opened or changed."""
+    try:
+        os.lstat(ABORT_PATH)
+    except FileNotFoundError:
+        return False
+    except (OSError, ValueError):
+        return True
+    return True
 
 
 def docker_reader():
