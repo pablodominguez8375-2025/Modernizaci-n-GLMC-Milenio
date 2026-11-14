@@ -15,12 +15,14 @@ import socket
 import stat
 import subprocess
 import sys
+import types
 
-QA = Path(__file__).resolve().parents[1]
+_ENTRY = Path(os.path.abspath(__file__))  # NOT resolve(): a symlinked invocation path must stay visible to trusted()
+QA = _ENTRY.parents[1]
 DOCKER = "/usr/bin/docker"
 HOST = "glmdch"
 # Everything this helper executes AS ROOT: itself plus the exact sibling modules it loads (and the one host-adapters loads).
-CHAIN = (Path(__file__).resolve(), QA / "qa525-vnext-host-adapters.py", QA / "qa525-vnext-containment.py",
+CHAIN = (_ENTRY, QA / "qa525-vnext-host-adapters.py", QA / "qa525-vnext-containment.py",
          QA / "qa525-vnext-state-reader.py", QA / "qa525-vnext-baseline-plan.py")
 STATUS = "BASELINE_CAPTURED_READ_ONLY_NO_APPLY"
 CLEAN_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}  # no DOCKER_HOST/DOCKER_CONFIG/DOCKER_CONTEXT from the caller
@@ -65,14 +67,17 @@ def verify_chain(chain=CHAIN, host_ok=None, euid=None):
     return digests
 
 
-def _load(name, filename):
-    spec = importlib.util.spec_from_file_location(name, QA / filename)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+def _load(name, filename, bindings=None):
+    """Execute ONLY the bytes verify_chain hashed, in a fresh module WITHOUT __file__ (same mechanics as the real
+    bootstrap loader), so siblings are never read from disk: dependencies are injected via bind_dependencies."""
     data = _VERIFIED.get(filename)
     if data is None:
         raise Blocked("MODULE_NOT_VERIFIED")  # never execute bytes that verify_chain did not hash
+    module = types.ModuleType(name)
+    sys.modules[name] = module
     exec(compile(data, str(QA / filename), "exec"), module.__dict__)  # noqa: S102 - the verified bytes
+    if bindings is not None:
+        module.bind_dependencies(bindings)
     return module
 
 
@@ -83,9 +88,12 @@ def _docker(args):
 
 
 def capture(run=_docker, modules=None, module_sha256=None):
-    adapters, sr, plan = modules or (_load("qa525_cap_adapters", "qa525-vnext-host-adapters.py"),
-                                     _load("qa525_cap_reader", "qa525-vnext-state-reader.py"),
-                                     _load("qa525_cap_plan", "qa525-vnext-baseline-plan.py"))
+    if modules is None:
+        containment = _load("qa525_cap_containment", "qa525-vnext-containment.py")
+        modules = (_load("qa525_cap_adapters", "qa525-vnext-host-adapters.py", {"containment": containment}),
+                   _load("qa525_cap_reader", "qa525-vnext-state-reader.py"),
+                   _load("qa525_cap_plan", "qa525-vnext-baseline-plan.py"))
+    adapters, sr, plan = modules
     read = adapters.read_only_docker(run)
     last = {"web_image": None}
 

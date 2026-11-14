@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -154,13 +155,40 @@ class BaselineCaptureTests(unittest.TestCase):
         mod._VERIFIED.clear()
         with self.assertRaisesRegex(mod.Blocked, "MODULE_NOT_VERIFIED"):
             mod._load("x_unverified", "qa525-vnext-state-reader.py")
-        qa = mod.QA
-        mod._VERIFIED["qa525-vnext-state-reader.py"] = (qa / "qa525-vnext-state-reader.py").read_bytes()
-        loaded = mod._load("x_verified", "qa525-vnext-state-reader.py")
-        self.assertTrue(callable(loaded.StateReader))
         mod._VERIFIED["qa525-vnext-state-reader.py"] = b"raise SystemExit('swapped bytes executed')"
         with self.assertRaises(SystemExit):
-            mod._load("x_swapped", "qa525-vnext-state-reader.py")  # proves exec uses the cached bytes, not the file on disk
+            mod._load("x_swapped", "qa525-vnext-state-reader.py")  # exec uses the cached bytes, not the file on disk
+
+    def test_containment_comes_from_the_verified_set_not_from_disk(self):
+        for path in mod.CHAIN:
+            mod._VERIFIED[path.name] = path.read_bytes()
+        containment = mod._load("x_containment", "qa525-vnext-containment.py")
+        adapters = mod._load("x_adapters", "qa525-vnext-host-adapters.py", {"containment": containment})
+        self.assertFalse(hasattr(adapters, "__file__"))      # no __file__ => HERE is None => no disk import path at all
+        self.assertIsNone(adapters.HERE)
+        self.assertIs(containment, adapters.containment)     # the injected, verified instance
+        # swapping the bytes of containment AFTER the hash cannot reach adapters: the disk is never consulted
+        mod._VERIFIED["qa525-vnext-containment.py"] = b"raise SystemExit('swapped containment')"
+        mod._load("x_adapters2", "qa525-vnext-host-adapters.py", {"containment": containment})
+        with self.assertRaises(SystemExit):
+            mod._load("x_containment2", "qa525-vnext-containment.py")
+
+    def test_symlinked_invocation_path_is_rejected_not_normalized(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            real = Path(tmp) / "real"
+            (real / "operators").mkdir(parents=True)
+            target = real / "operators" / "entry.py"
+            target.write_text("x = 1\n")
+            link_file = Path(tmp) / "entry-link.py"
+            link_file.symlink_to(target)
+            link_dir = Path(tmp) / "dirlink"
+            link_dir.symlink_to(real)
+            with patch.object(mod.socket, "gethostname", return_value="glmdch"):
+                for invoked in (link_file, link_dir / "operators" / "entry.py"):
+                    with self.subTest(invoked=str(invoked)), self.assertRaisesRegex(mod.Blocked, "TRUST_PATH_UNSAFE"):
+                        mod.verify_chain((Path(os.path.abspath(invoked)),), euid=0)
+        self.assertEqual(Path(os.path.abspath(mod.__file__)), mod._ENTRY)  # entrypoint path is never resolve()d
 
     def test_chain_covers_every_module_the_helper_executes(self):
         names = {p.name for p in mod.CHAIN}
