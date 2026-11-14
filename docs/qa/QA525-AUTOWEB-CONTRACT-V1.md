@@ -39,6 +39,8 @@ Cambios respecto de v1.1 (v1.2 y v1.3):
 
 Canonicalización: JSON ASCII con `sort_keys`, separadores compactos y salto final. Sin claves duplicadas, sin floats, sin NaN y con los campos exactos en cada nivel. `release_id` es el SHA256 de los bytes canónicos sin ese campo. Vigencia: `issued_at <= not_before < expires_at`, con un máximo de 72 h entre `not_before` y `expires_at` y entre `issued_at` y `not_before`; además, `issued_at` no puede tener más de 7 días (v1.3.1).
 
+**Asset único (v1.3.2):** un tar determinista con `envelope.json`, `f4b-shadow.json` (veredicto de sombra F4-B; el host lo ignora), `sbom.json` y `web-image.tar`. El parser del host debe aceptar exactamente estos 4 nombres y no otros.
+
 ## 3. `expect`: lo que aporta el host, nunca el sobre
 `check(raw, expect, classifier_module, now)` exige `expect` con estos campos exactos:
 - `repository`, `source_repository_id`, `classifier_sha256`, `workflow`, `workflow_ref`, `subject`, `allowed_base_image_digests`, `build_args_sha256`, `oci_shape_sha256`, `base_diff_ids_sha256`, `content_layer_count`, `first_sequence`, `last_sequence`: vienen de la **política verificada** (`qa525-vnext-policy.py`, ChatGPT).
