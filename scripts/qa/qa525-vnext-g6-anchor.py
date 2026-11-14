@@ -16,7 +16,10 @@ import json
 from pathlib import Path
 import re
 
-HERE = Path(__file__).resolve().parent
+try:
+    HERE = Path(__file__).resolve().parent
+except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED by bind_dependencies, never read from disk
+    HERE = None
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 MAX_BYTES = 65536
 STATUS = "G6_ANCHOR_METADATA_MATCH_NOT_AUTHENTICATED_NO_PHYSICAL_GO"
@@ -33,9 +36,21 @@ def _module(alias, path):
     return loaded
 
 
-binding = _module("qa525_vnext_binding_for_g6_anchor", "qa525-vnext-trust-binding.py")
+binding = _module("qa525_vnext_binding_for_g6_anchor", "qa525-vnext-trust-binding.py") if HERE is not None else None
 # v2 ONLY. There is deliberately NO fallback to the legacy v1 metadata module.
-g6 = _module("qa525_vnext_g6_v2_for_anchor", "qa525-vnext-g6-v2-evidence.py")
+g6 = _module("qa525_vnext_g6_v2_for_anchor", "qa525-vnext-g6-v2-evidence.py") if HERE is not None else None
+
+SIBLING_MODULES = {"binding": "qa525-vnext-trust-binding.py", "g6": "qa525-vnext-g6-v2-evidence.py"}
+_BOUND = []
+
+
+def bind_dependencies(mapping):
+    """PRE-4 ONLY: receive the exact sibling modules (one verified instance per file, shared by the whole flight)."""
+    if (HERE is not None or _BOUND or type(mapping) is not dict or set(mapping) != set(SIBLING_MODULES)
+            or any(type(m).__name__ != "module" or type(m).__module__ != "builtins" for m in mapping.values())):
+        raise Stop("DEPENDENCY_BINDING_INVALID")
+    globals().update(mapping)
+    _BOUND.append(True)
 
 
 def _pin(raw, pinned, label):

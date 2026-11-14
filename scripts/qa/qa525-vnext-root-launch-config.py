@@ -27,7 +27,7 @@ REPO_ID = re.compile(r"[1-9][0-9]{0,19}\Z")
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256",
     "app_subject_sha256", "inbox", "temp_root", "socket_path", "journal_root",
-    "lease_dir", "peer_uid", "timeout", "children", "g6_pins", "authenticity",
+    "lease_dir", "peer_uid", "timeout", "children", "g6_pins", "authenticity", "apiweb",
 })
 PINS_KEYS = frozenset({
     "ops_source_sha", "app_source_sha", "app_archive_sha256",
@@ -42,7 +42,8 @@ AUTH_KEYS = frozenset({
     "source_repository_id",
 })
 CHILD_MODULES = dict(
-    {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+    {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py",
+     "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
     **{"G6:" + cmd: "qa525-vnext-root-g6-%s.py" % cmd
        for cmd in ("preflight", "init", "backup", "restore", "review")}
 )
@@ -84,6 +85,9 @@ def _validated(data):
                             or g6["g6_command"] not in ("preflight", "init", "backup", "restore", "review")
                             or not _matches(g6["g6_operation_sha256"], SHA)):
         raise Stop("LAUNCH_CONFIG_INVALID")
+
+    if data["apiweb"] is not None and type(data["apiweb"]) is not dict:
+        raise Stop("LAUNCH_CONFIG_INVALID")  # deep shape is checked by the pinned host before any effect
 
     pins, launch, auth = data["pins"], data["launcher_pins"], data["authenticity"]
     if (not all(_matches(pins[k], SOURCE) for k in ("ops_source_sha", "app_source_sha"))

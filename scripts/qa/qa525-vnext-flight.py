@@ -39,7 +39,10 @@ import importlib.util
 import json
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+try:
+    HERE = Path(__file__).resolve().parent
+except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED by bind_dependencies, never read from disk
+    HERE = None
 STATUS = "FLIGHT_RESULT_NOT_AUTHENTICATED_NOT_AUTHORIZED_FOR_PHYSICAL_APPLY"
 
 
@@ -54,18 +57,37 @@ def _load(name: str, filename: str):
     return module
 
 
-journal = _load("qa525_vnext_journal_for_flight", "qa525-vnext-journal.py")
-plan_mod = _load("qa525_vnext_plan_for_flight", "qa525-vnext-baseline-plan.py")
-evidence = _load("qa525_vnext_evidence_for_flight", "qa525-vnext-evidence.py")
-store = _load("qa525_vnext_stage_store_for_flight", "qa525-vnext-stage-store.py")
-terminal = _load("qa525_vnext_terminal_for_flight", "qa525-vnext-terminal.py")
+journal = _load("qa525_vnext_journal_for_flight", "qa525-vnext-journal.py") if HERE is not None else None
+plan_mod = _load("qa525_vnext_plan_for_flight", "qa525-vnext-baseline-plan.py") if HERE is not None else None
+evidence = _load("qa525_vnext_evidence_for_flight", "qa525-vnext-evidence.py") if HERE is not None else None
+store = _load("qa525_vnext_stage_store_for_flight", "qa525-vnext-stage-store.py") if HERE is not None else None
+terminal = _load("qa525_vnext_terminal_for_flight", "qa525-vnext-terminal.py") if HERE is not None else None
 
-# Single journal owner: leases minted by journal.begin() here are the only
-# ones the store and the terminal writer will accept.
-store.journal = journal
-terminal.journal = journal
-if not (store.journal is terminal.journal is journal):  # pragma: no cover
-    raise Stop("FLIGHT_JOURNAL_NOT_SHARED")
+SIBLING_MODULES = {"journal": "qa525-vnext-journal.py", "plan_mod": "qa525-vnext-baseline-plan.py", "evidence": "qa525-vnext-evidence.py", "store": "qa525-vnext-stage-store.py", "terminal": "qa525-vnext-terminal.py"}
+_BOUND = []
+
+
+def bind_dependencies(mapping):
+    """PRE-4 ONLY: receive the exact sibling modules (one verified instance per file, shared by the whole flight)."""
+    if (HERE is not None or _BOUND or type(mapping) is not dict or set(mapping) != set(SIBLING_MODULES)
+            or any(type(m).__name__ != "module" or type(m).__module__ != "builtins" for m in mapping.values())):
+        raise Stop("DEPENDENCY_BINDING_INVALID")
+    globals().update(mapping)
+    _BOUND.append(True)
+    _share_journal()
+
+
+def _share_journal():
+    # Single journal owner: leases minted by journal.begin() here are the only
+    # ones the store and the terminal writer will accept.
+    store.journal = journal
+    terminal.journal = journal
+    if not (store.journal is terminal.journal is journal):  # pragma: no cover
+        raise Stop("FLIGHT_JOURNAL_NOT_SHARED")
+
+
+if HERE is not None:
+    _share_journal()
 
 
 def _intent_proof(plan: dict, stage: str) -> dict:

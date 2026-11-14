@@ -15,7 +15,10 @@ from pathlib import Path
 import re
 import stat
 
-HERE = Path(__file__).resolve().parent
+try:
+    HERE = Path(__file__).resolve().parent
+except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED by bind_dependencies, never read from disk
+    HERE = None
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 UNIT = re.compile(r"qa525-[a-f0-9]{16}-(?:api|web)\.scope\Z")
 MAX_BYTES = 4096
@@ -32,7 +35,19 @@ def _load(name, filename):
     return module
 
 
-journal = _load("qa525_vnext_journal_for_scope_store", "qa525-vnext-journal.py")
+journal = _load("qa525_vnext_journal_for_scope_store", "qa525-vnext-journal.py") if HERE is not None else None
+
+SIBLING_MODULES = {"journal": "qa525-vnext-journal.py"}
+_BOUND = []
+
+
+def bind_dependencies(mapping):
+    """PRE-4 ONLY: receive the exact sibling modules (one verified instance per file, shared by the whole flight)."""
+    if (HERE is not None or _BOUND or type(mapping) is not dict or set(mapping) != set(SIBLING_MODULES)
+            or any(type(m).__name__ != "module" or type(m).__module__ != "builtins" for m in mapping.values())):
+        raise Stop("DEPENDENCY_BINDING_INVALID")
+    globals().update(mapping)
+    _BOUND.append(True)
 
 
 def _path(lease):

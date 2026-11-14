@@ -51,20 +51,34 @@ MAX_ARCHIVE = 512 * 1024 * 1024
 G6_OPERATION_FILE = "g6-operation.json"
 G6_RUN = "qa525-vnext-g6-v2-run.py"
 G6_CHILD_CORE = "qa525-vnext-root-g6-child-core.py"
+APIWEB_HOST = "qa525-vnext-root-apiweb-host.py"  # pinned host-effects module (readers/runner/target); fail closed if absent
+APIWEB_MODULES = {"root_locks": LOCKS, "bridge": "qa525-vnext-admission-bridge.py",
+                  "boundary": "qa525-vnext-b7-root-boundary.py", "b7": "qa525-vnext-b7-held-readonly.py",
+                  "observer": "qa525-vnext-observer.py", "scopes": "qa525-vnext-scope-store.py",
+                  "switch": "qa525-vnext-switch.py", "flight": "qa525-vnext-flight.py",
+                  "g6_anchor": "qa525-vnext-g6-anchor.py", "run_held": "qa525-vnext-held-flight-bridge.py"}
+APIWEB_HOST_MODULES = {"root_locks": LOCKS, "boundary": "qa525-vnext-b7-root-boundary.py",
+                       "scopes": "qa525-vnext-scope-store.py", "containment": "qa525-vnext-containment.py",
+                       "host_adapters": "qa525-vnext-host-adapters.py", "state_reader": "qa525-vnext-state-reader.py",
+                       "health": "qa525-vnext-health.py", "plan": "qa525-vnext-baseline-plan.py",
+                       "b7": "qa525-vnext-b7-held-readonly.py", "physical_runner": "qa525-vnext-held-physical-runner.py"}
+APIWEB_EFFECTS = "qa525-vnext-root-apiweb-effects.py"
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256", "app_subject_sha256",
     "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
-    "g6_pins", "authenticity"})
+    "g6_pins", "authenticity", "apiweb"})
 AUTH_KEYS = frozenset({"ops_allowed_signers", "ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256",
                        "app_archive_path", "drop_uid", "drop_gid", "source_repository_id"})
 PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256",
                        "admission_sha256", "policy_hash"})
 # schema -> scope. One signed GO authorizes exactly one scope; a G6 GO authorizes exactly ONE G6 command.
-SCOPES = {"qa525-go-launcher-v1": "LAUNCHER_ONLY", "qa525-go-g6-v1": "G6_V2_ONLY"}
+SCOPES = {"qa525-go-launcher-v1": "LAUNCHER_ONLY", "qa525-go-g6-v1": "G6_V2_ONLY",
+          "qa525-go-cut-v1": "API_WEB_QA_ONLY"}
 G6_COMMANDS = ("preflight", "init", "backup", "restore", "review")
 # The ONLY scope/command -> child mapping. It lives in code, not in the configuration: an authentic but
 # mis-bound config (swap, duplicate, alternative child) is refused before authentication, nonce or child.
-CHILD_MODULES = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+CHILD_MODULES = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py",
+                      "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
                      **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in G6_COMMANDS})
 
 
@@ -108,6 +122,8 @@ def _config(module):
                            or g6["g6_command"] not in G6_COMMANDS
                            or type(g6["g6_operation_sha256"]) is not str
                            or SHA256.fullmatch(g6["g6_operation_sha256"]) is None):
+        raise Stop("LAUNCH_CONFIG_INVALID")
+    if cfg["apiweb"] is not None and type(cfg["apiweb"]) is not dict:
         raise Stop("LAUNCH_CONFIG_INVALID")
     return cfg
 
@@ -296,8 +312,59 @@ def _accept(path, peer_uid, timeout, *, owner=0, anchor="/"):
     return conn
 
 
+def _once(load):
+    """One module object per pinned name PER INVOCATION. The bootstrap `load_module` execs the verified bytes into a
+    brand-new module on every call, so two loads of the same name give distinct classes and every exact-type check
+    (`type(plane) is root_locks.RootPlane`, Boundary, scope-store) would fail on the real path. The cache is local to
+    this call, holds only bytes-verified modules, never reads disk and is never global."""
+    seen = {}
+
+    def load_once(name):
+        if name not in seen:
+            seen[name] = load(name)
+        return seen[name]
+    for attr in ("_qa525_verified", "_qa525_load_module"):  # the G6 path reads these off the loader
+        if hasattr(load, attr):
+            setattr(load_once, attr, getattr(load, attr))
+    return load_once
+
+
+def _bind_closure(load, roots):
+    """Resolve the TRANSITIVE sibling closure of the pinned API+WEB modules from the ONE verified instance per file
+    and inject it (modules never read siblings from disk under the bootstrap). Missing/unknown/cyclic/malformed
+    dependency declarations are a STOP here, i.e. before any nonce exists. Modules without a declaration are leaves."""
+    seen, order = {}, []
+
+    def visit(name, stack):
+        if name in stack:
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_CYCLE")
+        if name in seen:
+            return
+        try:
+            mod = seen[name] = load(name)
+        except Exception:  # noqa: BLE001 - one fixed code, nothing from the loader is echoed
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_MISSING") from None
+        deps, binder = getattr(mod, "SIBLING_MODULES", None), getattr(mod, "bind_dependencies", None)
+        if deps is None and binder is None:
+            return
+        if (type(deps) is not dict or not callable(binder) or not deps
+                or any(type(k) is not str or type(v) is not str for k, v in deps.items())):
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_INVALID")
+        for dep in deps.values():
+            visit(dep, stack + (name,))
+        order.append((mod, dict(deps)))
+    for root in roots:
+        visit(root, ())
+    for mod, deps in order:
+        try:
+            mod.bind_dependencies({key: load(dep) for key, dep in deps.items()})
+        except Exception:  # noqa: BLE001
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_INVALID") from None
+
+
 def _compose(load, record, env):
     """`env` is built ONLY by launch() below; tests build their own for the private seam."""
+    load = _once(load)
     if env["euid"]() != env["root_euid"]:
         raise Stop("LAUNCH_NOT_ROOT")
     cfg = _config(load(CONFIG))
@@ -348,6 +415,41 @@ def _compose(load, record, env):
             if claims is None:
                 raise Stop("LAUNCH_CLAIMS_MISSING")
             return act_for(claims=dict(claims), launcher_pins=dict(cfg["launcher_pins"]))(fd)
+    elif purpose == "API_WEB_QA_ONLY":
+        act_for = getattr(child_mod, "act_for", None)
+        if not callable(act_for):
+            raise Stop("LAUNCH_CHILD_INVALID")
+        if cfg["apiweb"] is None:
+            raise Stop("LAUNCH_APIWEB_NOT_CONFIGURED")  # this release pins no API_WEB authority: its GO is not honoured
+        # The PRE-4 Verified loader executes a NEW ModuleType on each call.
+        # Share one pinned instance per filename throughout this flight:
+        # RootPlane/Boundary are checked by exact class identity and the
+        # scope-store must share its journal instance with held-flight.
+        # This cache is local to the invocation, never process-global.
+        apiweb_cache = {}
+        def apiweb_load(name):
+            if name not in apiweb_cache:
+                apiweb_cache[name] = load(name)
+            return apiweb_cache[name]
+        apiweb_modules = {k: apiweb_load(v) for k, v in APIWEB_MODULES.items()}
+        apiweb_host = apiweb_load(APIWEB_HOST)
+        apiweb_host_modules = {k: apiweb_load(v) for k, v in APIWEB_HOST_MODULES.items()}
+        apiweb_effects = apiweb_load(APIWEB_EFFECTS)
+        _bind_closure(load, sorted(set(APIWEB_MODULES.values()) | set(APIWEB_HOST_MODULES.values())
+                                   | {APIWEB_HOST, APIWEB_EFFECTS}))  # closed + shared BEFORE any nonce is spent
+        apiweb_authority = dict(cfg["apiweb"], admission_sha256=cfg["pins"]["admission_sha256"],
+                                policy_hash=cfg["pins"]["policy_hash"])
+        apiweb_port = getattr(load(POSIX), "PosixPort")()
+        outer = {}
+
+        def act(fd):
+            claims = granted.get("claims")
+            if claims is None or outer.get("fp") is None:
+                raise Stop("LAUNCH_CLAIMS_MISSING")
+            return act_for(claims=dict(claims), modules=apiweb_modules, host=apiweb_host,
+                           outer_plane=lambda: outer["fp"]._plane, port=apiweb_port,
+                           authority=dict(apiweb_authority), host_modules=apiweb_host_modules,
+                           effects=apiweb_effects)(fd)
     else:
         factory = getattr(child_mod, "act_for", None)
         verified = getattr(load, "_qa525_verified", None)
@@ -388,13 +490,16 @@ def _compose(load, record, env):
             go_bytes=raw["go.json"], go_signature_bytes=raw["go.json.sig"], pins=pins,
             ops_v3_receipt=ops, app_subject=subject, now_utc=dt.datetime.fromtimestamp(now, dt.timezone.utc),
             verify_go_signature=verifier, nonce_unused=lambda _n, _a: True,  # #967 consume is the ONLY marker
-            purpose=purpose, launcher_pins=None if g6_pins else dict(cfg["launcher_pins"]), g6_pins=g6_pins)
+            purpose=purpose, launcher_pins=dict(cfg["launcher_pins"]) if purpose == "LAUNCHER_ONLY" else None, g6_pins=g6_pins)
         try:
             authentic = port(ops_bytes=raw["ops-v3.json"], app_subject_bytes=raw["app-subject.json"], claims=dict(result))
         except Exception:  # noqa: BLE001
             authentic = False
         if authentic is not True:  # check_cut is consistency only; receipts are claims until this port says so
             raise Stop("LAUNCH_AUTHENTICITY_DENIED")
+        if purpose == "API_WEB_QA_ONLY":  # abort marker + staged images, read-only, BEFORE the nonce can be spent
+            apiweb_host.precheck(app_source_sha=result["app_source_sha"], authority=dict(apiweb_authority),
+                                 modules=apiweb_host_modules, effects=apiweb_effects)
         if g6_pins and result.get("g6_command") != g6_pins["g6_command"]:
             raise Stop("LAUNCH_GO_CLAIMS_INVALID")
         if (result.get("purpose") != purpose or type(result.get("nonce")) is not str
@@ -405,6 +510,8 @@ def _compose(load, record, env):
                              "app_archive_sha256": result["app_archive_sha256"]}
         if g6_pins is not None:
             granted["claims"]["g6_command"] = result["g6_command"]
+        if purpose == "API_WEB_QA_ONLY":
+            granted["claims"]["expires_at"] = _epoch(result["expires_at"])  # the host gate refuses any stage after it
         return {"nonce": result["nonce"], "app_archive_sha256": result["app_archive_sha256"],
                 # the nonce journal binds DIGESTS only: the OPS half is the pinned sha256 of the signed v3 receipt
                 # (a 40-hex source sha here made every real consume() stop with NONCE_BINDING_INVALID)
@@ -412,12 +519,18 @@ def _compose(load, record, env):
                 "plan": result["plan_sha256"], "admission": result["admission_sha256"],
                 "expires_at": _epoch(result["expires_at"])}
 
-    locks, posix, plane_mod = load(LOCKS), load(POSIX), load(PLANE)
+    # The outer launcher plane and the re-entrant API/WEB child MUST share
+    # the exact RootPlane class, not only identical verified source bytes.
+    locks = apiweb_modules["root_locks"] if purpose == "API_WEB_QA_ONLY" else load(LOCKS)
+    posix, plane_mod = load(POSIX), load(PLANE)
     flight = plane_mod.launcher_flight(locks, posix.PosixPort(), cfg["lease_dir"], uid=0)  # genuine view only
     sock = env["accept"](cfg["socket_path"], cfg["peer_uid"], cfg["timeout"])
     try:
+        flight_plane = entry.FlightPlane(flight)
+        if purpose == "API_WEB_QA_ONLY":
+            outer["fp"] = flight_plane
         return entry.run(
-            load, plane=entry.FlightPlane(flight), verify_go=verify_go, sock=sock,
+            load, plane=flight_plane, verify_go=verify_go, sock=sock,
             peer_uid=cfg["peer_uid"], peer_pid=None, timeout=cfg["timeout"],
             journal_root=cfg["journal_root"], uid=0, clock=env["now"], child=act)
     finally:

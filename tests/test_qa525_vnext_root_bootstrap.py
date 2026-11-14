@@ -13,7 +13,7 @@ import unittest.mock
 
 SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-root-bootstrap.py"
 CFG_SRC = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-vnext-root-launch-config.py"
-CHILDREN = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py"},
+CHILDREN = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py", "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
                 **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in ("preflight", "init", "backup", "restore", "review")})
 
 
@@ -29,7 +29,7 @@ def good_config():
         "ops_v3_sha256": sha("4"), "app_subject_sha256": sha("5"),
         "inbox": "/var/lib/x/inbox", "temp_root": "/var/lib/x/tmp", "socket_path": "/run/x/s.sock",
         "journal_root": "/var/lib/x/journal", "lease_dir": "/var/lib/x/lease", "peer_uid": 1001, "timeout": 30,
-        "children": dict(CHILDREN), "g6_pins": None,
+        "children": dict(CHILDREN), "g6_pins": None, "apiweb": None,
         "authenticity": {"ops_allowed_signers": "ops ssh-ed25519 BBBB\n", "ops_signature_sha256": sha("6"),
                          "app_bundle_sha256": sha("7"), "trusted_root_sha256": sha("8"),
                          "app_archive_path": "/var/lib/x/app.zip", "drop_uid": 1002, "drop_gid": 1002,
