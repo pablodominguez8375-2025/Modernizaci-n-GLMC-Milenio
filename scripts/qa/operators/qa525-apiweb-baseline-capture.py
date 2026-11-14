@@ -23,6 +23,8 @@ HOST = "glmdch"
 CHAIN = (Path(__file__).resolve(), QA / "qa525-vnext-host-adapters.py", QA / "qa525-vnext-containment.py",
          QA / "qa525-vnext-state-reader.py", QA / "qa525-vnext-baseline-plan.py")
 STATUS = "BASELINE_CAPTURED_READ_ONLY_NO_APPLY"
+CLEAN_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}  # no DOCKER_HOST/DOCKER_CONFIG/DOCKER_CONTEXT from the caller
+_VERIFIED = {}  # file name -> the EXACT bytes that were hashed (what gets executed, no re-read: closes hash/import TOCTOU)
 
 
 class Blocked(Exception):
@@ -57,7 +59,9 @@ def verify_chain(chain=CHAIN, host_ok=None, euid=None):
     digests = {}
     for path in chain:
         trusted(path)
-        digests[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        data = path.read_bytes()
+        _VERIFIED[path.name] = data
+        digests[path.name] = hashlib.sha256(data).hexdigest()
     return digests
 
 
@@ -65,12 +69,17 @@ def _load(name, filename):
     spec = importlib.util.spec_from_file_location(name, QA / filename)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    data = _VERIFIED.get(filename)
+    if data is None:
+        raise Blocked("MODULE_NOT_VERIFIED")  # never execute bytes that verify_chain did not hash
+    exec(compile(data, str(QA / filename), "exec"), module.__dict__)  # noqa: S102 - the verified bytes
     return module
 
 
 def _docker(args):
-    return subprocess.run([DOCKER, *args], check=True, capture_output=True, text=True, timeout=30).stdout
+    trusted(DOCKER)  # the binary itself: root-owned, not writable, not a symlink
+    return subprocess.run([DOCKER, *args], check=True, capture_output=True, text=True, timeout=30,
+                          env=dict(CLEAN_ENV)).stdout
 
 
 def capture(run=_docker, modules=None, module_sha256=None):

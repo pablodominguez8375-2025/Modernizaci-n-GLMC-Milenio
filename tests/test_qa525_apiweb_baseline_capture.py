@@ -41,6 +41,11 @@ def fake_docker(calls, drift=False, state_override=None):
 
 
 class BaselineCaptureTests(unittest.TestCase):
+    def setUp(self):
+        for path in mod.CHAIN:  # what verify_chain() does before capture() may run
+            mod._VERIFIED[path.name] = path.read_bytes()
+        self.addCleanup(mod._VERIFIED.clear)
+
     def test_captures_canonical_baseline_twice_with_only_read_verbs(self):
         calls = []
         result = mod.capture(fake_docker(calls))
@@ -131,6 +136,31 @@ class BaselineCaptureTests(unittest.TestCase):
                 with patch.object(Path, "lstat", fake("ok")):
                     with self.assertRaisesRegex(mod.Blocked, "TRUST_PATH_MISSING"):
                         mod.verify_chain(missing, euid=0)
+
+    def test_docker_runs_with_clean_environment_and_trusted_binary(self):
+        seen = {}
+
+        def fake_run(argv, **kw):
+            seen.update(kw, argv=argv)
+            return type("R", (), {"stdout": "ok"})()
+        with patch.object(mod, "trusted", return_value=None) as trusted, patch.object(mod.subprocess, "run", fake_run), \
+                patch.dict(mod.os.environ, {"DOCKER_HOST": "tcp://evil:2375", "DOCKER_CONFIG": "/tmp/x"}):
+            self.assertEqual("ok", mod._docker(["ps"]))
+        trusted.assert_called_once_with(mod.DOCKER)
+        self.assertEqual({"PATH": "/usr/bin:/bin", "LC_ALL": "C"}, seen["env"])
+        self.assertEqual("/usr/bin/docker", seen["argv"][0])
+
+    def test_modules_execute_only_the_bytes_that_were_hashed(self):
+        mod._VERIFIED.clear()
+        with self.assertRaisesRegex(mod.Blocked, "MODULE_NOT_VERIFIED"):
+            mod._load("x_unverified", "qa525-vnext-state-reader.py")
+        qa = mod.QA
+        mod._VERIFIED["qa525-vnext-state-reader.py"] = (qa / "qa525-vnext-state-reader.py").read_bytes()
+        loaded = mod._load("x_verified", "qa525-vnext-state-reader.py")
+        self.assertTrue(callable(loaded.StateReader))
+        mod._VERIFIED["qa525-vnext-state-reader.py"] = b"raise SystemExit('swapped bytes executed')"
+        with self.assertRaises(SystemExit):
+            mod._load("x_swapped", "qa525-vnext-state-reader.py")  # proves exec uses the cached bytes, not the file on disk
 
     def test_chain_covers_every_module_the_helper_executes(self):
         names = {p.name for p in mod.CHAIN}
