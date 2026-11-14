@@ -12,19 +12,26 @@ The auto-web lane must never be able to touch the API. `ServiceSwitcher` can rec
 Build it with the module factory ``web_only_port(plan, ...)``; the returned object's public
 surface is exactly those two callables (review 5904937432 P1-3).
 
-Guarantees, each tested as a mutant that is rejected BEFORE the real runner is reached:
+THREAT MODEL (independent review, 14-11): this port protects against ACCIDENTAL misuse and
+composition errors inside the trusted root orchestrator. It is NOT a boundary against hostile
+code running in the same Python process: such code can always reach the raw runner through
+closures (`port.apply_web.__closure__` -> switcher -> `_runner.__closure__`). The hard boundary
+against hostile or confused callers is the REAL runner adapter: build it as
+``held_runner(capability, run, argv_guard=web_argv_guard(...))`` (#1021 root plane) so the WEB
+argv allowlist is enforced where the process is actually spawned, under the 5 locks + lease.
+
+Guarantees within that model, each tested as a mutant rejected BEFORE the real runner:
 1. The plan's API layers are identical in baseline and target (auto-web never changes API).
-2. Every argv handed to the real runner is byte-identical to the expected WEB argv
-   (`--unit=qa525-<h>-web.scope`, final service `web`, no extra verbs).
-3. The port object has no attribute leading to a switcher or to the raw runner (__slots__,
-   closures). Python closures stay introspectable, so guarantee 2 is the hard boundary:
-   even a switcher reached by introspection cannot get an API argv past the guard.
-4. Single use is enforced INSIDE the runner guard (review 5904937432 P1-1): each of apply and
-   rollback grants one internal permit, consumed by the guard before the real runner. A
-   switcher reached by introspection has no permit, so even the exact WEB argv is rejected,
-   and a second `switch("web")` is rejected too.
-5. Rollback is refused unless apply was attempted (review P1-2); after a rollback the port is
-   spent: no second rollback and no apply after rollback.
+2. Every argv handed to the real runner is byte-identical to one of the two expected WEB argv
+   (`--unit=qa525-<h>-web.scope`, final service `web`); `web_argv_guard` exports the same
+   allowlist for the real adapter.
+3. The port object has no attribute leading to a switcher or to the raw runner (__slots__).
+4. Single use: apply and rollback each grant one internal permit, consumed by the guard before
+   the real runner; a switcher reached through ONE closure level has no permit, and a second
+   `switch("web")` is rejected (review 5904937432 P1-1, within the threat model above).
+5. Rollback is refused unless apply was attempted; after a rollback the port is spent.
+6. `record_unit` and `scope_factory` only ever see the WEB unit name: an API unit is never
+   recorded durably, even if a switcher is misused (independent review P2).
 
 This module starts no process. It does not authorize an apply: locks, lease, journal,
 policy and envelope checks belong to the future `qa525-vnext-auto.py`.
@@ -81,6 +88,27 @@ def _plan_layers(plan):
     return out
 
 
+def web_argv_guard(plan, *, nonce, project, workdir, env_file):
+    """Allowlist for the REAL runner adapter: accepts only the exact target/baseline WEB argv.
+
+    Returns a callable `guard(argv) -> list` suitable for `held_runner(..., argv_guard=...)`.
+    It does not do single use (the port does); it never accepts an API or compose-wide argv."""
+    layers = _plan_layers(plan)
+    try:
+        unit = containment.unit_name(nonce, "web")
+        allowed = [list(containment.systemd_run_argv(unit, project, workdir, env_file,
+                                                     layers[which]["web"], "web"))
+                   for which in ("target", "baseline")]
+    except containment.Stop:
+        raise Stop("WEB_PORT_COMMAND_INVALID") from None
+
+    def guard(argv):
+        if type(argv) is not list or argv not in allowed or argv[-1] != "web":
+            raise Stop("WEB_PORT_ARGV_NOT_WEB")
+        return list(argv)
+    return guard
+
+
 class WebOnlyPort:
     """Only `apply_web` / `rollback_web`; built by the module factory `web_only_port(...)`."""
 
@@ -93,7 +121,7 @@ class WebOnlyPort:
 def web_only_port(plan, *, nonce, project, workdir, env_file, runner, scope_factory,
                   record_unit, observe, settle, samples=3):
     cls = WebOnlyPort
-    if not callable(runner):
+    if not all(callable(x) for x in (runner, scope_factory, record_unit)):
         raise Stop("WEB_PORT_ADAPTER_INVALID")
     layers = _plan_layers(plan)
     try:
@@ -103,6 +131,16 @@ def web_only_port(plan, *, nonce, project, workdir, env_file, runner, scope_fact
                     for which in ("target", "baseline")}
     except containment.Stop:
         raise Stop("WEB_PORT_COMMAND_INVALID") from None
+    def record_web_unit(name):
+        if name != unit:
+            raise Stop("WEB_PORT_UNIT_NOT_WEB")
+        return record_unit(name)
+
+    def web_scope(name):
+        if name != unit:
+            raise Stop("WEB_PORT_UNIT_NOT_WEB")
+        return scope_factory(name)
+
     state = {"applied": False, "rolled_back": False}
     permits = {"target": False, "baseline": False}
 
@@ -120,8 +158,8 @@ def web_only_port(plan, *, nonce, project, workdir, env_file, runner, scope_fact
 
     def make(which):
         kwargs = dict(nonce=nonce, project=project, workdir=workdir, env_file=env_file,
-                      runner=guarded(which), scope_factory=scope_factory,
-                      record_unit=record_unit, observe=observe, settle=settle, samples=samples)
+                      runner=guarded(which), scope_factory=web_scope,
+                      record_unit=record_web_unit, observe=observe, settle=settle, samples=samples)
         try:
             return switch.ServiceSwitcher.for_plan(plan, which, **kwargs)
         except switch.Stop:

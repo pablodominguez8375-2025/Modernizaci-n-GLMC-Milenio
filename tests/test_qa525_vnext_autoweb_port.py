@@ -30,13 +30,15 @@ class AutoWebPortTests(unittest.TestCase):
         self.code = 0
 
     def port(self, plan=PLAN, runner=None):
+        self.recorded = []
+
         def real_runner(argv):
             self.calls.append(list(argv))
             return self.code
         return P.web_only_port(
             plan, nonce=NONCE, project="centenario-qa-lab2", workdir="/opt/centenario",
             env_file="/etc/pmgm/qa.env", runner=runner or real_runner,
-            scope_factory=AutoWebPortScope, record_unit=lambda unit: None,
+            scope_factory=AutoWebPortScope, record_unit=self.recorded.append,
             observe=lambda: {"web": 1}, settle=lambda: None)
 
     def expected(self, which):
@@ -94,9 +96,39 @@ class AutoWebPortTests(unittest.TestCase):
         for sw in self.introspected_switchers(port):
             for attempt in (lambda: sw.switch("api"), lambda: sw.switch("web"), sw.switch_all,
                             sw.switch_api, sw.switch_web):
-                with self.assertRaisesRegex(P.switch.Stop, "SWITCH_RUNNER_FAILED"):
+                # API is now refused already at scope/record (SWITCH_SCOPE_INVALID); WEB at the guard.
+                with self.assertRaisesRegex(P.switch.Stop, "SWITCH_(RUNNER_FAILED|SCOPE_INVALID)"):
                     attempt()
         self.assertEqual(self.calls, [])
+
+    def test_api_unit_never_recorded_even_by_misused_switcher(self):
+        """Independent review P2: record_unit/scope_factory only see the WEB unit."""
+        port = self.port()
+        for sw in self.introspected_switchers(port):
+            with self.assertRaises(P.switch.Stop):
+                sw.switch("api")
+        port.apply_web()
+        web_unit = P.containment.unit_name(NONCE, "web")
+        self.assertTrue(self.recorded)
+        self.assertTrue(all(u == web_unit for u in self.recorded), self.recorded)
+
+    def test_web_argv_guard_for_real_runner_adapter(self):
+        guard = P.web_argv_guard(PLAN, nonce=NONCE, project="centenario-qa-lab2",
+                                 workdir="/opt/centenario", env_file="/etc/pmgm/qa.env")
+        self.assertEqual(guard(self.expected("target")), self.expected("target"))
+        self.assertEqual(guard(self.expected("baseline")), self.expected("baseline"))
+        unit = P.containment.unit_name(NONCE, "api")
+        api = P.containment.systemd_run_argv(unit, "centenario-qa-lab2", "/opt/centenario",
+                                             "/etc/pmgm/qa.env", PLAN["target"]["layers"]["api"], "api")
+        for bad in (api, self.expected("target")[:-1] + ["api"], self.expected("target") + ["x"], "argv", None):
+            with self.assertRaisesRegex(P.Stop, "WEB_PORT_ARGV_NOT_WEB"):
+                guard(bad)
+
+    def test_threat_model_is_documented(self):
+        """Same-process hostile code is out of scope; the real adapter must use web_argv_guard."""
+        doc = P.__doc__
+        self.assertIn("NOT a boundary against hostile", doc)
+        self.assertIn("web_argv_guard", doc)
 
     def test_mutant_second_web_after_apply_via_introspection(self):
         port = self.port()
