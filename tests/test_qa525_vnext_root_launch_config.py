@@ -47,7 +47,7 @@ def values():
         "peer_uid": 1001,
         "timeout": 5,
         "children": dict(factory.CHILD_MODULES),
-        "g6_pins": None,
+        "g6_pins": None, "apiweb": None,
         "authenticity": {
             "ops_allowed_signers": b"ops-test-signers-lines",
             "ops_signature_sha256": h("4"),

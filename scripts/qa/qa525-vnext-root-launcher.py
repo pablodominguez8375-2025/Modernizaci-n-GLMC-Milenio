@@ -57,10 +57,16 @@ APIWEB_MODULES = {"root_locks": LOCKS, "bridge": "qa525-vnext-admission-bridge.p
                   "observer": "qa525-vnext-observer.py", "scopes": "qa525-vnext-scope-store.py",
                   "switch": "qa525-vnext-switch.py", "flight": "qa525-vnext-flight.py",
                   "g6_anchor": "qa525-vnext-g6-anchor.py", "run_held": "qa525-vnext-held-flight-bridge.py"}
+APIWEB_HOST_MODULES = {"root_locks": LOCKS, "boundary": "qa525-vnext-b7-root-boundary.py",
+                       "scopes": "qa525-vnext-scope-store.py", "containment": "qa525-vnext-containment.py",
+                       "host_adapters": "qa525-vnext-host-adapters.py", "state_reader": "qa525-vnext-state-reader.py",
+                       "health": "qa525-vnext-health.py", "plan": "qa525-vnext-baseline-plan.py",
+                       "b7": "qa525-vnext-b7-held-readonly.py", "physical_runner": "qa525-vnext-held-physical-runner.py"}
+APIWEB_EFFECTS = "qa525-vnext-root-apiweb-effects.py"
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256", "app_subject_sha256",
     "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
-    "g6_pins", "authenticity"})
+    "g6_pins", "authenticity", "apiweb"})
 AUTH_KEYS = frozenset({"ops_allowed_signers", "ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256",
                        "app_archive_path", "drop_uid", "drop_gid", "source_repository_id"})
 PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256",
@@ -116,6 +122,8 @@ def _config(module):
                            or g6["g6_command"] not in G6_COMMANDS
                            or type(g6["g6_operation_sha256"]) is not str
                            or SHA256.fullmatch(g6["g6_operation_sha256"]) is None):
+        raise Stop("LAUNCH_CONFIG_INVALID")
+    if cfg["apiweb"] is not None and type(cfg["apiweb"]) is not dict:
         raise Stop("LAUNCH_CONFIG_INVALID")
     return cfg
 
@@ -361,7 +369,13 @@ def _compose(load, record, env):
         if not callable(act_for):
             raise Stop("LAUNCH_CHILD_INVALID")
         apiweb_modules = {k: load(v) for k, v in APIWEB_MODULES.items()}  # ALL pinned before any nonce is spent
+        if cfg["apiweb"] is None:
+            raise Stop("LAUNCH_APIWEB_NOT_CONFIGURED")  # this release pins no API_WEB authority: its GO is not honoured
         apiweb_host = load(APIWEB_HOST)
+        apiweb_host_modules = {k: load(v) for k, v in APIWEB_HOST_MODULES.items()}
+        apiweb_effects = load(APIWEB_EFFECTS)
+        apiweb_authority = dict(cfg["apiweb"], admission_sha256=cfg["pins"]["admission_sha256"],
+                                policy_hash=cfg["pins"]["policy_hash"])
         apiweb_port = getattr(load(POSIX), "PosixPort")()
         outer = {}
 
@@ -370,7 +384,9 @@ def _compose(load, record, env):
             if claims is None or outer.get("fp") is None:
                 raise Stop("LAUNCH_CLAIMS_MISSING")
             return act_for(claims=dict(claims), modules=apiweb_modules, host=apiweb_host,
-                           outer_plane=lambda: outer["fp"]._plane, port=apiweb_port)(fd)
+                           outer_plane=lambda: outer["fp"]._plane, port=apiweb_port,
+                           authority=dict(apiweb_authority), host_modules=apiweb_host_modules,
+                           effects=apiweb_effects)(fd)
     else:
         factory = getattr(child_mod, "act_for", None)
         verified = getattr(load, "_qa525_verified", None)

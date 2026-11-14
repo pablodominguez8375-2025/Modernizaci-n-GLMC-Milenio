@@ -135,7 +135,7 @@ class LauncherComposeTests(unittest.TestCase):
                "inbox": os.path.join(self.dir, "inbox"), "temp_root": os.path.join(self.dir, "tmp"),
                "socket_path": os.path.join(self.dir, "s"), "journal_root": os.path.join(self.dir, "j"),
                "lease_dir": os.path.join(self.dir, "l"), "peer_uid": UID, "timeout": 5,
-               "children": dict(CHILDREN), "g6_pins": None,
+               "children": dict(CHILDREN), "g6_pins": None, "apiweb": None,
                "authenticity": {"ops_allowed_signers": self.allowed.replace(NS.encode(), b"qa525-ops-v2@pmgm"),
                                 "ops_signature_sha256": sha(self.files["ops-v3.json.sig"]),
                                 "app_bundle_sha256": sha(self.files["app-bundle.json"]),
@@ -281,16 +281,18 @@ class LauncherComposeTests(unittest.TestCase):
         return self.go_bytes(purpose="API_WEB_QA_ONLY", release_asset_sha256=None,
                              old_launcher_sha256=None, candidate_operator_sha256=None)
 
-    def apiweb_loader(self, host=True):
+    def apiweb_loader(self, host=True, configured=True):
         seen = self.apiweb_seen = []
         act = lambda fd: (self.acted.append(os.fstat(fd).st_size), "apiweb")[1]
         child = types.SimpleNamespace(act_for=lambda **kw: (seen.append(kw), act)[1])
-        extra = {"qa525-vnext-root-apiweb-child.py": child}
-        extra.update({v: types.SimpleNamespace(name=k) for k, v in launcher.APIWEB_MODULES.items()
+        extra = {"qa525-vnext-root-apiweb-child.py": child, launcher.APIWEB_EFFECTS: types.SimpleNamespace(name="fx")}
+        extra.update({v: types.SimpleNamespace(name=k) for k, v in
+                      list(launcher.APIWEB_MODULES.items()) + list(launcher.APIWEB_HOST_MODULES.items())
                       if v not in ("qa525-vnext-root-locks.py",)})
         if host:
             extra[launcher.APIWEB_HOST] = types.SimpleNamespace(build=lambda *a: {})
         cfg = self.config()
+        cfg["apiweb"] = {"marker": 1} if configured else None
         return self.loader(cfg=cfg, **extra)
 
     def test_apiweb_go_dispatches_to_the_closed_apiweb_child_exactly_once(self):
@@ -301,6 +303,15 @@ class LauncherComposeTests(unittest.TestCase):
         self.assertEqual(kw["claims"]["purpose"], "API_WEB_QA_ONLY")
         self.assertEqual(set(kw["modules"]), set(launcher.APIWEB_MODULES))
         self.assertTrue(callable(kw["outer_plane"]) and kw["host"] is not None)
+        # the authority is the bootstrap-pinned section PLUS the GO-bound admission/policy digests, never the ZIP
+        self.assertEqual(kw["authority"], {"marker": 1, "admission_sha256": PINS["admission_sha256"],
+                                           "policy_hash": PINS["policy_hash"]})
+        self.assertEqual(set(kw["host_modules"]), set(launcher.APIWEB_HOST_MODULES))
+
+    def test_apiweb_go_is_not_honoured_when_the_release_pins_no_apiweb_authority(self):
+        self.write_inbox(go=self.apiweb_go())
+        self.stop("LAUNCH_APIWEB_NOT_CONFIGURED", load=self.apiweb_loader(configured=False))
+        self.assertEqual((self.spent, self.acted), ([], []))
 
     def test_apiweb_go_without_the_pinned_host_module_stops_before_any_nonce(self):
         self.write_inbox(go=self.apiweb_go())

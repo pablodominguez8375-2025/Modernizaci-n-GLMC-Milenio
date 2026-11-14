@@ -86,7 +86,7 @@ def _read_fd(fd):
         raise Stop("APIWEB_FD_INVALID") from None
 
 
-def act_for(*, claims, modules, host, outer_plane, port):
+def act_for(*, claims, modules, host, outer_plane, port, authority=None, host_modules=None, effects=None):
     """Build the child from AUTHENTICATED claims. `modules`: pinned-loader modules; `host`: pinned host module
     exposing build(archive_bytes, claims) -> {"g6_evidence": dict, "inputs": dict}; `outer_plane`: () -> the
     RootPlane held by the launcher."""
@@ -103,7 +103,7 @@ def act_for(*, claims, modules, host, outer_plane, port):
         if "sha256:" + hashlib.sha256(data).hexdigest() != claims["app_archive_sha256"]:
             raise Stop("APIWEB_ARCHIVE_MISMATCH")
         try:
-            built = host.build(data, dict(claims))
+            built = host.build(data, dict(claims), authority, host_modules, effects)
         except Exception:
             raise Stop("APIWEB_HOST_DENIED") from None
         if type(built) is not dict or set(built) != HOST_KEYS or type(built["inputs"]) is not dict:

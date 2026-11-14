@@ -29,7 +29,7 @@ def good_config():
         "ops_v3_sha256": sha("4"), "app_subject_sha256": sha("5"),
         "inbox": "/var/lib/x/inbox", "temp_root": "/var/lib/x/tmp", "socket_path": "/run/x/s.sock",
         "journal_root": "/var/lib/x/journal", "lease_dir": "/var/lib/x/lease", "peer_uid": 1001, "timeout": 30,
-        "children": dict(CHILDREN), "g6_pins": None,
+        "children": dict(CHILDREN), "g6_pins": None, "apiweb": None,
         "authenticity": {"ops_allowed_signers": "ops ssh-ed25519 BBBB\n", "ops_signature_sha256": sha("6"),
                          "app_bundle_sha256": sha("7"), "trusted_root_sha256": sha("8"),
                          "app_archive_path": "/var/lib/x/app.zip", "drop_uid": 1002, "drop_gid": 1002,

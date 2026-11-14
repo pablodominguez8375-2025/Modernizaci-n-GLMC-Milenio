@@ -72,7 +72,8 @@ class Env(unittest.TestCase):
         self.host = types.SimpleNamespace(build=self.build)
         self.host_result = lambda: {"g6_evidence": {"e": 1}, "inputs": dict(self.inputs)}
 
-    def build(self, data, claims):
+    def build(self, data, claims, *rest):
+        self.rest = rest
         self.built.append((data, claims))
         r = self.host_result()
         if isinstance(r, BaseException):
@@ -93,7 +94,7 @@ class Env(unittest.TestCase):
 
     def act(self, claims=CLAIMS, **over):
         kw = dict(claims=claims if type(claims) is not dict else dict(claims), modules=self.modules, host=self.host,
-                  outer_plane=lambda: self.outer, port="PORT")
+                  outer_plane=lambda: self.outer, port="PORT", authority={"a": 1}, host_modules={"m": 1}, effects="FX")
         kw.update(over)
         return child.act_for(**kw)
 
@@ -159,6 +160,7 @@ class Flight(Env):
         self.assertEqual((kw["port"], kw["g6_evidence"], kw["clock"]), ("PORT", {"e": 1}, 1))
         self.assertEqual(self.built[0][0], DATA)
         self.assertEqual(self.built[0][1], CLAIMS)
+        self.assertEqual(self.rest, ({"a": 1}, {"m": 1}, "FX"))
 
     def test_rolled_back_or_unknown_outcome_is_never_success(self):
         self.result = {"terminal_outcome": "ROLLED_BACK"}
