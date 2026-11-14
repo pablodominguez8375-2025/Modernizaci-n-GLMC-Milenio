@@ -70,3 +70,12 @@ Nada de esto construye, descarga, carga ni arranca nada.
 `apiweb.baseline_sha256` = resumen canónico del baseline que `qa525-vnext-state-reader` produce al leer los 10 contenedores del proyecto
 `centenario-qa-lab2` (inspector del host). El Sponsor lo obtiene con el inventario de solo lectura ya aprobado en la misma ventana en que
 fija los layers; el vuelo lo vuelve a comparar bajo los 5 locks y se detiene si difiere.
+
+## Captura del baseline canónico (helper de solo lectura)
+`scripts/qa/operators/qa525-apiweb-baseline-capture.py --capture` (root en glmdch; único flag) lee los 10 contenedores de `centenario-qa-lab2`
+con el MISMO guardia docker de solo lectura (`ps -a`, `inspect --format`, `image inspect --format`; argv exactos) y el MISMO
+`StateReader.capture_baseline` del vuelo, dos veces; si las lecturas difieren, STOP. Imprime el baseline canónico y su resumen
+`sha256:<hex>` = valor de `apiweb.baseline_sha256`. No escribe archivos, no arranca/detiene/construye/descarga nada y no gasta GO
+(`may_apply=false`). Exige 2 targets running, 5 dependencias running y 3 one-shots `exited 0`; si no, STOP. Ejecutar DESPUÉS de `--prepare`
+(las imágenes target ya no cambian el baseline porque no se aplican). `apiweb.target.layers` NO lo calcula este helper: lo confirma ChatGPT
+(los layers target son los del baseline más los overlays imagen-sola del corte; el vuelo los vuelve a comparar bajo los 5 locks).
