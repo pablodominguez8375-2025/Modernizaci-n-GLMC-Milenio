@@ -26,6 +26,9 @@ F4-B avanza a supervisado solo cuando la sombra demuestre que no produce falsos 
      - HTML: `innerHTML`/`outerHTML`/`insertAdjacentHTML`, `dangerouslySetInnerHTML`;
      - otros: `import.meta.env`, `window.open`, `location.href/assign/replace`, `postMessage`, `Worker`;
      - CSS: `@import`, `url()` externo, `expression()` y `behavior`;
+   - **sin accesos indirectos nuevos** (revisión independiente de #1024, P1): `globalThis`, `self`, `Reflect` o `Proxy`; claves calculadas sobre `window` o `document` (`window['fet'+'ch']`); claves literales que nombran un sumidero (`window["localStorage"]`); y alias de objetos globales (`const w = window`);
+   - **sin peticiones nuevas desde el markup ni desde literales:** `src`/`href`/`action`/`formAction`/`data`/`poster` con URL absoluta, `/api` o dinámica en JSX, `srcDoc`, y literales de URL absoluta o `/api` (`new Image().src = '…'`);
+   - **CSS:** sin escapes `\`, URL absolutas o `//`, `image-set()` ni at-rules fuera de `@media`/`@supports`/`@keyframes`/`@font-face`/`@layer`/`@container`;
    - **sin referencias nuevas** a nombres importados desde módulos `api/`, `auth/`, `accounts/`, `oidc/`, `keycloak/` o `*Api`;
    - **sin llamadas nuevas** a callbacks que mutan (`onSave`, `onDelete`, `onApprove`, `onSubmit`…);
    - el archivo parsea sin errores.
@@ -39,6 +42,13 @@ De 11 commits de solo frontend, **F4-B en sombra habría automatizado 3** (c78bc
 - directorio denegado (2).
 
 Siguiente mejora posible (F4-B v2, a decidir con datos de la sombra): admitir imports relativos hacia archivos **nuevos del mismo release** que a su vez pasen el AST, sin sumideros ni API.
+
+## Lo que F4-B NO detecta (P2 conocidos; por eso sigue en sombra)
+- Llamadas a funciones de API que llegan **por props, contexto o hooks** (`props.api.deleteMember()`, `ctx.save()`), salvo los callbacks `on…Save/Delete/…`. Tampoco nombres nuevos que vienen de un módulo no-API ya importado.
+- Rutas que se arman sin literal de URL, por ejemplo concatenando variables.
+- El gate E2E aún no está conectado: en la calibración se supuso `e2e_passed=True`.
+
+La sombra existe justamente para medir si estos casos aparecen en releases reales antes de pasar a supervisado.
 
 ## Límite honesto
 Ningún análisis estático prueba que una pantalla no cambie datos. El riesgo lo acotan otras dos cosas:

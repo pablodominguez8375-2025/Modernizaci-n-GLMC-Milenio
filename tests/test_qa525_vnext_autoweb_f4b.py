@@ -61,6 +61,37 @@ class AutoWebF4bAnalyzerTests(unittest.TestCase):
                 new = BASE_TSX.replace("  const [n, setN]", f"  {stmt}\n  const [n, setN]")
                 self.assertIn(kind, self.facts(new)["new_sinks"])
 
+    def test_independent_review_evasions_are_detected(self):
+        """P1 of the independent review of #1024 (probe ev.cjs): every line must produce a finding."""
+        evasions = ["globalThis.fetch('/x')", "window['fet'+'ch']('/x')", "void window[`sessionStorage`]",
+                    'void window["localStorage"]', "Reflect.get(window, 'fetch')",
+                    "(document as any)['coo'+'kie'] = 'a=b'", "void navigator['send'+'Beacon']",
+                    "const w = window; w.open()", "window['location'] = '//x'", "self.fetch('/x')"]
+        for stmt in evasions:
+            with self.subTest(stmt=stmt):
+                new = BASE_TSX.replace("  const [n, setN]", f"  {stmt}\n  const [n, setN]")
+                self.assertTrue(self.facts(new)["new_sinks"], stmt)
+
+    def test_markup_and_literal_url_requests_detected(self):
+        for change in ('<img src="https://evil/x.png" />', '<form action="/api/members" method="post"></form>',
+                       '<a href="/api/x">x</a>', '<iframe srcDoc="<b>x</b>" />', '<img src={user.photo} />'):
+            with self.subTest(change=change):
+                new = BASE_TSX.replace("<h2>Talleres</h2>", "<h2>Talleres</h2>" + change)
+                self.assertTrue(self.facts(new)["new_sinks"], change)
+        new = BASE_TSX.replace("useState(0)", "useState(0); const i = new Image(); i.src = 'https://evil/p'")
+        self.assertTrue(self.facts(new)["new_sinks"])
+
+    def test_benign_member_access_still_clean(self):
+        new = BASE_TSX.replace("useState(0)", "useState(0); const rows = [1, 2]; const k = 'a'; const m: Record<string, number> = {}; void rows[0]; void m[k]")
+        self.assertEqual(self.facts(new)["new_sinks"], {})
+
+    def test_css_evasions_detected(self):
+        for css in (".b{background:url(\\2f\\2f evil/x)}", ".b{background:image-set('//evil/x' 1x)}",
+                    "@\\69mport 'x';", ".b{background:url(data:image/svg+xml,x)}", "@charset 'x';"):
+            with self.subTest(css=css):
+                f = analyze("frontend/src/a.css", ".a{color:red}", ".a{color:red}\n" + css)
+                self.assertTrue(f["new_sinks"], css)
+
     def test_dangerously_set_inner_html(self):
         new = BASE_TSX.replace('<div className="panel">', '<div className="panel" dangerouslySetInnerHTML={{ __html: "x" }}>')
         self.assertIn("dangerouslySetInnerHTML", self.facts(new)["new_sinks"])
@@ -84,7 +115,7 @@ class AutoWebF4bAnalyzerTests(unittest.TestCase):
 
     def test_css_sinks(self):
         f = analyze("frontend/src/a.css", ".a{color:red}", ".a{color:red}\n@import 'x.css';\n.b{background:url(https://evil/x.png)}")
-        self.assertEqual(set(f["new_sinks"]), {"css:@import", "css:url_external"})
+        self.assertTrue({"css:@import", "css:url_external"} <= set(f["new_sinks"]))
 
     def test_parse_error_flagged(self):
         self.assertFalse(self.facts(BASE_TSX + "\nexport const = ;\n")["parse_ok"])
