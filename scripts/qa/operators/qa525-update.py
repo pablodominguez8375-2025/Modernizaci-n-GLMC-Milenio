@@ -172,7 +172,8 @@ def make_review_packet(entry, args, modules):
 
 def require_reconciled_archive(entry):
     """A process crash during archival never grants a clean update state."""
-    for name in ('expired-prepared-archive-pending.json', 'pending-dual-reconciliation.json'):
+    for name in ('expired-prepared-archive-pending.json', 'pending-dual-reconciliation.json',
+                 'prepared-successor-archive-pending.json'):
         marker = entry.STATE / name
         require(not marker.exists() and not marker.is_symlink(),
                 'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION')
