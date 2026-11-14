@@ -3,7 +3,7 @@
 ## Estado
 
 - Issue #1020; PR DRAFT #1021; referencia de arquitectura #1010.
-- Base inicial: `dev@6e74c422e14e310f2e463a821a34ad37a2a6b825`; rebase final pendiente sobre `dev@8e851bc3d2f1615a94009591f0781f88d6d3fe6f`.
+- Base inicial: `dev@6e74c422e14e310f2e463a821a34ad37a2a6b825`; rebase completado sobre `dev@8e851bc3d2f1615a94009591f0781f88d6d3fe6f`.
 - `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin cambios.
 - Implementado en rama, todavía no integrado a `dev`.
 
