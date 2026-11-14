@@ -14,7 +14,10 @@ the real adapter. Intent/stop stages are declarative and are NOT handled here.
 import importlib.util
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+try:
+    HERE = Path(__file__).resolve().parent
+except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED by bind_dependencies, never read from disk
+    HERE = None
 # Verification stage -> the verifier kind its evidence must have.
 STAGE_KIND = {
     "API_VERIFIED": "API_SWITCHED",
@@ -35,8 +38,20 @@ def _load(name: str, filename: str):
     return module
 
 
-plan_mod = _load("qa525_vnext_plan_for_evidence", "qa525-vnext-baseline-plan.py")
-verify = _load("qa525_vnext_verify_for_evidence", "qa525-vnext-verify.py")
+plan_mod = _load("qa525_vnext_plan_for_evidence", "qa525-vnext-baseline-plan.py") if HERE is not None else None
+verify = _load("qa525_vnext_verify_for_evidence", "qa525-vnext-verify.py") if HERE is not None else None
+
+SIBLING_MODULES = {"plan_mod": "qa525-vnext-baseline-plan.py", "verify": "qa525-vnext-verify.py"}
+_BOUND = []
+
+
+def bind_dependencies(mapping):
+    """PRE-4 ONLY: receive the exact sibling modules (one verified instance per file, shared by the whole flight)."""
+    if (HERE is not None or _BOUND or type(mapping) is not dict or set(mapping) != set(SIBLING_MODULES)
+            or any(type(m).__name__ != "module" or type(m).__module__ != "builtins" for m in mapping.values())):
+        raise Stop("DEPENDENCY_BINDING_INVALID")
+    globals().update(mapping)
+    _BOUND.append(True)
 
 
 def proof_from_verification(plan: dict, stage: str, result: dict) -> dict:

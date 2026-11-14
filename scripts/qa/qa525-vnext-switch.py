@@ -24,7 +24,10 @@ belong to the future engine, and real adapters are wired only by it.
 import importlib.util
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+try:
+    HERE = Path(__file__).resolve().parent
+except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED by bind_dependencies, never read from disk
+    HERE = None
 STATUS = "SWITCH_RESULT_NOT_AUTHENTICATED_NOT_AUTHORIZED_FOR_PHYSICAL_APPLY"
 
 
@@ -39,7 +42,19 @@ def _load(name: str, filename: str):
     return module
 
 
-containment = _load("qa525_vnext_containment_for_switch", "qa525-vnext-containment.py")
+containment = _load("qa525_vnext_containment_for_switch", "qa525-vnext-containment.py") if HERE is not None else None
+
+SIBLING_MODULES = {"containment": "qa525-vnext-containment.py"}
+_BOUND = []
+
+
+def bind_dependencies(mapping):
+    """PRE-4 ONLY: receive the exact sibling modules (one verified instance per file, shared by the whole flight)."""
+    if (HERE is not None or _BOUND or type(mapping) is not dict or set(mapping) != set(SIBLING_MODULES)
+            or any(type(m).__name__ != "module" or type(m).__module__ != "builtins" for m in mapping.values())):
+        raise Stop("DEPENDENCY_BINDING_INVALID")
+    globals().update(mapping)
+    _BOUND.append(True)
 
 
 class ServiceSwitcher:

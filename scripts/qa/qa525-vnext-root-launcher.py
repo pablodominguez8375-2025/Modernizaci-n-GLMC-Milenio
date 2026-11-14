@@ -329,6 +329,39 @@ def _once(load):
     return load_once
 
 
+def _bind_closure(load, roots):
+    """Resolve the TRANSITIVE sibling closure of the pinned API+WEB modules from the ONE verified instance per file
+    and inject it (modules never read siblings from disk under the bootstrap). Missing/unknown/cyclic/malformed
+    dependency declarations are a STOP here, i.e. before any nonce exists. Modules without a declaration are leaves."""
+    seen, order = {}, []
+
+    def visit(name, stack):
+        if name in stack:
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_CYCLE")
+        if name in seen:
+            return
+        try:
+            mod = seen[name] = load(name)
+        except Exception:  # noqa: BLE001 - one fixed code, nothing from the loader is echoed
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_MISSING") from None
+        deps, binder = getattr(mod, "SIBLING_MODULES", None), getattr(mod, "bind_dependencies", None)
+        if deps is None and binder is None:
+            return
+        if (type(deps) is not dict or not callable(binder) or not deps
+                or any(type(k) is not str or type(v) is not str for k, v in deps.items())):
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_INVALID")
+        for dep in deps.values():
+            visit(dep, stack + (name,))
+        order.append((mod, dict(deps)))
+    for root in roots:
+        visit(root, ())
+    for mod, deps in order:
+        try:
+            mod.bind_dependencies({key: load(dep) for key, dep in deps.items()})
+        except Exception:  # noqa: BLE001
+            raise Stop("LAUNCH_APIWEB_DEPENDENCY_INVALID") from None
+
+
 def _compose(load, record, env):
     """`env` is built ONLY by launch() below; tests build their own for the private seam."""
     load = _once(load)
@@ -402,6 +435,8 @@ def _compose(load, record, env):
         apiweb_host = apiweb_load(APIWEB_HOST)
         apiweb_host_modules = {k: apiweb_load(v) for k, v in APIWEB_HOST_MODULES.items()}
         apiweb_effects = apiweb_load(APIWEB_EFFECTS)
+        _bind_closure(load, sorted(set(APIWEB_MODULES.values()) | set(APIWEB_HOST_MODULES.values())
+                                   | {APIWEB_HOST, APIWEB_EFFECTS}))  # closed + shared BEFORE any nonce is spent
         apiweb_authority = dict(cfg["apiweb"], admission_sha256=cfg["pins"]["admission_sha256"],
                                 policy_hash=cfg["pins"]["policy_hash"])
         apiweb_port = getattr(load(POSIX), "PosixPort")()
