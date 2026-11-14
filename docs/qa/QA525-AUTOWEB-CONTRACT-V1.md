@@ -29,7 +29,7 @@ Cambios respecto de v1.1 (v1.2 y v1.3):
 - **P1-1:** se agrega `candidate.base_image_digests`. Si difiere de `allowed_base_image_digests` de la política, el release es `manual`, porque la base de nginx o node cambió sin ningún archivo modificado (`frontend/Dockerfile:1,24` va por tag).
 - **P1-2:** se agrega `candidate.build_args_sha256`, el JSON canónico de **exactamente los 7 ARG** de `frontend/Dockerfile:8-14`. Si falta o sobra una clave, se rechaza. Reglas fijas (las de `qa-lite-web-build.py`): `VITE_USE_MOCKS="false"`, `VITE_API_BASE_URL=""`, emisor `https://`, `VITE_OIDC_CLIENT_ID="pmgm-web"`, `VITE_OIDC_SCOPE="openid profile"`, `VITE_OIDC_ALLOW_HTTP_LOCAL="false"` y `VITE_OIDC_ALLOW_HTTP_QA` en `true` o `false`. Los valores exactos los fija la política del Sponsor a partir del Compose real (FUENTE ANTES QUE CÓDIGO). El archivo `ops/qa525/autoweb/web-build-args.json` es la entrada del workflow; si no coincide con la política, el release se rechaza sin gastar nada.
 - **v1.3 · Forma y capas OCI ligadas:** `image_binding(config, content_layer_count)` calcula tres hashes:
-  - `oci_shape_sha256`: arquitectura, SO y `Cmd`, `Entrypoint`, `Env`, `ExposedPorts`, `Healthcheck`, `StopSignal`, `User`, `Volumes`, `WorkingDir`, sin `Labels`;
+  - `oci_shape_sha256`: arquitectura, SO y `Cmd`, `Entrypoint`, `Env`, `ExposedPorts`, `Healthcheck`, `Labels`, `OnBuild`, `Shell`, `StopSignal`, `User`, `Volumes`, `WorkingDir` (v1.3.1: se agregan `Labels`, `OnBuild` y `Shell`; un registro con `config` y `Config` a la vez se rechaza);
   - `rootfs_diff_ids_sha256`: todas las capas;
   - `base_diff_ids_sha256`: todas las capas menos las 2 de contenido (`COPY dist` y `RUN chmod`).
 
@@ -37,7 +37,7 @@ Cambios respecto de v1.1 (v1.2 y v1.3):
 - **v1.3 · `sequence` consecutiva:** `sequence == last_applied_sequence + 1` (`ENVELOPE_SEQUENCE_GAP`), dentro de `[first_sequence, last_sequence]` de la política.
 - `source_repository_id` es numérico, igual que en #989; un nombre de repositorio solo no basta.
 
-Canonicalización: JSON ASCII con `sort_keys`, separadores compactos y salto final. Sin claves duplicadas, sin floats, sin NaN y con los campos exactos en cada nivel. `release_id` es el SHA256 de los bytes canónicos sin ese campo. Vigencia: `issued_at <= not_before < expires_at`, con un máximo de 72 h.
+Canonicalización: JSON ASCII con `sort_keys`, separadores compactos y salto final. Sin claves duplicadas, sin floats, sin NaN y con los campos exactos en cada nivel. `release_id` es el SHA256 de los bytes canónicos sin ese campo. Vigencia: `issued_at <= not_before < expires_at`, con un máximo de 72 h entre `not_before` y `expires_at` y entre `issued_at` y `not_before`; además, `issued_at` no puede tener más de 7 días (v1.3.1).
 
 ## 3. `expect`: lo que aporta el host, nunca el sobre
 `check(raw, expect, classifier_module, now)` exige `expect` con estos campos exactos:

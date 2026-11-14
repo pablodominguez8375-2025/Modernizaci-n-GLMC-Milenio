@@ -44,7 +44,7 @@ def image_config(layers=LAYERS, **cfg):
               "Env": ["PATH=/usr/sbin:/usr/bin"], "ExposedPorts": {"80/tcp": {}},
               "Healthcheck": {"Test": ["CMD-SHELL", "wget -qO- http://127.0.0.1/health/web"]},
               "StopSignal": "SIGQUIT", "User": "", "Volumes": None, "WorkingDir": "",
-              "Labels": {"org.opencontainers.image.revision": "x"}}
+              "Labels": {"maintainer": "NGINX Docker Maintainers"}}
     config.update(cfg)
     return {"Id": D("8"), "Architecture": "amd64", "Os": "linux", "Config": config,
             "RootFS": {"Type": "layers", "Layers": list(layers)}}
@@ -122,6 +122,16 @@ class AutoWebClassifierTests(unittest.TestCase):
         jpeg_as_png = F("frontend/src/assets/photo.png", content_kind="jpeg")
         self.assertIn("CONTENT_KIND_MISMATCH", self.res([jpeg_as_png])["reasons"])
         self.assertIn("F4A_REMOVAL_MANUAL", self.res([F("frontend/src/assets/old.png", "removed")])["reasons"])
+
+    def test_p2_coverage_denied_directory_jpeg_header_and_top_ico(self):
+        """The 3 mutants the independent review found uncovered."""
+        for p in ("frontend/src/api/logo.png", "frontend/src/auth/x.png", "frontend/src/Accounts/y.png"):
+            with self.subTest(path=p):
+                self.assertIn("DENIED_DIRECTORY", self.res([F(p)])["reasons"])
+        self.assertEqual(C.sniff(b"\xff\xd8" + b"0" * 10), "unknown")  # needs the 3rd 0xFF byte
+        self.assertEqual(C.sniff(b"\xff\xd8\xff"), "jpeg")
+        self.assertIn("EXTENSION_NOT_ALLOWED", self.res([F("frontend/public/favicon.ico")])["reasons"])
+        self.assertEqual(self.res([F("frontend/public/brand/favicon.ico")])["result"], "auto-web")
 
     def test_sniff_magic_numbers(self):
         self.assertEqual(C.sniff(b"\x89PNG\r\n\x1a\n" + b"0" * 8), "png")
@@ -227,9 +237,7 @@ class AutoWebEnvelopeTests(unittest.TestCase):
         out = check(make(cand=rebased))
         self.assertEqual((out["decision"], out["reasons"]), (E.MANUAL, ["BASE_LAYERS_DRIFT"]))
 
-    def test_labels_do_not_change_shape_but_content_layers_change_rootfs(self):
-        relabeled = E.image_binding(image_config(Labels={"x": "y"}), 2)
-        self.assertEqual(relabeled["oci_shape_sha256"], BINDING["oci_shape_sha256"])
+    def test_content_layers_change_rootfs_but_not_base(self):
         new_content = E.image_binding(image_config(layers=LAYERS[:3] + [D("0"), D("1")]), 2)
         self.assertEqual(new_content["base_diff_ids_sha256"], BINDING["base_diff_ids_sha256"])
         self.assertNotEqual(new_content["rootfs_diff_ids_sha256"], BINDING["rootfs_diff_ids_sha256"])
@@ -265,6 +273,23 @@ class AutoWebEnvelopeTests(unittest.TestCase):
             check(make(times=("2026-11-14T11:00:00Z", "2026-11-14T11:30:00Z", "2026-11-18T11:30:00Z")))
         with self.assertRaisesRegex(E.Stop, "ENVELOPE_TIME_INVALID"):
             check(make(times=("2026-11-14T11:00:00Z", "2026-13-14T11:30:00Z", "2026-11-15T11:30:00Z")))
+
+    def test_p2_shape_includes_labels_shell_onbuild_and_rejects_ambiguous(self):
+        for change in ({"Labels": {"traefik.enable": "true"}}, {"Shell": ["/bin/bash", "-c"]},
+                       {"OnBuild": ["RUN id"]}):
+            with self.subTest(change=change):
+                self.assertNotEqual(E.image_binding(image_config(**change), 2)["oci_shape_sha256"],
+                                    BINDING["oci_shape_sha256"])
+        both = dict(image_config(), config={"Entrypoint": ["/bin/sh"]})
+        with self.assertRaisesRegex(E.Stop, "IMAGE_CONFIG_AMBIGUOUS"):
+            E.image_binding(both, 2)
+
+    def test_p2_issued_at_lower_bound(self):
+        with self.assertRaisesRegex(E.Stop, "ENVELOPE_WINDOW_INVALID"):
+            check(make(times=("2000-01-01T00:00:00Z", "2026-11-14T11:30:00Z", "2026-11-15T11:30:00Z")))
+        with self.assertRaisesRegex(E.Stop, "ENVELOPE_WINDOW_INVALID"):
+            check(make(times=("2026-11-14T11:00:00Z", "2026-11-14T11:30:00Z", "2026-11-15T11:30:00Z")),
+                  now=dt.datetime(2026, 11, 15, 11, 0, 0, tzinfo=dt.timezone.utc) + dt.timedelta(days=7))
 
     def test_sequence_must_be_exactly_next(self):
         for seq in (13, 14):
