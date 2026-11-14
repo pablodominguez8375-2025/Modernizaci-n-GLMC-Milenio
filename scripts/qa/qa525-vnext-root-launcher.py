@@ -481,7 +481,10 @@ def _compose(load, record, env):
                 "plan": result["plan_sha256"], "admission": result["admission_sha256"],
                 "expires_at": _epoch(result["expires_at"])}
 
-    locks, posix, plane_mod = load(LOCKS), load(POSIX), load(PLANE)
+    # The outer launcher plane and the re-entrant API/WEB child MUST share
+    # the exact RootPlane class, not only identical verified source bytes.
+    locks = apiweb_modules["root_locks"] if purpose == "API_WEB_QA_ONLY" else load(LOCKS)
+    posix, plane_mod = load(POSIX), load(PLANE)
     flight = plane_mod.launcher_flight(locks, posix.PosixPort(), cfg["lease_dir"], uid=0)  # genuine view only
     sock = env["accept"](cfg["socket_path"], cfg["peer_uid"], cfg["timeout"])
     try:
