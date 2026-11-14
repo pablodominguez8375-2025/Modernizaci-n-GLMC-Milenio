@@ -262,28 +262,47 @@ class _Noop:
         return None
 
 
-def _read_marker(state):
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def _read_marker(state, actas):
+    """The marker is AUTHENTICATED by ownership, not by its own checksums: regular file, owned by the running (root)
+    user, 0600, single link, bounded size; and its content is a STRICT allowlist (state/prepared.json + the authorized
+    actas, no duplicates, no symlinked origins). Anything else is a STOP before any movement."""
     marker = state / PENDING
-    require(marker.is_file() and not marker.is_symlink(), "PREPARE_ARCHIVE_MARKER_INVALID")
-    data = json.loads(marker.read_text())
+    fd = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as stream:
+        st = os.fstat(stream.fileno())
+        require(stat.S_ISREG(st.st_mode) and st.st_uid == os.geteuid() and st.st_nlink == 1
+                and stat.S_IMODE(st.st_mode) == 0o600 and 0 < st.st_size <= 65536, "PREPARE_ARCHIVE_MARKER_UNTRUSTED")
+        data = json.loads(stream.read(65537))
     require(type(data) is dict and data.get("status") == "ARCHIVE_INCOMPLETE_NO_DEPLOYMENT"
             and type(data.get("items")) is list and type(data.get("archive_name")) is str
             and re.fullmatch(r"review-archive-[0-9a-f]{24}", data["archive_name"])
-            and type(data.get("new_receipt_sha256")) is str, "PREPARE_ARCHIVE_MARKER_INVALID")
+            and type(data.get("new_receipt_sha256")) is str and HEX64.fullmatch(data["new_receipt_sha256"]),
+            "PREPARE_ARCHIVE_MARKER_INVALID")
+    allowed = {"prepared.json": str(state / "prepared.json")}
+    allowed.update({Path(a).name: str(a) for a in actas})
+    seen = set()
     for item in data["items"]:
-        require(type(item) is dict and type(item.get("origin")) is str and type(item.get("sha256")) is str
-                and item["origin"].startswith("/") and Path(item["origin"]).name == item.get("name"),
-                "PREPARE_ARCHIVE_MARKER_INVALID")
+        require(type(item) is dict and set(item) == {"name", "origin", "sha256"}
+                and type(item["name"]) is str and type(item["origin"]) is str and type(item["sha256"]) is str
+                and HEX64.fullmatch(item["sha256"]) and allowed.get(item["name"]) == item["origin"]
+                and item["name"] not in seen, "PREPARE_ARCHIVE_MARKER_ORIGIN_NOT_ALLOWED")
+        seen.add(item["name"])
+        origin = Path(item["origin"])
+        require(not origin.is_symlink() and not origin.parent.is_symlink(), "PREPARE_ARCHIVE_MARKER_ORIGIN_NOT_ALLOWED")
+    require("prepared.json" in seen, "PREPARE_ARCHIVE_MARKER_INVALID")
     return data
 
 
-def recover_prepare_archive(state, fsync_dir=_fsync_dir):
+def recover_prepare_archive(state, fsync_dir=_fsync_dir, actas=ACTAS):
     """Deterministic, supervised recovery of an interrupted successor archive (marker ARCHIVE_INCOMPLETE_NO_DEPLOYMENT).
     The plan is fully computed from the marker and the physical state BEFORE anything moves; any ambiguity is a STOP
     that changes nothing. Nothing is ever deleted except our own aside file, empty archive dir and the marker.
       PUBLISHED  (new receipt in place, byte-identical to the marker digest): roll FORWARD, old receipt+actas stay archived.
       otherwise  (old receipt still, or all of it back at origin): roll BACK, every file returns byte-for-byte."""
-    marker = _read_marker(state)
+    marker = _read_marker(state, actas)
     archive = state / marker["archive_name"]
     receipt, aside = state / "prepared.json", state / "prepared.json.next"
     require(archive.is_dir() and not archive.is_symlink(), "PREPARE_ARCHIVE_RECOVERY_UNSAFE")
@@ -393,7 +412,7 @@ def install_prepared_archiving_predecessor(state, previous, prepared, actas=ACTA
             os.fsync(stream.fileno())
         hook("result")
         if revalidate is not None:
-            revalidate()  # Docker running/health/baseline drift last check, immediately before publication
+            revalidate(archive)  # Docker running/health/baseline drift last check, immediately before publication
         hook("revalidated")
         aside.rename(receipt)  # the only publication step: atomic
         published = True
@@ -407,10 +426,20 @@ def install_prepared_archiving_predecessor(state, previous, prepared, actas=ACTA
         if published:
             raise Blocked("PREPARE_ARCHIVE_PUBLISHED_RECOVERY_REQUIRED") from None
         try:
-            recover_prepare_archive(state, fsync_dir)  # same deterministic code as the supervised recovery
+            recover_prepare_archive(state, fsync_dir, actas)  # same deterministic code as the supervised recovery
         except BaseException:
             pass  # marker stays: nothing lost, further prepare/update blocked until recovered
         raise
+
+
+def make_revalidate(entry_mod, previous, before, docker, state=None):
+    """Final pre-publication check. It runs AFTER the predecessor receipt was moved, so the predecessor is verified
+    at its ARCHIVED path (private_json trust + equality), never at the now-empty state path."""
+    def revalidate(archive):
+        require(entry_mod.private_json(archive / "prepared.json") == previous, "PREPARE_PREDECESSOR_CHANGED")
+        require(snapshot(docker) == before, "PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT")
+        require(entry_mod.health(previous["source_sha"]) is True, "PREPARE_PREDECESSOR_HEALTH_UNVERIFIED")
+    return revalidate
 
 
 def prepare():
@@ -463,10 +492,7 @@ def prepare():
         if previous is not None:
             # signed release + host already re-verified above: only now archive the APPLIED predecessor
             require(previous["source_sha"] != prepared["source_sha"], "PREPARE_TARGET_ALREADY_APPLIED")
-            def revalidate():
-                require(snapshot(builder.transport.docker) == before, "PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT")
-                require(entry_mod.health(previous["source_sha"]) is True, "PREPARE_PREDECESSOR_HEALTH_UNVERIFIED")
-                require(entry_mod.private_json(STATE / "prepared.json") == previous, "PREPARE_PREDECESSOR_CHANGED")
+            revalidate = make_revalidate(entry_mod, previous, before, builder.transport.docker)
             install_prepared_archiving_predecessor(STATE, previous, prepared, now=int(__import__("time").time()),
                                                    revalidate=revalidate)
         else:

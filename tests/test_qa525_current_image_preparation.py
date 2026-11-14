@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -353,7 +354,7 @@ class PreparedSuccessorTests(unittest.TestCase):
                 self.assertTrue((self.state / mod.PENDING).exists())  # blocker stays after a hard crash
                 with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED"):
                     self.check()
-                status = mod.recover_prepare_archive(self.state)
+                status = mod.recover_prepare_archive(self.state, actas=self.actas)
                 self.assertFalse((self.state / mod.PENDING).exists())
                 self.assertFalse((self.state / "prepared.json.next").exists())
                 if step in ("published", "synced"):
@@ -378,7 +379,7 @@ class PreparedSuccessorTests(unittest.TestCase):
             self.install(fsync_dir=fsync_fail)
         self.assertEqual(SHA, json.loads((self.state / "prepared.json").read_text())["source_sha"])
         self.assertTrue((self.state / mod.PENDING).exists())
-        self.assertEqual("ROLLED_FORWARD", mod.recover_prepare_archive(self.state))
+        self.assertEqual("ROLLED_FORWARD", mod.recover_prepare_archive(self.state, actas=self.actas))
         archived = list(self.state.glob("review-archive-*"))[0]
         for name, data in self.snap_files.items():
             self.assertEqual(data, (archived / name).read_bytes())
@@ -397,7 +398,7 @@ class PreparedSuccessorTests(unittest.TestCase):
         (self.state / "prepared.json").write_text('{"tampered": true}')  # origin reoccupied by something else
         before = sorted(str(p) for p in self.state.rglob("*"))
         with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_RECOVERY_UNSAFE"):
-            mod.recover_prepare_archive(self.state)
+            mod.recover_prepare_archive(self.state, actas=self.actas)
         self.assertEqual(before, sorted(str(p) for p in self.state.rglob("*")))
         self.assertTrue((self.state / mod.PENDING).exists())
 
@@ -421,7 +422,7 @@ class PreparedSuccessorTests(unittest.TestCase):
         self.assertFalse((self.state / mod.PENDING).exists())
 
     def test_drift_after_build_before_commit_rolls_back_everything(self):
-        def drift():
+        def drift(archive):
             raise mod.Blocked("PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT")
         with self.assertRaisesRegex(mod.Blocked, "PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT"):
             self.install(revalidate=drift)
@@ -444,7 +445,7 @@ class PreparedSuccessorTests(unittest.TestCase):
         archived = list(self.state.glob("review-archive-*"))[0]
         self.assertTrue((archived / "post.json").exists())
         with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_RECOVERY_UNSAFE"):
-            mod.recover_prepare_archive(self.state)
+            mod.recover_prepare_archive(self.state, actas=self.actas)
         self.assertTrue((self.state / mod.PENDING).exists())
 
     def test_acta_of_another_target_is_never_archived(self):
@@ -459,6 +460,119 @@ class PreparedSuccessorTests(unittest.TestCase):
             self.assertEqual(0, mod.main(["--recover-prepare-archive"]))
             rec.assert_called_once()
         self.assertIn("prepared-successor-archive-pending.json", UPDATE_SRC.read_text())
+
+    def fake_docker(self, image=OLD):
+        def docker(args, **kw):
+            name = args[-1].split("-")[-2]
+            return json.dumps([{"Id": CID, "Image": image, "State": {"Status": "running"},
+                                "Config": {"Labels": {"com.docker.compose.project": mod.PROJECT,
+                                                      "com.docker.compose.service": name}}}])
+        return docker
+
+    def test_real_revalidate_callback_runs_in_real_rename_order_and_publishes(self):
+        class Entry(FakeEntry):
+            health_calls = []
+
+            @staticmethod
+            def health(sha):
+                Entry.health_calls.append(sha)
+                return True
+        docker = self.fake_docker()
+        before = mod.snapshot(docker)
+        revalidate = mod.make_revalidate(Entry, self.previous, before, docker)
+        self.install(revalidate=revalidate)  # prepared.json is ALREADY archived when the callback runs
+        self.assertEqual([OLD_SHA], Entry.health_calls)
+        self.assertEqual(SHA, json.loads((self.state / "prepared.json").read_text())["source_sha"])
+        self.assertFalse((self.state / mod.PENDING).exists())
+
+    def test_real_revalidate_detects_drift_health_and_predecessor_change(self):
+        class Entry(FakeEntry):
+            ok = True
+
+            @staticmethod
+            def health(sha):
+                return Entry.ok
+        docker = self.fake_docker()
+        before = mod.snapshot(docker)
+        cases = {
+            "runtime": (mod.make_revalidate(Entry, self.previous, before, self.fake_docker("sha256:" + "9" * 64)), True),
+            "health": (mod.make_revalidate(Entry, self.previous, before, docker), False),
+            "predecessor": (mod.make_revalidate(Entry, dict(self.previous, api_image_id="sha256:" + "8" * 64), before, docker), True),
+        }
+        for name, (callback, health) in cases.items():
+            with self.subTest(name):
+                self.setUp()
+                Entry.ok = health
+                with self.assertRaises(mod.Blocked):
+                    self.install(revalidate=callback)
+                self.assertEqual(self.snap_files, self.state_files())
+                self.assertFalse((self.state / mod.PENDING).exists())
+
+    def crashed(self, step="moved-1"):
+        class Crash(BaseException):
+            pass
+
+        def hook(label):
+            if label == step:
+                raise Crash()
+        with self.assertRaises(Crash):
+            self.install(hook=hook)
+        return self.state / mod.PENDING
+
+    def test_tampered_marker_is_rejected_before_any_movement(self):
+        marker = self.crashed()
+        good = json.loads(marker.read_text())
+
+        def rewrite(obj, mode=0o600):
+            marker.write_text(json.dumps(obj))
+            marker.chmod(mode)
+
+        outside = Path(self.t.name) / "evil.json"
+        variants = {
+            "origin outside allowlist": dict(good, items=good["items"] + [{"name": "evil.json", "origin": str(outside), "sha256": "a" * 64}]),
+            "origin swapped": dict(good, items=[dict(good["items"][0], origin=str(outside))] + good["items"][1:]),
+            "duplicate": dict(good, items=good["items"] + [good["items"][1]]),
+            "bad archive name": dict(good, archive_name="../../etc"),
+            "bad digest": dict(good, new_receipt_sha256="zz"),
+            "extra field": dict(good, items=[dict(good["items"][0], extra=1)] + good["items"][1:]),
+            "no receipt item": dict(good, items=good["items"][1:]),
+        }
+        snapshot_before = sorted(str(p) for p in self.state.rglob("*"))
+        for name, obj in variants.items():
+            with self.subTest(name):
+                rewrite(obj)
+                with self.assertRaises(mod.Blocked):
+                    mod.recover_prepare_archive(self.state, actas=self.actas)
+                self.assertEqual(snapshot_before, sorted(str(p) for p in self.state.rglob("*")))
+        with self.subTest("mode"):
+            rewrite(good, 0o644)
+            with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_MARKER_UNTRUSTED"):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+        with self.subTest("hardlink"):
+            rewrite(good)
+            os.link(marker, Path(self.t.name) / "marker-link")
+            with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_MARKER_UNTRUSTED"):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+            os.unlink(Path(self.t.name) / "marker-link")
+        with self.subTest("symlink marker"):
+            real = Path(self.t.name) / "real-marker"
+            marker.rename(real)
+            marker.symlink_to(real)
+            with self.assertRaises(OSError):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+            marker.unlink()
+            real.rename(marker)
+        with self.subTest("symlinked origin"):
+            rewrite(good)
+            self.actas[0].parent.rename(Path(self.t.name) / "etc-real")
+            self.actas[0].parent.symlink_to(Path(self.t.name) / "etc-real")
+            with self.assertRaises(mod.Blocked):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+
+    def test_recovery_with_untampered_marker_still_works_after_hardening(self):
+        self.crashed("moved-2")
+        self.assertEqual("ROLLED_BACK", mod.recover_prepare_archive(self.state, actas=self.actas))
+        self.assertEqual(self.snap_files, self.state_files())
 
     def test_symlink_acta_is_refused_before_any_move(self):
         self.actas[0].unlink()

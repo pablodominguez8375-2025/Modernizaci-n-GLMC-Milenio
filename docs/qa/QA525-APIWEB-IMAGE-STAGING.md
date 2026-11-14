@@ -40,7 +40,8 @@ comprueba que el snapshot de los 7 servicios en ejecución es idéntico antes y 
   `--prepare` y `qa525-update.py`): `qa525-current-image-preparation.py --recover-prepare-archive` (root, glmdch, locks, supervisado).
   Plan completo antes de mover: si el recibo nuevo está publicado (digest == marcador) avanza (roll-forward, antiguos quedan
   archivados); si no, devuelve cada archivo byte a byte (roll-back). Cualquier ambigüedad = STOP sin cambios y marcador intacto.
-  NUNCA usar `--reconcile-pending-dual` para este marcador ni borrar/mover a mano.
+  El marcador se autentica por propiedad (root, 0600, nlink 1, tamaño acotado) y por allowlist estricta (`prepared.json` + las 3 actas, sin duplicados ni symlinks);
+  una revalidación final verifica el predecesor en su ruta ARCHIVADA. NUNCA usar `--reconcile-pending-dual` para este marcador ni borrar/mover a mano.
 - `--archive-expired-prepared` y `--reconcile-pending-dual` NO aplican a ese caso (son para actas vencidas/archivado interrumpido).
   **Prohibido** mover, renombrar o borrar `prepared.json` a mano y prohibido ejecutar el legado sin autenticar. Si queda
   `expired-prepared-archive-pending.json` tras un corte, usar `--inspect-pending-archive` y `--reconcile-pending-dual` (revisión firmada).
