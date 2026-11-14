@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -193,6 +194,36 @@ class AuthenticityTests(unittest.TestCase):
         gh = self.gh()
         app = self.app(gh_path=gh, drop_uid=30033, drop_gid=30033, required_euid=0, os_uid=0)
         self.assertIs(app(ARCHIVE, APP_SRC), True)
+        self.assertEqual(Path(self.out, "uid").read_text().strip(), "30033")
+
+    def test_verifier_inputs_are_readable_whatever_umask_root_inherited(self):
+        """Regression (physical GO 12-11-2026): under sudo-rs the root process kept the caller's umask 077, the two
+        verifier inputs were created 0600 and `gh` running as the unprivileged uid could not read them."""
+        seen = {}
+        real_run = self.m.subprocess.run
+
+        def spy(argv, **kw):
+            for flag, key in (("--bundle", "bundle"), ("--custom-trusted-root", "root")):
+                path = argv[argv.index(flag) + 1]
+                seen[key] = stat.S_IMODE(os.stat(path).st_mode)
+            seen["dir"] = stat.S_IMODE(os.stat(os.path.dirname(argv[argv.index("--bundle") + 1])).st_mode)
+            return real_run(argv, **kw)
+        old = os.umask(0o077)
+        try:
+            with unittest.mock.patch.object(self.m.subprocess, "run", spy):
+                self.assertIs(self.app()(ARCHIVE, APP_SRC), True)
+        finally:
+            os.umask(old)
+        self.assertEqual(seen, {"bundle": 0o644, "root": 0o644, "dir": 0o755})
+
+    @unittest.skipUnless(os.geteuid() == 0, "needs root to drop privileges")
+    def test_dropped_verifier_still_reads_its_inputs_under_umask_077(self):
+        old = os.umask(0o077)
+        try:
+            app = self.app(gh_path=self.gh(), drop_uid=30033, drop_gid=30033, required_euid=0, os_uid=0)
+            self.assertIs(app(ARCHIVE, APP_SRC), True)
+        finally:
+            os.umask(old)
         self.assertEqual(Path(self.out, "uid").read_text().strip(), "30033")
 
     # ---- OPS half -----------------------------------------------------------------------------------
