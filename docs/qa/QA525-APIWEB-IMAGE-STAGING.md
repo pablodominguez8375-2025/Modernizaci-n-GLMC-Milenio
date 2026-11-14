@@ -22,13 +22,29 @@ staging, en la sección `apiweb.target.images` de la configuración que el Spons
 verifica la fuente firmada y el host, construye API y WEB con `--pull=false` y etiqueta `org.opencontainers.image.revision=<sha>`,
 comprueba que el snapshot de los 7 servicios en ejecución es idéntico antes y después, y escribe `prepared.json`
 (`may_apply=false`) con `api_image_id` y `web_image_id`.
-- Bloqueo conocido: si ya existe `prepared.json` (recibo del corte 6eed4) devuelve `PREPARE_ALREADY_EXISTS`.
-  **Prohibido** mover, renombrar o borrar `prepared.json` a mano y prohibido ejecutar el legado sin autenticar. La única vía es el
-  archivado autorizado ya existente en `scripts/qa/operators/qa525-update.py --archive-expired-prepared` (contrato estricto de
-  `archive_expired_prepared()`): actas prepared/review/post/GO coherentes, nonce NO consumido, jornales reconciliados, imágenes
-  prebuilt intactas, snapshot y salud del WEB anterior antes y después, marcador write-ahead durable
-  (`expired-prepared-archive-pending.json`), fsync, y todas las actas quedan en `review-archive-*` (nada se borra ni se oculta).
-  Requiere `--source`, `--digest` y `--operator-name soporte@glmdch` explícitos, autorización expresa del Sponsor y revisión de ChatGPT.
+- Predecesor APPLIED (caso 6eed4, hechos físicos 4/4 PASS): `prepared.json` existente con jornal `dual-<sha>` en `APPLIED`, ids de
+  `prepared.json` == `journal.new_images` == contenedores vivos y salud pública del WEB anterior OK. En ese caso `--prepare`
+  ya NO devuelve `PREPARE_ALREADY_EXISTS`: reutiliza `qa525-update.py::previous_prepared_is_applied` (solo lectura), exige que TODOS los
+  jornales `dual-*.json` estén `APPLIED`, que no exista marcador `expired-prepared-archive-pending.json` ni reconciliación pendiente
+  y que el SHA objetivo sea distinto. Solo DESPUÉS de verificar la release firmada/Sigstore y el host (dos veces), construir las imágenes y
+  comprobar que el snapshot de los 7 servicios no cambió, archiva de forma atómica y durable (marcador write-ahead, renombrado a
+  `review-archive-<hex24>`, fsync, marcador borrado como commit, rollback byte a byte ante fallo) `prepared.json` y las actas
+  `/etc/pmgm/qa525-sensitive-reviewed.json`, `qa525-single-operator-postdb-approved.json` y `qa525-supervised-cut.json` que existan, y publica el
+  nuevo `prepared.json` con un único rename. El jornal `dual-<sha>` y la evidencia se conservan. No aplica, no gasta GO, no toca contenedores.
+- Autoridad sobre actas externas (`/etc/pmgm`): solo se archivan las actas del predecesor ya APPLIED (el acta de corte debe tener
+  `target_sha` == SHA del predecesor, si no `PREPARE_ACTA_NOT_PREDECESSOR` y no se mueve nada). Nada se borra: todo queda en
+  `review-archive-<hex24>`. Antes del primer cambio se exige mismo dispositivo (`st_dev`) entre estado y actas
+  (`PREPARE_ARCHIVE_CROSS_DEVICE`, evita EXDEV no atómico). Se re-hashea lo archivado (TOCTOU) y justo antes de publicar se
+  revalida snapshot Docker idéntico, salud del predecesor y `prepared.json` sin cambios (`PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT`).
+- Recuperación (marcador propio `prepared-successor-archive-pending.json`, estado `ARCHIVE_INCOMPLETE_NO_DEPLOYMENT`; bloquea
+  `--prepare` y `qa525-update.py`): `qa525-current-image-preparation.py --recover-prepare-archive` (root, glmdch, locks, supervisado).
+  Plan completo antes de mover: si el recibo nuevo está publicado (digest == marcador) avanza (roll-forward, antiguos quedan
+  archivados); si no, devuelve cada archivo byte a byte (roll-back). Cualquier ambigüedad = STOP sin cambios y marcador intacto.
+  El marcador se autentica por propiedad (root, 0600, nlink 1, tamaño acotado) y por allowlist estricta (`prepared.json` + las 3 actas, sin duplicados ni symlinks);
+  una revalidación final verifica el predecesor en su ruta ARCHIVADA. NUNCA usar `--reconcile-pending-dual` para este marcador ni borrar/mover a mano.
+- `--archive-expired-prepared` y `--reconcile-pending-dual` NO aplican a ese caso (son para actas vencidas/archivado interrumpido).
+  **Prohibido** mover, renombrar o borrar `prepared.json` a mano y prohibido ejecutar el legado sin autenticar. Si queda
+  `expired-prepared-archive-pending.json` tras un corte, usar `--inspect-pending-archive` y `--reconcile-pending-dual` (revisión firmada).
 - Si el estado de 6eed4 NO cumple el contrato: STOP. Se usa `--status` (solo lectura, `archive_reconciliation_required`) y
   `--inspect-pending-archive` para ver un archivado interrumpido; la recuperación es `--reconcile-pending-dual` con revisión firmada,
   nunca una edición manual. Un archivado interrumpido deja el marcador y bloquea toda actualización hasta reconciliar.

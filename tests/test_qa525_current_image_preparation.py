@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -221,6 +222,371 @@ class DynamicImagePreparationTests(unittest.TestCase):
         self.assertIn('"may_apply": False', source)
         self.assertLess(source.index("bootstrap_import_trust()"),
                         source.index("stage = load("))
+
+
+UPDATE_SRC = SRC.parent / "qa525-update.py"
+uspec = importlib.util.spec_from_file_location("qa525_update_for_prepare_test", UPDATE_SRC)
+update_mod = importlib.util.module_from_spec(uspec)
+uspec.loader.exec_module(update_mod)
+
+OLD_SHA = "1" * 40
+OLD_API = "sha256:" + "2" * 64
+OLD_WEB = "sha256:" + "3" * 64
+
+
+class FakeEntry:
+    @staticmethod
+    def private_json(path):
+        return json.loads(Path(path).read_text())
+
+
+class PreparedSuccessorTests(unittest.TestCase):
+    def setUp(self):
+        self.t = tempfile.TemporaryDirectory(prefix="qa525-successor-")
+        self.addCleanup(self.t.cleanup)
+        root = Path(self.t.name)
+        self.state = root / "state"
+        self.etc = root / "etc"
+        self.state.mkdir()
+        self.etc.mkdir()
+        self.actas = tuple(self.etc / n for n in ("review.json", "post.json", "cut.json"))
+        for i, p in enumerate(self.actas):
+            p.write_text('{"acta": %d}' % i)
+        self.previous = {"status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT",
+                         "source_sha": OLD_SHA, "source_asset_sha256": "f" * 64,
+                         "api_image_id": OLD_API, "web_image_id": OLD_WEB}
+        (self.state / "prepared.json").write_text(json.dumps(self.previous))
+        self.journal = {"status": "APPLIED", "source_sha": OLD_SHA,
+                        "new_images": {"api": OLD_API, "web": OLD_WEB}}
+        (self.state / ("dual-" + OLD_SHA + ".json")).write_text(json.dumps(self.journal))
+        self.live = {"api": ["c1", OLD_API, "running"], "web": ["c2", OLD_WEB, "running"]}
+        self.new = {"status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT",
+                    "source_sha": SHA, "source_asset_sha256": "e" * 64,
+                    "api_image_id": API, "web_image_id": WEB}
+        self.actas[2].write_text(json.dumps({"target_sha": OLD_SHA}))
+        self.snap_files = {p.name: p.read_bytes() for p in (self.state / "prepared.json", *self.actas)}
+
+    def check(self, **kw):
+        health = kw.pop("health", lambda sha: True)
+        return mod.applied_predecessor(self.state, update_mod, FakeEntry, kw.pop("live", self.live), health, None)
+
+    def install(self, **kw):
+        return mod.install_prepared_archiving_predecessor(self.state, self.previous, self.new, actas=self.actas, now=1, **kw)
+
+    def test_no_prepared_returns_none(self):
+        (self.state / "prepared.json").unlink()
+        self.assertIsNone(self.check())
+
+    def test_applied_live_healthy_predecessor_is_accepted(self):
+        self.assertEqual(OLD_SHA, self.check()["source_sha"])
+
+    def test_adversarial_predecessor_is_blocked(self):
+        cases = {
+            "not live": lambda: self.check(live={"api": ["c1", API, "running"], "web": self.live["web"]}),
+            "unhealthy": lambda: self.check(health=lambda sha: False),
+            "stopped": lambda: self.check(live={"api": ["c1", OLD_API, "stopped"], "web": self.live["web"]}),
+        }
+        for name, call in cases.items():
+            with self.subTest(name), self.assertRaises(mod.Blocked):
+                call()
+        (self.state / ("dual-" + OLD_SHA + ".json")).write_text(json.dumps(dict(self.journal, status="ROLLED_BACK")))
+        with self.assertRaises(mod.Blocked):
+            self.check()
+
+    def test_other_pending_journal_or_marker_blocks(self):
+        (self.state / ("dual-" + "9" * 40 + ".json")).write_text(json.dumps(dict(self.journal, status="STARTED")))
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_JOURNAL_REQUIRES_RECONCILIATION"):
+            self.check()
+        (self.state / ("dual-" + "9" * 40 + ".json")).unlink()
+        (self.state / mod.PENDING).write_text("{}")
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED"):
+            self.check()
+
+    def test_install_archives_actas_byte_for_byte_and_publishes_new_receipt(self):
+        self.install()
+        self.assertEqual(SHA, json.loads((self.state / "prepared.json").read_text())["source_sha"])
+        self.assertFalse((self.state / mod.PENDING).exists())
+        self.assertFalse((self.state / "prepared.json.next").exists())
+        self.assertTrue(all(not p.exists() for p in self.actas))
+        archives = list(self.state.glob("review-archive-*"))
+        self.assertEqual(1, len(archives))
+        for name, data in self.snap_files.items():
+            self.assertEqual(data, (archives[0] / name).read_bytes())
+        self.assertTrue((self.state / ("dual-" + OLD_SHA + ".json")).exists())  # journal preserved
+        self.assertEqual(0o600, (self.state / "prepared.json").stat().st_mode & 0o777)
+
+    def test_failure_midway_restores_everything_and_removes_marker(self):
+        original = Path.rename
+        calls = []
+
+        def flaky(self_, target):
+            calls.append(self_.name)
+            if self_.name == "post.json":
+                raise OSError("disk")
+            return original(self_, target)
+        with patch.object(Path, "rename", flaky), self.assertRaises(OSError):
+            self.install()
+        self.assertEqual(self.snap_files, {p.name: p.read_bytes() for p in (self.state / "prepared.json", *self.actas)})
+        self.assertFalse((self.state / mod.PENDING).exists())
+        self.assertFalse((self.state / "prepared.json.next").exists())
+        self.assertEqual([], list(self.state.glob("review-archive-*")))
+
+    def state_files(self):
+        return {p.name: p.read_bytes() for p in (self.state / "prepared.json", *self.actas) if p.exists()}
+
+    def test_hard_crash_at_every_transition_is_recoverable_and_preserves_both_receipts(self):
+        steps = ["marker", "aside", "moved-0", "moved-1", "moved-2", "moved-3", "result", "revalidated",
+                 "published", "synced"]
+        new_bytes = json.dumps(self.new, sort_keys=True).encode()
+        for step in steps:
+            with self.subTest(step=step):
+                self.tearDown() if False else None
+                self.setUp()
+
+                class Crash(BaseException):
+                    pass
+
+                def hook(label, step=step):
+                    if label == step:
+                        raise Crash()
+                with self.assertRaises(Crash):
+                    self.install(hook=hook)
+                self.assertTrue((self.state / mod.PENDING).exists())  # blocker stays after a hard crash
+                with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_RECONCILIATION_REQUIRED"):
+                    self.check()
+                status = mod.recover_prepare_archive(self.state, actas=self.actas)
+                self.assertFalse((self.state / mod.PENDING).exists())
+                self.assertFalse((self.state / "prepared.json.next").exists())
+                if step in ("published", "synced"):
+                    self.assertEqual("ROLLED_FORWARD", status)
+                    self.assertEqual(new_bytes, (self.state / "prepared.json").read_bytes())
+                    archived = list(self.state.glob("review-archive-*"))[0]
+                    for name, data in self.snap_files.items():
+                        self.assertEqual(data, (archived / name).read_bytes())
+                else:
+                    self.assertEqual("ROLLED_BACK", status)
+                    self.assertEqual(self.snap_files, self.state_files())
+                    self.assertEqual([], list(self.state.glob("review-archive-*")))
+
+    def test_failure_after_publication_does_not_roll_back_and_is_recovered_forward(self):
+        calls = {"n": 0}
+
+        def fsync_fail(directory):
+            calls["n"] += 1
+            if calls["n"] > 1:  # first call is the marker fsync; the next is after the publication rename
+                raise OSError("fsync")
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_PUBLISHED_RECOVERY_REQUIRED"):
+            self.install(fsync_dir=fsync_fail)
+        self.assertEqual(SHA, json.loads((self.state / "prepared.json").read_text())["source_sha"])
+        self.assertTrue((self.state / mod.PENDING).exists())
+        self.assertEqual("ROLLED_FORWARD", mod.recover_prepare_archive(self.state, actas=self.actas))
+        archived = list(self.state.glob("review-archive-*"))[0]
+        for name, data in self.snap_files.items():
+            self.assertEqual(data, (archived / name).read_bytes())
+
+    def test_recovery_with_ambiguous_state_changes_nothing(self):
+        steps_crash = {}
+
+        class Crash(BaseException):
+            pass
+
+        def hook(label):
+            if label == "moved-1":
+                raise Crash()
+        with self.assertRaises(Crash):
+            self.install(hook=hook)
+        (self.state / "prepared.json").write_text('{"tampered": true}')  # origin reoccupied by something else
+        before = sorted(str(p) for p in self.state.rglob("*"))
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_RECOVERY_UNSAFE"):
+            mod.recover_prepare_archive(self.state, actas=self.actas)
+        self.assertEqual(before, sorted(str(p) for p in self.state.rglob("*")))
+        self.assertTrue((self.state / mod.PENDING).exists())
+
+    def test_cross_device_is_refused_before_any_change(self):
+        real = Path.stat
+
+        class Fake:
+            def __init__(self, st, dev):
+                self._st, self.st_dev = st, dev
+
+            def __getattr__(self, name):
+                return getattr(self._st, name)
+
+        def fake_stat(self_, *a, **k):
+            st = real(self_, *a, **k)
+            return Fake(st, 99) if self_ == self.etc else st
+        with patch.object(Path, "stat", fake_stat), self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_CROSS_DEVICE"):
+            self.install()
+        self.assertEqual(self.snap_files, self.state_files())
+        self.assertEqual([], list(self.state.glob("review-archive-*")))
+        self.assertFalse((self.state / mod.PENDING).exists())
+
+    def test_drift_after_build_before_commit_rolls_back_everything(self):
+        def drift(archive):
+            raise mod.Blocked("PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT")
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_RUNTIME_DRIFT_BEFORE_COMMIT"):
+            self.install(revalidate=drift)
+        self.assertEqual(self.snap_files, self.state_files())
+        self.assertFalse((self.state / mod.PENDING).exists())
+        self.assertEqual([], list(self.state.glob("review-archive-*")))
+
+    def test_acta_changed_between_hash_and_rename_rolls_back(self):
+        original = Path.rename
+
+        def tamper(self_, target):
+            if self_.name == "post.json":
+                self_.write_text('{"swapped": true}')  # TOCTOU window
+            return original(self_, target)
+        with patch.object(Path, "rename", tamper), self.assertRaisesRegex(mod.Blocked, "PREPARE_ACTA_CHANGED_DURING_ARCHIVE"):
+            self.install()
+        # fail-closed: a swapped acta is NEVER silently restored or deleted; marker blocks until supervised recovery,
+        # which also refuses (digest mismatch) and changes nothing
+        self.assertTrue((self.state / mod.PENDING).exists())
+        archived = list(self.state.glob("review-archive-*"))[0]
+        self.assertTrue((archived / "post.json").exists())
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_RECOVERY_UNSAFE"):
+            mod.recover_prepare_archive(self.state, actas=self.actas)
+        self.assertTrue((self.state / mod.PENDING).exists())
+
+    def test_acta_of_another_target_is_never_archived(self):
+        self.actas[2].write_text(json.dumps({"target_sha": "9" * 40}))
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_ACTA_NOT_PREDECESSOR"):
+            self.install()
+        self.assertTrue(self.actas[2].exists())
+        self.assertFalse((self.state / mod.PENDING).exists())
+
+    def test_cli_recover_flag_and_legacy_updater_blocks_on_our_marker(self):
+        with patch.object(mod, "recover", return_value={"status": "x"}) as rec, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(0, mod.main(["--recover-prepare-archive"]))
+            rec.assert_called_once()
+        self.assertIn("prepared-successor-archive-pending.json", UPDATE_SRC.read_text())
+
+    def fake_docker(self, image=OLD):
+        def docker(args, **kw):
+            name = args[-1].split("-")[-2]
+            return json.dumps([{"Id": CID, "Image": image, "State": {"Status": "running"},
+                                "Config": {"Labels": {"com.docker.compose.project": mod.PROJECT,
+                                                      "com.docker.compose.service": name}}}])
+        return docker
+
+    def test_real_revalidate_callback_runs_in_real_rename_order_and_publishes(self):
+        class Entry(FakeEntry):
+            health_calls = []
+
+            @staticmethod
+            def health(sha):
+                Entry.health_calls.append(sha)
+                return True
+        docker = self.fake_docker()
+        before = mod.snapshot(docker)
+        revalidate = mod.make_revalidate(Entry, self.previous, before, docker)
+        self.install(revalidate=revalidate)  # prepared.json is ALREADY archived when the callback runs
+        self.assertEqual([OLD_SHA], Entry.health_calls)
+        self.assertEqual(SHA, json.loads((self.state / "prepared.json").read_text())["source_sha"])
+        self.assertFalse((self.state / mod.PENDING).exists())
+
+    def test_real_revalidate_detects_drift_health_and_predecessor_change(self):
+        class Entry(FakeEntry):
+            ok = True
+
+            @staticmethod
+            def health(sha):
+                return Entry.ok
+        docker = self.fake_docker()
+        before = mod.snapshot(docker)
+        cases = {
+            "runtime": (mod.make_revalidate(Entry, self.previous, before, self.fake_docker("sha256:" + "9" * 64)), True),
+            "health": (mod.make_revalidate(Entry, self.previous, before, docker), False),
+            "predecessor": (mod.make_revalidate(Entry, dict(self.previous, api_image_id="sha256:" + "8" * 64), before, docker), True),
+        }
+        for name, (callback, health) in cases.items():
+            with self.subTest(name):
+                self.setUp()
+                Entry.ok = health
+                with self.assertRaises(mod.Blocked):
+                    self.install(revalidate=callback)
+                self.assertEqual(self.snap_files, self.state_files())
+                self.assertFalse((self.state / mod.PENDING).exists())
+
+    def crashed(self, step="moved-1"):
+        class Crash(BaseException):
+            pass
+
+        def hook(label):
+            if label == step:
+                raise Crash()
+        with self.assertRaises(Crash):
+            self.install(hook=hook)
+        return self.state / mod.PENDING
+
+    def test_tampered_marker_is_rejected_before_any_movement(self):
+        marker = self.crashed()
+        good = json.loads(marker.read_text())
+
+        def rewrite(obj, mode=0o600):
+            marker.write_text(json.dumps(obj))
+            marker.chmod(mode)
+
+        outside = Path(self.t.name) / "evil.json"
+        variants = {
+            "origin outside allowlist": dict(good, items=good["items"] + [{"name": "evil.json", "origin": str(outside), "sha256": "a" * 64}]),
+            "origin swapped": dict(good, items=[dict(good["items"][0], origin=str(outside))] + good["items"][1:]),
+            "duplicate": dict(good, items=good["items"] + [good["items"][1]]),
+            "bad archive name": dict(good, archive_name="../../etc"),
+            "bad digest": dict(good, new_receipt_sha256="zz"),
+            "extra field": dict(good, items=[dict(good["items"][0], extra=1)] + good["items"][1:]),
+            "no receipt item": dict(good, items=good["items"][1:]),
+        }
+        snapshot_before = sorted(str(p) for p in self.state.rglob("*"))
+        for name, obj in variants.items():
+            with self.subTest(name):
+                rewrite(obj)
+                with self.assertRaises(mod.Blocked):
+                    mod.recover_prepare_archive(self.state, actas=self.actas)
+                self.assertEqual(snapshot_before, sorted(str(p) for p in self.state.rglob("*")))
+        with self.subTest("mode"):
+            rewrite(good, 0o644)
+            with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_MARKER_UNTRUSTED"):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+        with self.subTest("hardlink"):
+            rewrite(good)
+            os.link(marker, Path(self.t.name) / "marker-link")
+            with self.assertRaisesRegex(mod.Blocked, "PREPARE_ARCHIVE_MARKER_UNTRUSTED"):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+            os.unlink(Path(self.t.name) / "marker-link")
+        with self.subTest("symlink marker"):
+            real = Path(self.t.name) / "real-marker"
+            marker.rename(real)
+            marker.symlink_to(real)
+            with self.assertRaises(OSError):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+            marker.unlink()
+            real.rename(marker)
+        with self.subTest("symlinked origin"):
+            rewrite(good)
+            self.actas[0].parent.rename(Path(self.t.name) / "etc-real")
+            self.actas[0].parent.symlink_to(Path(self.t.name) / "etc-real")
+            with self.assertRaises(mod.Blocked):
+                mod.recover_prepare_archive(self.state, actas=self.actas)
+
+    def test_recovery_with_untampered_marker_still_works_after_hardening(self):
+        self.crashed("moved-2")
+        self.assertEqual("ROLLED_BACK", mod.recover_prepare_archive(self.state, actas=self.actas))
+        self.assertEqual(self.snap_files, self.state_files())
+
+    def test_symlink_acta_is_refused_before_any_move(self):
+        self.actas[0].unlink()
+        self.actas[0].symlink_to(self.actas[1])
+        with self.assertRaisesRegex(mod.Blocked, "PREPARE_ACTA_UNTRUSTED"):
+            self.install()
+        self.assertTrue((self.state / "prepared.json").exists())
+        self.assertFalse((self.state / mod.PENDING).exists())
+
+    def test_source_wires_release_verification_before_archive(self):
+        src = SRC.read_text()
+        self.assertLess(src.index("signed_source_guard(package, sha)"),
+                        src.index("install_prepared_archiving_predecessor(STATE"))
+        self.assertIn("qa525-update.py", src[src.index("SOURCE_CHAIN"):src.index("class Blocked")])
 
 
 if __name__ == "__main__":
