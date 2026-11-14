@@ -42,6 +42,8 @@ G6_EVIDENCE_FIELDS = frozenset({
     "pinned_admission_sha256", "pinned_approval_sha256",
     "pinned_review_sha256", "pinned_receipt_sha256",
     "pinned_restore_sha256", "observed_archive_sha256",
+    "downloaded_offhost_sha256", "expected_restic_repo_id",
+    "expected_key_epoch",
 })
 G6_BYTE_FIELDS = frozenset({"review_bytes", "receipt_bytes", "restore_bytes"})
 G6_DIGEST_FIELDS = G6_EVIDENCE_FIELDS - G6_BYTE_FIELDS
@@ -151,6 +153,9 @@ def run_synthetic(*, root, admission, admission_sha256, clock,
                         pinned_receipt_sha256=frozen_g6["pinned_receipt_sha256"],
                         pinned_restore_sha256=frozen_g6["pinned_restore_sha256"],
                         observed_archive_sha256=frozen_g6["observed_archive_sha256"],
+                        downloaded_offhost_sha256=frozen_g6["downloaded_offhost_sha256"],
+                        expected_restic_repo_id=frozen_g6["expected_restic_repo_id"],
+                        expected_key_epoch=frozen_g6["expected_key_epoch"],
                         trusted_policy_hash=trusted_policy_hash, now=clock())
                     plane.assert_held()
                     if (type(g6_evidence) is not dict
