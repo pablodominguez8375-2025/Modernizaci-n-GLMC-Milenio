@@ -33,6 +33,7 @@ MAX_EVIDENCE = 1 << 20
 ROOT_UID = 0  # tests may rebind; production semantics are root-owned evidence only
 MODULE_KEYS = frozenset({"root_locks", "boundary", "scopes", "containment", "host_adapters",
                          "state_reader", "health", "plan", "b7", "physical_runner"})
+REVISION_FORMAT = '{{index .Config.Labels "org.opencontainers.image.revision"}}'
 EFFECT_METHODS = ("docker_reader", "executor", "pin_verifier", "https_fetch")
 
 
@@ -126,6 +127,23 @@ def make_gate(clock, expires_at):
     return gate
 
 
+def require_staged_images(read, target, app_source_sha):
+    """Fail-closed BEFORE any mutation: both target images must already exist locally with the EXACT pinned image id
+    and carry the expected source revision label (API = signed app source sha, WEB = target web sha). `read` is the
+    read-only docker guard (image inspect by id only); nothing is built, pulled, started or loaded here. An id that
+    inspects successfully IS that image: ids are content-addressed."""
+    expected = {"api": app_source_sha, "web": target["web_sha"]}
+    for service in ("api", "web"):
+        image = target["images"][service]
+        image = image if image.startswith("sha256:") else "sha256:" + image
+        try:
+            label = read(["image", "inspect", "--format", REVISION_FORMAT, image])
+        except Exception:  # noqa: BLE001
+            raise Stop("APIWEB_STAGED_IMAGE_MISSING") from None
+        if type(label) is not str or label.strip() != expected[service]:
+            raise Stop("APIWEB_STAGED_IMAGE_LABEL_MISMATCH")
+
+
 def build(archive_bytes, claims, authority, modules, effects, now=None):
     if (type(archive_bytes) is not bytes or type(claims) is not dict or type(modules) is not dict
             or not MODULE_KEYS <= set(modules) or any(not callable(getattr(effects, m, None)) for m in EFFECT_METHODS)):
@@ -194,6 +212,8 @@ def build(archive_bytes, claims, authority, modules, effects, now=None):
     execute = effects.executor()
 
     def runner_factory(plane, held, report, plan):
+        # staged images are verified inside the held plane, after B7/G6 and before ANY mutation command is bound
+        require_staged_images(read, a["target"], claims.get("app_source_sha"))
         spec = {"nonce": plane.lease.nonce, "project": host_cfg["project"], "workdir": host_cfg["workdir"],
                 "env_file": host_cfg["env_file"], "baseline_layers": plan["baseline"]["layers"],
                 "target_layers": plan["target"]["layers"], "admission_sha256": a["admission_sha256"]}

@@ -50,6 +50,8 @@ class ApiwebHostFakeDocker:
     def __init__(self):
         self.calls = []
         self.rows = {n: row(i + 1, n) for i, n in enumerate(SERVICES)}
+        self.missing = set()
+        self.labels = {D("7"): "b" * 40, D("8"): "d" * 40}  # staged target images: api = app source, web = web sha
 
     def __call__(self, args):
         self.calls.append(list(args))
@@ -58,7 +60,9 @@ class ApiwebHostFakeDocker:
         if args[0] == "inspect":
             return json.dumps(next(r for r in self.rows.values() if r[0] == args[3]))
         if args[:2] == ["image", "inspect"]:
-            return "a" * 40
+            if args[4] in self.missing:
+                raise RuntimeError("no such image")
+            return self.labels.get(args[4], "a" * 40)
         raise AssertionError(args)
 
 
@@ -127,7 +131,7 @@ class ApiwebHostBase(unittest.TestCase):
                      "evidence_dir": self.dir}}
 
     def build(self, **over):
-        kw = dict(archive_bytes=b"zip", claims={"expires_at": 1800000300}, authority=self.authority, modules=M,
+        kw = dict(archive_bytes=b"zip", claims={"expires_at": 1800000300, "app_source_sha": "b" * 40}, authority=self.authority, modules=M,
                   effects=self.fx, now=None)
         kw.update(over)
         return host.build(kw["archive_bytes"], kw["claims"], kw["authority"], kw["modules"], kw["effects"], kw["now"])
@@ -277,6 +281,43 @@ class ApiwebHostAssembled(ApiwebHostBase):
         self.assertEqual(kw["pins"], self.authority["exec_pins"])
         self.assertEqual(self.fx.paths, self.authority["exec_paths"])
         self.assertEqual((kw["plane"], kw["boundary"], kw["report"]), (plane, "HELD", "REPORT"))
+
+
+class ApiwebHostStagedImages(ApiwebHostBase):
+    def factory(self, **over):
+        calls = []
+        physical = types.SimpleNamespace(bind=lambda **kw: (calls.append(kw), "RUNNER")[1])
+        i = self.build(modules=dict(M, physical_runner=physical), **over)["inputs"]
+        plane = types.SimpleNamespace(lease=types.SimpleNamespace(nonce="n" * 32))
+        plan = {"baseline": {"layers": {"api": ["/a"], "web": ["/w"]}}, "target": {"layers": {"api": ["/b"], "web": ["/v"]}}}
+        return i["runner_factory"], (plane, "HELD", "REPORT", plan), calls
+
+    def test_both_staged_images_must_exist_with_the_expected_revision_before_any_runner_is_bound(self):
+        fn, args, calls = self.factory()
+        self.assertEqual(fn(*args), "RUNNER")
+        verbs = [c for c in self.docker.calls if c[:2] == ["image", "inspect"]]
+        self.assertEqual([c[4] for c in verbs[-2:]], [D("7"), D("8")])  # exact pinned ids, api then web
+
+    def test_missing_image_or_wrong_revision_stops_with_no_runner(self):
+        for mutate, code in ((lambda d: d.missing.add(D("7")), "APIWEB_STAGED_IMAGE_MISSING"),
+                             (lambda d: d.missing.add(D("8")), "APIWEB_STAGED_IMAGE_MISSING"),
+                             (lambda d: d.labels.update({D("7"): "c" * 40}), "APIWEB_STAGED_IMAGE_LABEL_MISMATCH"),
+                             (lambda d: d.labels.update({D("8"): "c" * 40}), "APIWEB_STAGED_IMAGE_LABEL_MISMATCH")):
+            with self.subTest(code=code):
+                self.docker = ApiwebHostFakeDocker()
+                self.fx = ApiwebHostFx(self.docker)
+                mutate(self.docker)
+                fn, args, calls = self.factory()
+                with self.assertRaises(host.Stop) as err:
+                    fn(*args)
+                self.assertEqual(str(err.exception), code)
+                self.assertEqual(calls, [])
+
+    def test_the_check_only_issues_read_only_image_inspect_and_never_builds_or_loads(self):
+        fn, args, _ = self.factory()
+        fn(*args)
+        self.assertTrue(all(c[0] in ("ps", "inspect", "image") for c in self.docker.calls))
+        self.assertTrue(all(c[1] == "inspect" for c in self.docker.calls if c[0] == "image"))
 
 
 class ApiwebHostEffects(unittest.TestCase):
