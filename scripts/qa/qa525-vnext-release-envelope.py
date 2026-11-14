@@ -21,7 +21,7 @@ import json
 import re
 
 SCHEMA = "pmgm-qa-auto-web-envelope-v1"
-CONTRACT = "1.2"
+CONTRACT = "1.3"
 MAX_BYTES = 262144
 MAX_VALIDITY_S = 72 * 3600
 ISSUER = "https://token.actions.githubusercontent.com"
@@ -35,7 +35,8 @@ TOP = frozenset({"schema", "release_id", "repository", "source_repository_id", "
 INSTALLED = frozenset({"sha", "web_image_digest", "api_image_digest", "compose_bytes_sha256",
                        "identity_digest", "silo_image_digest"})
 CANDIDATE = frozenset({"sha", "web_image_digest", "web_image_archive_sha256", "web_sbom_sha256",
-                       "base_image_digests", "build_args_sha256"})
+                       "base_image_digests", "build_args_sha256", "oci_shape_sha256",
+                       "rootfs_diff_ids_sha256", "base_diff_ids_sha256"})
 BASES = frozenset({"build", "final"})
 LINEAGE = frozenset({"merge_base", "ahead_by", "total_changed_files", "changed_files_complete",
                      "changed_files"})
@@ -44,7 +45,15 @@ CI = frozenset({"workflow", "workflow_ref", "run_id", "run_attempt", "issuer", "
                 "source_sha"})
 EXPECT = frozenset({"repository", "source_repository_id", "installed", "classifier_sha256",
                     "workflow", "workflow_ref", "subject", "allowed_base_image_digests",
-                    "build_args_sha256", "first_sequence", "last_sequence", "last_applied_sequence"})
+                    "build_args_sha256", "oci_shape_sha256", "base_diff_ids_sha256",
+                    "content_layer_count", "first_sequence", "last_sequence", "last_applied_sequence"})
+# The 7 ARG of frontend/Dockerfile:8-14, exactly (review 5904808610 P1-1).
+BUILD_ARG_KEYS = frozenset({"VITE_API_BASE_URL", "VITE_USE_MOCKS", "VITE_OIDC_AUTHORITY",
+                            "VITE_OIDC_CLIENT_ID", "VITE_OIDC_SCOPE", "VITE_OIDC_ALLOW_HTTP_LOCAL",
+                            "VITE_OIDC_ALLOW_HTTP_QA"})
+# OCI config keys that define how the WEB container runs; Labels are excluded (CI metadata).
+SHAPE_KEYS = ("Cmd", "Entrypoint", "Env", "ExposedPorts", "Healthcheck", "StopSignal", "User",
+              "Volumes", "WorkingDir")
 
 # Decisions (not authorizations). Stop codes are `reject`.
 AUTO_WEB_CANDIDATE = "AUTO_WEB_CANDIDATE_CHECKED_NO_APPLY"
@@ -76,12 +85,63 @@ def release_id(record):
 
 
 def build_args_sha256(args):
-    """Digest of the WEB image build arguments (contract P1-2). Values must be strings."""
-    if type(args) is not dict or any(type(k) is not str or type(v) is not str for k, v in args.items()):
+    """Digest of the EXACT 7 WEB build arguments (contract P1-2, same rules as qa-lite-web-build).
+
+    Exact values (authority, ALLOW_HTTP_QA) are pinned by the Sponsor policy from the real
+    compose (FUENTE ANTES QUE CODIGO); here only the invariant rules are enforced."""
+    if (type(args) is not dict or set(args) != BUILD_ARG_KEYS
+            or any(type(v) is not str or len(v) > 256 or any(c in v for c in "\r\n\x00")
+                   for v in args.values())):
         raise Stop("BUILD_ARGS_INVALID")
-    if args.get("VITE_USE_MOCKS") != "false":
+    if args["VITE_USE_MOCKS"] != "false":
         raise Stop("BUILD_ARGS_MOCKS_FORBIDDEN")
+    if (args["VITE_API_BASE_URL"] != "" or not args["VITE_OIDC_AUTHORITY"].startswith("https://")
+            or args["VITE_OIDC_CLIENT_ID"] != "pmgm-web" or args["VITE_OIDC_SCOPE"] != "openid profile"
+            or args["VITE_OIDC_ALLOW_HTTP_LOCAL"] != "false"
+            or args["VITE_OIDC_ALLOW_HTTP_QA"] not in ("true", "false")):
+        raise Stop("BUILD_ARGS_IDENTITY_CHANGED")
     return "sha256:" + hashlib.sha256(canonical(args)).hexdigest()
+
+
+def _sha_of(obj):
+    return "sha256:" + hashlib.sha256(canonical(obj)).hexdigest()
+
+
+def image_binding(image_config, content_layer_count):
+    """From an OCI image config (or `docker image inspect` record): shape and layer digests.
+
+    Returns {oci_shape_sha256, rootfs_diff_ids_sha256, base_diff_ids_sha256}. The base layers are
+    every diff_id except the last `content_layer_count` (COPY dist + chmod in frontend/Dockerfile).
+    Used by CI to fill the envelope and by the host on the LOADED image (review P1-3)."""
+    if type(image_config) is not dict or type(content_layer_count) is not int or content_layer_count < 1:
+        raise Stop("IMAGE_CONFIG_INVALID")
+    cfg = image_config.get("config", image_config.get("Config"))
+    rootfs = image_config.get("rootfs", image_config.get("RootFS"))
+    arch = image_config.get("architecture", image_config.get("Architecture"))
+    osname = image_config.get("os", image_config.get("Os"))
+    if type(cfg) is not dict or type(rootfs) is not dict or type(arch) is not str or type(osname) is not str:
+        raise Stop("IMAGE_CONFIG_INVALID")
+    diff_ids = rootfs.get("diff_ids", rootfs.get("Layers"))
+    if (type(diff_ids) is not list or len(diff_ids) <= content_layer_count
+            or any(type(d) is not str or DIGEST.fullmatch(d) is None for d in diff_ids)):
+        raise Stop("IMAGE_CONFIG_INVALID")
+    shape = {"architecture": arch, "os": osname, "config": {k: cfg.get(k) for k in SHAPE_KEYS}}
+    try:
+        shape_sha = _sha_of(shape)
+    except (TypeError, ValueError):
+        raise Stop("IMAGE_CONFIG_INVALID") from None
+    return {"oci_shape_sha256": shape_sha, "rootfs_diff_ids_sha256": _sha_of(diff_ids),
+            "base_diff_ids_sha256": _sha_of(diff_ids[:-content_layer_count])}
+
+
+def verify_loaded_image(decision, image_config, content_layer_count):
+    """Host side, after `docker load` and BEFORE spending: the loaded image is the attested one."""
+    if type(decision) is not dict or decision.get("decision") != AUTO_WEB_CANDIDATE:
+        raise Stop("LOADED_IMAGE_NO_CANDIDATE")
+    got = image_binding(image_config, content_layer_count)
+    for key in ("oci_shape_sha256", "rootfs_diff_ids_sha256", "base_diff_ids_sha256"):
+        _eq(got[key], decision[key], "LOADED_IMAGE_MISMATCH")
+    return True
 
 
 def build(*, repository, source_repository_id, sequence, installed, candidate, lineage,
@@ -212,6 +272,8 @@ def check(raw, *, expect, classifier_module, now):
         raise Stop("ENVELOPE_SEQUENCE_INVALID")
     if seq <= applied:
         raise Stop("ENVELOPE_SEQUENCE_REPLAY")
+    if seq != applied + 1:
+        raise Stop("ENVELOPE_SEQUENCE_GAP")
     if not first <= seq <= last:
         raise Stop("ENVELOPE_SEQUENCE_OUTSIDE_POLICY")
 
@@ -233,11 +295,20 @@ def check(raw, *, expect, classifier_module, now):
         raise Stop("EXPECT_INVALID")
     if cand["base_image_digests"] != allowed:
         return dict(base, decision=MANUAL, reasons=["BASE_IMAGE_DRIFT"])
+    if type(expect["content_layer_count"]) is not int or expect["content_layer_count"] < 1:
+        raise Stop("EXPECT_INVALID")
     _eq(cand["build_args_sha256"], expect["build_args_sha256"], "ENVELOPE_BUILD_ARGS")
+    if cand["oci_shape_sha256"] != expect["oci_shape_sha256"]:
+        return dict(base, decision=MANUAL, reasons=["OCI_SHAPE_CHANGED"])
+    if cand["base_diff_ids_sha256"] != expect["base_diff_ids_sha256"]:
+        return dict(base, decision=MANUAL, reasons=["BASE_LAYERS_DRIFT"])
     if now < start:
         return dict(base, decision=NO_OP_NOT_BEFORE)
     return dict(base, decision=AUTO_WEB_CANDIDATE, web_image_digest=cand["web_image_digest"],
                 web_image_archive_sha256=cand["web_image_archive_sha256"],
+                oci_shape_sha256=cand["oci_shape_sha256"],
+                rootfs_diff_ids_sha256=cand["rootfs_diff_ids_sha256"],
+                base_diff_ids_sha256=cand["base_diff_ids_sha256"],
                 rollback_web_image_digest=inst["web_image_digest"])
 
 

@@ -33,11 +33,11 @@ CLASSIFIER = _load("qa525-vnext-release-classifier")
 
 STATES = frozenset({"IDLE", "BLOCKED"})
 EVENTS = frozenset({"lock_busy", "network_drop", "asset_count", "asset_oversize", "policy_ok",
-                    "attestation_ok", "loaded_digest_ok", "image_shape_ok", "invariants_pre_ok",
+                    "attestation_ok", "loaded_digest_ok", "invariants_pre_ok",
                     "crash", "health_ok", "invariants_post_ok", "rollback_ok"})
 DEFAULT_EVENTS = {"lock_busy": False, "network_drop": False, "asset_count": 1,
                   "asset_oversize": False, "policy_ok": True, "attestation_ok": True,
-                  "loaded_digest_ok": True, "image_shape_ok": True, "invariants_pre_ok": True,
+                  "loaded_digest_ok": True, "invariants_pre_ok": True,
                   "crash": None, "health_ok": True, "invariants_post_ok": True, "rollback_ok": True}
 
 
@@ -45,11 +45,13 @@ def _out(outcome, code, state, spent=False, critical=False):
     return {"outcome": outcome, "code": code, "state": state, "spent": spent, "critical": critical}
 
 
-def tick(*, state, raw, expect, now, events=None):
+def tick(*, state, raw, expect, now, image_config=None, events=None):
     """One tick. Returns {outcome, code, state, spent, critical}.
 
     outcome in {auto-web, manual, reject, no-op, BLOCKED}. `spent` means the sequence and one
     release slot of the policy were consumed (only after the durable APPLYING intent).
+    `image_config` is the OCI config of the image the host LOADED (read-only measurement); it is
+    checked with `verify_loaded_image` (shape + layers), never replaced by a boolean.
     """
     ev = dict(DEFAULT_EVENTS)
     if events:
@@ -83,8 +85,10 @@ def tick(*, state, raw, expect, now, events=None):
         return _out("reject", "INVARIANT_DRIFT_PRE", "IDLE")
     if not ev["loaded_digest_ok"]:
         return _out("reject", "LOADED_DIGEST_MISMATCH", "IDLE")
-    if not ev["image_shape_ok"]:
-        return _out("manual", "IMAGE_SHAPE_CHANGED", "IDLE")
+    try:
+        ENVELOPE.verify_loaded_image(decision, image_config, expect["content_layer_count"])
+    except ENVELOPE.Stop as exc:
+        return _out("reject", str(exc), "IDLE")
     # Durable APPLYING intent written: from here the slot is spent.
     if ev["crash"] in ("APPLYING", "VERIFYING"):
         return _out("BLOCKED", "RECOVERY_REQUIRED_" + ev["crash"], "BLOCKED", spent=True)

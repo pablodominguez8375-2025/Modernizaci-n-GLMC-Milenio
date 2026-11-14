@@ -1,4 +1,4 @@
-"""Hermetic tests: auto-web classifier, envelope v1.2 and F1 simulator (19 cases).
+"""Hermetic tests: auto-web classifier (F4-A), envelope v1.3, CI producer and F1 simulator.
 
 No signature, host, docker or network. Vectors mirror docs/qa/QA525-AUTOWEB-CONTRACT-V1.md §6.
 """
@@ -34,17 +34,39 @@ INST, CAND = "a" * 40, "b" * 40
 INSTALLED = {"sha": INST, "web_image_digest": D("1"), "api_image_digest": D("2"),
              "compose_bytes_sha256": D("3"), "identity_digest": D("4"), "silo_image_digest": D("5")}
 BASES = {"build": D("6"), "final": D("7")}
-ARGS = {"VITE_API_BASE_URL": "", "VITE_USE_MOCKS": "false",
-        "VITE_OIDC_AUTHORITY": "https://sistema.example/identity/realms/pmgm",
-        "VITE_OIDC_CLIENT_ID": "pmgm-web", "VITE_OIDC_SCOPE": "openid profile"}
+ARGS = json.loads((ROOT / "ops/qa525/autoweb/web-build-args.json").read_text())
 ARGS_SHA = E.build_args_sha256(ARGS)
+LAYERS = [D(c) for c in "bcd"] + [D("e"), D("f")]  # 3 base (nginx + conf) + 2 content (dist, chmod)
+
+
+def image_config(layers=LAYERS, **cfg):
+    config = {"Cmd": ["nginx", "-g", "daemon off;"], "Entrypoint": ["/docker-entrypoint.sh"],
+              "Env": ["PATH=/usr/sbin:/usr/bin"], "ExposedPorts": {"80/tcp": {}},
+              "Healthcheck": {"Test": ["CMD-SHELL", "wget -qO- http://127.0.0.1/health/web"]},
+              "StopSignal": "SIGQUIT", "User": "", "Volumes": None, "WorkingDir": "",
+              "Labels": {"org.opencontainers.image.revision": "x"}}
+    config.update(cfg)
+    return {"Id": D("8"), "Architecture": "amd64", "Os": "linux", "Config": config,
+            "RootFS": {"Type": "layers", "Layers": list(layers)}}
+
+
+BINDING = E.image_binding(image_config(), 2)
 NOW = dt.datetime(2026, 11, 14, 12, 0, 0, tzinfo=dt.timezone.utc)
-F = lambda p, st="modified", **kw: dict({"path": p, "status": st, "mode": "100644"}, **kw)  # noqa: E731
-UI = sorted([F("frontend/src/LodgeManagementPage.tsx"), F("frontend/src/home-consistency.css"),
-             F("frontend/public/brand/logo.svg", "added")], key=lambda e: e["path"])
+KIND = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".webp": "webp", ".woff2": "woff2", ".ico": "ico"}
+
+
+def F(p, st="modified", **kw):
+    kind = "none" if st == "removed" else KIND.get(p[p.rfind("."):], "unknown")
+    return dict({"path": p, "status": st, "mode": "100644", "content_kind": kind}, **kw)
+
+
+UI = sorted([F("frontend/src/assets/lodge-banner.webp"), F("frontend/src/fonts/serif.woff2"),
+             F("frontend/public/brand/logo.png", "added")], key=lambda e: e["path"])
 EXPECT = {"repository": REPO, "source_repository_id": REPO_ID, "installed": dict(INSTALLED),
           "classifier_sha256": CLS_SHA, "workflow": WF, "workflow_ref": REF, "subject": SUBJECT,
           "allowed_base_image_digests": dict(BASES), "build_args_sha256": ARGS_SHA,
+          "oci_shape_sha256": BINDING["oci_shape_sha256"],
+          "base_diff_ids_sha256": BINDING["base_diff_ids_sha256"], "content_layer_count": 2,
           "first_sequence": 10, "last_sequence": 14, "last_applied_sequence": 11}
 
 
@@ -53,7 +75,7 @@ def make(files=UI, *, complete=True, total=None, seq=12, cand=None, installed=No
          merge_base=INST, ahead=3, cls_sha=CLS_SHA):
     candidate = {"sha": CAND, "web_image_digest": D("8"), "web_image_archive_sha256": D("9"),
                  "web_sbom_sha256": D("a"), "base_image_digests": dict(BASES),
-                 "build_args_sha256": ARGS_SHA}
+                 "build_args_sha256": ARGS_SHA, **BINDING}
     candidate.update(cand or {})
     ci_rec = {"workflow": WF, "workflow_ref": REF, "run_id": 77, "run_attempt": 1,
               "issuer": E.ISSUER, "subject": SUBJECT, "source_sha": CAND}
@@ -84,8 +106,31 @@ class AutoWebClassifierTests(unittest.TestCase):
     def res(self, files, **kw):
         return C.classify(files, complete=kw.get("complete", True), total=kw.get("total"))
 
-    def test_ui_only_is_auto_web(self):
-        self.assertEqual(self.res(UI), {"version": 2, "result": "auto-web", "reasons": ["ALLOWLIST_ONLY"]})
+    def test_static_assets_only_are_auto_web_f4a(self):
+        self.assertEqual(self.res(UI), {"version": 3, "result": "auto-web",
+                                        "reasons": ["ALLOWLIST_ONLY", "F4A_STATIC_NON_EXECUTABLE"]})
+
+    def test_f4a_executable_or_active_content_is_manual(self):
+        for p in ("frontend/src/LodgeManagementPage.tsx", "frontend/src/home-consistency.css",
+                  "frontend/src/icons/star.svg", "frontend/public/brand/logo.svg", "frontend/src/util.ts"):
+            with self.subTest(path=p):
+                self.assertIn("F4A_ACTIVE_CONTENT_MANUAL", self.res([F(p)])["reasons"])
+
+    def test_content_kind_must_match_extension(self):
+        fake = F("frontend/src/assets/photo.png", content_kind="unknown")
+        self.assertIn("CONTENT_KIND_MISMATCH", self.res([fake])["reasons"])
+        jpeg_as_png = F("frontend/src/assets/photo.png", content_kind="jpeg")
+        self.assertIn("CONTENT_KIND_MISMATCH", self.res([jpeg_as_png])["reasons"])
+        self.assertIn("F4A_REMOVAL_MANUAL", self.res([F("frontend/src/assets/old.png", "removed")])["reasons"])
+
+    def test_sniff_magic_numbers(self):
+        self.assertEqual(C.sniff(b"\x89PNG\r\n\x1a\n" + b"0" * 8), "png")
+        self.assertEqual(C.sniff(b"\xff\xd8\xff\xe0" + b"0" * 8), "jpeg")
+        self.assertEqual(C.sniff(b"RIFF\x00\x00\x00\x00WEBPVP8 "), "webp")
+        self.assertEqual(C.sniff(b"wOF2" + b"0" * 8), "woff2")
+        self.assertEqual(C.sniff(b"\x00\x00\x01\x00" + b"0" * 8), "ico")
+        for data in (b"<svg onload='x'>", b"GIF89a", b"", "png", b"\x89PNG" + b"0" * (3 * 1024 * 1024)):
+            self.assertEqual(C.sniff(data), "unknown")
 
     def test_denylist_paths_are_manual(self):
         for p in ("frontend/src/main.tsx", "frontend/src/api/calendarApi.ts", "frontend/src/auth/config.ts",
@@ -100,27 +145,28 @@ class AutoWebClassifierTests(unittest.TestCase):
                 self.assertEqual(self.res([F(p)])["result"], "manual")
 
     def test_rename_symlink_exec_binary_are_manual(self):
-        cases = [F("frontend/src/B.tsx", "renamed", previous_path="frontend/src/A.tsx"),
-                 F("frontend/src/link.ts", mode="120000"), F("frontend/src/vendor", mode="160000"),
-                 F("frontend/src/tool.ts", mode="100755"), F("frontend/public/lib.wasm", "added")]
+        cases = [F("frontend/src/b.png", "renamed", previous_path="frontend/src/a.png"),
+                 F("frontend/src/link.png", mode="120000"), F("frontend/src/vendor", mode="160000"),
+                 F("frontend/src/tool.png", mode="100755"), F("frontend/public/lib.wasm", "added")]
         for entry in cases:
             with self.subTest(entry=entry):
                 self.assertEqual(self.res([entry])["result"], "manual")
 
     def test_brand_removal_is_manual_but_addition_is_auto(self):
-        self.assertIn("BRAND_REMOVAL", self.res([F("frontend/public/brand/logo.svg", "removed")])["reasons"])
-        self.assertEqual(self.res([F("frontend/public/brand/logo-v3.svg", "added")])["result"], "auto-web")
+        self.assertIn("BRAND_REMOVAL", self.res([F("frontend/public/brand/logo.png", "removed")])["reasons"])
+        self.assertEqual(self.res([F("frontend/public/brand/logo-v3.png", "added")])["result"], "auto-web")
 
     def test_truncated_total_mismatch_unsorted_and_limit(self):
         self.assertIn("COMPARISON_INCOMPLETE", self.res(UI, complete=False)["reasons"])
         self.assertIn("TOTAL_MISMATCH", self.res(UI, total=4)["reasons"])
         self.assertIn("FILES_NOT_SORTED_UNIQUE", self.res(list(reversed(UI)))["reasons"])
-        many = [F("frontend/src/P%03d.tsx" % i) for i in range(300)]
+        many = [F("frontend/src/assets/p%03d.png" % i) for i in range(300)]
         self.assertIn("TOO_MANY_FILES", self.res(many)["reasons"])
 
     def test_malformed_entries(self):
-        for entry in ({"path": "frontend/src/A.tsx", "status": "modified"},
-                      F("frontend/src/A.tsx", extra=1), F("frontend/src/../x.tsx"), F("/etc/passwd")):
+        for entry in ({"path": "frontend/src/a.png", "status": "modified", "mode": "100644"},
+                      F("frontend/src/a.png", extra=1), F("frontend/src/../x.png"), F("/etc/passwd"),
+                      F("frontend/src/a.png", content_kind="none"), F("frontend/src/a.png", content_kind="gif")):
             with self.subTest(entry=entry):
                 self.assertEqual(self.res([entry])["result"], "manual")
 
@@ -130,7 +176,7 @@ class AutoWebEnvelopeTests(unittest.TestCase):
         out = check(make())
         self.assertEqual(out["decision"], E.AUTO_WEB_CANDIDATE)
         self.assertEqual(out["rollback_web_image_digest"], INSTALLED["web_image_digest"])
-        self.assertEqual(out["contract"], "1.2")
+        self.assertEqual(out["contract"], "1.3")
 
     def test_canonical_release_id_and_strict_json(self):
         raw = make()
@@ -152,13 +198,50 @@ class AutoWebEnvelopeTests(unittest.TestCase):
         with self.assertRaisesRegex(E.Stop, "ENVELOPE_INSTALLED_DRIFT"):
             check(make(), expect={"installed": drift})
 
-    def test_build_args_and_base_images(self):
+    def test_build_args_exact_seven_keys_and_rules(self):
+        self.assertEqual(set(ARGS), E.BUILD_ARG_KEYS)
+        dockerfile = (ROOT / "frontend/Dockerfile").read_text()
+        self.assertEqual({line.split()[1].split("=")[0] for line in dockerfile.splitlines()
+                          if line.startswith("ARG ")}, E.BUILD_ARG_KEYS)
         with self.assertRaisesRegex(E.Stop, "BUILD_ARGS_MOCKS_FORBIDDEN"):
             E.build_args_sha256(dict(ARGS, VITE_USE_MOCKS="true"))
+        for bad in ({k: v for k, v in ARGS.items() if k != "VITE_OIDC_ALLOW_HTTP_QA"},
+                    dict(ARGS, VITE_EXTRA="1"), dict(ARGS, VITE_OIDC_SCOPE=None)):
+            with self.assertRaisesRegex(E.Stop, "BUILD_ARGS_INVALID"):
+                E.build_args_sha256(bad)
+        for key, value in (("VITE_API_BASE_URL", "https://evil"), ("VITE_OIDC_AUTHORITY", "http://x"),
+                           ("VITE_OIDC_ALLOW_HTTP_LOCAL", "true"), ("VITE_OIDC_CLIENT_ID", "other")):
+            with self.assertRaisesRegex(E.Stop, "BUILD_ARGS_IDENTITY_CHANGED"):
+                E.build_args_sha256(dict(ARGS, **{key: value}))
+        other = E.build_args_sha256(dict(ARGS, VITE_OIDC_ALLOW_HTTP_QA="true"))
         with self.assertRaisesRegex(E.Stop, "ENVELOPE_BUILD_ARGS"):
-            check(make(cand={"build_args_sha256": E.build_args_sha256(dict(ARGS, VITE_API_BASE_URL="https://evil"))}))
+            check(make(cand={"build_args_sha256": other}))
+
+    def test_base_images_shape_and_layers(self):
         out = check(make(cand={"base_image_digests": {"build": D("6"), "final": D("c")}}))
         self.assertEqual((out["decision"], out["reasons"]), (E.MANUAL, ["BASE_IMAGE_DRIFT"]))
+        shaped = E.image_binding(image_config(User="root"), 2)
+        out = check(make(cand=shaped))
+        self.assertEqual((out["decision"], out["reasons"]), (E.MANUAL, ["OCI_SHAPE_CHANGED"]))
+        rebased = E.image_binding(image_config(layers=[D("9")] + LAYERS[1:]), 2)
+        out = check(make(cand=rebased))
+        self.assertEqual((out["decision"], out["reasons"]), (E.MANUAL, ["BASE_LAYERS_DRIFT"]))
+
+    def test_labels_do_not_change_shape_but_content_layers_change_rootfs(self):
+        relabeled = E.image_binding(image_config(Labels={"x": "y"}), 2)
+        self.assertEqual(relabeled["oci_shape_sha256"], BINDING["oci_shape_sha256"])
+        new_content = E.image_binding(image_config(layers=LAYERS[:3] + [D("0"), D("1")]), 2)
+        self.assertEqual(new_content["base_diff_ids_sha256"], BINDING["base_diff_ids_sha256"])
+        self.assertNotEqual(new_content["rootfs_diff_ids_sha256"], BINDING["rootfs_diff_ids_sha256"])
+
+    def test_verify_loaded_image(self):
+        decision = check(make())
+        self.assertTrue(E.verify_loaded_image(decision, image_config(), 2))
+        for bad in (image_config(layers=LAYERS[:3] + [D("0"), D("1")]), image_config(Cmd=["sh"]),
+                    {"Config": {}}, None):
+            with self.subTest(bad=str(bad)[:40]):
+                with self.assertRaises(E.Stop):
+                    E.verify_loaded_image(decision, bad, 2)
 
     def test_workflow_and_repository_pins(self):
         for ci in ({"workflow": ".github/workflows/other.yml"}, {"workflow_ref": "refs/heads/main"},
@@ -183,6 +266,12 @@ class AutoWebEnvelopeTests(unittest.TestCase):
         with self.assertRaisesRegex(E.Stop, "ENVELOPE_TIME_INVALID"):
             check(make(times=("2026-11-14T11:00:00Z", "2026-13-14T11:30:00Z", "2026-11-15T11:30:00Z")))
 
+    def test_sequence_must_be_exactly_next(self):
+        for seq in (13, 14):
+            with self.subTest(seq=seq):
+                with self.assertRaisesRegex(E.Stop, "ENVELOPE_SEQUENCE_GAP"):
+                    check(make(seq=seq))
+
     def test_bool_is_not_int(self):
         with self.assertRaisesRegex(E.Stop, "ENVELOPE_SEQUENCE_INVALID"):
             check(resign(make(), lambda r: r.update(sequence=True)))
@@ -194,7 +283,9 @@ class AutoWebSimulatorF1Tests(unittest.TestCase):
     def run_case(self, raw=None, state="IDLE", now=NOW, expect=None, **events):
         exp = copy.deepcopy(EXPECT)
         exp.update(expect or {})
-        return S.tick(state=state, raw=make() if raw is None else raw, expect=exp, now=now, events=events)
+        cfg = events.pop("image_config", image_config())
+        return S.tick(state=state, raw=make() if raw is None else raw, expect=exp, now=now,
+                      image_config=cfg, events=events)
 
     def assertOutcome(self, out, outcome, code=None, spent=False, critical=False, state=None):
         self.assertEqual(out["outcome"], outcome, out)
@@ -205,7 +296,7 @@ class AutoWebSimulatorF1Tests(unittest.TestCase):
         if state:
             self.assertEqual(out["state"], state, out)
 
-    def test_01_ui_only_auto_web(self):
+    def test_01_static_assets_only_auto_web(self):
         self.assertOutcome(self.run_case(), "auto-web", "ACTIVE", spent=True, state="IDLE")
 
     def test_02_migration_api_compose_identity_silo_secrets_manual(self):
@@ -227,9 +318,11 @@ class AutoWebSimulatorF1Tests(unittest.TestCase):
         self.assertOutcome(self.run_case(make(complete=False)), "manual", "COMPARISON_INCOMPLETE")
         self.assertOutcome(self.run_case(make(total=9)), "manual", "TOTAL_MISMATCH")
 
-    def test_06_sequence_replay_or_outside_policy_reject(self):
+    def test_06_sequence_replay_gap_or_outside_policy_reject(self):
         self.assertOutcome(self.run_case(make(seq=11)), "reject", "SEQUENCE_REPLAY")
-        self.assertOutcome(self.run_case(make(seq=15)), "reject", "OUTSIDE_POLICY")
+        self.assertOutcome(self.run_case(make(seq=13)), "reject", "SEQUENCE_GAP")
+        self.assertOutcome(self.run_case(make(seq=15), expect={"last_applied_sequence": 14}), "reject",
+                           "OUTSIDE_POLICY")
 
     def test_07_before_not_before_no_op(self):
         self.assertOutcome(self.run_case(now=NOW - dt.timedelta(minutes=45)), "no-op", "NOT_BEFORE")
@@ -243,8 +336,11 @@ class AutoWebSimulatorF1Tests(unittest.TestCase):
         self.assertOutcome(self.run_case(make(ci={"workflow_ref": "refs/heads/x"})), "reject", "WORKFLOW_PIN")
         self.assertOutcome(self.run_case(make(cls_sha=D("e"))), "reject", "CLASSIFIER_PIN")
 
-    def test_10_image_digest_mismatch_reject(self):
+    def test_10_image_digest_or_loaded_image_mismatch_reject(self):
         self.assertOutcome(self.run_case(loaded_digest_ok=False), "reject", "LOADED_DIGEST")
+        other = image_config(layers=LAYERS[:3] + [D("0"), D("1")])
+        self.assertOutcome(self.run_case(image_config=other), "reject", "LOADED_IMAGE_MISMATCH")
+        self.assertOutcome(self.run_case(image_config=None), "reject", "IMAGE_CONFIG_INVALID")
 
     def test_11_api_compose_identity_silo_drift_reject(self):
         drift = dict(INSTALLED, compose_bytes_sha256=D("f"))
@@ -281,16 +377,19 @@ class AutoWebSimulatorF1Tests(unittest.TestCase):
         self.assertOutcome(out, "reject", "NOT_DESCENDANT")
 
     def test_image_shape_and_base_drift_are_manual_without_spending(self):
-        self.assertOutcome(self.run_case(image_shape_ok=False), "manual", "IMAGE_SHAPE_CHANGED")
+        shaped = E.image_binding(image_config(User="root"), 2)
+        self.assertOutcome(self.run_case(make(cand=shaped)), "manual", "OCI_SHAPE_CHANGED")
         self.assertOutcome(self.run_case(make(cand={"base_image_digests": {"build": D("6"), "final": D("c")}})),
                            "manual", "BASE_IMAGE_DRIFT")
+        self.assertOutcome(self.run_case(make([F("frontend/src/Page.tsx")])), "manual", "F4A_ACTIVE_CONTENT")
 
     def test_nothing_but_apply_paths_spend(self):
         """NO QUEMAR: only rows 01, 12, 13, 14 may spend a release slot."""
         quiet = [self.run_case(make([F("frontend/src/main.tsx")])), self.run_case(make(seq=11)),
                  self.run_case(lock_busy=True), self.run_case(state="BLOCKED"),
                  self.run_case(network_drop=True), self.run_case(invariants_pre_ok=False),
-                 self.run_case(loaded_digest_ok=False), self.run_case(image_shape_ok=False)]
+                 self.run_case(loaded_digest_ok=False), self.run_case(make(seq=13)),
+                 self.run_case(image_config=image_config(Cmd=["sh"]))]
         self.assertFalse(any(o["spent"] for o in quiet))
 
 
