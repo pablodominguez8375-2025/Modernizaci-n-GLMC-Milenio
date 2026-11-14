@@ -32,7 +32,8 @@ F4-B avanza a supervisado solo cuando la sombra demuestre que no produce falsos 
    - **sin referencias nuevas** a nombres importados desde módulos `api/`, `auth/`, `accounts/`, `oidc/`, `keycloak/` o `*Api`;
    - **sin llamadas nuevas** a callbacks que mutan (`onSave`, `onDelete`, `onApprove`, `onSubmit`…);
    - el archivo parsea sin errores.
-4. **E2E:** el candidato pasa la captura de todas las vistas de la demo sin errores de consola. El gate de CI se conecta en un PR posterior; mientras tanto la sombra registra `F4B_E2E_NOT_PASSED`.
+4. **E2E (conectado en v1.2):** el job `e2e` de `qa-release-envelope.yml` construye la demo con mocks y la recorre con `.github/scripts/capture-showcase-views.mjs`. Ese script ahora registra excepciones, `console.error`/`assert` y errores de red en `console-errors.json` (`pmgm-showcase-console-errors-v1`). El gate pasa solo si el recorrido termina con `count == 0`. Línea base de `dev`, medida localmente: **0 errores** en 9 escenarios × 4 viewports. Con errores inyectados se registraron 112 y `PMGM_FAIL_ON_CONSOLE_ERRORS=1` corta el recorrido.
+5. **Separación de permisos:** npm, Vite, Chrome y el compilador TypeScript corren **solo** en el job `e2e`, sin permiso de token OIDC. El job `envelope`, que firma, no ejecuta código de dependencias del frontend en el runner: el `npm ci` del Dockerfile corre aislado dentro de `docker build`. Los hechos AST y el informe E2E pasan como artefacto y solo alimentan `f4b-shadow.json`, que va dentro del asset y que el host ignora.
 
 ## Calibración con datos reales (`dev`, últimos 150 commits)
 De 11 commits de solo frontend, **F4-B en sombra habría automatizado 3** (c78bc03e, b27509d9, 0bd927bc). F4-A habría automatizado 0. Los 8 restantes van a manual por:
@@ -47,7 +48,7 @@ Siguiente mejora posible (F4-B v2, a decidir con datos de la sombra): admitir im
 - Llamadas a funciones de API que llegan **por props, contexto o hooks** (`props.api.deleteMember()`, `ctx.save()`), salvo los callbacks `on…Save/Delete/…`. Tampoco nombres nuevos que vienen de un módulo no-API ya importado.
 - Rutas que se arman sin literal de URL, por ejemplo concatenando variables.
 - También se marcan (v1.1, segunda revisión independiente): spread de props en JSX, `srcSet`/`ping`/`style` con `url()`, `pushState`/`replaceState`, `setAttribute`, `addModule`, `new URL(…)` y en CSS `url(/api…)` o con `?`.
-- El gate E2E aún no está conectado: en la calibración se supuso `e2e_passed=True`.
+- Los hechos AST y el informe E2E vienen del job sin permisos: un paquete npm comprometido podría falsear la **sombra**, pero nunca el sobre F4-A ni lo que aplica el host.
 
 La sombra existe justamente para medir si estos casos aparecen en releases reales antes de pasar a supervisado.
 

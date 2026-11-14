@@ -34,6 +34,7 @@ def _load(name, filename):
 
 
 CLASSIFIER = _load("ci_autoweb_classifier", "qa525-vnext-release-classifier.py")
+F4B = _load("ci_autoweb_f4b", "qa525-vnext-autoweb-f4b.py")
 ENVELOPE = _load("ci_autoweb_envelope", "qa525-vnext-release-envelope.py")
 CLASSIFIER_FILE = HERE / "qa525-vnext-release-classifier.py"
 
@@ -105,6 +106,29 @@ def sbom(lock_path):
     return ENVELOPE.canonical(record)
 
 
+def load_facts(path):
+    """F4-B facts come from the job without id-token; missing/invalid facts => shadow MANUAL."""
+    if not path:
+        return []
+    try:
+        facts = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return facts if type(facts) is list else []
+
+
+def e2e_passed(report_path):
+    """True only for a completed showcase walk with zero console errors (F4-B E2E gate)."""
+    if not report_path:
+        return False
+    try:
+        report = json.loads(Path(report_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (type(report) is dict and report.get("schema") == "pmgm-showcase-console-errors-v1"
+            and report.get("walk_completed") is True and report.get("count") == 0)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--repo", required=True)
@@ -120,12 +144,22 @@ def main(argv=None):
     ap.add_argument("--build-args-json", required=True)
     ap.add_argument("--content-layer-count", type=int, required=True)
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--e2e-report", help="console-errors.json from capture-showcase-views.mjs (F4-B shadow E2E gate)")
+    ap.add_argument("--f4b-facts", help="AST facts produced by `--emit-f4b-facts` in the job WITHOUT id-token")
+    ap.add_argument("--emit-f4b-facts", help="only compute F4-B AST facts (node/TypeScript) into this file and exit")
     a = ap.parse_args(argv)
 
     env = os.environ
     repo_name, ref = env["GITHUB_REPOSITORY"], env["GITHUB_REF"]
     if ref != "refs/heads/dev" or env.get("GITHUB_SHA") != a.candidate_sha:
         raise Fail("CI_REF_OR_SHA_NOT_DEV_HEAD")
+    if a.emit_f4b_facts:
+        installed_sha = json.loads(a.installed_json)["sha"]
+        lin = lineage(a.repo, installed_sha, a.candidate_sha)
+        facts = F4B.collect_facts(a.repo, installed_sha, a.candidate_sha, lin["changed_files"])
+        Path(a.emit_f4b_facts).write_bytes(ENVELOPE.canonical(facts))
+        print(json.dumps({"status": "F4B_FACTS_EMITTED", "files": len(facts)}))
+        return 0
     inspect = json.loads(Path(a.image_inspect).read_text(encoding="utf-8"))
     if type(inspect) is not list or len(inspect) != 1:
         raise Fail("IMAGE_INSPECT_INVALID")
@@ -153,9 +187,17 @@ def main(argv=None):
             "source_sha": a.candidate_sha},
         issued_at=a.issued_at, not_before=a.not_before, expires_at=a.expires_at)
     (out / "envelope.json").write_bytes(raw)
+    # F4-B SHADOW: recorded next to the envelope, never inside it; the host ignores it.
+    lin = json.loads(raw)["lineage"]
+    shadow = F4B.shadow_verdict(lin["changed_files"], load_facts(a.f4b_facts),
+                                e2e_passed=e2e_passed(a.e2e_report), complete=lin["changed_files_complete"])
+    shadow["release_id"] = json.loads(raw)["release_id"]
+    shadow["f4a_result"] = json.loads(raw)["classifier"]["result"]
+    (out / "f4b-shadow.json").write_bytes(ENVELOPE.canonical(shadow))
     verdict = json.loads(raw)["classifier"]
     print(json.dumps({"status": "ENVELOPE_PRODUCED_NOT_PUBLISHED", "result": verdict["result"],
-                      "reasons": verdict["reasons"], "release_id": json.loads(raw)["release_id"]}))
+                      "reasons": verdict["reasons"], "release_id": json.loads(raw)["release_id"],
+                      "f4b_shadow": shadow["result"]}))
     return 0
 
 

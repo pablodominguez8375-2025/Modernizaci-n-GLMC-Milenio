@@ -122,6 +122,57 @@ class AutoWebWorkflowStaticTests(unittest.TestCase):
         self.assertEqual(len(layer_steps), 3)  # conf (base, constant) + dist + chmod (2 content)
         self.assertTrue(layer_steps[0].startswith("COPY nginx.conf"))
 
+    def test_workflow_is_valid_yaml(self):
+        """The #1012 version had an unquoted ': ' in a step name: GitHub could not load it."""
+        for number, line in enumerate(self.text.splitlines(), 1):
+            stripped = line.strip()
+            for key in ("- name: ", "name: ", "description: "):
+                if stripped.startswith(key):
+                    value = stripped[len(key):]
+                    if not value.startswith(('"', "'")):
+                        self.assertNotIn(": ", value, f"line {number}: unquoted ': ' in {key.strip()}")
+        try:
+            import yaml
+        except ImportError:
+            return
+        doc = yaml.safe_load(self.text)
+        self.assertEqual(set(doc["jobs"]), {"e2e", "envelope"})
+
+    def test_untrusted_frontend_code_never_runs_in_the_signing_job(self):
+        e2e, envelope = self.text.split("\n  envelope:\n", 1)
+        self.assertIn("needs: e2e", envelope)
+        self.assertNotIn("id-token", e2e.split("\n  e2e:\n", 1)[1])
+        self.assertIn("id-token: write", envelope)
+        for word in ("npm ", "npx ", "node .github", "setup-node", "--emit-f4b-facts"):
+            self.assertNotIn(word, envelope, word)
+        self.assertIn("--ignore-scripts", e2e)
+        self.assertIn("--emit-f4b-facts", e2e)
+        self.assertIn("f4b-shadow.json", envelope)
+
+    def test_e2e_report_and_facts_loading(self):
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        tmp = Path(holder.name)
+        good = tmp / "ok.json"
+        good.write_text(json.dumps({"schema": "pmgm-showcase-console-errors-v1", "walk_completed": True, "count": 0}))
+        self.assertTrue(CI.e2e_passed(str(good)))
+        for bad in ({"schema": "pmgm-showcase-console-errors-v1", "walk_completed": True, "count": 1},
+                    {"schema": "pmgm-showcase-console-errors-v1", "walk_completed": False, "count": 0}, {}, []):
+            p = tmp / "bad.json"
+            p.write_text(json.dumps(bad))
+            self.assertFalse(CI.e2e_passed(str(p)), bad)
+        self.assertFalse(CI.e2e_passed(None))
+        self.assertFalse(CI.e2e_passed(str(tmp / "missing.json")))
+        self.assertEqual(CI.load_facts(None), [])
+        (tmp / "f.json").write_text("{not json")
+        self.assertEqual(CI.load_facts(str(tmp / "f.json")), [])
+
+    def test_showcase_walker_records_console_errors(self):
+        walker = (ROOT / ".github/scripts/capture-showcase-views.mjs").read_text()
+        for needle in ("Runtime.exceptionThrown", "Runtime.consoleAPICalled", "Log.entryAdded",
+                       "console-errors.json", "PMGM_FAIL_ON_CONSOLE_ERRORS", "walk_completed"):
+            self.assertIn(needle, walker)
+
     def test_build_args_file_is_valid(self):
         args = json.loads((ROOT / "ops/qa525/autoweb/web-build-args.json").read_text())
         self.assertTrue(CI.ENVELOPE.build_args_sha256(args).startswith("sha256:"))
