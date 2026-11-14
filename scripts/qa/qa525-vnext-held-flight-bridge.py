@@ -24,7 +24,10 @@ G6_PINS = frozenset({
     "pinned_admission_sha256", "pinned_approval_sha256",
     "pinned_review_sha256", "pinned_receipt_sha256",
     "pinned_restore_sha256", "observed_archive_sha256",
+    "downloaded_offhost_sha256",
 })
+G6_IDS = {"expected_restic_repo_id": re.compile(r"[0-9a-f]{64}\Z"),
+          "expected_key_epoch": re.compile(r"[0-9a-f]{32}\Z")}
 FORWARD = frozenset({"API_SWITCHING", "WEB_SWITCHING"})
 
 
@@ -61,10 +64,12 @@ def _inputs(inputs, g6_evidence, modules):
     for name in ("project", "workdir", "env_file"):
         if type(inputs[name]) is not str or not inputs[name]:
             raise Stop("HELDFLIGHT_PATH_INVALID")
-    if (type(g6_evidence) is not dict or set(g6_evidence) != G6_BYTES | G6_PINS
+    if (type(g6_evidence) is not dict or set(g6_evidence) != G6_BYTES | G6_PINS | set(G6_IDS)
             or any(type(g6_evidence[k]) is not bytes for k in G6_BYTES)
             or any(type(g6_evidence[k]) is not str
-                   or SHA256.fullmatch(g6_evidence[k]) is None for k in G6_PINS)):
+                   or SHA256.fullmatch(g6_evidence[k]) is None for k in G6_PINS)
+            or any(type(g6_evidence[k]) is not str
+                   or G6_IDS[k].fullmatch(g6_evidence[k]) is None for k in G6_IDS)):
         raise Stop("HELDFLIGHT_G6_INPUT_INVALID")
     for name, method in (
             ("root_locks", "root_flight"), ("bridge", "BoundJournal"),
@@ -148,6 +153,9 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
                         pinned_receipt_sha256=frozen["pinned_receipt_sha256"],
                         pinned_restore_sha256=frozen["pinned_restore_sha256"],
                         observed_archive_sha256=frozen["observed_archive_sha256"],
+                        downloaded_offhost_sha256=frozen["downloaded_offhost_sha256"],
+                        expected_restic_repo_id=frozen["expected_restic_repo_id"],
+                        expected_key_epoch=frozen["expected_key_epoch"],
                         trusted_policy_hash=inputs["policy_hash"],
                         now=inputs["clock"]())
                 except Exception:

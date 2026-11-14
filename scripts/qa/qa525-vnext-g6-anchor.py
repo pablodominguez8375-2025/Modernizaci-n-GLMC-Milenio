@@ -34,7 +34,8 @@ def _module(alias, path):
 
 
 binding = _module("qa525_vnext_binding_for_g6_anchor", "qa525-vnext-trust-binding.py")
-g6 = _module("qa525_vnext_g6_for_anchor", "qa525-vnext-g6-metadata.py")
+# v2 ONLY. There is deliberately NO fallback to the legacy v1 metadata module.
+g6 = _module("qa525_vnext_g6_v2_for_anchor", "qa525-vnext-g6-v2-evidence.py")
 
 
 def _pin(raw, pinned, label):
@@ -85,7 +86,9 @@ def _utc(value):
 def compare(*, admission_bytes, approval_bytes, review_bytes, receipt_bytes,
             restore_bytes, pinned_admission_sha256, pinned_approval_sha256,
             pinned_review_sha256, pinned_receipt_sha256, pinned_restore_sha256,
-            observed_archive_sha256, trusted_policy_hash, now):
+            observed_archive_sha256, downloaded_offhost_sha256,
+            expected_restic_repo_id, expected_key_epoch,
+            trusted_policy_hash, now):
     """Check equality of externally pinned evidence; never authenticate pins.
 
     This is NOT a substitute for SIGSTORE/OPS/G6/Sponsor approval at the
@@ -94,23 +97,29 @@ def compare(*, admission_bytes, approval_bytes, review_bytes, receipt_bytes,
     """
     _pin(admission_bytes, pinned_admission_sha256, "ADMISSION")
     _pin(approval_bytes, pinned_approval_sha256, "APPROVAL")
-    # G6 inspector validates and pins its own three source byte streams.
-    try:
-        reviewed = g6.inspect(
-            review_bytes, receipt_bytes, restore_bytes,
-            pinned_review_sha256=pinned_review_sha256,
-            pinned_receipt_sha256=pinned_receipt_sha256,
-            pinned_restore_sha256=pinned_restore_sha256,
-            observed_archive_sha256=observed_archive_sha256, now=now)
-    except Exception:
-        raise Stop("G6_ANCHOR_G6_METADATA_REJECTED") from None
-
     try:
         bound = binding.bind(
             admission_bytes, approval_bytes,
             trusted_policy_hash=trusted_policy_hash, now=now)
     except Exception:
         raise Stop("G6_ANCHOR_BINDING_REJECTED") from None
+    # The EFFECTIVE admission end (min of validity, G6 and expiry) must be
+    # fully covered by the real archive-stamp + 48h checkpoint. It is derived
+    # from the bound admission bytes, never supplied by the caller.
+    try:
+        reviewed = g6.inspect(
+            review_bytes=review_bytes, receipt_bytes=receipt_bytes,
+            restore_bytes=restore_bytes,
+            pins={"review_sha256": pinned_review_sha256,
+                  "receipt_sha256": pinned_receipt_sha256,
+                  "restore_sha256": pinned_restore_sha256},
+            observed_archive_sha256=observed_archive_sha256,
+            downloaded_offhost_sha256=downloaded_offhost_sha256,
+            expected_restic_repo_id=expected_restic_repo_id,
+            expected_key_epoch=expected_key_epoch, now=now,
+            admission_expires_at=_utc(bound["valid_until"]))
+    except Exception:
+        raise Stop("G6_ANCHOR_G6_METADATA_REJECTED") from None
     anchor, admission = _document(approval_bytes), _document(admission_bytes)
     if (not hmac.compare_digest(bound["admission_sha256"],
                                 pinned_admission_sha256)
@@ -127,10 +136,8 @@ def compare(*, admission_bytes, approval_bytes, review_bytes, receipt_bytes,
     admission_until = _utc(admission.get("valid_until"))
     if _utc(anchor.get("g6_expires_at")) < admission_until:
         raise Stop("G6_ANCHOR_EXPIRES_BEFORE_ADMISSION")
-    # A claimed G6 TTL alone cannot extend the 48h limit of its actual
-    # checkpoint. This check must cover the ENTIRE admission window.
-    if _utc(reviewed.get("checkpoint_expires_at")) < admission_until:
-        raise Stop("G6_ANCHOR_CHECKPOINT_EXPIRES_BEFORE_ADMISSION")
+    # The real 48h checkpoint coverage of the whole admission window is
+    # enforced inside g6.inspect (admission_end < checkpoint_end, strict).
 
     return {
         "status": STATUS,

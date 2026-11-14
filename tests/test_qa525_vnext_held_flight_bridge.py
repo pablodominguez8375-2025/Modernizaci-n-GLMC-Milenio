@@ -149,6 +149,30 @@ class RealHeldFlightWithFakeEffectsTests(unittest.TestCase):
         self.assertEqual(self.h.runs, [])
         self.assertEqual(self.port.fds, {})
 
+    def test_v1_nine_field_or_malformed_generation_pins_are_input_invalid(self):
+        legacy = {k: v for k, v in self.h.g6_evidence.items()
+                  if k not in ("downloaded_offhost_sha256",
+                               "expected_restic_repo_id", "expected_key_epoch")}
+        with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_G6_INPUT_INVALID"):
+            self.call(g6_evidence=legacy)
+        for key, value in (("expected_restic_repo_id", "A" * 64),
+                           ("expected_key_epoch", "e" * 31),
+                           ("downloaded_offhost_sha256", "a" * 64)):
+            bad = dict(self.h.g6_evidence, **{key: value})
+            with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_G6_INPUT_INVALID"):
+                self.call(g6_evidence=bad)
+        self.assertEqual(self.factories, 0)
+        self.assertEqual(self.h.runs, [])
+
+    def test_offhost_substitution_blocks_before_inspection_factory_and_runner(self):
+        wrong = dict(self.h.g6_evidence,
+                     downloaded_offhost_sha256="sha256:" + "b" * 64)
+        with self.assertRaisesRegex(host.Stop, "HELDFLIGHT_G6_DENIED"):
+            self.call(g6_evidence=wrong)
+        self.assertEqual(self.inspected, 0)
+        self.assertEqual(self.factories, 0)
+        self.assertEqual(self.h.runs, [])
+
     def test_baseline_reread_difference_is_a_stop_without_mutation(self):
         mismatch = "sha256:" + "f" * 64
         params = self.args(baseline_sha256=mismatch)

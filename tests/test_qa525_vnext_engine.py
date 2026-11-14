@@ -57,17 +57,22 @@ class EngineTests(unittest.TestCase):
         self.nonce = self.record["nonce"]
         # Pure synthetic G6 evidence, NOT a real backup or approval.
         stamp = "20261105T180000Z"
-        name = "centenario-qa-g6-CIFRADO-" + stamp + ".tar.gz"
+        name = "centenario-qa-g6-v2-CIFRADO-" + stamp + ".tar.gz"
+        gen = {"restic_repo_id": "d" * 64, "key_epoch": "e" * 32}
         self.review = {
+            "schema": "qa525-g6-v2-review",
             "g6_archive_name": name, "g6_archive_sha256": "a" * 64,
-            "g6_restore_report_name": "isolated-restore-" + stamp + ".report.json",
+            "g6_restore_report_name": "isolated-restore-v2-" + stamp + ".report.json",
             "g6_offhost_sha256_verified": True,
+            "g6_drive_file_id": "syntheticFakeDriveId01234", **gen,
         }
         self.receipt = {
+            "schema": "qa525-g6-v2-receipt",
             "archive_name": name, "sha256": "a" * 64,
-            "status": "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING",
+            "status": "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING", **gen,
         }
         self.restore = {
+            "schema": "qa525-g6-v2-restore", **gen,
             "result": "G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY",
             "archive_filename": name, "archive_sha256": "a" * 64,
             "postgres_tables_by_database": {"pmgm": 7, "pmgm_keycloak": 4},
@@ -89,6 +94,9 @@ class EngineTests(unittest.TestCase):
             "pinned_receipt_sha256": self._sha(self.receipt_bytes),
             "pinned_restore_sha256": self._sha(self.restore_bytes),
             "observed_archive_sha256": "sha256:" + "a" * 64,
+            "downloaded_offhost_sha256": "sha256:" + "a" * 64,
+            "expected_restic_repo_id": "d" * 64,
+            "expected_key_epoch": "e" * 32,
         }
         self.lockdir = Path(self.tmp.name) / "locks"
         self.lockdir.mkdir(mode=0o700)
@@ -105,7 +113,8 @@ class EngineTests(unittest.TestCase):
 
     @staticmethod
     def _raw(record):
-        return (json.dumps(record, sort_keys=True) + "\n").encode()
+        return (json.dumps(record, sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=True) + "\n").encode("ascii")
 
     @staticmethod
     def _sha(raw):
@@ -425,6 +434,54 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(result["status"], "ROLLED_BACK")
         self.assertEqual(self.world, {"api": "baseline", "web": "baseline"})
         self.assertEqual(self.terminal(), "ROLLED_BACK")
+
+    def test_v1_nine_field_evidence_is_refused_without_fallback(self):
+        legacy = {k: v for k, v in self.g6_evidence.items()
+                  if k not in ("downloaded_offhost_sha256",
+                               "expected_restic_repo_id", "expected_key_epoch")}
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_G6_EVIDENCE_INVALID$"):
+            self.fly(evidence=legacy)
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
+
+    def _denied_substitution(self, key, value):
+        bad = dict(self.g6_evidence, **{key: value})
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_G6_EVIDENCE_DENIED$"):
+            self.fly(evidence=bad)
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
+
+    def test_offhost_hash_substitution_denied_before_any_mutation(self):
+        self._denied_substitution("downloaded_offhost_sha256", "sha256:" + "b" * 64)
+
+    def test_repo_id_substitution_denied_before_any_mutation(self):
+        self._denied_substitution("expected_restic_repo_id", "c" * 64)
+
+    def test_key_epoch_substitution_denied_before_any_mutation(self):
+        self._denied_substitution("expected_key_epoch", "c" * 32)
+
+    def test_g6_v2_checkpoint_equal_to_admission_end_is_denied(self):
+        # Stamp such that archive+48h == effective admission end (18:20).
+        stamp = "20261103T182000Z"
+        name = "centenario-qa-g6-v2-CIFRADO-" + stamp + ".tar.gz"
+        review = dict(self.review, g6_archive_name=name,
+                      g6_restore_report_name="isolated-restore-v2-" + stamp + ".report.json")
+        receipt = dict(self.receipt, archive_name=name)
+        restore = dict(self.restore, archive_filename=name)
+        rb, cb, sb = (self._raw(x) for x in (review, receipt, restore))
+        anchor = trust.approval_record(self.record)
+        anchor["g6_review_sha256"] = self._sha(rb)
+        approval = trust.canonical(anchor)
+        evidence = dict(self.g6_evidence, review_bytes=rb, receipt_bytes=cb,
+                        restore_bytes=sb, pinned_approval_sha256=self._sha(approval),
+                        pinned_review_sha256=self._sha(rb),
+                        pinned_receipt_sha256=self._sha(cb),
+                        pinned_restore_sha256=self._sha(sb))
+        self.approval = approval
+        with self.assertRaisesRegex(engine.Stop, "^ENGINE_G6_EVIDENCE_DENIED$"):
+            self.fly(evidence=evidence)
+        self.assertEqual(self.runs, [])
+        self.assertIsNone(self.terminal())
 
     def test_new_execution_intent_must_not_bypass_held_g6(self):
         with mock.patch.dict(engine.flight.plan_mod.PROOF_KINDS,

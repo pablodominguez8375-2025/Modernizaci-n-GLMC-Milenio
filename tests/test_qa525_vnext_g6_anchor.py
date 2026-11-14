@@ -17,7 +17,13 @@ spec.loader.exec_module(unit)
 
 
 def raw(record):
-    return (json.dumps(record, sort_keys=True) + "\n").encode()
+    return (json.dumps(record, sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=True) + "\n").encode("ascii")
+
+
+REPO = "d" * 64
+EPOCH = "e" * 32
+ARCH = "sha256:" + "a" * 64
 
 
 def sha(contents):
@@ -27,19 +33,24 @@ def sha(contents):
 class G6AnchorTests(unittest.TestCase):
     def setUp(self):
         self.admission = trust.admission_record()
-        self.name = "centenario-qa-g6-CIFRADO-20261105T180000Z.tar.gz"
+        self.name = "centenario-qa-g6-v2-CIFRADO-20261105T180000Z.tar.gz"
+        gen = {"restic_repo_id": REPO, "key_epoch": EPOCH}
         self.review = {
+            "schema": "qa525-g6-v2-review",
             "g6_archive_name": self.name,
             "g6_archive_sha256": "a" * 64,
             "g6_restore_report_name":
-                "isolated-restore-20261105T180000Z.report.json",
+                "isolated-restore-v2-20261105T180000Z.report.json",
             "g6_offhost_sha256_verified": True,
+            "g6_drive_file_id": "syntheticFakeDriveId01234", **gen,
         }
         self.receipt = {
+            "schema": "qa525-g6-v2-receipt",
             "archive_name": self.name, "sha256": "a" * 64,
-            "status": "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING",
+            "status": "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING", **gen,
         }
         self.restore = {
+            "schema": "qa525-g6-v2-restore", **gen,
             "result": "G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY",
             "archive_filename": self.name, "archive_sha256": "a" * 64,
             "postgres_tables_by_database": {"pmgm": 7, "pmgm_keycloak": 4},
@@ -51,8 +62,8 @@ class G6AnchorTests(unittest.TestCase):
 
     def compare(self, *, admission=None, anchor=None, review=None,
                 receipt=None, restore=None, pinned=None, now=trust.NOW,
-                policy=trust.POLICY):
-        a = raw(self.admission if admission is None else admission)
+                policy=trust.POLICY, **extra):
+        a = trust.canonical(self.admission if admission is None else admission)
         b = trust.canonical(self.anchor if anchor is None else anchor)
         c = raw(self.review if review is None else review)
         d = raw(self.receipt if receipt is None else receipt)
@@ -60,7 +71,7 @@ class G6AnchorTests(unittest.TestCase):
         pins = [sha(a), sha(b), sha(c), sha(d), sha(e)]
         if pinned is not None:
             pins = list(pinned)
-        return unit.compare(
+        args = dict(
             admission_bytes=a, approval_bytes=b,
             review_bytes=c, receipt_bytes=d, restore_bytes=e,
             pinned_admission_sha256=pins[0],
@@ -68,8 +79,11 @@ class G6AnchorTests(unittest.TestCase):
             pinned_review_sha256=pins[2],
             pinned_receipt_sha256=pins[3],
             pinned_restore_sha256=pins[4],
-            observed_archive_sha256="sha256:" + "a" * 64,
+            observed_archive_sha256=ARCH, downloaded_offhost_sha256=ARCH,
+            expected_restic_repo_id=REPO, expected_key_epoch=EPOCH,
             trusted_policy_hash=policy, now=now)
+        args.update(extra)
+        return unit.compare(**args)
 
     def test_matching_bytes_are_only_consistency_not_permission(self):
         result = self.compare()
@@ -99,33 +113,66 @@ class G6AnchorTests(unittest.TestCase):
                 unit.Stop, "^G6_ANCHOR_EXPIRES_BEFORE_ADMISSION$"):
             self.compare(admission=admission, anchor=anchor)
 
-    def test_checkpoint_48h_must_cover_whole_admission_not_just_now(self):
-        # At NOW=Nov 5 18:05 the archive is <48h old, but it expires
-        # at 18:06, before the admitted window closes at 18:25.
-        stamp = "20261103T180600Z"
-        name = "centenario-qa-g6-CIFRADO-" + stamp + ".tar.gz"
+    def _cut(self, stamp):
+        name = "centenario-qa-g6-v2-CIFRADO-" + stamp + ".tar.gz"
         review = dict(self.review, g6_archive_name=name,
-                      g6_restore_report_name="isolated-restore-" + stamp + ".report.json")
-        receipt = dict(self.receipt, archive_name=name)
-        restore = dict(self.restore, archive_filename=name)
-        anchor = dict(self.anchor, g6_review_sha256=sha(raw(review)))
-        with self.assertRaisesRegex(
-                unit.Stop, "^G6_ANCHOR_CHECKPOINT_EXPIRES_BEFORE_ADMISSION$"):
+                      g6_restore_report_name="isolated-restore-v2-" + stamp + ".report.json")
+        return (review, dict(self.receipt, archive_name=name),
+                dict(self.restore, archive_filename=name),
+                dict(self.anchor, g6_review_sha256=sha(raw(review))))
+
+    def test_checkpoint_48h_must_cover_whole_admission_not_just_now(self):
+        # Archive stamp 11-03 18:06 -> checkpoint ends 11-05 18:06, before the
+        # effective window (min of validity/G6/approval) closes at 18:20: STOP although now is inside 48h.
+        review, receipt, restore, anchor = self._cut("20261103T180600Z")
+        with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_G6_METADATA_REJECTED$"):
             self.compare(review=review, receipt=receipt, restore=restore,
                          anchor=anchor)
-        # Exact end-of-window boundary is safe: validity is exclusive.
-        stamp = "20261103T182500Z"
-        name = "centenario-qa-g6-CIFRADO-" + stamp + ".tar.gz"
-        review = dict(review, g6_archive_name=name,
-                      g6_restore_report_name="isolated-restore-" + stamp + ".report.json")
-        receipt = dict(receipt, archive_name=name)
-        restore = dict(restore, archive_filename=name)
-        anchor = dict(anchor, g6_review_sha256=sha(raw(review)))
+        # Exactly equal end (checkpoint == admission end) is NOT enough.
+        review, receipt, restore, anchor = self._cut("20261103T182000Z")
+        with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_G6_METADATA_REJECTED$"):
+            self.compare(review=review, receipt=receipt, restore=restore,
+                         anchor=anchor)
+        # One second of margin is accepted and still never grants authority.
+        review, receipt, restore, anchor = self._cut("20261103T182001Z")
         self.assertIs(self.compare(review=review, receipt=receipt,
                                    restore=restore, anchor=anchor)["may_apply"], False)
 
+    def test_admission_end_cannot_be_supplied_or_rejuvenated_by_caller(self):
+        with self.assertRaises(TypeError):
+            self.compare(admission_expires_at=trust.NOW)
+
+    def test_v1_artifacts_and_schema_are_rejected_no_fallback(self):
+        v1_name = "centenario-qa-g6-CIFRADO-20261105T180000Z.tar.gz"
+        old = {k: v for k, v in self.review.items()
+               if k not in ("schema", "g6_drive_file_id", "restic_repo_id", "key_epoch")}
+        old.update(g6_archive_name=v1_name,
+                   g6_restore_report_name="isolated-restore-20261105T180000Z.report.json")
+        anchor = dict(self.anchor, g6_review_sha256=sha(raw(old)))
+        with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_G6_METADATA_REJECTED$"):
+            self.compare(review=old, anchor=anchor)
+
+    def test_mixing_cuts_repo_epoch_and_offhost_is_rejected(self):
+        bad = dict(self.receipt, restic_repo_id="f" * 64)
+        with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_G6_METADATA_REJECTED$"):
+            self.compare(receipt=bad)
+        for extra in ({"expected_restic_repo_id": "c" * 64},
+                      {"expected_key_epoch": "c" * 32},
+                      {"downloaded_offhost_sha256": "sha256:" + "b" * 64},
+                      {"observed_archive_sha256": "sha256:" + "b" * 64},
+                      {"downloaded_offhost_sha256": None}):
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(
+                        unit.Stop, "^G6_ANCHOR_G6_METADATA_REJECTED$"):
+                    self.compare(**extra)
+
+    def test_anchor_must_name_the_v2_review_hash(self):
+        other = dict(self.review, g6_drive_file_id="otherSyntheticDriveId99")
+        with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_REVIEW_MISMATCH$"):
+            self.compare(review=other)
+
     def test_pinned_bytes_detect_tampering_before_binding(self):
-        a = raw(self.admission)
+        a = trust.canonical(self.admission)
         b = trust.canonical(self.anchor)
         c = raw(self.review)
         d = raw(self.receipt)
@@ -151,10 +198,12 @@ class G6AnchorTests(unittest.TestCase):
         with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_G6_METADATA_REJECTED$"):
             self.compare(receipt=dict(self.receipt, sha256="b" * 64))
         with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_G6_METADATA_REJECTED$"):
+            self.compare(receipt=dict(self.receipt, restic_repo_id="f" * 64))
+        with self.assertRaisesRegex(unit.Stop, "^G6_ANCHOR_BINDING_REJECTED$"):
             self.compare(now=trust.NOW + dt.timedelta(days=4))
 
     def test_reject_duplicate_anchor_keys(self):
-        a = raw(self.admission)
+        a = trust.canonical(self.admission)
         b = trust.canonical(self.anchor)
         duplicate = b.replace(b'"scope": "API_WEB_QA_ONLY"',
                               b'"scope": "API_WEB_QA_ONLY", "scope": "API_WEB_QA_ONLY"')
@@ -169,7 +218,8 @@ class G6AnchorTests(unittest.TestCase):
                 pinned_review_sha256=sha(raw(self.review)),
                 pinned_receipt_sha256=sha(raw(self.receipt)),
                 pinned_restore_sha256=sha(raw(self.restore)),
-                observed_archive_sha256="sha256:" + "a" * 64,
+                observed_archive_sha256=ARCH, downloaded_offhost_sha256=ARCH,
+                expected_restic_repo_id=REPO, expected_key_epoch=EPOCH,
                 trusted_policy_hash=trust.POLICY, now=trust.NOW)
 
     def test_source_is_pure_and_cannot_run_as_host_script(self):
