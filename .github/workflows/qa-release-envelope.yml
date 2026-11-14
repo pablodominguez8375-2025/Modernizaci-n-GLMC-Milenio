@@ -1,0 +1,94 @@
+name: QA525 auto-web release envelope (inactive)
+
+# Contract docs/qa/QA525-AUTOWEB-CONTRACT-V1.md (v1.3). Manual dispatch ONLY: no push/schedule
+# trigger, no secrets, no publication, no host access. Produces ONE asset (envelope + WEB image
+# archive + SBOM) attested by Sigstore. The host acts only under a Sponsor policy (not yet active).
+on:
+  workflow_dispatch:
+    inputs:
+      installed_json:
+        description: "Expected installed state (6 fields, compact JSON) from the last applied receipt"
+        required: true
+      sequence:
+        description: "Exactly last_applied_sequence + 1"
+        required: true
+      validity_hours:
+        description: "Envelope validity (1..72)"
+        required: true
+        default: "24"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa525-autoweb-envelope
+  cancel-in-progress: false
+
+jobs:
+  envelope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      CONTENT_LAYER_COUNT: "2"
+    steps:
+      - name: Only dev
+        run: test "$GITHUB_REF" = "refs/heads/dev"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve base images by digest
+        run: |
+          set -euo pipefail
+          for ref in node:24-alpine nginx:stable-alpine; do docker pull --quiet "$ref" >/dev/null; done
+          node=$(docker image inspect --format '{{index .RepoDigests 0}}' node:24-alpine | cut -d@ -f2)
+          nginx=$(docker image inspect --format '{{index .RepoDigests 0}}' nginx:stable-alpine | cut -d@ -f2)
+          printf '{"build":"%s","final":"%s"}' "$node" "$nginx" > "$RUNNER_TEMP/base-digests.json"
+      - name: Build WEB image (no pull: uses the digests resolved above)
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS=$'\t' read -r k v; do args+=(--build-arg "$k=$v"); done < <(
+            python3 -c 'import json,sys; [print(k+"\t"+v) for k,v in sorted(json.load(open(sys.argv[1])).items())]' ops/qa525/autoweb/web-build-args.json)
+          docker build --pull=false "${args[@]}" -t "pmgm-web:autoweb-$GITHUB_SHA" frontend
+          docker image inspect "pmgm-web:autoweb-$GITHUB_SHA" > "$RUNNER_TEMP/image-inspect.json"
+          docker save "pmgm-web:autoweb-$GITHUB_SHA" -o "$RUNNER_TEMP/web-image.tar"
+      - name: Produce envelope
+        env:
+          INSTALLED_JSON: ${{ inputs.installed_json }}
+          SEQUENCE: ${{ inputs.sequence }}
+          VALIDITY_HOURS: ${{ inputs.validity_hours }}
+        run: |
+          set -euo pipefail
+          case "$VALIDITY_HOURS" in ''|*[!0-9]*) exit 1;; esac
+          test "$VALIDITY_HOURS" -ge 1 -a "$VALIDITY_HOURS" -le 72
+          case "$SEQUENCE" in ''|*[!0-9]*) exit 1;; esac
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          until=$(date -u -d "+${VALIDITY_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)
+          python3 -I scripts/qa/qa525-vnext-release-envelope-ci.py --repo . \
+            --installed-json "$INSTALLED_JSON" --candidate-sha "$GITHUB_SHA" --sequence "$SEQUENCE" \
+            --issued-at "$now" --not-before "$now" --expires-at "$until" \
+            --image-inspect "$RUNNER_TEMP/image-inspect.json" --image-archive "$RUNNER_TEMP/web-image.tar" \
+            --base-digests-json "$RUNNER_TEMP/base-digests.json" \
+            --build-args-json ops/qa525/autoweb/web-build-args.json \
+            --content-layer-count "$CONTENT_LAYER_COUNT" --out-dir "$RUNNER_TEMP/out"
+          cp "$RUNNER_TEMP/web-image.tar" "$RUNNER_TEMP/out/web-image.tar"
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
+            -C "$RUNNER_TEMP/out" -cf "$RUNNER_TEMP/autoweb-release.tar" envelope.json sbom.json web-image.tar
+      - name: Attest the single asset and the envelope bytes
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            ${{ runner.temp }}/autoweb-release.tar
+            ${{ runner.temp }}/out/envelope.json
+      - name: Keep the asset (artifact only; nothing is published)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: autoweb-release-${{ github.sha }}
+          path: ${{ runner.temp }}/autoweb-release.tar
+          if-no-files-found: error
+          retention-days: 7
