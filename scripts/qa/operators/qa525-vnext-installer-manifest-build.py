@@ -38,6 +38,60 @@ LAUNCHER = "qa525-vnext-root-launcher.py"
 CONFIG_MODULE = "qa525-vnext-root-launch-config.py"
 BOOTSTRAP = "qa525-vnext-root-bootstrap.py"
 HELPERS = ("gh", "ssh-keygen")  # both are pinned by the launcher (_helper_pin)
+EXPECTED_CLOSURE = frozenset({
+    "qa525-vnext-admission-bridge.py",
+    "qa525-vnext-b7-held-readonly.py",
+    "qa525-vnext-b7-root-boundary.py",
+    "qa525-vnext-baseline-plan.py",
+    "qa525-vnext-containment.py",
+    "qa525-vnext-evidence.py",
+    "qa525-vnext-flight.py",
+    "qa525-vnext-g6-anchor.py",
+    "qa525-vnext-g6-v2-captor.py",
+    "qa525-vnext-g6-v2-evidence.py",
+    "qa525-vnext-g6-v2-producer.py",
+    "qa525-vnext-g6-v2-run.py",
+    "qa525-vnext-g6-v2-verifier.py",
+    "qa525-vnext-go-cut-contract.py",
+    "qa525-vnext-go-nonce-journal.py",
+    "qa525-vnext-health.py",
+    "qa525-vnext-held-flight-bridge.py",
+    "qa525-vnext-held-physical-runner.py",
+    "qa525-vnext-host-adapters.py",
+    "qa525-vnext-journal.py",
+    "qa525-vnext-observer.py",
+    "qa525-vnext-ops-signature.py",
+    "qa525-vnext-posix-port.py",
+    "qa525-vnext-root-apiweb-child.py",
+    "qa525-vnext-root-apiweb-effects.py",
+    "qa525-vnext-root-apiweb-host.py",
+    "qa525-vnext-root-authenticity.py",
+    "qa525-vnext-root-boundary-recv.py",
+    "qa525-vnext-root-entry.py",
+    "qa525-vnext-root-g6-backup.py",
+    "qa525-vnext-root-g6-child-core.py",
+    "qa525-vnext-root-g6-init.py",
+    "qa525-vnext-root-g6-preflight.py",
+    "qa525-vnext-root-g6-restore.py",
+    "qa525-vnext-root-g6-review.py",
+    "qa525-vnext-root-go-verify.py",
+    "qa525-vnext-root-launch-config.py",
+    "qa525-vnext-root-launcher-child.py",
+    "qa525-vnext-root-launcher.py",
+    "qa525-vnext-root-locks.py",
+    "qa525-vnext-root-plane.py",
+    "qa525-vnext-scope-store.py",
+    "qa525-vnext-stage-store.py",
+    "qa525-vnext-state-reader.py",
+    "qa525-vnext-switch.py",
+    "qa525-vnext-terminal.py",
+    "qa525-vnext-trust-binding.py",
+    "qa525-vnext-verify.py",
+})
+ALLOWED_FRAGMENTS = frozenset({  # the only non-literal module-name shapes tolerated inside the closure
+    "qa525-vnext-root-g6-%s.py",  # CHILD_MODULES template; every expansion is enumerated by CHILDREN
+    "qa525-vnext-[a-z0-9-]{1,60}\\.py\\Z",  # the launcher's own MODULE pattern
+})
 MAX_CONFIG = 64 * 1024
 MAX_MEMBER = 1024 ** 3
 MAX_TOTAL = 2 * 1024 ** 3
@@ -184,7 +238,8 @@ def load_release(asset_bytes, expected_asset_sha256, source_sha):
 
 # ---------------------------------------------------------------- launcher closure (static, never executed)
 def _names(source):
-    """Module names the code mentions as string constants (docstrings skipped)."""
+    """(module names mentioned as string constants, other strings containing the module prefix).
+    Docstrings are skipped. A prefix fragment means a name may be built dynamically."""
     tree = ast.parse(source)
     skip = set()
     for node in ast.walk(tree):
@@ -192,12 +247,20 @@ def _names(source):
             body = node.body
             if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant):
                 skip.add(id(body[0].value))
-    return {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)
-            and id(n) not in skip and MODULE.fullmatch(n.value)}
+    refs, frags = set(), set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip:
+            if MODULE.fullmatch(n.value):
+                refs.add(n.value)
+            elif "qa525-vnext" in n.value:
+                frags.add(n.value)
+    return refs, frags
 
 
 def closure(code):
-    """Transitive closure of module names reachable from the launcher, config module and all scope children."""
+    """Transitive static closure from the launcher, config module and every scope child, then an exact-set
+    comparison against the versioned EXPECTED_CLOSURE. Any dynamically built name (prefix fragment outside
+    ALLOWED_FRAGMENTS) or any difference in either direction is a STOP, never a silently incomplete manifest."""
     roots = {LAUNCHER, CONFIG_MODULE, *CHILDREN.values()}
     todo, seen = sorted(roots), set()
     while todo:
@@ -208,12 +271,16 @@ def closure(code):
             raise Stop("BUILD_CLOSURE_MEMBER_MISSING")
         seen.add(name)
         try:
-            refs = _names(code[name])
+            refs, frags = _names(code[name])
         except (SyntaxError, ValueError, RecursionError):
             raise Stop("BUILD_CLOSURE_UNPARSEABLE") from None
+        if frags - ALLOWED_FRAGMENTS:
+            raise Stop("BUILD_CLOSURE_DYNAMIC_NAME")
         todo.extend(sorted(r for r in refs if r not in seen and r != BOOTSTRAP))
     if any(NAME.fullmatch(n) is None for n in seen):
         raise Stop("BUILD_CLOSURE_NAME_INVALID")
+    if seen != EXPECTED_CLOSURE:
+        raise Stop("BUILD_CLOSURE_ALLOWLIST_MISMATCH")
     return seen
 
 
@@ -322,15 +389,29 @@ def _write_new(path, data):
 
 
 def _regular(path, limit):
+    """Bounded read of a regular file: no symlink, same inode before/after open, size and mtime unchanged after
+    the read (a candidate manifest must never take bytes from a file that changed under us)."""
     try:
-        st = os.lstat(path)
-        if not stat.S_ISREG(st.st_mode) or st.st_size > limit:
+        before = os.lstat(path)
+        if not stat.S_ISREG(before.st_mode):
             raise Stop("BUILD_INPUT_NOT_REGULAR")
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         raise Stop("BUILD_INPUT_NOT_REGULAR") from None
     with os.fdopen(fd, "rb") as f:
-        return f.read(limit + 1)
+        try:
+            opened = os.fstat(f.fileno())
+            if (not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                    or opened.st_size > limit or opened.st_size != before.st_size):
+                raise Stop("BUILD_INPUT_CHANGED")
+            data = f.read(opened.st_size + 1)
+            after = os.fstat(f.fileno())
+        except OSError:
+            raise Stop("BUILD_INPUT_NOT_REGULAR") from None
+    if (len(data) != opened.st_size or (after.st_size, after.st_mtime_ns, after.st_ino) !=
+            (opened.st_size, opened.st_mtime_ns, opened.st_ino)):
+        raise Stop("BUILD_INPUT_CHANGED")
+    return data
 
 
 def main(argv):
@@ -347,6 +428,9 @@ def main(argv):
     except SystemExit:
         print("BUILD_USAGE")
         return 2
+    if os.geteuid() == 0:
+        print("BUILD_MUST_NOT_RUN_AS_ROOT")
+        return 1
     missing = [n for n, v in (("asset", a.asset), ("asset-sha256", a.asset_sha256), ("source-sha", a.source_sha),
                               ("config", a.config), ("interpreter", a.interpreter), ("output", a.output)) if not v]
     have = {h.split("=", 1)[0] for h in a.helper}

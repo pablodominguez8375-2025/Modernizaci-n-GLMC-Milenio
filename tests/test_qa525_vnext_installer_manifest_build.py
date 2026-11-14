@@ -208,6 +208,42 @@ class BuildTests(unittest.TestCase):
         no_boot = make_release(mutate=lambda f: f.pop("scripts/qa/qa525-vnext-root-bootstrap.py"))
         self.stop("BUILD_CLOSURE_MEMBER_MISSING", asset=no_boot)
 
+    def _launcher_plus(self, snippet, extra=None):
+        def mut(f):
+            k = "scripts/qa/" + B.LAUNCHER
+            f[k] = f[k] + snippet.encode()
+        return make_release(mutate=mut, extra=extra)
+
+    def test_closure_exact_set_gate(self):
+        self.assertEqual(len(B.EXPECTED_CLOSURE), 48)
+        # a NEW literal dependency (module present and hashed in the release) must STOP: manifest would differ
+        added = self._launcher_plus('\nEXTRA = "qa525-vnext-newdep.py"\n',
+                                    extra={"scripts/qa/qa525-vnext-newdep.py": b"x = 1\n"})
+        self.stop("BUILD_CLOSURE_ALLOWLIST_MISMATCH", asset=added)
+        # a literal that points to a module absent from the release STOPs as missing
+        self.stop("BUILD_CLOSURE_MEMBER_MISSING", asset=self._launcher_plus('\nEXTRA = "qa525-vnext-ghost.py"\n'))
+
+    def test_dynamically_built_dependency_name_stops_the_build(self):
+        for snippet in ('\nX = "qa525-vnext-" + NAME + ".py"\n', '\nX = f"qa525-vnext-{NAME}.py"\n',
+                        '\nX = "qa525-vnext-%s.py" % NAME\n', '\nX = "qa525-vnext-{}.py".format(NAME)\n'):
+            self.stop("BUILD_CLOSURE_DYNAMIC_NAME", asset=self._launcher_plus(snippet))
+
+    def test_dependency_dropped_from_code_is_detected(self):
+        def mut(f):
+            k = "scripts/qa/qa525-vnext-root-launcher.py"
+            f[k] = f[k].replace(b"qa525-vnext-admission-bridge.py", b"qa525-vnext-health.py")
+        self.stop("BUILD_CLOSURE_ALLOWLIST_MISMATCH", asset=make_release(mutate=mut))
+
+    def test_real_asset_end_to_end_when_provided(self):
+        path = os.environ.get("QA525_REAL_ASSET")
+        if not path:
+            self.skipTest("QA525_REAL_ASSET not set")
+        raw = Path(path).read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        blob, info = B.build_manifest(raw, **{**kwargs(raw), "asset_sha256": digest, "source_sha": os.environ["QA525_REAL_SOURCE"]})
+        self.assertEqual(info["files"], 48)
+        BOOT.check_manifest_pin(blob, info["manifest_sha256"])
+
     def test_host_pin_parsing(self):
         for bad in ("/usr/bin/x", "rel=%s" % H, "/usr/bin/x=zz", "/a/../b=%s" % H, "a=b=c=d"):
             with self.assertRaises(B.Stop):
@@ -259,6 +295,55 @@ class CliTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(B.main(argv2), 1)
             self.assertFalse(os.path.exists(os.path.join(d, "m2.json")))
+
+    def test_input_changed_or_special_files_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "f")
+            Path(f).write_bytes(b"abc")
+            self.assertEqual(B._regular(f, 10), b"abc")
+            with self.assertRaises(B.Stop):
+                B._regular(f, 2)  # over the bound
+            os.symlink(f, os.path.join(d, "l"))
+            for bad in (os.path.join(d, "l"), d, os.path.join(d, "missing")):
+                with self.assertRaises(B.Stop):
+                    B._regular(bad, 10)
+            fifo = os.path.join(d, "p")
+            os.mkfifo(fifo)
+            with self.assertRaises(B.Stop):
+                B._regular(fifo, 10)
+            real = os.fstat
+
+            def grown(fd):
+                st = real(fd)
+                if st.st_size == 3:
+                    class S:
+                        pass
+                    s = S()
+                    for a in dir(st):
+                        if a.startswith("st_"):
+                            setattr(s, a, getattr(st, a))
+                    s.st_mtime_ns += 1
+                    return s
+                return st
+            from unittest import mock
+            calls = []
+
+            def flip(fd):
+                calls.append(1)
+                st = real(fd)
+                return st if len(calls) == 1 else grown(fd)
+            with mock.patch.object(B.os, "fstat", flip):
+                with self.assertRaises(B.Stop) as cm:
+                    B._regular(f, 10)
+            self.assertEqual(str(cm.exception), "BUILD_INPUT_CHANGED")
+
+    def test_refuses_to_run_as_root(self):
+        from unittest import mock
+        import contextlib
+        buf = io.StringIO()
+        with mock.patch.object(B.os, "geteuid", lambda: 0), contextlib.redirect_stdout(buf):
+            self.assertEqual(B.main(["x"]), 1)
+        self.assertIn("BUILD_MUST_NOT_RUN_AS_ROOT", buf.getvalue())
 
 
 if __name__ == "__main__":
