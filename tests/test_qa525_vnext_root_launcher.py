@@ -355,7 +355,9 @@ class LauncherComposeTests(unittest.TestCase):
         def fresh_load(name):
             if name in shared:
                 calls[name] = calls.get(name, 0) + 1
-                return types.SimpleNamespace(instance=calls[name])
+                # A distinct namespace each time, retaining the fake module's
+                # callable contract so the launcher can finish its flight.
+                return types.SimpleNamespace(**vars(base(name)))
             return base(name)
 
         out = self.compose(load=fresh_load)
