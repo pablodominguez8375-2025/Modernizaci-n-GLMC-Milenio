@@ -44,11 +44,28 @@ class GlobalValidationTest(unittest.TestCase):
         self.review = root / "review-20261113T165400Z.json"
         self.workdir = root / "restores-v2" / "20261113T165400Z"
         self.inboxes = [root / name for name in ("backup", "restore", "review-inbox")]
-        for inbox in self.inboxes:
+        for inbox, command in zip(self.inboxes, ("backup", "restore", "review")):
             inbox.mkdir(mode=0o700)
             used = inbox / ".used-go-1234567890abcdef-20261114T004100Z-1.json"
-            used.write_bytes(b"{}\n")
-            used.chmod(0o600)
+            canonical(used, {
+                "action": f"g6-v2-{command}-supervised",
+                "admission_sha256": "sha256:" + "a" * 64,
+                "app_archive_sha256": "sha256:" + "b" * 64,
+                "app_source_sha": "164a07ecd36eb45428b6aeac4854a17e339ca525",
+                "environment": "QA_GLMDCH_ONLY",
+                "expires_at": "2026-11-14T00:50:00Z",
+                "g6_command": command,
+                "g6_operation_sha256": "sha256:" + "c" * 64,
+                "host": "glmdch",
+                "issued_at": "2026-11-14T00:36:00Z",
+                "nonce": "d" * 64,
+                "operator": "soporte@glmdch",
+                "ops_source_sha": "164a07ecd36eb45428b6aeac4854a17e339ca525",
+                "plan_sha256": "sha256:" + "e" * 64,
+                "policy_hash": "sha256:" + "f" * 64,
+                "schema": "qa525-go-g6-v1",
+                "scope": "QA525_G6_V2_ONLY_NO_LAUNCHER_NO_API_WEB",
+            })
             sig = Path(str(used) + ".sig")
             sig.write_bytes(b"signature\n")
             sig.chmod(0o600)
@@ -102,6 +119,14 @@ class GlobalValidationTest(unittest.TestCase):
 
     def test_missing_used_signature_stops(self):
         next(self.inboxes[2].glob("*.json.sig")).unlink()
+        self.assertNotEqual(self.run_verifier().returncode, 0)
+
+    def test_used_go_from_wrong_command_stops(self):
+        used = next(self.inboxes[0].glob("*.json"))
+        value = json.loads(used.read_text())
+        value["action"] = "g6-v2-restore-supervised"
+        value["g6_command"] = "restore"
+        canonical(used, value)
         self.assertNotEqual(self.run_verifier().returncode, 0)
 
     def test_hardlinked_evidence_stops(self):
