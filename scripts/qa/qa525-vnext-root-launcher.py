@@ -386,12 +386,22 @@ def _compose(load, record, env):
         act_for = getattr(child_mod, "act_for", None)
         if not callable(act_for):
             raise Stop("LAUNCH_CHILD_INVALID")
-        apiweb_modules = {k: load(v) for k, v in APIWEB_MODULES.items()}  # ALL pinned before any nonce is spent
         if cfg["apiweb"] is None:
             raise Stop("LAUNCH_APIWEB_NOT_CONFIGURED")  # this release pins no API_WEB authority: its GO is not honoured
-        apiweb_host = load(APIWEB_HOST)
-        apiweb_host_modules = {k: load(v) for k, v in APIWEB_HOST_MODULES.items()}
-        apiweb_effects = load(APIWEB_EFFECTS)
+        # The PRE-4 Verified loader executes a NEW ModuleType on each call.
+        # Share one pinned instance per filename throughout this flight:
+        # RootPlane/Boundary are checked by exact class identity and the
+        # scope-store must share its journal instance with held-flight.
+        # This cache is local to the invocation, never process-global.
+        apiweb_cache = {}
+        def apiweb_load(name):
+            if name not in apiweb_cache:
+                apiweb_cache[name] = load(name)
+            return apiweb_cache[name]
+        apiweb_modules = {k: apiweb_load(v) for k, v in APIWEB_MODULES.items()}
+        apiweb_host = apiweb_load(APIWEB_HOST)
+        apiweb_host_modules = {k: apiweb_load(v) for k, v in APIWEB_HOST_MODULES.items()}
+        apiweb_effects = apiweb_load(APIWEB_EFFECTS)
         apiweb_authority = dict(cfg["apiweb"], admission_sha256=cfg["pins"]["admission_sha256"],
                                 policy_hash=cfg["pins"]["policy_hash"])
         apiweb_port = getattr(load(POSIX), "PosixPort")()
