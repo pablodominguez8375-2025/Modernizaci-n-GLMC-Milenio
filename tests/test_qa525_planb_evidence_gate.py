@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import time
+import json
 
 PATH = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-planb-evidence-gate.py"
 spec = importlib.util.spec_from_file_location("planb_gate", PATH)
@@ -12,7 +14,8 @@ D = "sha256:" + "c" * 64
 
 
 def valid():
-    return dict(schema="qa525-planb-evidence-v1", source_sha=B, release_source_sha=B,
+    now = int(time.time())
+    return dict(collected_at_unix=now, g6_expires_at_unix=now + 3600, schema="qa525-planb-evidence-v1", source_sha=B, release_source_sha=B,
                 release_digest=D, last_applied_sha=A, live_api_sha=A, live_web_sha=A,
                 live_healthy=True, pending_flight=False, prepared_reconciled=True,
                 diff_complete=True, diff_count=10, physical_preflight_baseline_sha=A,
@@ -66,6 +69,26 @@ class PlanBGateTests(unittest.TestCase):
             e = valid()
             e["pending_flight"] = pending
             self.assertIn("FLIGHT_PENDING_OR_UNKNOWN", mod.inspect(e))
+
+    def test_stale_evidence_and_expired_g6(self):
+        now = int(time.time())
+        e = valid()
+        e["collected_at_unix"] = now - 301
+        self.assertIn("EVIDENCE_STALE_OR_CLOCK_INVALID", mod.inspect(e, now=now))
+        e = valid()
+        e["g6_expires_at_unix"] = now + 299
+        self.assertIn("G6_EXPIRED_OR_INSUFFICIENT_WINDOW", mod.inspect(e, now=now))
+        e = valid()
+        e["collected_at_unix"] = now + 31
+        self.assertIn("EVIDENCE_STALE_OR_CLOCK_INVALID", mod.inspect(e, now=now))
+        e = valid()
+        e["collected_at_unix"] = True
+        self.assertIn("EVIDENCE_STALE_OR_CLOCK_INVALID", mod.inspect(e, now=now))
+
+    def test_duplicate_json_key_is_blocked(self):
+        with self.assertRaises(ValueError):
+            json.loads('{"scope":"API_WEB_QA_ONLY","scope":"LAUNCHER_ONLY"}',
+                       object_pairs_hook=mod.no_duplicate_keys)
 
     def test_missing_or_extra_field(self):
         e = valid()
