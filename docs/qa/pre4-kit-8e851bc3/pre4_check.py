@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """QA525 PRE-4 post-install check WITHOUT exposing the PIN (INACTIVE, AUTHORITY=NONE).
 
-  python3 -I -S pre4_check.py INSTALL_DIR     (run as soporte, no sudo; PIN typed hidden on a TTY)
+  sudo <python> -I -S /root/qa525-pre4-8e851bc3/pre4_check.py INSTALL_DIR
+  (ROOT, from the root-only hash-checked copy: the parent /opt/centenario/qa525-root-source is 0:0 0700, so
+   soporte cannot traverse it; PIN typed hidden on a TTY)
 
 The bootstrap's own `check` takes the PIN in argv (visible in ps/history). This wrapper runs the
 SAME gate (`verify_install` + `materialize_config`, from the bootstrap bytes pinned below) but reads
@@ -19,6 +21,9 @@ MANIFEST = "manifest-launcher.json"
 
 
 def main(argv):
+    if os.geteuid() != 0:
+        print("PRE4_CHECK_MUST_RUN_AS_ROOT (parent dir is root 0700)")
+        return 2
     if len(argv) != 2 or not os.path.isabs(argv[1]) or not sys.stdin.isatty():
         print("PRE4_CHECK_USAGE (absolute INSTALL_DIR, TTY required)")
         return 2

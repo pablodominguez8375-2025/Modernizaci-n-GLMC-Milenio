@@ -139,6 +139,8 @@ def main():
     wadm("adm.json", adm)
     r = U(W + "/k/pre4_kit.py", "check-admission", W + "/u/adm.json")
     step("proposed admission schema: canonical, fields match the cut, 12h validity", r.returncode == 0 and "ADMISSION_SHAPE_OK VALID_NOW" in r.stdout)
+    wadm("adm_old.json", dict(adm, issued_at=now - 90000, expires_at=now - 3600)); r = U(W + "/k/pre4_kit.py", "check-admission", W + "/u/adm_old.json")
+    step("expired admission -> STOP (NOT_VALID_NOW is never a PASS)", r.returncode == 3 and "ADMISSION_NOT_VALID_NOW" in r.stdout and "OK" not in r.stdout)
     wadm("adm2.json", dict(adm, source_sha="0" * 40)); r = U(W + "/k/pre4_kit.py", "check-admission", W + "/u/adm2.json")
     step("admission for another source_sha -> STOP", r.returncode == 3 and "ADMISSION_FIELD_MISMATCH:source_sha" in r.stdout)
     wadm("adm3.json", dict(adm, expires_at=now + 600)); r = U(W + "/k/pre4_kit.py", "check-admission", W + "/u/adm3.json")
@@ -207,7 +209,7 @@ def main():
 
     d = PAR + "/" + SRC
     code, out, argv = run_check(d, cand, as_root=False)
-    step("0700 parent: unprivileged soporte cannot traverse it, so the check must be root (no loosening of 0700)", code != 0 and "BOOT_CHECK_OK" not in out)
+    step("pre4_check refuses a non-root caller (parent is root 0700; no loosening)", code == 2 and "PRE4_CHECK_MUST_RUN_AS_ROOT" in out and "BOOT_CHECK_OK" not in out)
     code, out, argv = run_check(d, cand)
     step("pre4_check as root from root-only copy (hidden PIN) => BOOT_CHECK_OK files=48", code == 0 and "BOOT_CHECK_OK" in out and "files=48" in out, out.strip().splitlines()[-1][:80])
     step("PIN never in argv (process cmdline at the prompt)", cand not in argv and argv.count("\0") <= 5, argv.replace("\0", " ")[:80])

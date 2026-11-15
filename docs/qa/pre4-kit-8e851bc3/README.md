@@ -38,6 +38,7 @@ El launcher NO abre este documento para LAUNCHER_ONLY: solo compara su sha256 co
 7. `python3 -I pre4_kit.py stage outer.zip f0a018c8…0176 manifest-launcher.json launch-config.json /home/soporte/pre4-stage` → `STAGE_OK files=51`.
 
 **2. Instalación (root, el Sponsor teclea; requiere TTY; aprobación explícita)**
+0'. **Revalidación de la admisión INMEDIATAMENTE antes de cada paso privilegiado** (8b, provisión de rutas, emisión del GO): `python3 -I pre4_kit.py check-admission <acta>` debe imprimir `ADMISSION_SHAPE_OK VALID_NOW`; `ADMISSION_NOT_VALID_NOW` es **STOP**, nunca PASS. Ese resultado y el hash NO son permiso para sudo: la autorización humana del PO se confirma aparte (el launcher no abre ni verifica este documento).
 8a. **Compuerta PRE-ROOT (solo utilidades root-owned; el instalador NO corre aún).** El hash de `pre4_install.py` (`sha256sum`, también en `SHA256SUMS` del commit del PR #1027) se obtiene en el dispositivo independiente A y se TECLEA aquí; no se lee de glmdch:
 `sudo install -d -m 0700 -o root -g root /root/qa525-pre4-8e851bc3`
 `sudo install -m 0600 -o root -g root -T /home/soporte/pre4-kit/pre4_install.py /root/qa525-pre4-8e851bc3/pre4_install.py`

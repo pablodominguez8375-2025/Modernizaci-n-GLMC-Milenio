@@ -184,8 +184,10 @@ def cmd_check_admission(args):
     if type(d["issuer"]) is not str or not re.fullmatch(r"[A-Za-z0-9@._ -]{3,64}", d["issuer"]):
         raise Stop("ADMISSION_ISSUER")
     import time
-    state = "VALID_NOW" if ia <= time.time() < ea else "NOT_VALID_NOW"
-    print("ADMISSION_SHAPE_OK %s admission_sha256=sha256:%s AUTHORITY=NONE (candidate for the PO to pin)" % (state, _sha(raw)))
+    if not ia <= time.time() < ea:
+        raise Stop("ADMISSION_NOT_VALID_NOW (STOP, never PASS: expired or not yet valid)")
+    print("ADMISSION_SHAPE_OK VALID_NOW admission_sha256=sha256:%s AUTHORITY=NONE. Shape/time only: NOT permission for sudo; "
+          "re-run immediately before every privileged step and confirm the PO's human authorization separately" % _sha(raw))
 
 
 def _inner(asset_path, asset_sha):

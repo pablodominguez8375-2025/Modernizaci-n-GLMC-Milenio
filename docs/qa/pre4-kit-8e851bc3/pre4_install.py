@@ -157,7 +157,7 @@ def main(argv):
     os.chmod(dest, 0o755)
     safe_ancestors(dest)
     print("INSTALL_DIR_OK dir=%s files=51 manifest_sha256=%s AUTHORITY=NONE" % (dest, sha(mraw)))
-    print("Next (as soporte, no sudo, PIN typed hidden, never argv): python3 -I -S pre4_check.py %s" % dest)
+    print("Next (ROOT, from the hash-checked root-only copy, PIN typed hidden, never argv): sudo <python> -I -S /root/qa525-pre4-8e851bc3/pre4_check.py %s" % dest)
 
 
 if __name__ == "__main__":
