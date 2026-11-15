@@ -172,6 +172,15 @@ class SuccessorUpdateTests(unittest.TestCase):
         with self.assertRaises(Exception):
             succ_update.make_live_ef_check(self.entry, lambda: {"migrations": []})(lambda a: "")
 
+    def test_patch_surface_is_exactly_four_attributes(self):
+        before = {k: v for k, v in vars(self.entry).items() if not k.startswith("__")}
+        self.install()
+        after = {k: v for k, v in vars(self.entry).items() if not k.startswith("__")}
+        changed = {k for k in set(before) | set(after) if before.get(k) is not after.get(k)}
+        # transact/rollback/G6/health/layers/signature checks are the untouched historical ones.
+        self.assertEqual({"BASELINE", "current_change_review", "approved_review",
+                          "validate_live_ef_history"}, changed)
+
     def test_successor_flag_only_with_run_reviewed(self):
         update = load("t_succ_main", OPS / "qa525-update.py")
         for argv in (["--successor", "--apply-prepared"], ["--successor", "--status"]):
