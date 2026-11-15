@@ -7,6 +7,7 @@ this module cannot authenticate provenance. No root, network, Docker or APPLY.
 import argparse
 import json
 import re
+import time
 from pathlib import Path
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -18,12 +19,15 @@ REQUIRED = frozenset({
     "staged_api_digest", "staged_web_digest", "target_api_digest",
     "target_web_digest", "sender_frame", "receiver_frame", "receiver_real_test_pass",
     "g6_valid_now", "g6_restore_verified", "rollback_verified",
+    "collected_at_unix", "g6_expires_at_unix",
     "release_sigstore_verified", "release_source_sha", "scope",
 })
 
 
-def inspect(e):
+def inspect(e, now=None):
     errors = []
+    if now is None:
+        now = int(time.time())
     if type(e) is not dict or set(e) != REQUIRED:
         return ["EVIDENCE_SCHEMA_INCOMPLETE_OR_EXTRA"]
     if e["schema"] != "qa525-planb-evidence-v1":
@@ -36,6 +40,13 @@ def inspect(e):
               "target_api_digest", "target_web_digest"):
         if type(e[k]) is not str or not DIGEST.fullmatch(e[k]):
             errors.append("DIGEST_INVALID:" + k)
+    # A prior PASS is not a fresh PASS: reject replayed snapshots and near-expiry G6.
+    sample = e["collected_at_unix"]
+    expiry = e["g6_expires_at_unix"]
+    if type(sample) is not int or sample < 0 or sample > now + 30 or now - sample > 300:
+        errors.append("EVIDENCE_STALE_OR_CLOCK_INVALID")
+    if type(expiry) is not int or expiry <= now + 300:
+        errors.append("G6_EXPIRED_OR_INSUFFICIENT_WINDOW")
     if e["source_sha"] != e["release_source_sha"]:
         errors.append("TARGET_RELEASE_MISMATCH")
     if e["last_applied_sha"] != e["live_api_sha"] or e["last_applied_sha"] != e["live_web_sha"]:
@@ -63,6 +74,15 @@ def inspect(e):
     return errors
 
 
+def no_duplicate_keys(pairs):
+    doc = {}
+    for key, value in pairs:
+        if key in doc:
+            raise ValueError('duplicate JSON key')
+        doc[key] = value
+    return doc
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("evidence", type=Path)
@@ -72,11 +92,11 @@ def main(argv=None):
             raw = f.read(32769)
         if len(raw) > 32768:
             raise ValueError("oversized")
-        failures = inspect(json.loads(raw))
+        failures = inspect(json.loads(raw, object_pairs_hook=no_duplicate_keys))
     except (OSError, ValueError, UnicodeError):
         failures = ["EVIDENCE_UNREADABLE_OR_INVALID"]
     print(json.dumps({
-        "status": "CONSISTENT_READ_ONLY_NO_GO" if not failures else "BLOCKED_READ_ONLY_NO_GO",
+        "status": "CONSISTENT_UNAUTHENTICATED_READ_ONLY_NO_GO" if not failures else "BLOCKED_READ_ONLY_NO_GO",
         "failures": failures, "may_apply": False,
     }, sort_keys=True))
     return 0 if not failures else 2
