@@ -6,6 +6,7 @@ Subcommands (run as python3 -I pre4_kit.py <cmd> ...):
   check-config CONFIG                 shape + cross-checks of the 17-key launch-config
   verify-manifest MANIFEST CONFIG ASSET ASSET_SHA256
                                       INDEPENDENT re-derivation (own code, not the generator)
+  check-admission FILE                shape/canonical check of a PROPOSED LAUNCHER_ONLY admission (no authority)
   stage ASSET ASSET_SHA256 MANIFEST CONFIG OUTDIR
                                       literal-name extraction of 48 modules + bootstrap
 Nothing here signs, admits, authorizes or spends a GO. A printed hash is a CANDIDATE
@@ -154,6 +155,37 @@ def cmd_check_config(args):
     print("CONFIG_OK keys=17 sha256=%s AUTHORITY=NONE (shape+public facts only; admission/APP-subject/paths NOT authenticated)" % _sha(raw))
 
 
+ADMISSION_KEYS = {"schema", "purpose", "source_sha", "release_asset_sha256", "app_archive_sha256",
+                  "plan_sha256", "ops_v3_sha256", "issuer", "issued_at", "expires_at"}
+
+
+def cmd_check_admission(args):
+    """PROPOSED schema (pending ChatGPT/PO ruling). The launcher never opens this document for
+    LAUNCHER_ONLY: it only compares its sha256 with pins.admission_sha256, so validity is a human
+    contract, not enforced code. The sha256 printed is a CANDIDATE for the PO to pin."""
+    raw = _read(args[0], 16384)
+    d = json.loads(raw)
+    if raw != (json.dumps(d, sort_keys=True, separators=(",", ":")) + "\n").encode():
+        raise Stop("ADMISSION_NOT_CANONICAL")
+    if type(d) is not dict or set(d) != ADMISSION_KEYS:
+        raise Stop("ADMISSION_KEYS")
+    want = {"schema": "qa525-launcher-admission-v1", "purpose": "LAUNCHER_ONLY", "source_sha": SOURCE,
+            "release_asset_sha256": FACTS["launcher_pins.release_asset_sha256"],
+            "app_archive_sha256": FACTS["pins.app_archive_sha256"], "plan_sha256": FACTS["pins.plan_sha256"],
+            "ops_v3_sha256": FACTS["ops_v3_sha256"]}
+    for k, v in want.items():
+        if d[k] != v:
+            raise Stop("ADMISSION_FIELD_MISMATCH:" + k)
+    ia, ea = d["issued_at"], d["expires_at"]
+    if type(ia) is not int or type(ea) is not int or not 900 <= ea - ia <= 86400:
+        raise Stop("ADMISSION_VALIDITY_OUT_OF_RANGE")
+    if type(d["issuer"]) is not str or not re.fullmatch(r"[A-Za-z0-9@._ -]{3,64}", d["issuer"]):
+        raise Stop("ADMISSION_ISSUER")
+    import time
+    state = "VALID_NOW" if ia <= time.time() < ea else "NOT_VALID_NOW"
+    print("ADMISSION_SHAPE_OK %s admission_sha256=sha256:%s AUTHORITY=NONE (candidate for the PO to pin)" % (state, _sha(raw)))
+
+
 def _inner(asset_path, asset_sha):
     outer = _read(asset_path)
     if _sha(outer) != asset_sha or asset_sha != OUTER_SHA256:
@@ -238,7 +270,8 @@ def cmd_stage(args):
 
 def main(argv):
     cmds = {"facts": (cmd_facts, 0), "check-config": (cmd_check_config, 1),
-            "verify-manifest": (cmd_verify_manifest, 4), "stage": (cmd_stage, 5)}
+            "verify-manifest": (cmd_verify_manifest, 4), "stage": (cmd_stage, 5),
+            "check-admission": (cmd_check_admission, 1)}
     if os.geteuid() == 0:
         print("KIT_MUST_NOT_RUN_AS_ROOT")
         return 1

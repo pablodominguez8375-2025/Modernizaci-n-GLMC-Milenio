@@ -129,6 +129,21 @@ def main():
     r = U(W + "/k/pre4_kit_reh.py", "check-config", W + "/u/bad.json")
     step("wrong public fact (release asset) -> MISMATCH refused", r.returncode == 3 and "MISMATCH" in r.stdout)
 
+    import time
+    now = int(time.time())
+    adm = {"schema": "qa525-launcher-admission-v1", "purpose": "LAUNCHER_ONLY", "source_sha": SRC,
+           "release_asset_sha256": cfg["launcher_pins"]["release_asset_sha256"], "app_archive_sha256": cfg["pins"]["app_archive_sha256"],
+           "plan_sha256": cfg["pins"]["plan_sha256"], "ops_v3_sha256": cfg["ops_v3_sha256"], "issuer": "PO-rehearsal", "issued_at": now, "expires_at": now + 43200}
+    def wadm(name, d):
+        open(W + "/u/" + name, "wb").write((json.dumps(d, sort_keys=True, separators=(",", ":")) + "\n").encode()); sh(["chown", "65534", W + "/u/" + name])
+    wadm("adm.json", adm)
+    r = U(W + "/k/pre4_kit.py", "check-admission", W + "/u/adm.json")
+    step("proposed admission schema: canonical, fields match the cut, 12h validity", r.returncode == 0 and "ADMISSION_SHAPE_OK VALID_NOW" in r.stdout)
+    wadm("adm2.json", dict(adm, source_sha="0" * 40)); r = U(W + "/k/pre4_kit.py", "check-admission", W + "/u/adm2.json")
+    step("admission for another source_sha -> STOP", r.returncode == 3 and "ADMISSION_FIELD_MISMATCH:source_sha" in r.stdout)
+    wadm("adm3.json", dict(adm, expires_at=now + 600)); r = U(W + "/k/pre4_kit.py", "check-admission", W + "/u/adm3.json")
+    step("admission with <900 s validity -> STOP (would expire before manifest/PIN/install)", r.returncode == 3 and "VALIDITY_OUT_OF_RANGE" in r.stdout)
+
     H = lambda p: sha(p)
     gh = os.path.realpath(shutil.which("gh"))
     build = [W + "/k/qa525-vnext-installer-manifest-build.py", "--asset", W + "/u/outer.zip", "--asset-sha256", ASSET_SHA,
