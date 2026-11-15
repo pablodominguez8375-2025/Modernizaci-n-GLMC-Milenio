@@ -66,9 +66,21 @@ def safe_ancestors(path):
             raise Stop("ANCESTOR_NOT_ROOT_OWNED_PLAIN_DIR:" + cur)
 
 
+def self_check():
+    """Operator-error guard, NOT a trust anchor: refuse to run from a user-writable place.
+    The anchor is the procedure (README, pre-root gate): root copies this file to a root-only
+    directory and `sha256sum -c` against a hash typed from the independent device BEFORE it runs."""
+    me = os.path.realpath(__file__)
+    safe_ancestors(os.path.dirname(me))
+    st = os.lstat(me)
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+        raise Stop("INSTALLER_NOT_ROOT_OWNED_COPY")
+
+
 def main(argv):
     if os.geteuid() != 0:
         raise Stop("MUST_RUN_AS_ROOT")
+    self_check()
     args = argv[1:]
     parent = DEFAULT_PARENT
     if "--parent" in args:
@@ -145,7 +157,7 @@ def main(argv):
     os.chmod(dest, 0o755)
     safe_ancestors(dest)
     print("INSTALL_DIR_OK dir=%s files=51 manifest_sha256=%s AUTHORITY=NONE" % (dest, sha(mraw)))
-    print("Next (as soporte, no sudo): python3 -I -S %s/%s check %s %s/%s <PIN>" % (dest, BOOTSTRAP, dest, dest, MANIFEST_NAME))
+    print("Next (as soporte, no sudo, PIN typed hidden, never argv): python3 -I -S pre4_check.py %s" % dest)
 
 
 if __name__ == "__main__":

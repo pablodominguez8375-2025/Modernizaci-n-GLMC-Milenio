@@ -36,11 +36,14 @@ def sha(p):
     return sh(["sha256sum", os.path.realpath(p)]).stdout.split()[0]
 
 
-def run_install(staging, parent, phrase, pin):
+ROOTDIR = "/root/qa525-pre4-reh"
+
+
+def run_install(staging, parent, phrase, pin, script=None):
     """Drive pre4_install.py through a pty (it demands a TTY and a hidden PIN)."""
     pid, fd = pty.fork()
     if pid == 0:
-        os.execv(PY, [PY, "-I", "-S", W + "/k/pre4_install.py", staging, "--parent", parent])
+        os.execv(PY, [PY, "-I", "-S", script or ROOTDIR + "/pre4_install.py", staging, "--parent", parent])
     out, sent = b"", 0
     while True:
         try:
@@ -56,6 +59,28 @@ def run_install(staging, parent, phrase, pin):
             os.write(fd, (pin + "\n").encode()); sent = 2
     _, status = os.waitpid(pid, 0)
     return os.waitstatus_to_exitcode(status), out.decode(errors="replace")
+
+
+def run_check(dest, pin):
+    """pre4_check.py as an unprivileged user through a pty; returns (code, output, argv-at-prompt)."""
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.setgid(65534); os.setgroups([]); os.setuid(65534)
+        os.execve(PY, [PY, "-I", "-S", W + "/k/pre4_check.py", dest], {"HOME": "/tmp"})
+    out, argv, sent = b"", b"", False
+    while True:
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        out += chunk
+        if b"PIN (hidden)" in out and not sent:
+            argv = open("/proc/%d/cmdline" % pid, "rb").read()
+            os.write(fd, (pin + "\n").encode()); sent = True
+    _, status = os.waitpid(pid, 0)
+    return os.waitstatus_to_exitcode(status), out.decode(errors="replace"), argv.decode(errors="replace")
 
 
 def main():
@@ -125,6 +150,19 @@ def main():
     r = U(W + "/k/pre4_kit.py", "stage", W + "/u/outer.zip", ASSET_SHA, W + "/u/manifest-launcher.json", W + "/u/launch-config.json", W + "/u/stage")
     step("stage extracts 48 modules + bootstrap + config + manifest (51)", r.returncode == 0 and "STAGE_OK files=51" in r.stdout)
 
+    code, out = run_install(W + "/u/stage", PAR, "AUTORIZO INSTALL_DIR " + SRC, cand, script=W + "/k/pre4_install.py")
+    step("installer run from a user-writable path as root -> STOP before reading staging", code == 3 and "STOP" in out and ("ANCESTOR_NOT_ROOT_OWNED" in out or "INSTALLER_NOT_ROOT_OWNED_COPY" in out) and "PIN (hidden)" not in out and not os.path.exists(PAR + "/" + SRC))
+    # PRE-ROOT GATE (README step 8a): root copies the installer, then sha256sum -c against the hash typed from the independent device
+    shutil.rmtree(ROOTDIR, ignore_errors=True)
+    inst_hash = sha(W + "/k/pre4_install.py")
+    gate = lambda h: sh(["sh", "-c", 'install -d -m 0700 -o root -g root %s && install -m 0600 -o root -g root -T %s %s/pre4_install.py && echo "%s  %s/pre4_install.py" | sha256sum -c -' % (ROOTDIR, W + "/u/kitcopy/pre4_install.py", ROOTDIR, h, ROOTDIR)])
+    os.makedirs(W + "/u/kitcopy"); shutil.copy(W + "/k/pre4_install.py", W + "/u/kitcopy/pre4_install.py")
+    open(W + "/u/kitcopy/pre4_install.py", "a").write("\nopen('/tmp/CANARY','w').write('pwned')\n")  # user swaps in a malicious installer
+    r = gate(inst_hash)
+    step("pre-root gate: tampered installer fails sha256sum -c, so it is never executed", r.returncode != 0 and not os.path.exists("/tmp/CANARY"))
+    shutil.copy(W + "/k/pre4_install.py", W + "/u/kitcopy/pre4_install.py")
+    r = gate(inst_hash)
+    step("pre-root gate: genuine installer copy passes sha256sum -c (root-owned 0600 copy)", r.returncode == 0 and oct(os.stat(ROOTDIR + "/pre4_install.py").st_mode & 0o777) == "0o600", "sha=" + inst_hash[:16])
     code, out = run_install(W + "/u/stage", PAR, "AUTORIZO INSTALL_DIR " + SRC, "0" * 64)
     step("wrong PIN -> STOP, nothing created", code == 3 and "PIN_MISMATCH" in out and not os.path.exists(PAR + "/" + SRC))
     code, out = run_install(W + "/u/stage", PAR, "si", cand)
@@ -149,10 +187,13 @@ def main():
     step("second install on existing dir -> STOP (no replace)", code == 3 and "INSTALL_DIR_ALREADY_EXISTS" in out)
 
     d = PAR + "/" + SRC
-    r = sh(UNPRIV + [PY, "-I", "-S", d + "/qa525-vnext-root-bootstrap.py", "check", d, d + "/manifest-launcher.json", cand])
-    step("bootstrap check as unprivileged user => BOOT_CHECK_OK files=48", r.returncode == 0 and "BOOT_CHECK_OK" in r.stdout and "files=48" in r.stdout, r.stdout.strip()[:90] + r.stderr.strip()[:90])
-    r = sh(UNPRIV + [PY, "-I", "-S", d + "/qa525-vnext-root-bootstrap.py", "check", d, d + "/manifest-launcher.json", "0" * 64])
-    step("bootstrap check with a wrong PIN is refused", r.returncode != 0 and "BOOT_CHECK_OK" not in r.stdout)
+    code, out, argv = run_check(d, cand)
+    step("pre4_check (hidden PIN) => BOOT_CHECK_OK files=48", code == 0 and "BOOT_CHECK_OK" in out and "files=48" in out, out.strip().splitlines()[-1][:80])
+    step("PIN never in argv (process cmdline at the prompt)", cand not in argv and argv.count("\0") <= 5, argv.replace("\0", " ")[:80])
+    code, out, argv = run_check(d, "0" * 64)
+    step("pre4_check with a wrong PIN is refused", code != 0 and "BOOT_CHECK_OK" not in out)
+    st = os.stat(d + "/qa525-vnext-root-bootstrap.py")
+    step("installed files root:root 0644, dir 0755", st.st_uid == 0 and oct(st.st_mode & 0o777) == "0o644" and oct(os.stat(d).st_mode & 0o777) == "0o755")
     print("\nRESULT %s (%d/%d)" % ("PASS" if all(results) else "FAIL", sum(results), len(results)))
     return 0 if all(results) else 1
 
