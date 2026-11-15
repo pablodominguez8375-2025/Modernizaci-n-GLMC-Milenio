@@ -6,7 +6,7 @@ Subcommands (run as python3 -I pre4_kit.py <cmd> ...):
   check-config CONFIG                 shape + cross-checks of the 17-key launch-config
   verify-manifest MANIFEST CONFIG ASSET ASSET_SHA256
                                       INDEPENDENT re-derivation (own code, not the generator)
-  fill-config TEMPLATE OUT --pub PUBFILE --admission FILE --admission-sig SIG --drop-uid N --drop-gid N
+  fill-config TEMPLATE OUT --pub PUBFILE --admission FILE --admission-sig SIG [--drop-uid N --drop-gid N]
                                       fill the 5 authority fields from explicit authority inputs (no invention)
   check-admission FILE                shape/canonical check of a PROPOSED LAUNCHER_ONLY admission (no authority)
   stage ASSET ASSET_SHA256 MANIFEST CONFIG OUTDIR
@@ -53,13 +53,14 @@ FACTS = {
     # physical PASS on glmdch (rootless, ChatGPT #6887458024): exact bytes of app-subject.json (317 B)
     # GO and OPS signers must be the SAME Sponsor key: both are checked against go_fingerprint (root-go-verify)
     "go_fingerprint": OPS_FP,
+    "authenticity.drop_uid": 65534,  # physical: getent passwd/group 65534 = nobody/nogroup (#6887553491)
+    "authenticity.drop_gid": 65534,
     "app_subject_sha256": "sha256:9b47ac0daa1a62a8d9f7423a7393806baba6e6b9f47528b3e1582f64aca82e58",
 }
 # values only an authority can supply: reported OPEN while placeholders, never invented here
 AUTHORITY = ("pins.admission_sha256", "allowed_signers",
              "authenticity.ops_allowed_signers", "authenticity.app_archive_path", "inbox",
-             "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid",
-             "authenticity.drop_uid", "authenticity.drop_gid")
+             "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid")
 
 
 class Stop(Exception):
@@ -126,8 +127,9 @@ def cmd_fill_config(args):
     try:
         tmpl, out = args[0], args[1]
         opt = dict(zip(args[2::2], args[3::2]))
-        pub, adm, duid, dgid = opt["--pub"], opt["--admission"], int(opt["--drop-uid"]), int(opt["--drop-gid"])
-        asig = opt["--admission-sig"]
+        pub, adm, asig = opt["--pub"], opt["--admission"], opt["--admission-sig"]
+        duid = int(opt["--drop-uid"]) if "--drop-uid" in opt else None
+        dgid = int(opt["--drop-gid"]) if "--drop-gid" in opt else None
     except (KeyError, ValueError, IndexError):
         raise Stop("FILL_USAGE") from None
     pubtxt = _read(pub, 4096).decode().strip().split()
@@ -145,7 +147,9 @@ def cmd_fill_config(args):
     with contextlib.redirect_stdout(buf):
         cmd_check_admission([adm])  # STOP unless canonical, matching the cut and VALID_NOW
     cfg["pins"]["admission_sha256"] = "sha256:" + _sha(_read(adm, 16384))
-    if duid <= 0 or dgid <= 0 or duid == cfg["peer_uid"]:
+    duid = cfg["authenticity"]["drop_uid"] if duid is None else duid  # template: physical PASS 65534/65534 (getent, #6887553491)
+    dgid = cfg["authenticity"]["drop_gid"] if dgid is None else dgid
+    if type(duid) is not int or type(dgid) is not int or duid <= 0 or dgid <= 0 or duid == cfg["peer_uid"]:
         raise Stop("FILL_DROP_IDENTITY_INVALID")
     cfg["authenticity"]["drop_uid"], cfg["authenticity"]["drop_gid"] = duid, dgid
     data = json.dumps(cfg, indent=1).encode()

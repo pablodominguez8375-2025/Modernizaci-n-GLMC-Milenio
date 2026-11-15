@@ -39,8 +39,8 @@
   "app_bundle_sha256": "sha256:6da41f302ab7eaa4bd3a095d76cbb421538ab537df4b3f77420a1c475c6164c4",
   "trusted_root_sha256": "sha256:65ca537f6ed8a47fd0e560c421baa1f6c1efb8b25fc200d8c5c02c0e92eb2b9c",
   "app_archive_path": "/var/lib/pmgm-qa525/launcher-8e851bc3/app/inner.zip",
-  "drop_uid": "@@REQUIRED:uid sin privilegios != 1000; propuesto 65534 tras `getent passwd 65534` read-only@@",
-  "drop_gid": "@@REQUIRED:gid de caida; propuesto 65534 tras `getent group 65534` read-only@@",
+  "drop_uid": 65534,
+  "drop_gid": 65534,
   "source_repository_id": "1356543647"
  },
  "apiweb": null

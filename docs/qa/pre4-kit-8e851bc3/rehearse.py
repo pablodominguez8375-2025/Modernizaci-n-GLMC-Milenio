@@ -123,6 +123,8 @@ def main():
     step("fill-config refuses an admission whose bytes do not match its signature", r.returncode == 3 and "ADMISSION_SIGNATURE_INVALID" in r.stdout)
     r = U(W + "/k/pre4_kit_reh.py", "fill-config", W + "/k/launch-config.template.json", W + "/u/x.json", "--pub", W + "/u/pub.txt", "--admission", W + "/u/adm.json", "--admission-sig", W + "/u/adm.json.sig", "--drop-uid", "1000", "--drop-gid", "65534")
     step("fill-config refuses drop_uid == peer_uid", r.returncode == 3 and "FILL_DROP_IDENTITY_INVALID" in r.stdout)
+    r = U(W + "/k/pre4_kit_reh.py", "fill-config", W + "/k/launch-config.template.json", W + "/u/w.json", "--pub", W + "/u/pub.txt", "--admission", W + "/u/adm.json", "--admission-sig", W + "/u/adm.json.sig")
+    step("fill-config with NO drop flags uses the template's physical 65534/65534", r.returncode == 0 and json.load(open(W + "/u/w.json"))["authenticity"]["drop_uid"] == 65534)
     r = U(W + "/k/pre4_kit.py", "fill-config", W + "/k/launch-config.template.json", W + "/u/y.json", "--pub", W + "/u/pub.txt", "--admission", W + "/u/adm.json", "--admission-sig", W + "/u/adm.json.sig", "--drop-uid", "65534", "--drop-gid", "65534")
     step("production kit refuses a public key that is not the pinned fingerprint", r.returncode == 3 and "NOT_THE_PINNED_FINGERPRINT" in r.stdout)
     r = U(W + "/k/pre4_kit.py", "check-config", W + "/k/launch-config.template.json")

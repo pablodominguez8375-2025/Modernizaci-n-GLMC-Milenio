@@ -1,6 +1,6 @@
 # Kit PRE-4 — corte 8e851bc3 (LAUNCHER_ONLY) — AUTHORITY=NONE, NO_GO_ROOT_APPLY
 
-Nada de este kit firma, admite, autoriza ni gasta un GO. Cada hash que imprime es CANDIDATO hasta que el Sponsor lo recompute en otro dispositivo y lo fije fuera de banda (Bitwarden). Ensayo off-host sobre el release firmado real: `RESULT PASS (34/34)` (`python3 rehearse.py outer.zip`, contenedor desechable, NUNCA en glmdch).
+Nada de este kit firma, admite, autoriza ni gasta un GO. Cada hash que imprime es CANDIDATO hasta que el Sponsor lo recompute en otro dispositivo y lo fije fuera de banda (Bitwarden). Ensayo off-host sobre el release firmado real: `RESULT PASS (35/35)` (`python3 rehearse.py outer.zip`, contenedor desechable, NUNCA en glmdch).
 
 ## Contenido (ver SHA256SUMS)
 - `qa525-vnext-installer-manifest-build.py` — generador offline (#1022, sha256 `fd678da2…2839aa`; el kit se niega a usarlo si el hash difiere).
@@ -17,9 +17,9 @@ Nada de este kit firma, admite, autoriza ni gasta un GO. Cada hash que imprime e
 | `pins.admission_sha256` | PO: acta canónica (`check-admission`) **firmada** por la llave Sponsor fijada: `ssh-keygen -Y sign -f <llave> -n qa525-launcher-admission-v1@pmgm acta.json` (en su dispositivo, p. ej. Termux) ⇒ `acta.json.sig`. `fill-config` verifica esa firma (origen) y exige `VALID_NOW` antes de calcular el hash. |
 | `allowed_signers`, `authenticity.ops_allowed_signers` | PÚBLICA, derivada: el kit las ARMA con el formato exacto del verificador (`qa525-ops namespaces="<ns>" ssh-ed25519 <blob>`, ns GO `qa525-go-cut-v1@pmgm` y OPS `qa525-ops-v2@pmgm`) desde el archivo de llave pública que entregue el Sponsor (`~/.ssh/qa525-ops.pub` en Termux). Se NIEGA si su huella no es `SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k` (la que ya verificó el recibo OPS). |
 | `go_fingerprint` | **Prellenado = `SHA256:DN64Bjj…Y5k`.** El código (`root-go-verify`) compara AMBAS líneas de signers (GO y OPS) con este mismo valor ⇒ la llave GO y la OPS son la MISMA llave del Sponsor, en namespaces distintos. El PO lo confirma contra su Bitwarden. |
-| `authenticity.drop_uid`, `drop_gid` | PO (≠ peer_uid, > 0; propuesto 65534/65534 tras `getent` read-only) |
+| `authenticity.drop_uid`, `drop_gid` | **Físico PASS, prellenado 65534/65534** (`getent`: nobody/nogroup, #6887553491; ≠ peer_uid 1000). Ya no es entrada de autoridad. |
 
-`python3 -I pre4_kit.py fill-config launch-config.template.json /ruta/abs/launch-config.json --pub qa525-ops.pub --admission acta.json --admission-sig acta.json.sig --drop-uid 65534 --drop-gid 65534` llena SOLO esas 5 entradas con esas fuentes explícitas (nada inventado) y escribe un archivo 0600 nuevo; luego `check-config` debe dar `CONFIG_OK keys=17`.
+`python3 -I pre4_kit.py fill-config launch-config.template.json /ruta/abs/launch-config.json --pub qa525-ops.pub --admission acta.json --admission-sig acta.json.sig` llena SOLO esas 3 entradas (admisión, 2 líneas de signers; `go_fingerprint` y la identidad de caída vienen del template) con esas fuentes explícitas (nada inventado) y escribe un archivo 0600 nuevo; luego `check-config` debe dar `CONFIG_OK keys=17`.
 
 Rutas (`inbox`, `temp_root`, `journal_root`, `lease_dir`, `socket_path`, `app_archive_path`) y `peer_uid=1000` vienen PREllenados desde `PATHS-PROPOSAL.md` (propuesta con origen en código/hechos físicos; la aprueban ChatGPT/PO; provisión solo con root tras la compuerta).
 `app_subject_sha256` = `9b47ac0d…2e58` ya vino prellenado: coincide con el `app-subject.json` REAL de glmdch (317 B, físico PASS); el Sponsor lo aprueba. El resto (13 valores públicos: SHAs del corte, plan `769c53b8…6063`, política, asset, launcher viejo, operador candidato, OPS `3771195a…`, firma `36875914…`, bundle `6da41f30…`, trusted-root `65ca537f…`, repo id) ya viene fijado y `check-config` los compara (MATCH/MISMATCH).
@@ -51,6 +51,6 @@ El launcher NO abre este documento para LAUNCHER_ONLY: solo compara su sha256 co
 **3. GO (fuera del kit)**
 10. Sender (soporte) primero; GO `LAUNCHER_ONLY` TTL ≤ 900 s emitido último; luego `sudo /bin/sh -c 'umask 022; exec "$@"' sh /usr/bin/python3.14 -I -S -u <DEST>/qa525-vnext-root-bootstrap.py run <DEST> <DEST>/manifest-launcher.json` y el PIN por TTY. Luego `--prepare`/`--capture`, G6 v2 vigente y GO API_WEB (fases aparte).
 
-## Qué prueba el ensayo (34/34) y qué no
+## Qué prueba el ensayo (35/35) y qué no
 Prueba: template rechazado con placeholders; config con hecho público erróneo o llave OPS no fijada rechazado; manifiesto de 48 archivos determinista y recomputado por código independiente; manifiesto alterado, PIN erróneo, frase errónea, archivo extra, symlink y módulo modificado en staging → STOP sin crear nada; instalador ejecutado como root desde ruta escribible por usuarios → STOP antes de leer staging; compuerta pre-root: instalador alterado NO pasa `sha256sum -c` y nunca se ejecuta (canario ausente), copia genuina pasa; instalación feliz; segunda instalación sobre directorio existente → STOP; `pre4_check` real = `BOOT_CHECK_OK files=48`, PIN erróneo se niega y el PIN nunca aparece en el argv del proceso.
 No prueba (bloqueos reales): admisión, APP subject, llaves/huella GO, rutas/uids del host, pins reales del intérprete (en el ensayo se usan los de este contenedor), GO, `run` root, G6/API_WEB. No se ejecutó nada en glmdch.
