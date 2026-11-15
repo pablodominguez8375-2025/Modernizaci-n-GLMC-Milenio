@@ -43,6 +43,9 @@ Requiere inbox con los 5 archivos pinneados (PRE_GO_INBOX_5=PASS), provisión PA
 El sender v2.9 envió el marco `QA525-FD-V1:` (módulo `fd-handoff-contract`), pero el receptor de `root-entry` usa `qa525-vnext-root-boundary-recv.py` con `QA525-BND-V1:<nonce>:<sha-hex>`. Error mío: el ensayo off-host usaba el receptor equivocado. `pre4_sender.py` ahora toma `MAGIC` del módulo `boundary-recv` del release fijado (exige `QA525-BND-V1:`) y envía memfd sellado por SCM_RIGHTS; las credenciales las estampa el kernel porque el receptor activa `SO_PASSCRED`. Ensayo off-host con `entry.run` REAL + `boundary-recv` REAL + journal REAL: sender nuevo → recibe el fd y gasta el nonce; sender v2.9 → reproduce `BND_FRAME_MISMATCH`; nonce erróneo → `BND_FRAME_MISMATCH` sin gastar. El nonce solo se consume DESPUÉS de recibir (paso 5 de `root-entry`), así que el fallo físico no lo gastó (verificar con `pre4_go_recover.sh`).
 `pre4_go_recover.sh` (Termius): diagnóstico de solo lectura (inbox, dirs, socket, procesos, shim, nonce gastado sí/no) y, solo si se escribe `ARCHIVAR`, MUEVE (no borra) `go.json`/`go.json.sig` a un dir nuevo root 0700 para poder firmar un GO nuevo. Todo GO nuevo es una firma nueva: no se reutiliza el vencido.
 
+## v2.9.3 — `pre4_go_launch.sh` usa el `go-in-*` MÁS NUEVO
+Ya existe el `go-in-*` del GO fallido (vencido, no reutilizable); el script antes exigía exactamente uno. Ahora toma el más nuevo por nombre (timestamp UTC ordenable), avisa si hay varios y no toca los demás; un GO viejo igualmente falla por firma/TTL (≥ 240 s) y por `INBOX_ALREADY_HAS_go.json`.
+
 ## Procedimiento único (un comando a la vez; STOP ante cualquier otra salida)
 **0. Dispositivo independiente A (Sponsor, sin root, fuera de glmdch)**
 1. `sha256sum outer.zip` = `f0a018c8…0176`; Sigstore `gh attestation verify … --source-digest 8e851bc3…` exit 0 (comando del runbook).

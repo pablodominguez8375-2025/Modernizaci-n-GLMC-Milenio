@@ -14,8 +14,10 @@ NS=qa525-go-cut-v1@pmgm
 PY=/usr/bin/python3.14
 die() { echo "STOP $1"; exit 1; }
 set -- "$RR"/go-in-*
-[ $# -eq 1 ] && [ -d "$1" ] || die GO_IN_NOT_EXACTLY_ONE
-GOIN=$1; GO=$GOIN/go.json; SIG=$GOIN/go.json.sig
+[ -d "$1" ] || die GO_IN_NOT_FOUND
+GOIN=$(ls -d "$RR"/go-in-* | sort | tail -1)
+[ $# -gt 1 ] && echo "AVISO: hay $# directorios go-in-*; se usa el MAS NUEVO ($GOIN); los demas no se tocan"
+GO=$GOIN/go.json; SIG=$GOIN/go.json.sig
 for f in "$GO" "$SIG"; do [ -f "$f" ] && [ ! -L "$f" ] || die GO_FILE_NOT_REGULAR; done
 [ "$(ssh-keygen -lf "$RR/po-admission/qa525-ops.pub" | awk '{print $2}')" = 'SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k' ] || die PUB_FP
 BLOB=$(awk '{print $2}' "$RR/po-admission/qa525-ops.pub")
