@@ -7,7 +7,8 @@ Nada de este kit firma, admite, autoriza ni gasta un GO. Cada hash que imprime e
 - `pre4_kit.py` — `facts`, `check-config`, `verify-manifest` (re-derivación INDEPENDIENTE, código propio), `stage`.
 - `pre4_install.py` — crea el INSTALL_DIR nuevo (root, solo desde copia root-owned verificada por hash). Sin red, sin borrar nada.
 - `pre4_check.py` — chequeo post-instalación con PIN oculto (sin argv).
-- `launch-config.template.json` — las 17 claves; 13 campos `@@REQUIRED:…@@` que solo una autoridad puede llenar.
+- `launch-config.template.json` — las 17 claves; 6 campos `@@REQUIRED:…@@` que solo una autoridad puede llenar.
+- `PATHS-PROPOSAL.md` — rutas/uids propuestos con su requisito de código y comandos de provisión (no ejecutados).
 - `rehearse.py` — ensayo con llave y valores desechables.
 
 ## Campos que NO puedo ni debo inventar (config privado, no subir a GitHub/Drive)
@@ -16,8 +17,9 @@ Nada de este kit firma, admite, autoriza ni gasta un GO. Cada hash que imprime e
 | `pins.admission_sha256` | PO (admisión auténtica y vigente; se emite ANTES del manifiesto) |
 | `allowed_signers`, `go_fingerprint` | PO (llave GO pública y su huella desde Bitwarden) |
 | `authenticity.ops_allowed_signers` | PO (llave pública OPS; el kit exige huella `SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k`) |
-| `inbox` (dir NUEVO, no `inbox-launcher`), `temp_root`, `socket_path`, `journal_root`, `lease_dir`, `app_archive_path` | ChatGPT/PO tras lectura read-only de glmdch |
-| `peer_uid`, `authenticity.drop_uid`, `drop_gid` | PO (drop_uid ≠ peer_uid, > 0) |
+| `authenticity.drop_uid`, `drop_gid` | PO (≠ peer_uid, > 0; propuesto 65534/65534 tras `getent` read-only) |
+
+Rutas (`inbox`, `temp_root`, `journal_root`, `lease_dir`, `socket_path`, `app_archive_path`) y `peer_uid=1000` vienen PREllenados desde `PATHS-PROPOSAL.md` (propuesta con origen en código/hechos físicos; la aprueban ChatGPT/PO; provisión solo con root tras la compuerta).
 `app_subject_sha256` = `9b47ac0d…2e58` ya vino prellenado: coincide con el `app-subject.json` REAL de glmdch (317 B, físico PASS); el Sponsor lo aprueba. El resto (13 valores públicos: SHAs del corte, plan `769c53b8…6063`, política, asset, launcher viejo, operador candidato, OPS `3771195a…`, firma `36875914…`, bundle `6da41f30…`, trusted-root `65ca537f…`, repo id) ya viene fijado y `check-config` los compara (MATCH/MISMATCH).
 
 ## Admisión LAUNCHER_ONLY (PROPUESTA, pendiente de dictamen ChatGPT/PO; `check-admission` solo valida forma)
