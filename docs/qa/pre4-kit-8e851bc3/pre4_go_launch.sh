@@ -5,6 +5,8 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 RR=$HOME/qa525-release-8e851bc3d2f1615a94009591f0781f88d6d3fe6f
 P=$HOME/qa525-prov-8e851bc3
+if [ -f "$P/inner.zip" ]; then INNER=$P/inner.zip; else INNER=$HOME/qa525-inner-8e851bc3.zip; fi
+[ -f "$INNER" ] || { echo "STOP INNER_ZIP_NOT_FOUND"; exit 1; }
 D=/var/lib/pmgm-qa525/inbox-launcher-8e851bc3
 SOCK=/run/pmgm-qa525/launcher-8e851bc3.sock
 DEST=/opt/centenario/qa525-root-source/8e851bc3d2f1615a94009591f0781f88d6d3fe6f
@@ -41,7 +43,7 @@ A=$(sudo sha256sum "$D/go.json" "$D/go.json.sig" | awk '{print $1}'); B2=$(sha25
 [ -n "$A" ] && [ "$A" = "$B2" ] || die INBOX_COPY_HASH_MISMATCH
 echo "GO_INBOX_COPY=PASS"
 LOG=$HOME/qa525-sender-$(date -u +%H%M%S).log
-"$PY" -I "$HERE/pre4_sender.py" --outer "$RR/release.zip" --inner "$P/inner.zip" --go "$GO" --socket "$SOCK" --wait 240 > "$LOG" 2>&1 &
+"$PY" -I "$HERE/pre4_sender.py" --outer "$RR/release.zip" --inner "$INNER" --go "$GO" --socket "$SOCK" --wait 240 > "$LOG" 2>&1 &
 echo "sender en segundo plano (log $LOG). Ahora el launcher: te pedira el PIN (oculto)."
 set +e
 sudo /bin/sh -c 'umask 022; exec "$@"' sh "$PY" -I -S -u "$DEST/qa525-vnext-root-bootstrap.py" run "$DEST" "$DEST/manifest-launcher.json"

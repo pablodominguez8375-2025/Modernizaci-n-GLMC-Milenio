@@ -4,7 +4,12 @@
 # No imprime ni copia la llave privada. Ejecutar desde la copia del kit en el commit fijado.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
-B=${QA525_B:-$HOME/qa525-deviceB-a3451816}
+B=${QA525_B:-}
+if [ -z "$B" ]; then
+  for c in "$HOME/qa525-pin-independent-a3451816" "$HOME/qa525-deviceB-a3451816"; do [ -f "$c/launch-config.json" ] && B=$c && break; done
+fi
+[ -n "$B" ] || { echo "STOP DEVICE_B_DIR_NOT_FOUND"; exit 1; }
+if [ -f "$B/release.zip" ]; then OUTER=$B/release.zip; else OUTER=$B/outer.zip; fi
 H=soporte@sistema.granlogiamixta.cl
 RR=qa525-release-8e851bc3d2f1615a94009591f0781f88d6d3fe6f
 KEY=$HOME/.ssh/qa525-ops; PUB=$KEY.pub
@@ -13,10 +18,10 @@ NS=qa525-go-cut-v1@pmgm
 die() { echo "STOP $1"; exit 1; }
 [ -f "$KEY" ] && [ -f "$PUB" ] || die KEY_MISSING
 [ "$(ssh-keygen -lf "$PUB" | awk '{print $2}')" = "$EXPECTED_FP" ] || die PUBLIC_KEY_FINGERPRINT_MISMATCH
-[ -f "$B/outer.zip" ] && [ -f "$B/launch-config.json" ] || die DEVICE_B_FILES_MISSING
+[ -f "$OUTER" ] && [ -f "$B/launch-config.json" ] || die DEVICE_B_FILES_MISSING
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 G=$HOME/qa525-go-$STAMP
-python3 -I "$HERE/pre4_gosheet.py" --outer "$B/outer.zip" --config "$B/launch-config.json" --out "$G"
+python3 -I "$HERE/pre4_gosheet.py" --outer "$OUTER" --config "$B/launch-config.json" --out "$G"
 printf '\nCompara el SHORT_CODE con el que mostrara glmdch. Escribe FIRMO para firmar este GO (900 s): '
 read -r ans; [ "$ans" = FIRMO ] || die NOT_CONFIRMED
 ssh-keygen -q -Y sign -f "$KEY" -n "$NS" "$G/go.json" || die SIGN_FAILED
