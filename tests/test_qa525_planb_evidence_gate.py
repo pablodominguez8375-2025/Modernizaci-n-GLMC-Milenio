@@ -4,6 +4,10 @@ from pathlib import Path
 import unittest
 import time
 import json
+import os
+import io
+import tempfile
+from contextlib import redirect_stdout
 
 PATH = Path(__file__).resolve().parents[1] / "scripts/qa/qa525-planb-evidence-gate.py"
 spec = importlib.util.spec_from_file_location("planb_gate", PATH)
@@ -89,6 +93,31 @@ class PlanBGateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             json.loads('{"scope":"API_WEB_QA_ONLY","scope":"LAUNCHER_ONLY"}',
                        object_pairs_hook=mod.no_duplicate_keys)
+
+    def test_main_accepts_regular_file_but_never_grants_go(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p = Path(folder) / "evidence.json"
+            p.write_text(json.dumps(valid()), encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                rc = mod.main([str(p)])
+            self.assertEqual(rc, 0)
+            data = json.loads(output.getvalue())
+            self.assertFalse(data["may_apply"])
+            self.assertEqual(data["status"], "CONSISTENT_UNAUTHENTICATED_READ_ONLY_NO_GO")
+
+    def test_main_rejects_symlink_and_duplicate_key_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p = Path(folder) / "evidence.json"
+            p.write_text(json.dumps(valid()), encoding="utf-8")
+            link = Path(folder) / "link.json"
+            os.symlink(p, link)
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(mod.main([str(link)]), 2)
+            p.write_text('{"scope":"API_WEB_QA_ONLY","scope":"LAUNCHER_ONLY"}',
+                         encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(mod.main([str(p)]), 2)
 
     def test_missing_or_extra_field(self):
         e = valid()
