@@ -1,0 +1,21 @@
+name: QA525 Plan B offline guard tests
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa525-planb-evidence-gate.py'
+      - 'tests/test_qa525_planb_evidence_gate.py'
+      - '.github/workflows/qa525-planb-offline-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  planb-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Syntax and focused Plan B unit tests
+        run: |
+          python3 -m py_compile scripts/qa/qa525-planb-evidence-gate.py tests/test_qa525_planb_evidence_gate.py
+          python3 -m unittest discover -s tests -p 'test_qa525_planb_evidence_gate.py' -v
