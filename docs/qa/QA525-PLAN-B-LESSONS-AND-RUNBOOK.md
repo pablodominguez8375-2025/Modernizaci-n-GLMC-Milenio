@@ -38,3 +38,18 @@ El auxiliar `scripts/qa/qa525-planb-evidence-gate.py` compara **un único snapsh
 **Regla de continuidad:** toda falla nueva debe quedar registrada con síntoma, causa, cambios mínimos, test adversarial que la reproduce, test que la evita, evidencia SHA y estado físico; referenciar lo ya PASS en lugar de repetir. No usar memoria del chat como fuente de verdad.
 
 Referencias: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525 ; https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/1028 ; https://docs.google.com/document/d/1ZL50zwm1DLTrRs0mbjw7VXFemFk3T4M05cPwKH-KoeQ/edit
+
+## Revisión 15-11-2026 — anti-replay, custodia y CI del Plan B
+
+**Fallo encontrado en nuestra primera implementación:** el auxiliar offline aceptaba `g6_valid_now=true` sin registrar cuándo se capturó la evidencia ni hasta cuándo duraba el G6. Un snapshot viejo podía parecer válido. **Corrección:** schema ahora exige `collected_at_unix` (captura de máximo 300 segundos, tolerancia de reloj 30 segundos) y `g6_expires_at_unix` (más de 300 segundos restantes). Se rechazan tipos no enteros, relojes futuros y evidencia caducada. **Importante:** estos valores no autentican un JSON: el colector físico autorizado debe producirlos y autenticarlos; no usar este auxiliar como autoridad de GO.
+
+**Fallo encontrado:** `json.loads` acepta claves duplicadas y la última puede sustituir una anterior. **Corrección:** `object_pairs_hook=no_duplicate_keys`; cualquier campo repetido ⇒ STOP. Cobertura adversarial agregada.
+
+**Fallo encontrado:** la lectura original por `Path.open` seguía enlaces simbólicos. **Corrección:** `os.open(... O_NOFOLLOW | O_CLOEXEC)` + `fstat` archivo regular, un solo hardlink y máximo 32 KiB; cerrar FD incluso con fallo. Pruebas de archivo regular y symlink. Nunca ejecutar este chequeo con root.
+
+**Mecanismo reutilizable:** workflow enfocado `.github/workflows/qa525-planb-offline-tests.yml` corre `py_compile` y unittest de este auxiliar, sin dependencias, host ni secretos. CI de ese workflow en commit exacto `009b0e53d3fb6e54be7bc4e79806597cb408af22`: **SUCCESS**, run `43735945535`. El workflow genérico `QA readonly contract tests` no ejecutaba nuestro test y NO debe confundirse con esta evidencia.
+
+**Punto de entrada de código REAL:** `scripts/qa/operators/qa525-update.py` en dev@da274d65 acepta `--successor` únicamente con `--run-reviewed /ruta/absoluta` o `--review-and-run`; inyecta el sucesor dentro del lock y luego reutiliza `--prepare-reviewed` y `--apply-supervised` del entrypoint preexistente. La existencia de la CLI en GitHub **no certifica** que el binario/operador instalado en glmdch sea idéntico o que ya exista un GO. Nunca ejecutar el comando con opciones ficticias ni sin GO y recovery aprobados.
+
+**Decisión:** conservar PR #1029 DRAFT, solo control auxiliar read-only y documentación de errores. El siguiente trabajo Plan B es verificar interfaz sucesora físicamente con el manifiesto firmado del SHA objetivo, staging BUILD_ONLY y G6 dual vigente en una ventana supervisada, sin rehacer CI/EF/release ya PASS. No crear automatizador alternativo ni alterar el GO total.
+
