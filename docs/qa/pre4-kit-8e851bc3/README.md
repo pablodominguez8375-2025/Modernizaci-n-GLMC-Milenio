@@ -33,6 +33,12 @@ El launcher NO abre este documento para LAUNCHER_ONLY: solo compara su sha256 co
 ## Hoja del GO LAUNCHER_ONLY (v2.8, rootless, AUTHORITY=NONE)
 `python3 -I pre4_gosheet.py --outer outer.zip --config launch-config.json --out /ruta/abs/NUEVO` arma SOLO los bytes canónicos del GO LAUNCHER_ONLY (módulo sponsor-signing tomado del release con hash fijado; campos pinneados desde el config instalado, cuyo sha256 `7a059c56…c98` se exige; nonce hex64 fresco; ventana ≤ 900 s que empieza AHORA). No firma, no usa llaves, no emite GO. Imprime la tarjeta de revisión y el código corto para comparar en dos dispositivos; el Sponsor firma en Termux con `ssh-keygen -Y sign -f ~/.ssh/qa525-ops -n qa525-go-cut-v1@pmgm go.json`. Ejecutarlo inmediatamente antes de firmar y copiar `go.json`+`go.json.sig` al inbox como lo ÚLTIMO.
 
+## GO LAUNCHER_ONLY en dos pegadas (v2.9, AUTHORITY=NONE hasta que el Sponsor firma)
+Requiere inbox con los 5 archivos pinneados (PRE_GO_INBOX_5=PASS), provisión PASS y `~/qa525-deviceB-a3451816/{outer.zip,launch-config.json}` en Termux.
+1. **Termux:** `sh pre4_go_sign.sh` (arma el GO con `pre4_gosheet.py`, muestra tarjeta y SHORT_CODE, pide `FIRMO`, firma con la llave del Sponsor y verifica; envía `go.json`+`go.json.sig` por scp a un directorio NUEVO `go-in-<ts>` de glmdch). La ventana de 900 s empieza al armarlo.
+2. **Termius (glmdch, soporte):** `sh pre4_go_launch.sh` (exige exactamente un `go-in-*`, verifica la firma y que queden >= 240 s, `check-admission`, pide `LANZAR`, instala `go.json`/`go.json.sig` en el inbox como root 0600 sin sobrescribir, arranca `pre4_sender.py` en segundo plano y ejecuta el `run` del bootstrap; el PIN se teclea oculto en el TTY).
+`pre4_sender.py` envía el ZIP interno como memfd sellado por SCM_RIGHTS con el nonce y sha del GO; el receptor compara con sus propios valores verificados, así que no otorga nada. Ensayo off-host con el receptor real: entrega OK, nonce erróneo rechazado, sin socket → STOP. NO probado en glmdch.
+
 ## Procedimiento único (un comando a la vez; STOP ante cualquier otra salida)
 **0. Dispositivo independiente A (Sponsor, sin root, fuera de glmdch)**
 1. `sha256sum outer.zip` = `f0a018c8…0176`; Sigstore `gh attestation verify … --source-digest 8e851bc3…` exit 0 (comando del runbook).
