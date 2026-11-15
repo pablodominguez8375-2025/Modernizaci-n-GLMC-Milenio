@@ -48,9 +48,11 @@ FACTS = {
     "authenticity.app_bundle_sha256": "sha256:6da41f302ab7eaa4bd3a095d76cbb421538ab537df4b3f77420a1c475c6164c4",
     "authenticity.trusted_root_sha256": "sha256:65ca537f6ed8a47fd0e560c421baa1f6c1efb8b25fc200d8c5c02c0e92eb2b9c",
     "authenticity.source_repository_id": "1356543647",
+    # physical PASS on glmdch (rootless, ChatGPT #6887458024): exact bytes of app-subject.json (317 B)
+    "app_subject_sha256": "sha256:9b47ac0daa1a62a8d9f7423a7393806baba6e6b9f47528b3e1582f64aca82e58",
 }
 # values only an authority can supply: reported OPEN while placeholders, never invented here
-AUTHORITY = ("pins.admission_sha256", "app_subject_sha256", "allowed_signers", "go_fingerprint",
+AUTHORITY = ("pins.admission_sha256", "allowed_signers", "go_fingerprint",
              "authenticity.ops_allowed_signers", "authenticity.app_archive_path", "inbox",
              "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid",
              "authenticity.drop_uid", "authenticity.drop_gid")

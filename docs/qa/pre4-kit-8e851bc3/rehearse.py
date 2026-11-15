@@ -61,12 +61,13 @@ def run_install(staging, parent, phrase, pin, script=None):
     return os.waitstatus_to_exitcode(status), out.decode(errors="replace")
 
 
-def run_check(dest, pin):
-    """pre4_check.py as an unprivileged user through a pty; returns (code, output, argv-at-prompt)."""
+def run_check(dest, pin, as_root=True):
+    """pre4_check.py through a pty (as root from the root-only copy, like the real procedure; or unprivileged)."""
     pid, fd = pty.fork()
     if pid == 0:
-        os.setgid(65534); os.setgroups([]); os.setuid(65534)
-        os.execve(PY, [PY, "-I", "-S", W + "/k/pre4_check.py", dest], {"HOME": "/tmp"})
+        if not as_root:
+            os.setgid(65534); os.setgroups([]); os.setuid(65534)
+        os.execve(PY, [PY, "-I", "-S", (ROOTDIR + "/pre4_check.py") if as_root else (W + "/k/pre4_check.py"), dest], {"HOME": "/tmp"})
     out, argv, sent = b"", b"", False
     while True:
         try:
@@ -103,7 +104,6 @@ def main():
     cfg = json.load(open(W + "/k/launch-config.template.json"))
     # fill authority placeholders with throwaway-but-shape-valid values
     cfg["pins"]["admission_sha256"] = "sha256:" + "5" * 64
-    cfg["app_subject_sha256"] = "sha256:" + "6" * 64
     cfg["allowed_signers"] = 'qa525-go namespaces="qa525-go-cut-v1@pmgm" %s\n' % pub
     cfg["go_fingerprint"] = fp
     cfg["authenticity"]["ops_allowed_signers"] = 'qa525-ops namespaces="qa525-ops-v2@pmgm" %s\n' % pub
@@ -171,6 +171,7 @@ def main():
     shutil.rmtree(ROOTDIR, ignore_errors=True)
     inst_hash = sha(W + "/k/pre4_install.py")
     gate = lambda h: sh(["sh", "-c", 'install -d -m 0700 -o root -g root %s && install -m 0600 -o root -g root -T %s %s/pre4_install.py && echo "%s  %s/pre4_install.py" | sha256sum -c -' % (ROOTDIR, W + "/u/kitcopy/pre4_install.py", ROOTDIR, h, ROOTDIR)])
+    chk_hash = sha(W + "/k/pre4_check.py")
     os.makedirs(W + "/u/kitcopy"); shutil.copy(W + "/k/pre4_install.py", W + "/u/kitcopy/pre4_install.py")
     open(W + "/u/kitcopy/pre4_install.py", "a").write("\nopen('/tmp/CANARY','w').write('pwned')\n")  # user swaps in a malicious installer
     r = gate(inst_hash)
@@ -178,6 +179,9 @@ def main():
     shutil.copy(W + "/k/pre4_install.py", W + "/u/kitcopy/pre4_install.py")
     r = gate(inst_hash)
     step("pre-root gate: genuine installer copy passes sha256sum -c (root-owned 0600 copy)", r.returncode == 0 and oct(os.stat(ROOTDIR + "/pre4_install.py").st_mode & 0o777) == "0o600", "sha=" + inst_hash[:16])
+    r = sh(["sh", "-c", 'install -m 0600 -o root -g root -T %s %s/pre4_check.py && echo "%s  %s/pre4_check.py" | sha256sum -c -' % (W + "/k/pre4_check.py", ROOTDIR, chk_hash, ROOTDIR)])
+    step("pre-root gate: pre4_check.py copied root-only and hash-checked too", r.returncode == 0)
+    os.chmod(PAR, 0o700)  # the real parent /opt/centenario/qa525-root-source is 0:0 0700 (physical fact): never loosened
     code, out = run_install(W + "/u/stage", PAR, "AUTORIZO INSTALL_DIR " + SRC, "0" * 64)
     step("wrong PIN -> STOP, nothing created", code == 3 and "PIN_MISMATCH" in out and not os.path.exists(PAR + "/" + SRC))
     code, out = run_install(W + "/u/stage", PAR, "si", cand)
@@ -202,8 +206,10 @@ def main():
     step("second install on existing dir -> STOP (no replace)", code == 3 and "INSTALL_DIR_ALREADY_EXISTS" in out)
 
     d = PAR + "/" + SRC
+    code, out, argv = run_check(d, cand, as_root=False)
+    step("0700 parent: unprivileged soporte cannot traverse it, so the check must be root (no loosening of 0700)", code != 0 and "BOOT_CHECK_OK" not in out)
     code, out, argv = run_check(d, cand)
-    step("pre4_check (hidden PIN) => BOOT_CHECK_OK files=48", code == 0 and "BOOT_CHECK_OK" in out and "files=48" in out, out.strip().splitlines()[-1][:80])
+    step("pre4_check as root from root-only copy (hidden PIN) => BOOT_CHECK_OK files=48", code == 0 and "BOOT_CHECK_OK" in out and "files=48" in out, out.strip().splitlines()[-1][:80])
     step("PIN never in argv (process cmdline at the prompt)", cand not in argv and argv.count("\0") <= 5, argv.replace("\0", " ")[:80])
     code, out, argv = run_check(d, "0" * 64)
     step("pre4_check with a wrong PIN is refused", code != 0 and "BOOT_CHECK_OK" not in out)

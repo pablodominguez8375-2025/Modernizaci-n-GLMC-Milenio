@@ -15,7 +15,7 @@
  "allowed_signers": "@@REQUIRED:pins.admission/GO: linea allowed_signers de la llave GO del PO (publica)@@",
  "go_fingerprint": "@@REQUIRED:SHA256:... de la llave GO fijada en Bitwarden@@",
  "ops_v3_sha256": "sha256:3771195a23cbd25578100c97edb5c1eb22c867ead7163dfa6c070f6c76cab1f4",
- "app_subject_sha256": "@@REQUIRED:sha256 de app-subject.json autentico (PO)@@",
+ "app_subject_sha256": "sha256:9b47ac0daa1a62a8d9f7423a7393806baba6e6b9f47528b3e1582f64aca82e58",
  "inbox": "@@REQUIRED:dir NUEVO root 0700, NO el historico inbox-launcher@@",
  "temp_root": "@@REQUIRED:ruta root-owned (confirmar en glmdch)@@",
  "socket_path": "@@REQUIRED:ruta del socket (dir root-owned)@@",
