@@ -4,11 +4,12 @@
   python3 -I pre4_sender.py --outer outer.zip --inner inner.zip --go go.json --socket /run/pmgm-qa525/launcher-8e851bc3.sock
 
 Waits (up to --wait s) for the launcher's socket, then sends ONE sealed memfd holding the pinned APP inner ZIP
-via SCM_RIGHTS with frame QA525-FD-V1:<nonce>:<sha>, using the fd-handoff contract module taken from the
-sha-pinned release. nonce = the GO's nonce, sha = the GO's app_archive_sha256 (both read from go.json; the
+via SCM_RIGHTS with the frame the ROOT BOOT RECEIVER expects (QA525-BND-V1:<nonce>:<sha-hex>, MAGIC read from the
+boundary-recv module of the sha-pinned release; v2.9 wrongly used the unrelated fd-handoff FD-V1 frame). nonce = the GO's nonce, sha = the GO's app_archive_sha256 (both read from go.json; the
 receiver compares them to ITS OWN independently verified values, so this file grants nothing).
 """
 import argparse
+import array
 import fcntl
 import hashlib
 import importlib.util
@@ -49,9 +50,12 @@ def main():
     spec = importlib.util.spec_from_file_location("pre4_kit", os.path.join(HERE, "pre4_kit.py"))
     k = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(k)
-    code = k._member(k._inner(a.outer, ASSET), "qa525-vnext-fd-handoff-contract.py")
-    ns = {"__name__": "qa525_fd_handoff"}
-    exec(compile(code, "qa525-vnext-fd-handoff-contract.py", "exec"), ns)
+    code = k._member(k._inner(a.outer, ASSET), "qa525-vnext-root-boundary-recv.py")
+    ns = {"__name__": "qa525_boundary_recv"}
+    exec(compile(code, "qa525-vnext-root-boundary-recv.py", "exec"), ns)
+    magic = ns["MAGIC"]
+    if magic != b"QA525-BND-V1:":
+        raise Stop("UNEXPECTED_BOUNDARY_MAGIC")
     go = json.load(open(a.go))
     nonce = go["nonce"]
     if go["app_archive_sha256"] != "sha256:" + INNER:
@@ -74,7 +78,10 @@ def main():
                 raise Stop("SOCKET_NOT_AVAILABLE")
             time.sleep(0.25)
     try:
-        ns["send_verified_fd"](s, fd, nonce=nonce, sha256="sha256:" + INNER)
+        if len(nonce) < 24 or any(c not in "0123456789abcdefABCDEF" for c in nonce):
+            raise Stop("GO_NONCE_FORMAT")
+        frame = magic + nonce.encode() + b":" + INNER.encode()
+        s.sendmsg([frame], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]))])
     finally:
         s.close()
     print("SENDER_SENT nonce=%s sha256=%s AUTHORITY=NONE" % (nonce, INNER))
