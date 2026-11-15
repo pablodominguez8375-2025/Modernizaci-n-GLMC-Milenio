@@ -6,7 +6,9 @@ this module cannot authenticate provenance. No root, network, Docker or APPLY.
 """
 import argparse
 import json
+import os
 import re
+import stat
 import time
 from pathlib import Path
 
@@ -88,10 +90,17 @@ def main(argv=None):
     p.add_argument("evidence", type=Path)
     a = p.parse_args(argv)
     try:
-        with a.evidence.open("rb") as f:
-            raw = f.read(32769)
-        if len(raw) > 32768:
-            raise ValueError("oversized")
+        fd = os.open(a.evidence, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_size > 32768:
+                raise ValueError("unsafe evidence file")
+            with os.fdopen(fd, "rb", closefd=False) as f:
+                raw = f.read(32769)
+            if len(raw) > 32768:
+                raise ValueError("oversized")
+        finally:
+            os.close(fd)
         failures = inspect(json.loads(raw, object_pairs_hook=no_duplicate_keys))
     except (OSError, ValueError, UnicodeError):
         failures = ["EVIDENCE_UNREADABLE_OR_INVALID"]
