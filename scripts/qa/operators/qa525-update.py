@@ -559,6 +559,7 @@ def main(argv=None):
     choice.add_argument('--install-launcher', action='store_true')
     choice.add_argument('--review-and-run', action='store_true')
     parser.add_argument('--reconciliation-review', type=Path)
+    parser.add_argument('--successor', action='store_true')
     parser.add_argument('--source')
     parser.add_argument('--digest')
     parser.add_argument('--technical-review-reference')
@@ -567,6 +568,8 @@ def main(argv=None):
     parser.add_argument('--schema-mode', choices=['member_history_postdb', 'support00_postdb'],
                         default='support00_postdb')
     args = parser.parse_args(argv)
+    require(not args.successor or args.run_reviewed is not None or args.review_and_run,
+            'UPDATE_SUCCESSOR_ONLY_WITH_RUN_REVIEWED')
     require(os.geteuid() == 0 and socket.gethostname() == 'glmdch', 'UPDATE_ONLY_GLM DCH_ROOT'.replace(' ', '_'))
     entry = load_entry()
     if args.install_launcher:
@@ -617,6 +620,12 @@ def main(argv=None):
         require(mode in ('member_history_postdb', 'support00_postdb'), 'UPDATE_PREPARED_SCHEMA_UNKNOWN')
         return invoke(entry, '--apply-supervised', mode == 'support00_postdb')
     with build.exclusive():
+        if args.successor:
+            # Baseline = last APPLIED+LIVE+HEALTHY cut, resolved in this same locked process.
+            path = HERE / 'qa525-successor-update.py'
+            entry.trusted(path)
+            successor = entry.load('qa525_successor_update', path)
+            successor.install(entry, adapter)
         if args.review_and_run:
             packet, verified = make_review_packet(entry, args, modules)
             support00 = install_review_packet(entry, packet, modules, verified=verified)
