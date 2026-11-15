@@ -102,28 +102,40 @@ def main():
     src = open(W + "/k/pre4_kit.py").read().replace("SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k", fp)
     open(W + "/k/pre4_kit_reh.py", "w").write(src)
     cfg = json.load(open(W + "/k/launch-config.template.json"))
-    # fill authority placeholders with throwaway-but-shape-valid values
-    cfg["pins"]["admission_sha256"] = "sha256:" + "5" * 64
-    cfg["allowed_signers"] = 'qa525-go namespaces="qa525-go-cut-v1@pmgm" %s\n' % pub
-    cfg["go_fingerprint"] = fp
-    cfg["authenticity"]["ops_allowed_signers"] = 'qa525-ops namespaces="qa525-ops-v2@pmgm" %s\n' % pub
-    cfg["authenticity"]["app_archive_path"] = "/opt/centenario/qa525-signed-stage/%s/inner.zip" % SRC
-    cfg.update(inbox="/var/lib/pmgm-qa525/inbox-reh/in", temp_root="/var/lib/pmgm-qa525/reh/tmp",
-               socket_path="/run/pmgm-qa525-reh/s.sock", journal_root="/var/lib/pmgm-qa525/reh/journal",
-               lease_dir="/var/lib/pmgm-qa525/reh/lease", peer_uid=1000)
-    cfg["authenticity"].update(drop_uid=65534, drop_gid=65534)
-    json.dump(cfg, open(W + "/u/launch-config.json", "w"), indent=1)
+    now = int(__import__("time").time())
+    adm = {"schema": "qa525-launcher-admission-v1", "purpose": "LAUNCHER_ONLY", "source_sha": SRC,
+           "release_asset_sha256": cfg["launcher_pins"]["release_asset_sha256"], "app_archive_sha256": cfg["pins"]["app_archive_sha256"],
+           "plan_sha256": cfg["pins"]["plan_sha256"], "ops_v3_sha256": cfg["ops_v3_sha256"], "issuer": "PO-rehearsal", "issued_at": now, "expires_at": now + 43200}
+    open(W + "/u/pub.txt", "w").write(pub + " rehearsal\n")
+    open(W + "/u/adm.json", "wb").write((json.dumps(adm, sort_keys=True, separators=(",", ":")) + "\n").encode())
+    sh(["ssh-keygen", "-q", "-Y", "sign", "-f", W + "/u/key", "-n", "qa525-launcher-admission-v1@pmgm", W + "/u/adm.json"])
+    shutil.copy(W + "/u/adm.json", W + "/u/adm_tamper.json")
+    open(W + "/u/adm_tamper.json", "ab").write(b" ")
+    shutil.copy(W + "/u/adm.json.sig", W + "/u/adm_tamper.json.sig")
     sh(["chown", "-R", "65534:65534", W + "/u"]); sh(["chmod", "-R", "a+rX", W]); os.chmod(W, 0o755)
 
     def U(*a):
         return sh(UNPRIV + [PY, "-I"] + list(a))
 
+    r = U(W + "/k/pre4_kit_reh.py", "fill-config", W + "/k/launch-config.template.json", W + "/u/launch-config.json", "--pub", W + "/u/pub.txt", "--admission", W + "/u/adm.json", "--admission-sig", W + "/u/adm.json.sig", "--drop-uid", "65534", "--drop-gid", "65534")
+    step("fill-config builds the 17-key config from the REAL template + 5 explicit authority inputs", r.returncode == 0 and "FILL_OK" in r.stdout, r.stdout.strip()[:50])
+    r = U(W + "/k/pre4_kit_reh.py", "fill-config", W + "/k/launch-config.template.json", W + "/u/z.json", "--pub", W + "/u/pub.txt", "--admission", W + "/u/adm_tamper.json", "--admission-sig", W + "/u/adm_tamper.json.sig", "--drop-uid", "65534", "--drop-gid", "65534")
+    step("fill-config refuses an admission whose bytes do not match its signature", r.returncode == 3 and "ADMISSION_SIGNATURE_INVALID" in r.stdout)
+    r = U(W + "/k/pre4_kit_reh.py", "fill-config", W + "/k/launch-config.template.json", W + "/u/x.json", "--pub", W + "/u/pub.txt", "--admission", W + "/u/adm.json", "--admission-sig", W + "/u/adm.json.sig", "--drop-uid", "1000", "--drop-gid", "65534")
+    step("fill-config refuses drop_uid == peer_uid", r.returncode == 3 and "FILL_DROP_IDENTITY_INVALID" in r.stdout)
+    r = U(W + "/k/pre4_kit.py", "fill-config", W + "/k/launch-config.template.json", W + "/u/y.json", "--pub", W + "/u/pub.txt", "--admission", W + "/u/adm.json", "--admission-sig", W + "/u/adm.json.sig", "--drop-uid", "65534", "--drop-gid", "65534")
+    step("production kit refuses a public key that is not the pinned fingerprint", r.returncode == 3 and "NOT_THE_PINNED_FINGERPRINT" in r.stdout)
     r = U(W + "/k/pre4_kit.py", "check-config", W + "/k/launch-config.template.json")
     step("template has OPEN placeholders and is refused", r.returncode == 3 and "CONFIG_OPEN" in r.stdout, r.stdout.count("OPEN ") and "(%d open lines)" % r.stdout.count("  OPEN "))
     r = U(W + "/k/pre4_kit.py", "check-config", W + "/u/launch-config.json")
-    step("production kit refuses a config whose OPS key is not the pinned fingerprint", r.returncode == 3 and "OPS_SIGNERS_KEY_NOT_THE_PINNED_FINGERPRINT" in r.stdout)
+    step("production kit refuses a config whose OPS key is not the pinned fingerprint", r.returncode == 3 and "SIGNERS_KEY_NOT_THE_PINNED_FINGERPRINT" in r.stdout)
     r = U(W + "/k/pre4_kit_reh.py", "check-config", W + "/u/launch-config.json")
     step("rehearsal kit: config 17 keys OK (shape + public facts + key cross-checks)", r.returncode == 0 and "CONFIG_OK keys=17" in r.stdout, r.stdout.strip().splitlines()[-1][:60])
+    cfg = json.load(open(W + "/u/launch-config.json"))
+    wrong = json.loads(json.dumps(cfg)); wrong["allowed_signers"] = wrong["allowed_signers"].replace("qa525-ops ", "qa525-go ")
+    json.dump(wrong, open(W + "/u/wrong.json", "w")); sh(["chown", "65534", W + "/u/wrong.json"])
+    r = U(W + "/k/pre4_kit_reh.py", "check-config", W + "/u/wrong.json")
+    step("signers line with a wrong principal is refused (exact format qa525-ops)", r.returncode == 3 and "SIGNERS_LINE_NOT_EXACT_FORMAT" in r.stdout)
     bad = json.loads(json.dumps(cfg)); bad["launcher_pins"]["release_asset_sha256"] = "sha256:" + "0" * 64
     json.dump(bad, open(W + "/u/bad.json", "w")); sh(["chown", "65534", W + "/u/bad.json"])
     r = U(W + "/k/pre4_kit_reh.py", "check-config", W + "/u/bad.json")

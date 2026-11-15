@@ -6,6 +6,8 @@ Subcommands (run as python3 -I pre4_kit.py <cmd> ...):
   check-config CONFIG                 shape + cross-checks of the 17-key launch-config
   verify-manifest MANIFEST CONFIG ASSET ASSET_SHA256
                                       INDEPENDENT re-derivation (own code, not the generator)
+  fill-config TEMPLATE OUT --pub PUBFILE --admission FILE --admission-sig SIG --drop-uid N --drop-gid N
+                                      fill the 5 authority fields from explicit authority inputs (no invention)
   check-admission FILE                shape/canonical check of a PROPOSED LAUNCHER_ONLY admission (no authority)
   stage ASSET ASSET_SHA256 MANIFEST CONFIG OUTDIR
                                       literal-name extraction of 48 modules + bootstrap
@@ -49,10 +51,12 @@ FACTS = {
     "authenticity.trusted_root_sha256": "sha256:65ca537f6ed8a47fd0e560c421baa1f6c1efb8b25fc200d8c5c02c0e92eb2b9c",
     "authenticity.source_repository_id": "1356543647",
     # physical PASS on glmdch (rootless, ChatGPT #6887458024): exact bytes of app-subject.json (317 B)
+    # GO and OPS signers must be the SAME Sponsor key: both are checked against go_fingerprint (root-go-verify)
+    "go_fingerprint": OPS_FP,
     "app_subject_sha256": "sha256:9b47ac0daa1a62a8d9f7423a7393806baba6e6b9f47528b3e1582f64aca82e58",
 }
 # values only an authority can supply: reported OPEN while placeholders, never invented here
-AUTHORITY = ("pins.admission_sha256", "allowed_signers", "go_fingerprint",
+AUTHORITY = ("pins.admission_sha256", "allowed_signers",
              "authenticity.ops_allowed_signers", "authenticity.app_archive_path", "inbox",
              "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid",
              "authenticity.drop_uid", "authenticity.drop_gid")
@@ -109,6 +113,70 @@ def _key_fp(line_bytes):
     return None
 
 
+PRINCIPAL = "qa525-ops"  # root-go-verify.PRINCIPAL: the same principal for both namespaces
+GO_NS = "qa525-go-cut-v1@pmgm"
+OPS_NS = "qa525-ops-v2@pmgm"
+
+
+def _signers_line(ns, blob):
+    return ('%s namespaces="%s" ssh-ed25519 %s\n' % (PRINCIPAL, ns, blob)).encode()
+
+
+def cmd_fill_config(args):
+    try:
+        tmpl, out = args[0], args[1]
+        opt = dict(zip(args[2::2], args[3::2]))
+        pub, adm, duid, dgid = opt["--pub"], opt["--admission"], int(opt["--drop-uid"]), int(opt["--drop-gid"])
+        asig = opt["--admission-sig"]
+    except (KeyError, ValueError, IndexError):
+        raise Stop("FILL_USAGE") from None
+    pubtxt = _read(pub, 4096).decode().strip().split()
+    if len(pubtxt) < 2 or pubtxt[0] != "ssh-ed25519" or not re.fullmatch(r"AAAA[A-Za-z0-9+/=]{20,200}", pubtxt[1]):
+        raise Stop("FILL_PUBLIC_KEY_FORMAT")
+    if _key_fp(("x ssh-ed25519 %s" % pubtxt[1]).encode()) != OPS_FP:
+        raise Stop("FILL_PUBLIC_KEY_NOT_THE_PINNED_FINGERPRINT")
+    _verify_admission_sig(adm, asig, pubtxt[1])  # origin: signed by the pinned Sponsor key, before anything is filled
+    cfg = json.loads(_read(tmpl, 65536))
+    cfg["allowed_signers"] = _signers_line(GO_NS, pubtxt[1]).decode()
+    cfg["authenticity"]["ops_allowed_signers"] = _signers_line(OPS_NS, pubtxt[1]).decode()
+    cfg["go_fingerprint"] = OPS_FP
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        cmd_check_admission([adm])  # STOP unless canonical, matching the cut and VALID_NOW
+    cfg["pins"]["admission_sha256"] = "sha256:" + _sha(_read(adm, 16384))
+    if duid <= 0 or dgid <= 0 or duid == cfg["peer_uid"]:
+        raise Stop("FILL_DROP_IDENTITY_INVALID")
+    cfg["authenticity"]["drop_uid"], cfg["authenticity"]["drop_gid"] = duid, dgid
+    data = json.dumps(cfg, indent=1).encode()
+    if b"@@" in data:
+        raise Stop("FILL_STILL_HAS_PLACEHOLDERS")
+    if not os.path.isabs(out):
+        raise Stop("FILL_OUT_NOT_ABSOLUTE")
+    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    print("FILL_OK out=%s sha256=%s AUTHORITY=NONE (run check-config next)" % (out, _sha(data)))
+
+
+ADM_NS = "qa525-launcher-admission-v1@pmgm"
+
+
+def _verify_admission_sig(adm_path, sig_path, pub_blob):
+    """ORIGIN check: the admission bytes must carry an OpenSSH detached signature, namespace ADM_NS,
+    made by the pinned Sponsor key (principal qa525-ops). Needs ssh-keygen; runs unprivileged."""
+    import tempfile
+    allowed = _signers_line(ADM_NS, pub_blob)
+    with tempfile.TemporaryDirectory(prefix="pre4adm-") as d:
+        ap = os.path.join(d, "allowed")
+        with open(ap, "wb") as f:
+            f.write(allowed)
+        r = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", ap, "-I", PRINCIPAL, "-n", ADM_NS, "-s", sig_path],
+                           input=_read(adm_path, 16384), capture_output=True, timeout=20)
+    if r.returncode != 0:
+        raise Stop("ADMISSION_SIGNATURE_INVALID")
+
+
 def cmd_facts(_):
     for k in sorted(FACTS):
         print("%s=%s" % (k, FACTS[k]))
@@ -145,11 +213,15 @@ def cmd_check_config(args):
         extra.append("PATHS_NOT_DISTINCT")
     if cfg["g6_pins"] is not None or cfg["apiweb"] is not None:
         extra.append("NOT_LAUNCHER_ONLY_SHAPE")
-    ops_fp = _key_fp(cfg["authenticity"]["ops_allowed_signers"].encode())
-    if ops_fp != OPS_FP:
-        extra.append("OPS_SIGNERS_KEY_NOT_THE_PINNED_FINGERPRINT")
-    if _key_fp(cfg["allowed_signers"].encode()) != cfg["go_fingerprint"]:
-        extra.append("GO_FINGERPRINT_NOT_THE_ALLOWED_SIGNERS_KEY")
+    for field, ns in (("allowed_signers", GO_NS), ("authenticity.ops_allowed_signers", OPS_NS)):
+        line = _get(cfg, field).encode()
+        fp = _key_fp(line)
+        if fp != OPS_FP or cfg["go_fingerprint"] != OPS_FP:
+            extra.append("SIGNERS_KEY_NOT_THE_PINNED_FINGERPRINT:" + field)
+        else:
+            blob = line.decode().split()[-1]
+            if line != _signers_line(ns, blob):
+                extra.append("SIGNERS_LINE_NOT_EXACT_FORMAT:" + field)
     for e in extra:
         print("CROSSCHECK_FAIL " + e)
     if bad or extra:
@@ -275,11 +347,11 @@ def cmd_stage(args):
 def main(argv):
     cmds = {"facts": (cmd_facts, 0), "check-config": (cmd_check_config, 1),
             "verify-manifest": (cmd_verify_manifest, 4), "stage": (cmd_stage, 5),
-            "check-admission": (cmd_check_admission, 1)}
+            "check-admission": (cmd_check_admission, 1), "fill-config": (cmd_fill_config, None)}
     if os.geteuid() == 0:
         print("KIT_MUST_NOT_RUN_AS_ROOT")
         return 1
-    if len(argv) < 2 or argv[1] not in cmds or len(argv) - 2 != cmds[argv[1]][1]:
+    if len(argv) < 2 or argv[1] not in cmds or (cmds[argv[1]][1] is not None and len(argv) - 2 != cmds[argv[1]][1]):
         print(__doc__)
         return 2
     try:

@@ -13,7 +13,7 @@
   "candidate_operator_sha256": "1071b7b46d58dc2869fe9fe1481ef49b0bf5db3aad14ca0265f3ec1d72865a5f"
  },
  "allowed_signers": "@@REQUIRED:pins.admission/GO: linea allowed_signers de la llave GO del PO (publica)@@",
- "go_fingerprint": "@@REQUIRED:SHA256:... de la llave GO fijada en Bitwarden@@",
+ "go_fingerprint": "SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k",
  "ops_v3_sha256": "sha256:3771195a23cbd25578100c97edb5c1eb22c867ead7163dfa6c070f6c76cab1f4",
  "app_subject_sha256": "sha256:9b47ac0daa1a62a8d9f7423a7393806baba6e6b9f47528b3e1582f64aca82e58",
  "inbox": "/var/lib/pmgm-qa525/inbox-launcher-8e851bc3",
