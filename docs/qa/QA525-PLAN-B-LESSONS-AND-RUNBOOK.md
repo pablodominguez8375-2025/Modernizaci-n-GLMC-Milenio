@@ -53,3 +53,26 @@ Referencias: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milen
 
 **Decisión:** conservar PR #1029 DRAFT, solo control auxiliar read-only y documentación de errores. El siguiente trabajo Plan B es verificar interfaz sucesora físicamente con el manifiesto firmado del SHA objetivo, staging BUILD_ONLY y G6 dual vigente en una ventana supervisada, sin rehacer CI/EF/release ya PASS. No crear automatizador alternativo ni alterar el GO total.
 
+
+## Continuidad física verificada 16-11-2026 — NO repetir F0–F3
+
+**Diferenciar carriles:** F0/F1/F2/F3 del kit v3.7 corresponden a **instalar y aprovisionar el launcher QA525**. No son una instalación ni un GO del operador `--successor`, ni certifican el Plan B API+WEB. No encadenar permisos: autorización F2 no cubre F3; F3 no cubre GO LAUNCHER_ONLY; GO LAUNCHER_ONLY no cubre GO API_WEB_QA_ONLY.
+
+Evidencia física registrada por Sponsor en Issue #525:
+
+| Control | Resultado físico | Referencia |
+|---|---|---|
+| F0 renovación + cotejo independiente device B | `DEVICE_B_MATCH=PASS`, config `d8fff1ae06bb14483b7a01ef3d63f1cfa3314c8cebd337ad8bdfa8d581ae8849`, PIN `0577ab54cdfee029507ba8ccb33936f0bfe7c194fc113a832ad5e93c69ff0ce4` | #6914683794 |
+| F1 PRE4_RUN renovado | `PREFLIGHT_PASS`, stage 51 archivos; no sudo ni GO | #6914596632 |
+| F2 ROOT_INSTALL | `ROOT_INSTALL_PASS`, `INSTALL_DIR_OK files=51`, `BOOT_CHECK_OK` | #6915926842 |
+| F3 PROVISION | `PROVISION_PASS inbox=5_pinned_files`, `QA525_F3_READBACK=PASS`; GO ausente | #6916058071 |
+| Termux GO pre-sign readiness | `QA525_GO_SIGN_READINESS=PASS`, `GO=NOT_SIGNED_NOT_EXECUTED` | #6916155718 |
+| Termius host readiness | `QA525_HOST_GO_READINESS=PASS`, GO/GO.sig/socket ausentes | #6916243132 |
+
+**Nuevo gate pendiente, exclusivamente launcher:** solicitar aprobación separada del Sponsor antes de firmar y lanzar `LAUNCHER_ONLY`; el GO tiene TTL de hasta 900 s y debe emitirse al final, no anticipadamente. El examen de admisión previo es histórico y requiere revalidación de TTL al emitir. El launcher no debe arrancar como consecuencia automática de F3 o de este documento.
+
+**Pendientes exclusivamente Plan B:** (1) revisar e integrar PR #1029 cuando corresponda (gate offline no es autoridad); (2) constatar en glmdch el SHA del ejecutor `qa525-update.py --successor`, versión fuente/manifest y estado `prepared`/locks mediante una sola consulta read-only; (3) baseline físico último APPLIED=API/WEB LIVE/HEALTHY y revisión técnica por SHA; (4) target firmado autenticado en el host, imágenes API/WEB staged sin drift; (5) G6 dual fresco con restore auditado y rollback; (6) nueva autorización específica `API_WEB_QA_ONLY`. No declarar READY hasta que todos tengan evidencia física actual. No repetir F0–F3 ni CI/EF/OPS ya PASS si no cambian sus entradas.
+
+**Incidente no repetible:** el intento F2 con admisión previa venció con `STOP_ADMISSION_TTL_TOO_SHORT`; un wrapper imprimió falsamente COMPLETED porque había un `(...) || ...` que inhibía `errexit`. Este error fue corregido en el procedimiento: exigir código de salida 0 **y** `ROOT_INSTALL_PASS` **y** readback físico. F2 posterior con admisión renovada logró PASS, sin reutilizar config/PIN históricos. Referencias #6914375704 y #6915926842.
+
+Este registro es de continuidad/seguimiento; no crea GO ni modifica glmdch, dev, main, identidad, base de datos o producción.
