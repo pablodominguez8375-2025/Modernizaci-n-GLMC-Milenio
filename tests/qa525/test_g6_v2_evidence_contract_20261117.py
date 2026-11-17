@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Offline G6 v2 evidence regression tests. No host, Docker, GO or network access."""
-import copy
 import datetime as dt
 import hashlib
 import importlib.util
@@ -8,7 +7,7 @@ import json
 from pathlib import Path
 import unittest
 
-MODULE = Path(__file__).resolve().parents[1] / "qa525-vnext-g6-v2-evidence.py"
+MODULE = Path(__file__).resolve().parents[2] / "scripts" / "qa" / "qa525-vnext-g6-v2-evidence.py"
 spec = importlib.util.spec_from_file_location("qa525_g6_v2_evidence", MODULE)
 evidence = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(evidence)
