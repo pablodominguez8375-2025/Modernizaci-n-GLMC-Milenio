@@ -23,7 +23,7 @@ def fixture():
             "baseline_images": dict(release["baseline_images"]), "expected_images": dict(release["expected_images"])}
     return plan, release, pins
 
-class PolicyTests(unittest.TestCase):
+class Qa525VnextReleaseBoundPolicyTests(unittest.TestCase):
     def test_exact_binding(self):
         self.assertTrue(policy.plan_attested(*fixture()))
     def test_flag_tampering_rejected(self):
