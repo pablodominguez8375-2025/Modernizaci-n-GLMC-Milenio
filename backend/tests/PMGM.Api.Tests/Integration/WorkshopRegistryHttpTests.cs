@@ -53,6 +53,10 @@ public sealed class WorkshopRegistryHttpTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
+            // Runbook de T1: tras migrar TODOS los modulos se reinstala la guardia para cubrir las tablas de otros contextos.
+            // Sin esto la baja se rechaza a proposito (409 GUARD_INCOMPLETE, fail-closed).
+            await db.Database.ExecuteSqlRawAsync("SELECT core.install_workshop_retired_guard()", ct);
+            Assert.Empty(await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct));
             db.Organizations.AddRange(parent, empty);
             await db.SaveChangesAsync(ct);
             db.Organizations.Add(new Organization { Name = $"Hijo {suffix}", Type = "workshop", ParentOrganizationId = parent.Id });
