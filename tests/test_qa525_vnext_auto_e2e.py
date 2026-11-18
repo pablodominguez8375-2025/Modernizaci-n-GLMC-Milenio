@@ -214,13 +214,46 @@ def destructive_flag(stack):
     return {"additive": False} if stack.destructive else {}
 
 
+# What a REAL adapter harness must provide to run this battery unchanged (ChatGPT #1037, 18-nov): subclass each test
+# class below, override `new_world` / `new_host`, and expose the same world facade. Everything runs OFF-HOST
+# (isolated PostgreSQL + Docker Compose + temp filesystem); nothing here talks to glmdch.
+#
+#   world.snapshot() -> comparable value of the whole persistent state (history, schema, containers, journal, nonces,
+#                       migrate count, physical-action log)           [I5 world byte-identical]
+#   world.history / columns / containers / journal / nonces / locks_held / lease / migrate_runs / recreates
+#   world.world_is_applied()                                          [I1]
+#   fault knobs: api_target_boots, api_target_delay, web_target_boots, migrate_fails_before_commit,
+#                migrate_commits_then_raises, g6_ok, g6_release, destructive, preflight_ok, supply_ok
+#   host(world, crash_at=N): the N-th port call raises E2eCrash (a BaseException: process death)
+#   _box(step, image): a fresh container of `image` (used to reset the host to the baseline after an APPLIED run)
+WORLD_API = (
+    "snapshot", "world_is_applied", "history", "columns", "containers", "journal", "nonces", "locks_held", "lease",
+    "migrate_runs", "recreates", "api_target_boots", "api_target_delay", "web_target_boots",
+    "migrate_fails_before_commit", "migrate_commits_then_raises", "g6_ok", "g6_release", "destructive",
+    "preflight_ok", "supply_ok", "_box",
+)
+HOST_PORTS = (
+    "preflight", "supply", "migration_plan", "plan_attested", "evidence", "g6_evidence", "acquire_locks",
+    "release_locks", "spend_nonce", "lease_alive", "journal", "ef_history_sha", "migrations_already_applied",
+    "migrate_once", "schema_ok", "ef_history_matches", "recreate", "ready",
+)
+
+
 class E2eBase(unittest.TestCase):
+    def new_world(self, clock):
+        """Override in a real-adapter harness: return an isolated world exposing WORLD_API."""
+        return SimStack(clock)
+
+    def new_host(self, world, crash_at=None):
+        """Override in a real-adapter harness: return the real host adapter over `world`, exposing HOST_PORTS."""
+        return SimHost(world, crash_at=crash_at)
+
     def setUp(self):
         self.clock = E2eClock()
-        self.stack = SimStack(self.clock)
+        self.stack = self.new_world(self.clock)
 
     def go(self, host=None, release=None):
-        host = host or SimHost(self.stack)
+        host = host or self.new_host(self.stack)
         return auto.run(host, release or RELEASE, clock=self.clock, sleep=self.clock.sleep)
 
     def assert_invariants(self):
@@ -231,6 +264,28 @@ class E2eBase(unittest.TestCase):
             self.assertTrue(s.world_is_applied(), "I1 APPLIED without the applied world")
             self.assertEqual(s.journal[-1], "APPLIED")
         self.assertLessEqual(len(s.nonces), 1)
+
+
+class Qa525AutoE2eContractSurface(E2eBase):
+    """The battery's required surface is explicit: a harness that misses a member fails here first, not mid-scenario."""
+
+    def test_world_and_host_expose_the_documented_contract_surface(self):
+        world = self.new_world(E2eClock())
+        host = self.new_host(world)
+        self.assertEqual([m for m in WORLD_API if not hasattr(world, m)], [])
+        self.assertEqual([m for m in HOST_PORTS if not callable(getattr(host, m, None))], [])
+
+    def test_orchestrator_only_uses_the_documented_host_ports(self):
+        used = set()
+
+        class Spy(SimHost):
+            def __getattribute__(self, name):
+                if not name.startswith("_") and name not in ("s", "calls", "crash_at", "crash_label"):
+                    used.add(name)
+                return super().__getattribute__(name)
+
+        auto.run(Spy(self.new_world(self.clock)), RELEASE, clock=self.clock, sleep=self.clock.sleep)
+        self.assertEqual(sorted(used - set(HOST_PORTS)), [])
 
 
 class Qa525AutoE2eHappyAndLatency(E2eBase):
@@ -330,7 +385,7 @@ class Qa525AutoE2eStopBeforeDb(E2eBase):
         self.stack.locks_held = True     # owned by the other process, never by us
 
     def test_e8_incompatible_with_api_n_is_manual(self):
-        host = SimHost(self.stack)
+        host = self.new_host(self.stack)
         host.migration_plan = lambda: additive_plan(backward_compatible_with_api_n=False)
         before = self.stack.snapshot()
         r = self.go(host)
@@ -384,7 +439,7 @@ class Qa525AutoE2eDatabaseUncertainty(E2eBase):
         self.assert_invariants()
 
     def test_e11_lease_lost_after_migration_blocks_before_api_web(self):
-        host = SimHost(self.stack)
+        host = self.new_host(self.stack)
         real = host.migrate_once
 
         def migrate_then_lose_lease():
@@ -400,7 +455,7 @@ class Qa525AutoE2eDatabaseUncertainty(E2eBase):
         self.assert_invariants()
 
     def test_lease_lost_during_api_stops_all_physical_action(self):
-        host = SimHost(self.stack)
+        host = self.new_host(self.stack)
         real = host.recreate
 
         def recreate_then_lose_lease(step, which):
@@ -418,8 +473,8 @@ class Qa525AutoE2eCrashSweep(E2eBase):
     """E6 + E12 generalized: kill the process at EVERY port call of the happy path and replay."""
 
     def happy_call_count(self):
-        probe = SimStack(E2eClock())
-        host = SimHost(probe)
+        probe = self.new_world(E2eClock())
+        host = self.new_host(probe)
         auto.run(host, RELEASE, clock=probe.clock, sleep=probe.clock.sleep)
         return host.calls
 
@@ -430,7 +485,7 @@ class Qa525AutoE2eCrashSweep(E2eBase):
         for point in range(1, total + 1):
             with self.subTest(crash_at=point):
                 self.setUp()
-                host = SimHost(self.stack, crash_at=point)
+                host = self.new_host(self.stack, crash_at=point)
                 try:
                     auto.run(host, RELEASE, clock=self.clock, sleep=self.clock.sleep)
                     self.fail("crash point %d was never reached" % point)
@@ -443,7 +498,7 @@ class Qa525AutoE2eCrashSweep(E2eBase):
                 migrated_before = s.migrate_runs
                 # replay with the SAME release after the process restarts (locks were dropped by the OS)
                 s.locks_held = False
-                r = auto.run(SimHost(s), RELEASE, clock=self.clock, sleep=self.clock.sleep)
+                r = auto.run(self.new_host(s), RELEASE, clock=self.clock, sleep=self.clock.sleep)
                 self.assertLessEqual(s.migrate_runs, 1, "I2 across crash + replay")
                 if nonce_spent:
                     self.assertNotEqual(r["outcome"], auto.OUT_APPLIED, "I3 spent nonce can never finish an APPLIED")
@@ -452,7 +507,7 @@ class Qa525AutoE2eCrashSweep(E2eBase):
         self.assertEqual(crashed, total)
 
     def test_e12_crash_right_after_journal_pending_blocks_a_fresh_nonce_too(self):
-        host = SimHost(self.stack)
+        host = self.new_host(self.stack)
         def crash_on_first_history_read():
             raise E2eCrash("after journal PENDING")
 
@@ -472,7 +527,7 @@ class Qa525AutoE2eCrashSweep(E2eBase):
         self.assertNotIn("APPLIED", s.journal)
 
     def test_e6_crash_after_api_recreate_never_reports_active(self):
-        host = SimHost(self.stack)
+        host = self.new_host(self.stack)
         def crash_while_waiting_for_api(step):
             raise E2eCrash("kill during API wait")
 
