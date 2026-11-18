@@ -11,8 +11,8 @@ import hmac
 import json
 import re
 
-DIGEST = re.compile(r"sha256:[0-9a-f]{64}\\Z")
-SOURCE = re.compile(r"[0-9a-f]{40}\\Z")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+SOURCE = re.compile(r"[0-9a-f]{40}\Z")
 FLAGS = ("additive", "backward_compatible_with_api_n", "arbitrary_sql",
          "unbounded_backfill", "incompatible_ddl_lock", "needs_api_n_plus_1")
 FIELDS = frozenset(("id",) + FLAGS)
@@ -21,7 +21,7 @@ PLAN_FIELDS = frozenset(("ordered_set_sha256", "migrations"))
 
 def canonical(obj):
     return (json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
-                       allow_nan=False) + "\\n").encode("ascii")
+                       allow_nan=False) + "\n").encode("ascii")
 
 
 def plan_digest(plan):
