@@ -347,11 +347,21 @@ public sealed class SupportViewAsPostgreSqlTests
         PMGM.Qa.Support00MigrationRunner.ValidateBefore(expected, expected,
             [PMGM.Qa.Support00MigrationRunner.Target, "20261118150000_AddWorkshopRegistryState"]);
         // ...but only well-formed IDs that sort after Target; Target must be first and never repeated.
-        foreach (var bad in new[] { "20261030223000_SeedSupportWorkshop00", "20261001000000_EarlierThanTarget", "unknown", "2026111815_Short" })
+        foreach (var bad in new[] { "20261030223000_SeedSupportWorkshop00", "20261001000000_EarlierThanTarget", "unknown", "2026111815_Short",
+                     "20261118150000_AddWorkshopRegistryState\n" })
             Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
                 expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, bad]));
         Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
             expected, expected, ["20261118150000_AddWorkshopRegistryState", PMGM.Qa.Support00MigrationRunner.Target]));
+        // Unique, strictly ascending and part of the assembly's known migrations.
+        const string later = "20261118150000_AddWorkshopRegistryState";
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, later, later]));
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, "20261120000000_B", "20261119000000_A"]));
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, "20261118160000_WellFormedButUnknown"], [later]));
+        PMGM.Qa.Support00MigrationRunner.ValidateBefore(expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, later], [later]);
         Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
             expected, expected.Skip(1).Append("different").ToArray(), [PMGM.Qa.Support00MigrationRunner.Target]));
         Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
