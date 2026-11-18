@@ -306,6 +306,7 @@ api.MapPrivacyLegalRuleEndpoints();
 api.MapPrivacyWorkflowEndpoints();
 api.MapSystemConfigurationEndpoints();
 api.MapSystemMailConfigurationEndpoints();
+api.MapWorkshopRegistryEndpoints();
 api.MapFormSchemaAdministrationEndpoints();
 api.MapUserAccountEndpoints();
 api.MapSupportViewAsEndpoints();

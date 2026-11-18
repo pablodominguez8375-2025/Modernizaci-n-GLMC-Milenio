@@ -204,6 +204,9 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.LogoContentType).HasMaxLength(80);
             entity.Property(x => x.LogoSha256).HasMaxLength(64);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("active");
+            entity.Property(x => x.RetiredReason).HasMaxLength(500);
+            entity.Property(x => x.Origin).HasMaxLength(40).IsRequired().HasDefaultValue("other");
             entity.HasOne<Organization>()
                 .WithMany()
                 .HasForeignKey(x => x.ParentOrganizationId)
