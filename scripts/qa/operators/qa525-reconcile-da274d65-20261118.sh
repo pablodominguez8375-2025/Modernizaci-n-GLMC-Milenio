@@ -32,7 +32,7 @@ state_ok() {
   priv "$P" || stop PREPARED_UNTRUSTED
   priv "$CUT" || stop CUT_UNTRUSTED
   priv "$E" || stop EVENTS_UNTRUSTED
-  raw=$(sudo find "$STATE" -maxdepth 1 \( -name 'dual-*.json.next' -o -name 'reconcile-*' -o -name 'route-a-recovery-*' -o -name 'expired-prepared-archive-pending.json' \)) || stop STATE_SCAN
+  raw=$(sudo find "$STATE" -maxdepth 1 \( -name 'dual-*.json.next' -o -name 'reconcile-*' -o -name 'expired-prepared-archive-pending.json' \)) || stop STATE_SCAN
   [[ -z "$raw" ]] || stop STALE_OR_PRIOR_RECONCILE_ARTIFACT
   raw=$(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json') || stop JOURNAL_SCAN
   cnt=0

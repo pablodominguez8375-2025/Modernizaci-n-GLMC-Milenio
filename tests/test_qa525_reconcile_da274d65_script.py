@@ -248,6 +248,14 @@ class Reconcile(unittest.TestCase):
         self.assertEqual(sha(j), before)
         self.assertEqual([x.name for x in self.fx.backups()], ["reconcile-old"])
 
+    def test_historic_recovery_archive_does_not_block(self):
+        (self.fx.state / "route-a-recovery-20261104T020824Z-3457037").mkdir()
+        r = self.fx.run("run_reconcile_locked")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_pending_archive_marker_blocks(self):
+        self.stop("STALE_OR_PRIOR_RECONCILE_ARTIFACT", lambda f: write(f.state / "expired-prepared-archive-pending.json", {}))
+
     def test_journal_next_blocks(self):
         self.stop("STALE_OR_PRIOR_RECONCILE_ARTIFACT", lambda f: write(f.state / ("dual-%s.json.next" % SRC), {}))
 
