@@ -13,6 +13,10 @@ OLD=6eed4f00b7917da3cca36bbda70e16d16328648d
 G6_END=1795129839
 FWD_BUDGET=480
 RB_BUDGET=480
+API_DIRECT_PORT=8080
+API_DIRECT_PATH=/health/ready
+WEB_DIRECT_PORT=80
+SELF_SHA=$(sha256sum -- "$0" 2>/dev/null | cut -d' ' -f1)
 WORKDIR=/opt/centenario/qa-lab-firstboot/recovery-v2
 ENVF=/opt/centenario/qa-auto-lite/empty.env
 PROJ=centenario-qa-lab2
@@ -136,39 +140,63 @@ apply_manual() {
   local OV_NEW_API OV_NEW_WEB OV_OLD_API OV_OLD_WEB
   OV_NEW_API=$(ov api "$new_api"); OV_NEW_WEB=$(ov web "$new_web"); OV_OLD_API=$(ov api "$old_api"); OV_OLD_WEB=$(ov web "$old_web")
   info() { docker inspect --format '{{.Id}} {{.Image}} {{.State.Status}} {{.State.Restarting}} {{.RestartCount}}' "$PROJ-$1-1"; }
+  cip() { docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$PROJ-$1-1" | awk '{print $1}'; }
   no_prior_attempt
-  local DL=0 OLD_API_CID OLD_WEB_CID NEW_API_CID NEW_WEB_CID jsha
+  local DL=0 OLD_API_CID OLD_WEB_CID jsha
   declare -A BEFORE
   for n in "${DEPS[@]}" "${ONES[@]}"; do line=$(info "$n") || stop BEFORE_INSPECT; read -r cid _ <<<"$line"; BEFORE[$n]=$cid; done
   line=$(info api) || stop BEFORE_INSPECT; read -r OLD_API_CID _ <<<"$line"
   line=$(info web) || stop BEFORE_INSPECT; read -r OLD_WEB_CID _ <<<"$line"
   jsha=$(sha256sum -- "$J" | cut -d' ' -f1)
-  dl_ok() { [[ "$(date +%s)" -lt "$DL" ]]; }
+  rem() { local r=$(( DL - $(date +%s) )); (( r > 0 )) && echo "$r" || echo 0; }
+  mt() { local r; r=$(rem); (( r > 12 )) && r=12; echo "$r"; }
+  dl_ok() { (( $(rem) > 0 )); }
+  nap() { local r; r=$(rem); (( r > 2 )) && r=2; (( r > 0 )) && sleep "$r"; return 0; }
+  hget() { local t; t=$(mt); (( t > 0 )) || return 1; curl -fsS --max-time "$t" --proto '=https,http' "$@"; }
   bound() { # service image previous_container_id: instancia NUEVA, de esa imagen, corriendo y sin reinicios
     local line cid img st rs rc
     line=$(info "$1") || return 1; read -r cid img st rs rc <<<"$line"
     [[ "$cid" != "$3" && "$img" == "$2" && "$st" == running && "$rs" == false && "$rc" == 0 ]]; }
-  compose() { # service override
-    dl_ok || return 1
-    local s=$1 e=$2 args=(compose --project-name "$PROJ" --project-directory "$WORKDIR" --env-file "$ENVF") f
-    while IFS= read -r f; do args+=(--file "$f"); done <<<"${LAY[$s]}"
-    args+=(--file "$e" up --detach --no-deps --no-build --pull never --force-recreate --wait --wait-timeout 90 "$s")
-    ( cd "$WORKDIR" && docker "${args[@]}" >/dev/null 2>&1 ); }
-  ready_api() { # API: contenedor NUEVO ligado a imagen+ID y salud pública OK; plazo global
-    local k
+  same() { # service image cid: la instancia sigue siendo exactamente esa
+    local line cid img st rs rc
+    line=$(info "$1") || return 1; read -r cid img st rs rc <<<"$line"
+    [[ "$cid" == "$3" && "$img" == "$2" && "$st" == running && "$rs" == false && "$rc" == 0 ]]; }
+  probe_api() { # sondeo HTTP DIRECTO a la IP del contenedor objetivo (nunca endpoint público); revalida ID/imagen antes y después
+    local k line cid ip
     for k in $(seq 1 45); do
       dl_ok || return 1
-      if bound api "$1" "$2" && curl -fsS -o /dev/null --max-time 12 --proto '=https' "$SITE/health/ready" 2>/dev/null; then return 0; fi
-      sleep 2
+      if bound api "$1" "$2"; then
+        line=$(info api) && read -r cid _ <<<"$line" && ip=$(cip api) && [[ "$ip" =~ ^[0-9.]+$ ]] \
+          && hget -o /dev/null "http://$ip:$API_DIRECT_PORT$API_DIRECT_PATH" 2>/dev/null && same api "$1" "$cid" && return 0
+      fi
+      nap
     done; return 1; }
-  ready() { # salud pública completa + versión pública $1; plazo global
+  probe_web() { # idem para WEB: /health/web y versión $3 servida por ESA instancia
+    local k line cid ip
+    for k in $(seq 1 45); do
+      dl_ok || return 1
+      if bound web "$1" "$2"; then
+        line=$(info web) && read -r cid _ <<<"$line" && ip=$(cip web) && [[ "$ip" =~ ^[0-9.]+$ ]] \
+          && hget -o /dev/null "http://$ip:$WEB_DIRECT_PORT/health/web" 2>/dev/null \
+          && hget "http://$ip:$WEB_DIRECT_PORT/qa-version.json" 2>/dev/null | jq -e --arg s "$3" '.environment=="QA_SYNTHETIC" and .source_sha==$s' >/dev/null \
+          && same web "$1" "$cid" && return 0
+      fi
+      nap
+    done; return 1; }
+  compose() { # service override; el plazo restante limita TODA la operación
+    local s=$1 e=$2 r w args f; r=$(rem); (( r > 0 )) || return 1; w=$r; (( w > 90 )) && w=90
+    args=(compose --project-name "$PROJ" --project-directory "$WORKDIR" --env-file "$ENVF")
+    while IFS= read -r f; do args+=(--file "$f"); done <<<"${LAY[$s]}"
+    args+=(--file "$e" up --detach --no-deps --no-build --pull never --force-recreate --wait --wait-timeout "$w" "$s")
+    ( cd "$WORKDIR" && timeout --foreground "$r" docker "${args[@]}" >/dev/null 2>&1 ); }
+  ready() { # extremo a extremo (público) tras la vinculación directa; versión pública $1; plazo global
     local k p c
     for k in $(seq 1 75); do
       dl_ok || return 1
       c=0
-      for p in "${HPATHS[@]}"; do curl -fsS -o /dev/null --max-time 12 --proto '=https' "$SITE$p" 2>/dev/null || c=1; done
-      if [[ "$c" == 0 ]] && curl -fsS --max-time 12 --proto '=https' "$SITE/qa-version.json" 2>/dev/null | jq -e --arg s "$1" '.environment=="QA_SYNTHETIC" and .source_sha==$s' >/dev/null; then return 0; fi
-      sleep 2
+      for p in "${HPATHS[@]}"; do hget -o /dev/null "$SITE$p" 2>/dev/null || c=1; done
+      if [[ "$c" == 0 ]] && hget "$SITE/qa-version.json" 2>/dev/null | jq -e --arg s "$1" '.environment=="QA_SYNTHETIC" and .source_sha==$s' >/dev/null; then return 0; fi
+      nap
     done; return 1; }
   verify() { # api_img web_img: imágenes, estado y dependencias/one-shots intactas
     local n line cid img st rs rc
@@ -177,17 +205,18 @@ apply_manual() {
     for n in "${DEPS[@]}" "${ONES[@]}"; do line=$(info "$n") || return 1; read -r cid img st _ <<<"$line"; [[ "$cid" == "${BEFORE[$n]}" ]] || return 1; done
     for n in "${DEPS[@]}"; do line=$(info "$n") || return 1; read -r cid img st _ <<<"$line"; [[ "$st" == running ]] || return 1; done; }
   forward() { DL=$(( $(date +%s) + FWD_BUDGET ))
-    compose api "$OV_NEW_API" && ready_api "$new_api" "$OLD_API_CID" && compose web "$OV_NEW_WEB" && bound web "$new_web" "$OLD_WEB_CID" && ready "$SRC" && bound api "$new_api" "$OLD_API_CID" && verify "$new_api" "$new_web"; }
+    compose api "$OV_NEW_API" && probe_api "$new_api" "$OLD_API_CID" && compose web "$OV_NEW_WEB" && probe_web "$new_web" "$OLD_WEB_CID" "$SRC" && probe_api "$new_api" "$OLD_API_CID" && ready "$SRC" && verify "$new_api" "$new_web"; }
   rollback() { local fa fw line; DL=$(( $(date +%s) + RB_BUDGET ))
     line=$(info api) && read -r fa _ <<<"$line" || fa=""; line=$(info web) && read -r fw _ <<<"$line" || fw=""
     compose web "$OV_OLD_WEB" || :; compose api "$OV_OLD_API" || :
-    bound web "$old_web" "$fw" && ready_api "$old_api" "$fa" && ready "$OLD" && verify "$old_api" "$old_web"; }
+    probe_web "$old_web" "$fw" "$OLD" && probe_api "$old_api" "$fa" && ready "$OLD" && verify "$old_api" "$old_web"; }
   ts=$(date -u +%Y%m%dT%H%M%SZ); RS="$STATE/manual-apply-$SRC-$ts.started.json"; R="$STATE/manual-apply-$SRC-$ts.result.json"
-  receipt() { # status path; ancla: journal sha, imágenes e IDs de contenedor antes/después, versión pública
-    local na nw pv
+  receipt() { # status path; anclas: sha del script, de los 4 override, del journal, imágenes e IDs de contenedor, versión pública
+    local na nw pv ovs
     na=$(info api 2>/dev/null | cut -d' ' -f1 || :); nw=$(info web 2>/dev/null | cut -d' ' -f1 || :)
     pv=$(curl -fsS --max-time 12 --proto '=https' "$SITE/qa-version.json" 2>/dev/null | jq -c '{environment,source_sha}' 2>/dev/null || echo null)
-    ( set -C; jq -n -c --arg s "$SRC" --arg st "$1" --arg t "$ts" --arg na "$new_api" --arg nw "$new_web" --arg oa "$old_api" --arg ow "$old_web" --arg js "$jsha" --arg oac "$OLD_API_CID" --arg owc "$OLD_WEB_CID" --arg cac "$na" --arg cwc "$nw" --argjson pv "${pv:-null}" '{status:$st,source_sha:$s,started:$t,new_images:{api:$na,web:$nw},old_images:{api:$oa,web:$ow},old_containers:{api:$oac,web:$owc},current_containers:{api:$cac,web:$cwc},public_version:$pv,operator_journal_sha256:$js,operator_journal_status_at_start:"RECOVERY_MANUALLY_REQUIRED",operator_journal_untouched:true,no_second_apply_without_approved_reconciliation:true}' > "$2" ) && chmod 600 "$2" && sync -f "$2"; }
+    ovs=$(for f in "$OV_NEW_API" "$OV_NEW_WEB" "$OV_OLD_API" "$OV_OLD_WEB"; do printf '%s %s\n' "${f##*/}" "$(sha256sum -- "$f" | cut -d' ' -f1)"; done | jq -R -s -c 'split("\n")[:-1]|map(split(" ")|{(.[0]):.[1]})|add')
+    ( set -C; jq -n -c --arg s "$SRC" --arg st "$1" --arg t "$ts" --arg na "$new_api" --arg nw "$new_web" --arg oa "$old_api" --arg ow "$old_web" --arg js "$jsha" --arg ss "$SELF_SHA" --arg oac "$OLD_API_CID" --arg owc "$OLD_WEB_CID" --arg cac "$na" --arg cwc "$nw" --argjson pv "${pv:-null}" --argjson ovs "${ovs:-null}" '{status:$st,source_sha:$s,started:$t,script_sha256:$ss,overrides_sha256:$ovs,new_images:{api:$na,web:$nw},old_images:{api:$oa,web:$ow},old_containers:{api:$oac,web:$owc},current_containers:{api:$cac,web:$cwc},public_version:$pv,operator_journal_sha256:$js,operator_journal_status_at_start:"RECOVERY_MANUALLY_REQUIRED",operator_journal_untouched:true,no_second_apply_without_approved_reconciliation:true}' > "$2" ) && chmod 600 "$2" && sync -f "$2"; }
   receipt MANUAL_APPLY_STARTED "$RS" || stop RECEIPT_START
   if forward; then receipt MANUAL_APPLY_VERIFIED_API_WEB "$R" || stop RECEIPT_RESULT; printf 'QA525_MANUAL_APPLY=PASS_VERIFIED api=%s web=%s\nQA525_MANUAL_APPLY_NOTE=journal del operador sigue RECOVERY_MANUALLY_REQUIRED; NO reejecutar; conciliar con procedimiento aprobado\n' "$new_api" "$new_web"; return 0; fi
   if rollback; then receipt MANUAL_APPLY_ROLLED_BACK_VERIFIED "$R" || :; stop MANUAL_APPLY_FAILED_ROLLED_BACK_OK; fi
@@ -217,7 +246,7 @@ hold_locks() {
 run_apply_locked() {
   local l body rc=0
   for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; done
-  body="set -Eeuo pipefail; umask 077; $(declare -p SRC DIGEST OLD G6_END FWD_BUDGET RB_BUDGET WORKDIR ENVF PROJ DEPS ONES HPATHS STATE OWNER J P M E CUT F LOCKS SITE); $(declare -f stop priv ev_has state_ok no_prior_attempt prereq_ok lock_hook hold_locks apply_manual); sudo() { \"\$@\"; }; hold_locks; apply_manual"
+  body="set -Eeuo pipefail; umask 077; $(declare -p SRC DIGEST OLD G6_END FWD_BUDGET RB_BUDGET API_DIRECT_PORT API_DIRECT_PATH WEB_DIRECT_PORT SELF_SHA WORKDIR ENVF PROJ DEPS ONES HPATHS STATE OWNER J P M E CUT F LOCKS SITE); $(declare -f stop priv ev_has state_ok no_prior_attempt prereq_ok lock_hook hold_locks apply_manual); sudo() { \"\$@\"; }; hold_locks; apply_manual"
   sudo bash -c "$body" || rc=$?
   [[ "$rc" == 0 ]] || stop MANUAL_APPLY_FAILED_SEE_ABOVE
 }

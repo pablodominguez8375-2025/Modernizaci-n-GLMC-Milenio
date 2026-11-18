@@ -70,13 +70,14 @@ class Manual(unittest.TestCase):
 echo "$@" >> @T@/docker.log
 if [ "$1" = image ]; then echo "da274d651d8e9e056525413406c0aab62131504f"; exit 0; fi
 if [ "$1" = inspect ]; then n="${@: -1}"; n="${n#centenario-qa-lab2-}"; n="${n%-1}"; [ -f "@T@/containers/$n" ] || exit 1
-  case "$*" in *Restarting*) read -r a b c _ < "@T@/containers/$n"; echo "$a $b $c false 0";; *) cat "@T@/containers/$n";; esac; exit 0; fi
+  case "$*" in *IPAddress*) case "$n" in api) echo "172.20.0.6 ";; web) echo "172.20.0.7 ";; *) echo "172.20.0.9 ";; esac;; *Restarting*) read -r a b c _ < "@T@/containers/$n"; echo "$a $b $c false 0";; *) cat "@T@/containers/$n";; esac; exit 0; fi
 if [ "$1" = compose ]; then
   svc="${@: -1}"; ov=""; prev=""; for a in "$@"; do [ "$prev" = --file ] && ov="$a"; prev="$a"; done
   c=$(cat @T@/ctl_count 2>/dev/null || echo 0); c=$((c+1)); echo $c > @T@/ctl_count
   [ "${FAIL_COMPOSE_AT:-0}" = "$c" ] && exit 1
-  [ "$svc" = api ] && [ -n "${SLOW_AFTER_API:-}" ] && echo "$SLOW_AFTER_API" > @T@/slow
+  [ "$svc" = api ] && [ -n "${SLOW_AFTER_API:-}" ] && echo "$SLOW_AFTER_API" > @T@/dslow
   [ -n "${HEALTH_FAIL_AFTER_COMPOSE:-}" ] && : > @T@/health_fail
+  [ -n "${COMPOSE_SLEEP:-}" ] && /bin/sleep "$COMPOSE_SLEEP"
   [ -n "${STUB_NO_RECREATE:-}" ] && exit 0
   img=$(jq -r ".services.$svc.image" "$ov")
   st=running; [ "${NEW_API_DOWN:-}" = 1 ] && [ "$svc" = api ] && [ "$img" = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ] && st=exited
@@ -89,13 +90,25 @@ exit 0''')
         # curl: health paths succeed after SLOW_API failures; qa-version follows web image
         stub("curl", r'''
 u="${@: -1}"; echo "$u" >> @T@/curl.log
+NEWAPI=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 case "$u" in
+ http://172.20.0.6:*) # API directo: sin listener si NO_LISTENER_ALL, o si la imagen actual es la nueva y NO_LISTENER_NEW
+   cur=$(cut -d' ' -f2 @T@/containers/api)
+   [ "${NO_LISTENER_ALL:-}" = 1 ] && exit 7
+   [ "${NO_LISTENER_NEW:-}" = 1 ] && [ "$cur" = "$NEWAPI" ] && exit 7
+   n=$(cat @T@/dslow 2>/dev/null || echo 0); if [ "$n" -gt 0 ]; then echo $((n-1)) > @T@/dslow; exit 7; fi
+   exit 0;;
+ http://172.20.0.7:*/qa-version.json) w=$(cut -d' ' -f2 @T@/containers/web)
+   if [ "$w" = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ]; then s=da274d651d8e9e056525413406c0aab62131504f; else s=6eed4f00b7917da3cca36bbda70e16d16328648d; fi
+   echo "{\"environment\":\"QA_SYNTHETIC\",\"source_sha\":\"$s\"}"; exit 0;;
+ http://172.20.0.7:*) exit 0;;
  */qa-version.json) w=$(cut -d' ' -f2 @T@/containers/web)
    if [ "$w" = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ] && [ ! -e @T@/web_bad ]; then s=da274d651d8e9e056525413406c0aab62131504f; else s=6eed4f00b7917da3cca36bbda70e16d16328648d; fi
    echo "{\"environment\":\"QA_SYNTHETIC\",\"source_sha\":\"$s\"}";;
  *) n=$(cat @T@/slow 2>/dev/null || echo 0); if [ "$n" -gt 0 ]; then echo $((n-1)) > @T@/slow; exit 22; fi
     [ -e @T@/health_fail ] && exit 22; exit 0;;
 esac''')
+
 
     def go(self, call, env=None):
         arr = " ".join('"%s"' % x for x in self.locks)
@@ -104,7 +117,7 @@ esac''')
         script = f'''set -Eeuo pipefail
 export PATH="{self.bin}:$PATH"
 sudo() {{ "$@"; }}
-SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; G6_END=$(( $(date -u +%s) + 90000 )); FWD_BUDGET=${{T_FWD:-480}}; RB_BUDGET=${{T_RB:-480}}; WORKDIR="{self.t}"; ENVF=/dev/null; PROJ=centenario-qa-lab2
+SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; G6_END=$(( $(date -u +%s) + 90000 )); FWD_BUDGET=${{T_FWD:-480}}; RB_BUDGET=${{T_RB:-480}}; API_DIRECT_PORT=8080; API_DIRECT_PATH=/health/ready; WEB_DIRECT_PORT=80; SELF_SHA={sha(SCRIPT)}; WORKDIR="{self.t}"; ENVF=/dev/null; PROJ=centenario-qa-lab2
 DEPS=(keycloak postgres minio gateway clamav); ONES=(db-grants migrator minio-init); HPATHS=(/ /health/web /health/ready /identity/realms/pmgm/.well-known/openid-configuration)
 STATE="{self.state}"; OWNER="$(id -u):$(id -g)"; SITE=https://x.invalid
 J="$STATE/dual-$SRC.json"; P="$STATE/prepared.json"; M="$STATE/expired-prepared-archive-pending.json"
@@ -220,6 +233,29 @@ source "{self.t}/fn.sh"
         self.assertNotEqual(r.returncode, 0); self.assertNotIn("PASS_VERIFIED", r.stdout)
         self.assertIn("MANUAL_APPLY_FAILED_ROLLED_BACK_OK", r.stdout); self.assertEqual(self.images(), OLDI)
 
+    def test_running_without_listener_with_public_200_is_not_success(self):
+        """New API container running, restartcount 0, NO listener, public /health/ready 200: must STOP (no PASS), then roll back to a verified old API."""
+        r = self.go("run_apply_locked", {"NO_LISTENER_NEW": "1", "T_FWD": "3"})
+        self.assertNotEqual(r.returncode, 0); self.assertNotIn("PASS_VERIFIED", r.stdout)
+        self.assertIn("MANUAL_APPLY_FAILED_ROLLED_BACK_OK", r.stdout); self.assertEqual(self.images(), OLDI)
+
+    def test_rollback_without_listener_is_reported_as_failed(self):
+        r = self.go("run_apply_locked", {"NO_LISTENER_ALL": "1", "T_FWD": "3", "T_RB": "3"})
+        self.assertNotEqual(r.returncode, 0); self.assertNotIn("PASS_VERIFIED", r.stdout)
+        self.assertIn("MANUAL_APPLY_ROLLBACK_FAILED_MANUAL_RECOVERY", r.stdout)
+        res = [p for p in self.receipts() if p.name.endswith(".result.json")]
+        self.assertEqual(json.loads(res[0].read_text())["status"], "MANUAL_APPLY_ROLLBACK_FAILED_MANUAL_RECOVERY")
+
+    def test_probe_is_direct_to_container_never_public_for_binding(self):
+        r = self.go("run_apply_locked", {"SLOW_AFTER_API": "3"}); self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        log = (self.t / "curl.log").read_text()
+        self.assertIn("http://172.20.0.6:8080/health/ready", log); self.assertIn("http://172.20.0.7:80/qa-version.json", log)
+
+    def test_per_call_deadline_kills_slow_operation(self):
+        import time
+        t0 = time.time(); r = self.go("run_apply_locked", {"COMPOSE_SLEEP": "30", "T_FWD": "2", "T_RB": "2"}); dt = time.time() - t0
+        self.assertLess(dt, 15, dt); self.assertNotIn("PASS_VERIFIED", r.stdout); self.assertNotEqual(r.returncode, 0)
+
     def test_second_apply_refused_after_any_attempt(self):
         write(self.state / ("manual-apply-%s-20261118T000000Z.started.json" % SRC), "{}")
         r = self.go("run_apply_locked"); self.assertIn("STOP_MANUAL_APPLY_ALREADY_ATTEMPTED", r.stdout + r.stderr)
@@ -229,8 +265,8 @@ source "{self.t}/fn.sh"
     def test_receipt_anchors(self):
         r = self.go("run_apply_locked", {"SLOW_AFTER_API": "2"}); self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         d = json.loads([p for p in self.receipts() if p.name.endswith(".result.json")][0].read_text())
-        for k in ("operator_journal_sha256", "old_containers", "current_containers", "public_version", "new_images", "old_images"): self.assertIn(k, d)
-        self.assertEqual(d["operator_journal_sha256"], self.orig_journal); self.assertEqual(d["public_version"]["source_sha"], SRC)
+        for k in ("script_sha256", "overrides_sha256", "operator_journal_sha256", "old_containers", "current_containers", "public_version", "new_images", "old_images"): self.assertIn(k, d)
+        self.assertEqual(d["script_sha256"], sha(SCRIPT)); self.assertEqual(len(d["overrides_sha256"]), 4); self.assertEqual(d["operator_journal_sha256"], self.orig_journal); self.assertEqual(d["public_version"]["source_sha"], SRC)
         self.assertTrue(d["no_second_apply_without_approved_reconciliation"]); self.assertIn("conciliar", r.stdout)
 
     def test_busy_lock(self):
