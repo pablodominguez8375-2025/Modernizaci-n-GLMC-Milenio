@@ -12,6 +12,10 @@ namespace PMGM.Api.Modules.SystemConfiguration;
 /// Serializacion con retire: el trigger toma FOR SHARE sobre la fila de la organizacion, que conflicta con el
 /// FOR NO KEY UPDATE del UPDATE de retire. El trigger se llama a00_... para ejecutarse ANTES de otros triggers de la tabla
 /// (orden alfabetico): la regla de baja prevalece sobre los bloqueos append-only existentes.
+/// ALCANCE: solo el esquema 'core' (politica A de la revision de ChatGPT). Columnas de organizacion en otros esquemas NO se
+/// tocan; el endpoint de baja las detecta y rechaza la baja (fail-closed, GUARD_INCOMPLETE) hasta que se inventaríen aparte.
+/// EXECUTE de ambas funciones se revoca a PUBLIC: solo el rol propietario/migrador instala; el rol de la aplicacion no puede
+/// llamar al instalador ni alterar triggers (no es propietario de las tablas).
 /// Los triggers se instalan por INVENTARIO del esquema real (mismo criterio que la huella de hasData); una prueba falla
 /// si aparece una tabla nueva sin cubrir: ejecutar core.install_workshop_retired_guard() tras agregarla.
 /// </summary>
@@ -85,8 +89,8 @@ public static class WorkshopRetiredGuardSql
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE a.attnum > 0 AND NOT a.attisdropped
               AND a.atttypid = 'uuid'::regtype
-              AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-              AND NOT (n.nspname = 'core' AND c.relname = 'organizations' AND a.attname = 'Id')
+              AND n.nspname = 'core'
+              AND NOT (c.relname = 'organizations' AND a.attname = 'Id')
               AND c.relname <> 'audit_events'
               AND c.relname NOT LIKE '\_\_EFMigrations%'
               AND (a.attname ~* '(organi[sz]ation|workshop|lodge|taller)id$'
@@ -102,6 +106,9 @@ public static class WorkshopRetiredGuardSql
           RETURN installed;
         END
         $fn$;
+
+        REVOKE ALL ON FUNCTION core.workshop_retired_guard() FROM PUBLIC;
+        REVOKE ALL ON FUNCTION core.install_workshop_retired_guard() FROM PUBLIC;
 
         SELECT core.install_workshop_retired_guard();
         """;

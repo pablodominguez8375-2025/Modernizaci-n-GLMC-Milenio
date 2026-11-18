@@ -63,8 +63,8 @@ public sealed class WorkshopRetiredGuardPostgreSqlTests
             FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid AND c.relkind = 'r'
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE a.attnum > 0 AND NOT a.attisdropped AND a.atttypid = 'uuid'::regtype
-              AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
-              AND NOT (n.nspname = 'core' AND c.relname = 'organizations' AND a.attname = 'Id')
+              AND n.nspname = 'core'
+              AND NOT (c.relname = 'organizations' AND a.attname = 'Id')
               AND c.relname <> 'audit_events' AND c.relname NOT LIKE '\_\_EFMigrations%'
               AND (a.attname ~* '(organi[sz]ation|workshop|lodge|taller|logia)'
                    OR EXISTS (SELECT 1 FROM pg_constraint k WHERE k.contype='f' AND k.conrelid=c.oid
@@ -276,6 +276,60 @@ public sealed class WorkshopRetiredGuardPostgreSqlTests
             }
         }
         finally { await DropAsync(name, admin); }
+    }
+
+    [Fact]
+    public async Task Installer_only_touches_core_is_not_callable_by_the_app_role_and_new_tables_fail_closed()
+    {
+        if (string.IsNullOrWhiteSpace(ConnectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        var (name, cs, admin) = await CreateDatabaseAsync(ct);
+        var role = "qa_app_" + Guid.NewGuid().ToString("N")[..8];
+        try
+        {
+            await using var c = await OpenAsync(cs, ct);
+            await using var db = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(cs).Options);
+
+            // Instalado todo: sin columnas descubiertas.
+            Assert.Empty(await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct));
+
+            // Esquema ajeno con una columna de organizacion: el instalador NO lo toca y la cobertura lo reporta (fail-closed).
+            await ExecAsync(c, "CREATE SCHEMA otro_modulo", ct);
+            await ExecAsync(c, "CREATE TABLE otro_modulo.cosas (\"Id\" uuid PRIMARY KEY, \"OrganizationId\" uuid)", ct);
+            await ExecAsync(c, "SELECT core.install_workshop_retired_guard()", ct);
+            Assert.Equal(0, await ScalarAsync<int>(c, "SELECT count(*)::int FROM pg_trigger WHERE tgrelid = 'otro_modulo.cosas'::regclass AND NOT tgisinternal", ct));
+            Assert.Contains("otro_modulo.cosas.OrganizationId", await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct));
+            await ExecAsync(c, "DROP SCHEMA otro_modulo CASCADE", ct);
+
+            // Tabla nueva en core sin guardia => descubierta hasta reinstalar; luego cubierta.
+            await ExecAsync(c, "CREATE TABLE core.zz_modulo_nuevo (\"Id\" uuid PRIMARY KEY, \"OrganizationId\" uuid)", ct);
+            Assert.Contains("core.zz_modulo_nuevo.OrganizationId", await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct));
+            await ExecAsync(c, "SELECT core.install_workshop_retired_guard()", ct);
+            Assert.Empty(await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct));
+
+            // Rol de aplicacion: sin EXECUTE (PUBLIC revocado), sin ser propietario => no instala ni altera triggers.
+            await ExecAsync(c, $"CREATE ROLE {role} NOLOGIN", ct);
+            await ExecAsync(c, $"GRANT USAGE ON SCHEMA core TO {role}", ct);
+            await ExecAsync(c, $"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA core TO {role}", ct);
+            Assert.False(await ScalarAsync<bool>(c, $"SELECT has_function_privilege('{role}', 'core.install_workshop_retired_guard()', 'EXECUTE')", ct));
+            Assert.False(await ScalarAsync<bool>(c, $"SELECT has_function_privilege('{role}', 'core.workshop_retired_guard()', 'EXECUTE')", ct));
+            await ExecAsync(c, $"SET ROLE {role}", ct);
+            try
+            {
+                Assert.Equal("42501", await StateOfAsync(() => ExecAsync(c, "SELECT core.install_workshop_retired_guard()", ct)));
+                Assert.Equal("42501", await StateOfAsync(() => ExecAsync(c, "ALTER TABLE core.memberships DISABLE TRIGGER a00_workshop_retired_guard", ct)));
+                Assert.Equal("42501", await StateOfAsync(() => ExecAsync(c, "DROP TRIGGER a00_workshop_retired_guard ON core.memberships", ct)));
+                Assert.Equal("42501", await StateOfAsync(() => ExecAsync(c, "DROP FUNCTION core.workshop_retired_guard() CASCADE", ct)));
+            }
+            finally { await ExecAsync(c, "RESET ROLE", ct); }
+        }
+        finally
+        {
+            await DropAsync(name, admin);
+            await using var cleanup = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(ConnectionString!) { Database = "postgres", Pooling = false }.ConnectionString);
+            await cleanup.OpenAsync(CancellationToken.None);
+            await ExecAsync(cleanup, $"DROP ROLE IF EXISTS {role}", CancellationToken.None);
+        }
     }
 
     [Fact]
