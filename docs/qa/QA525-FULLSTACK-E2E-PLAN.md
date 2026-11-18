@@ -21,6 +21,13 @@ Entorno efímero (compose local/CI, DB sintética restaurada desde un G6 sintét
 | E7 | Segundo intento con recibo consumido | rechazo |
 | E8 | API N rechaza esquema N+1 (no compatible hacia atrás) | migración clasificada no aditiva → STOP |
 
+## Condiciones de aceptación de ChatGPT (#1010 6977453297 / 6977539617)
+1. «Aditiva» no es solo SQL nullable: contrato de compatibilidad hacia atrás con API N, inventario EF `__EFMigrationsHistory` pre/post y hash del conjunto ordenado de migraciones; SQL arbitrario, backfill no acotado, locks DDL incompatibles o dependencia de API N+1 ⇒ MANUAL / GO separado.
+2. G6 con punto de recuperación consistente y restauración aislada demostrada, ligado al corte; migración parcial o esquema divergente ⇒ bloquear, NO reejecutar EF ni restaurar automáticamente.
+3. Recibo único con resultados `DB_APPLIED_APIWEB_APPLIED`, `DB_APPLIED_APIWEB_ROLLED_BACK_COMPATIBLE`, `STOP_BEFORE_DB`, `DB_UNCERTAIN_BLOCKED`, con hashes EF, SHA release, imágenes, IDs de contenedor, journal y duraciones; nunca APPLIED solo por health HTTP.
+Casos adicionales: migración ya aplicada (idempotencia), fallo entre migración y API, pérdida de lease tras migración, crash tras escribir journal, G6 caducado.
+Implementación hermética: PR separado (`scripts/qa/qa525-vnext-auto.py`, `tests/test_qa525_vnext_auto.py`).
+
 ## Reglas
 - Expand/contract: la API anterior debe tolerar el esquema nuevo.
 - Sin rollback automático destructivo de DB; restore G6 solo con GO.
