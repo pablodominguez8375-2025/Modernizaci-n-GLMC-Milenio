@@ -14,6 +14,8 @@ Rules encoded and tested:
 * The nonce is spent only after preflight, supply, classification, G6 AND the locks, before the first effect: a failed
   lock never burns the authorization; a burned nonce after a later failure is intended fail-closed behaviour.
 * classify RECOMPUTES the ordered-set hash from unique, sorted migration ids; the stub is never a trusted policy.
+* `release.baseline_images` / `release.expected_images` and the plan flags are INPUTS here: binding them to the signed
+  release is the contract of the real adapter (`preflight`, `supply`, `plan_attested`), not proven by this module.
 * Lease lost at any point after the migration => DB_UNCERTAIN_BLOCKED with no further physical action.
 * Verification of every recreate uses health.wait_until_ready (bounded, retried) — never a single probe.
 * A migration that fails or leaves a divergent schema/EF history => DB_UNCERTAIN_BLOCKED: no re-run, no automatic
