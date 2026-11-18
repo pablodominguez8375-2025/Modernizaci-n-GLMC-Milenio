@@ -95,7 +95,7 @@ class Host:
                                 "containers": {"api": "c1", "web": "c2"}}
 
 
-class Base(unittest.TestCase):
+class AutoBase(unittest.TestCase):
     def setUp(self):
         self.c = Clock()
         self.h = Host(self.c)
@@ -107,7 +107,7 @@ class Base(unittest.TestCase):
         return [x for x in self.h.log if x.startswith(("migrate", "recreate", "locks"))]
 
 
-class HappyAndLatency(Base):
+class AutoHappyAndLatency(AutoBase):
     def test_e1_happy(self):
         r = self.go()
         self.assertEqual(r["outcome"], auto.OUT_APPLIED)
@@ -132,7 +132,7 @@ class HappyAndLatency(Base):
         self.assertLess(log.index("recreate:api:target"), log.index("recreate:web:target"))
 
 
-class StopBeforeDb(Base):
+class AutoStopBeforeDb(AutoBase):
     def assert_pre_effect(self, code):
         r = self.go()
         self.assertEqual(r["outcome"], auto.OUT_STOP)
@@ -193,7 +193,7 @@ class StopBeforeDb(Base):
         self.assertNotIn("migrate", self.h.log)
 
 
-class RollbackAndBlock(Base):
+class AutoRollbackAndBlock(AutoBase):
     def test_e2_api_fails_rolled_back_schema_stays(self):
         self.h.never_ready["api"] = True
         r = self.go()
@@ -282,7 +282,7 @@ class RollbackAndBlock(Base):
         self.assertEqual(self.h.log[-1], "unlock")
 
 
-class Hermetic(unittest.TestCase):
+class AutoHermeticImports(unittest.TestCase):
     def test_no_process_network_time_imports(self):
         import ast
         tree = ast.parse((ROOT / "scripts/qa/qa525-vnext-auto.py").read_text())
