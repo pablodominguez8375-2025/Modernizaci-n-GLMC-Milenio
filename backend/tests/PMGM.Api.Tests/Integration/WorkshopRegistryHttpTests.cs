@@ -55,9 +55,10 @@ public sealed class WorkshopRegistryHttpTests
             await db.Database.MigrateAsync(ct);
             // Runbook de T1: tras migrar TODOS los modulos se reinstala la guardia para cubrir las tablas de otros contextos.
             // Sin esto la baja se rechaza a proposito (409 GUARD_INCOMPLETE, fail-closed).
-            // GATE de release (#1039): las columnas de organizacion que otros modulos crean DESPUES de T1 y aun no tienen guardia
-            // son exactamente las conocidas. Un modulo nuevo con columna de organizacion rompe esta prueba hasta que alguien lo
-            // revise y lo agregue aqui (o llame al instalador en su propia migracion): nunca queda sin cubrir en silencio.
+            // GATE de release (#1039): las columnas de organizacion sin guardia deben ser un SUBCONJUNTO de las 10 conocidas que
+            // hoy crean otros modulos despues de T1. No se exige igualdad porque la base de CI es compartida y el instalador
+            // pudo ejecutarse antes (cobertura ya completa). Un modulo nuevo con columna de organizacion sin guardia rompe esta
+            // prueba hasta que alguien la revise y la agregue aqui (o llame al instalador en su propia migracion).
             var known = new HashSet<string>
             {
                 "core.admission_cases.OrganizationId", "core.admission_cases.OriginOrganizationId",
