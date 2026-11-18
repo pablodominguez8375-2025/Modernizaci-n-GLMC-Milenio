@@ -53,9 +53,9 @@ public sealed class FirstImplementationSeedService(
     {
         if (await coreDb.Organizations.AnyAsync(x => x.Id == GrandLodgeId, cancellationToken)) return;
 
-        var grandLodge = new Organization { Id = GrandLodgeId, Name = "Gran Logia Mixta — QA", Number = null, Type = "grand_lodge" };
-        var lodge1 = new Organization { Id = Lodge1Id, Name = "Taller Demostrativo Nº 1", Number = "1", Type = "workshop", ParentOrganizationId = GrandLodgeId };
-        var lodge23 = new Organization { Id = Lodge23Id, Name = "Taller Demostrativo Nº 23", Number = "23", Type = "workshop", ParentOrganizationId = GrandLodgeId };
+        var grandLodge = new Organization { Id = GrandLodgeId, Name = "Gran Logia Mixta — QA", Number = null, Type = "grand_lodge", Origin = "qa_seed" };
+        var lodge1 = new Organization { Id = Lodge1Id, Name = "Taller Demostrativo Nº 1", Number = "1", Type = "workshop", ParentOrganizationId = GrandLodgeId, Origin = "qa_seed" };
+        var lodge23 = new Organization { Id = Lodge23Id, Name = "Taller Demostrativo Nº 23", Number = "23", Type = "workshop", ParentOrganizationId = GrandLodgeId, Origin = "qa_seed" };
 
         var p1 = new Person { Id = Guid.Parse("10101010-1010-1010-1010-101010101010"), FirstNames = "Hermana", LastNames = "Demostrativa Uno", Email = "persona1@pmgm.invalid" };
         var p2 = new Person { Id = Guid.Parse("30303030-3030-3030-3030-303030303030"), FirstNames = "Hermano", LastNames = "Demostrativo Dos", Email = "persona2@pmgm.invalid" };

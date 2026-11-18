@@ -151,7 +151,8 @@ public sealed class InstitutionalBootstrapService(BootstrapDbContext db) : IInst
             {
                 Name = normalized.Institution.Name,
                 Type = BootstrapCodes.GrandLodgeType,
-                Number = null
+                Number = null,
+                Origin = "bootstrap"
             };
             db.Organizations.Add(institution);
             await db.SaveChangesAsync(cancellationToken);
@@ -171,7 +172,8 @@ public sealed class InstitutionalBootstrapService(BootstrapDbContext db) : IInst
                     Name = workshopRequest.Name,
                     Number = workshopRequest.Number,
                     Type = BootstrapCodes.WorkshopType,
-                    ParentOrganizationId = institution.Id
+                    ParentOrganizationId = institution.Id,
+                    Origin = "bootstrap"
                 };
                 db.Organizations.Add(workshop);
             }

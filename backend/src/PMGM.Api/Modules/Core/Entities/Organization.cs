@@ -16,4 +16,10 @@ public sealed class Organization
     public string? LogoContentType { get; set; }
     public string? LogoSha256 { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    /// <summary>Registro de Talleres (#1035): «active» o «retired» (dado de baja, historia intacta).</summary>
+    public string Status { get; set; } = "active";
+    public DateTimeOffset? RetiredAtUtc { get; set; }
+    public string? RetiredReason { get; set; }
+    /// <summary>Quién creó el registro: initial_load, qa_seed, bootstrap u other.</summary>
+    public string Origin { get; set; } = "other";
 }
