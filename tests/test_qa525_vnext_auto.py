@@ -20,7 +20,7 @@ def set_hash(ids):
 SET = set_hash(IDS)
 BASE_IMG = {"api": "sha256:" + "b" * 64, "web": "sha256:" + "c" * 64}
 TGT_IMG = {"api": "sha256:" + "3" * 64, "web": "sha256:" + "4" * 64}
-REL = {"sha": SHA, "nonce": "n" * 32, "expected_images": TGT_IMG}
+REL = {"sha": SHA, "nonce": "n" * 32, "expected_images": TGT_IMG, "baseline_images": BASE_IMG}
 
 
 class Clock:
@@ -48,6 +48,7 @@ class Host:
         self.log = []
         self.plan = good_plan()
         self.pre = True
+        self.attest_ok = True
         self.sup = True
         self.g6 = {"isolated_restore_ok": True, "release_sha": SHA, "expires_at": 10**9}
         self.nonces = set()
@@ -69,12 +70,19 @@ class Host:
         self.raise_before_effect = None
         self.n = 0
         self.evidence_override = None
+        self.attested_plan = None
         self.journal_states = []
         self.migrations_run = 0
 
     def preflight(self): self.log.append("preflight"); return self.pre
     def supply(self): self.log.append("supply"); return self.sup
-    def migration_plan(self): return self.plan
+    def migration_plan(self):
+        import json
+        self.attested_plan = json.dumps(self.plan, sort_keys=True)     # what the signer attested
+        return self.plan
+    def plan_attested(self, plan, release):
+        import json
+        return json.dumps(plan, sort_keys=True) == self.attested_plan and self.attest_ok
     def g6_evidence(self): return self.g6
     def spend_nonce(self, n):
         self.log.append("nonce")
@@ -199,6 +207,44 @@ class AutoStopBeforeDb(AutoBase):
             plan["ordered_set_sha256"] = bad
             self.assertEqual(auto.classify(plan), "MANUAL")
 
+    def test_plan_not_attested_or_tampered_after_attestation(self):
+        self.h.attest_ok = False
+        self.assert_pre_effect("PLAN_NOT_ATTESTED")
+        self.assertEqual(self.h.nonces, set())
+        self.setUp()
+        orig = self.h.migration_plan
+        def tampered():
+            p = orig()                                         # signer attested this exact content
+            p["migrations"][0]["note"] = "edited after signing"
+            return p
+        self.h.migration_plan = tampered
+        self.assert_pre_effect("PLAN_NOT_ATTESTED")
+        self.assertEqual(self.h.nonces, set())
+
+    def test_baseline_evidence_must_match_release_before_any_effect(self):
+        for ev in ({}, {"images": {}, "containers": {}},
+                   {"images": dict(BASE_IMG, api="sha256:" + "9" * 64), "containers": {"api": "a", "web": "b"}},
+                   {"images": dict(BASE_IMG), "containers": {"api": "", "web": "b"}}):
+            self.setUp()
+            self.h.evidence_override = ev
+            self.assert_pre_effect("BASELINE_EVIDENCE_INVALID")
+            self.assertEqual(self.h.nonces, set())
+
+    def test_baseline_changed_between_read_and_locks(self):
+        reads = {"n": 0}
+        orig = self.h.evidence
+        def ev():
+            reads["n"] += 1
+            e = orig()
+            if reads["n"] >= 2:
+                e["containers"]["api"] = "changed-by-someone"
+            return e
+        self.h.evidence = ev
+        r = self.go()
+        self.assertEqual(r["failure_class"], "BASELINE_CHANGED_AFTER_LOCKS")
+        self.assertNotIn("migrate", self.h.log)
+        self.assertEqual(self.h.nonces, set())
+
     def test_e5_g6_restore_unavailable(self):
         self.h.g6["isolated_restore_ok"] = False
         self.assert_pre_effect("G6_UNAVAILABLE_OR_EXPIRED")
@@ -214,6 +260,8 @@ class AutoStopBeforeDb(AutoBase):
         self.assertEqual(self.go()["outcome"], auto.OUT_APPLIED)
         self.h.log.clear()
         self.h.journal_states.clear()
+        self.h.images = dict(BASE_IMG)                         # host back on baseline, same release/nonce replayed
+        self.h.cids = {"api": "c-api-0", "web": "c-web-0"}
         r = self.go()
         self.assertEqual(r["failure_class"], "NONCE_NOT_SPENDABLE")
         self.assertEqual([x for x in self.effects() if x != "locks"], [])    # locks taken, nothing else
@@ -276,6 +324,51 @@ class AutoRollbackAndBlock(AutoBase):
             self.assertEqual(self.h.images, BASE_IMG)            # physically back on baseline, not just a label
             self.assertIn("recreate:%s:baseline" % step, self.h.log)
 
+    def test_post_effect_exception_with_lease_lost_means_zero_further_operations(self):
+        for step in ("api", "web"):
+            self.setUp()
+            self.h.raise_after_effect = (step, "target")
+            seen = {"effect": False}
+            orig_rec = self.h.recreate
+            def rec(st, which, orig_rec=orig_rec, seen=seen):
+                try:
+                    orig_rec(st, which)
+                finally:
+                    if which == "target" and st == self.h.raise_after_effect[0]:
+                        seen["effect"] = True
+            self.h.recreate = rec
+            self.h.lease_alive = lambda: not seen["effect"]
+            r = self.go()
+            self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+            self.assertEqual(r["failure_class"], "LEASE_LOST_DURING_" + step.upper())
+            self.assertFalse([x for x in self.h.log if x.endswith(":baseline")])
+            self.assertEqual(self.h.journal_states[-1], "RECOVERY_MANUALLY_REQUIRED")
+
+    def test_post_effect_exception_and_lease_check_raising_is_blocked(self):
+        self.h.raise_after_effect = ("api", "target")
+        calls = {"n": 0}
+        def lease():
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                raise RuntimeError("lease backend down")
+            return True
+        self.h.lease_alive = lease
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+        self.assertFalse([x for x in self.h.log if x.endswith(":baseline")])
+
+    def test_unexpected_adapter_errors_block_without_rerun(self):
+        for name in ("ef_history_sha", "journal", "migrations_already_applied"):
+            self.setUp()
+            def boom(*a, **k):
+                raise RuntimeError("adapter")
+            setattr(self.h, name, boom)
+            r = self.go()
+            self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+            self.assertEqual(r["failure_class"], "UNEXPECTED_ADAPTER_ERROR_RECONCILE_EF_HISTORY")
+            self.assertEqual(self.h.migrations_run, 0)
+            self.assertEqual(self.h.log[-1], "unlock")
+
     def test_pre_effect_exception_still_restores_baseline_and_verifies(self):
         self.h.raise_before_effect = ("api", "target")
         r = self.go()
@@ -325,12 +418,17 @@ class AutoRollbackAndBlock(AutoBase):
         r = self.go()
         self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
 
-    def test_empty_or_wrong_evidence_never_applies(self):
-        for ev in ({}, {"images": {}, "containers": {}}, []):
+    def test_empty_or_wrong_final_evidence_never_applies(self):
+        for bad in ({}, {"images": {}, "containers": {}}, []):
             self.setUp()
-            self.h.evidence_override = ev
+            orig = self.h.evidence
+            calls = {"n": 0}
+            def ev(orig=orig, calls=calls, bad=bad):
+                calls["n"] += 1
+                return orig() if calls["n"] <= 2 else bad     # baseline read + recheck are valid; final is not
+            self.h.evidence = ev
             r = self.go()
-            self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+            self.assertNotEqual(r["outcome"], auto.OUT_APPLIED)
             self.assertNotIn("APPLIED", self.h.journal_states)
 
     def test_wrong_target_image_or_unchanged_container_blocks(self):

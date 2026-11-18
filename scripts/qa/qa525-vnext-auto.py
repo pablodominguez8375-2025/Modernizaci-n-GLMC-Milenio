@@ -82,6 +82,11 @@ def run(host, release, *, clock, sleep, budget=HEALTH_BUDGET_S, retry=HEALTH_RET
     plan = host.migration_plan()
     if classify(plan) != "ADDITIVE":
         return _stop("MIGRATION_NOT_PROVEN_ADDITIVE", started, clock)
+    if host.plan_attested(plan, release) is not True:      # flags+set hash bound to the signed release (review P2)
+        return _stop("PLAN_NOT_ATTESTED", started, clock)
+    baseline = host.evidence()
+    if not _baseline_valid(baseline, release):              # exact baseline bound to the release, before any effect
+        return _stop("BASELINE_EVIDENCE_INVALID", started, clock)
     g6 = host.g6_evidence()
     if not (isinstance(g6, dict) and g6.get("isolated_restore_ok") is True and g6.get("release_sha") == release["sha"]
             and g6.get("expires_at", 0) > clock() + budget):
@@ -90,9 +95,20 @@ def run(host, release, *, clock, sleep, budget=HEALTH_BUDGET_S, retry=HEALTH_RET
     if host.acquire_locks() is not True:
         return _stop("LOCKS_NOT_ACQUIRED", started, clock)
     try:
+        if host.evidence() != baseline:                     # the world did not change between read and locks
+            return _stop("BASELINE_CHANGED_AFTER_LOCKS", started, clock)
         if host.spend_nonce(release["nonce"]) is not True:
             return _stop("NONCE_NOT_SPENDABLE", started, clock)
-        return _locked(host, release, plan, started, clock, sleep, budget, retry)
+        try:
+            return _locked(host, release, plan, baseline, started, clock, sleep, budget, retry)
+        except Exception:
+            # Unexpected adapter error (journal/EF history/...): never re-run a migration; reconcile manually.
+            try:
+                host.journal("RECOVERY_MANUALLY_REQUIRED")
+            except Exception:
+                pass
+            return {"outcome": OUT_BLOCKED, "failure_class": "UNEXPECTED_ADAPTER_ERROR_RECONCILE_EF_HISTORY",
+                    "release_sha": release["sha"], "duration_s": clock() - started}
     finally:
         host.release_locks()
 
@@ -102,7 +118,7 @@ def _wait(host, step, clock, sleep, budget, retry):
                                    retry=retry)
 
 
-def _locked(host, release, plan, started, clock, sleep, budget, retry):
+def _locked(host, release, plan, baseline, started, clock, sleep, budget, retry):
     set_sha = plan["ordered_set_sha256"]
     receipt = {"release_sha": release["sha"], "ef_set_sha256": set_sha}
     host.journal("PENDING")
@@ -117,7 +133,6 @@ def _locked(host, release, plan, started, clock, sleep, budget, retry):
         return _blocked(host, receipt, "SCHEMA_OR_EF_HISTORY_DIVERGENT", started, clock)
     if host.lease_alive() is not True:
         return _blocked(host, receipt, "LEASE_LOST_AFTER_MIGRATION", started, clock)
-    baseline = host.evidence()
     # A step is recorded as ATTEMPTED *before* the effect: an adapter may change the physical state and then
     # raise, and the rollback must still cover it (#1034 review 6978339576 P1).
     attempted = []
@@ -129,7 +144,12 @@ def _locked(host, release, plan, started, clock, sleep, budget, retry):
             ready = _wait(host, step, clock, sleep, budget, retry)
             lease = host.lease_alive() is True
         except Exception:
-            ready, lease = False, True
+            # an adapter exception proves nothing about the lease: it must be re-established explicitly
+            ready = False
+            try:
+                lease = host.lease_alive() is True
+            except Exception:
+                lease = False
         if not lease:     # authority lost: never operate again, physical state is uncertain (review P1-2)
             return _blocked(host, receipt, "LEASE_LOST_DURING_" + step.upper(), started, clock)
         if not ready:
@@ -186,6 +206,16 @@ def _locked(host, release, plan, started, clock, sleep, budget, retry):
     host.journal("ROLLED_BACK")
     receipt.update(outcome=OUT_ROLLED_BACK, failure_class=failure, duration_s=clock() - started)
     return receipt
+
+
+def _baseline_valid(ev, release):
+    images, containers = _ids(ev)
+    want = release.get("baseline_images")
+    if not (isinstance(images, dict) and isinstance(containers, dict) and isinstance(want, dict)
+            and set(want) == {"api", "web"} and images == want):
+        return False
+    return all(SHA256.match(want[k] or "") and isinstance(containers.get(k), str) and containers[k]
+               for k in ("api", "web"))
 
 
 def _ids(ev):
