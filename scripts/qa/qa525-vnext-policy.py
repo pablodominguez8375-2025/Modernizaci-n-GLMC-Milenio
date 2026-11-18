@@ -34,10 +34,17 @@ def plan_digest(plan):
     for m in migrations:
         if type(m) is not dict or set(m) != FIELDS:
             raise ValueError("PLAN_MIGRATION_FIELDS")
-        if type(m["id"]) is not str or any(type(m[k]) is not bool for k in FLAGS):
+        if (type(m["id"]) is not str or not MIGRATION_ID.fullmatch(m["id"])
+                or any(type(m[k]) is not bool for k in FLAGS)):
             raise ValueError("PLAN_MIGRATION_TYPES")
     if type(plan["ordered_set_sha256"]) is not str or not DIGEST.fullmatch(plan["ordered_set_sha256"]):
         raise ValueError("PLAN_SET_DIGEST")
+    ids = [m["id"] for m in migrations]
+    if ids != sorted(set(ids)):
+        raise ValueError("PLAN_IDS_ORDER_OR_DUPLICATE")
+    ordered_sha = "sha256:" + hashlib.sha256(("\\n".join(ids) + "\\n").encode("ascii")).hexdigest()
+    if not hmac.compare_digest(plan["ordered_set_sha256"], ordered_sha):
+        raise ValueError("PLAN_ORDERED_SET_MISMATCH")
     return "sha256:" + hashlib.sha256(canonical(plan)).hexdigest()
 
 
