@@ -13,6 +13,7 @@ import re
 
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 SOURCE = re.compile(r"[0-9a-f]{40}\Z")
+MIGRATION_ID = re.compile(r"[0-9]{8,14}_[A-Za-z0-9_]{1,100}\Z")
 FLAGS = ("additive", "backward_compatible_with_api_n", "arbitrary_sql",
          "unbounded_backfill", "incompatible_ddl_lock", "needs_api_n_plus_1")
 FIELDS = frozenset(("id",) + FLAGS)
