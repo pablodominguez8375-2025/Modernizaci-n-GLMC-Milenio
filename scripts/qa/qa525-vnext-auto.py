@@ -20,6 +20,7 @@ Rules encoded and tested:
   ACTIVE. APPLIED needs verified readiness AND schema AND EF history, never HTTP health alone.
 """
 import importlib.util
+import re
 from pathlib import Path
 
 _spec = importlib.util.spec_from_file_location("qa525_auto_health", Path(__file__).with_name("qa525-vnext-health.py"))
@@ -39,10 +40,15 @@ class Stop(Exception):
     """Fixed diagnostic code; never carries external content."""
 
 
+SHA256 = re.compile(r"^sha256:[a-f0-9]{64}$")
+
+
 def classify(plan):
-    """'ADDITIVE' only when every migration is proven additive and backward compatible; anything else 'MANUAL'."""
+    """'ADDITIVE' only when every migration is proven additive and backward compatible; anything else 'MANUAL'.
+    An empty migration list or a malformed ordered-set hash is never ADDITIVE (fail closed)."""
     migrations = plan.get("migrations") if isinstance(plan, dict) else None
-    if not isinstance(migrations, list) or not plan.get("ordered_set_sha256"):
+    sha = plan.get("ordered_set_sha256") if isinstance(plan, dict) else None
+    if not isinstance(migrations, list) or not migrations or not isinstance(sha, str) or not SHA256.match(sha):
         return "MANUAL"
     for m in migrations:
         if not isinstance(m, dict):
@@ -92,42 +98,82 @@ def run(host, release, *, clock, sleep, budget=HEALTH_BUDGET_S, retry=HEALTH_RET
             return _blocked(host, receipt, "SCHEMA_OR_EF_HISTORY_DIVERGENT", started, clock)
         if host.lease_alive() is not True:
             return _blocked(host, receipt, "LEASE_LOST_AFTER_MIGRATION", started, clock)
-        applied = []
+        baseline = host.evidence()
+        # A step is recorded as ATTEMPTED *before* the effect: an adapter may change the physical state and then
+        # raise, and the rollback must still cover it (#1034 review 6978339576 P1).
+        attempted = []
         failure = None
         for step in ("api", "web"):
+            attempted.append(step)
             try:
                 host.recreate(step, "target")
-                applied.append(step)
-                ok = health.wait_until_ready(lambda s=step: host.ready(s) is True, clock=clock, sleep=sleep,
-                                             budget=budget, retry=retry)
+                ok = (health.wait_until_ready(lambda s=step: host.ready(s) is True, clock=clock, sleep=sleep,
+                                              budget=budget, retry=retry) and host.lease_alive() is True)
             except Exception:
                 ok = False
             if not ok:
                 failure = "API_NOT_READY" if step == "api" else "WEB_NOT_READY"
                 break
         if failure is None:
+            ev = host.evidence()
+            if not _target_identity_ok(ev, baseline, release):
+                return _blocked(host, receipt, "TARGET_IDENTITY_MISMATCH", started, clock)
             if host.lease_alive() is not True or host.schema_ok() is not True:
                 return _blocked(host, receipt, "FINAL_VERIFICATION_FAILED", started, clock)
-            receipt.update(host.evidence())
+            receipt.update(images=ev["images"], containers=ev["containers"])
             host.journal("APPLIED")
             receipt.update(outcome=OUT_APPLIED, duration_s=clock() - started)
             return receipt
-        # ---- rollback: WEB then API, same bounded criterion; additive schema stays ----
-        rolled = True
-        for step in reversed(applied):
+        # ---- rollback of EVERY attempted step, WEB then API; each step verified separately (no short-circuit) ----
+        results = {}
+        for step in reversed(attempted):
             try:
                 host.recreate(step, "baseline")
-                rolled = rolled and health.wait_until_ready(lambda s=step: host.ready(s) is True, clock=clock,
-                                                            sleep=sleep, budget=budget, retry=retry)
+                results[step] = (health.wait_until_ready(lambda s=step: host.ready(s) is True, clock=clock,
+                                                         sleep=sleep, budget=budget, retry=retry)
+                                 and host.lease_alive() is True)
             except Exception:
-                rolled = False
-        if not rolled:
+                results[step] = False
+        receipt["rollback_results"] = dict(results)
+        try:
+            restored = all(results.values()) and _baseline_identity_ok(host.evidence(), baseline, attempted)
+        except Exception:
+            restored = False
+        if not restored:
             return _blocked(host, receipt, "ROLLBACK_NOT_VERIFIED_" + failure, started, clock)
         host.journal("ROLLED_BACK")
         receipt.update(outcome=OUT_ROLLED_BACK, failure_class=failure, duration_s=clock() - started)
         return receipt
     finally:
         host.release_locks()
+
+
+def _ids(ev):
+    return ev.get("images") if isinstance(ev, dict) else None, ev.get("containers") if isinstance(ev, dict) else None
+
+
+def _target_identity_ok(ev, baseline, release):
+    """Exact target images, and NEW container ids (distinct from the baseline) for both services."""
+    images, containers = _ids(ev)
+    b_images, b_containers = _ids(baseline)
+    expected = release.get("expected_images")
+    if not (isinstance(images, dict) and isinstance(containers, dict) and isinstance(b_containers, dict)
+            and isinstance(expected, dict) and set(expected) == {"api", "web"}):
+        return False
+    for step in ("api", "web"):
+        cid = containers.get(step)
+        if images.get(step) != expected[step] or not isinstance(cid, str) or not cid or cid == b_containers.get(step):
+            return False
+    return all(SHA256.match(v or "") for v in expected.values())
+
+
+def _baseline_identity_ok(ev, baseline, attempted):
+    """Every attempted service is back on the exact baseline image (readiness alone is not proof)."""
+    images, _ = _ids(ev)
+    b_images, _ = _ids(baseline)
+    if not (isinstance(images, dict) and isinstance(b_images, dict)):
+        return False
+    return all(images.get(s) is not None and images.get(s) == b_images.get(s) for s in attempted)
 
 
 def _blocked(host, receipt, code, started, clock):

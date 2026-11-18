@@ -10,7 +10,9 @@ spec.loader.exec_module(auto)
 
 SHA = "a" * 40
 SET = "sha256:" + "e" * 64
-REL = {"sha": SHA, "nonce": "n" * 32}
+BASE_IMG = {"api": "sha256:" + "b" * 64, "web": "sha256:" + "c" * 64}
+TGT_IMG = {"api": "sha256:" + "3" * 64, "web": "sha256:" + "4" * 64}
+REL = {"sha": SHA, "nonce": "n" * 32, "expected_images": TGT_IMG}
 
 
 class Clock:
@@ -53,6 +55,12 @@ class Host:
         self.crash_on = None
         self.recreated_at = {}
         self.target = {}
+        self.images = dict(BASE_IMG)
+        self.cids = {"api": "c-api-0", "web": "c-web-0"}
+        self.raise_after_effect = None      # (step, which): physical change happens, THEN the adapter raises
+        self.raise_before_effect = None
+        self.n = 0
+        self.evidence_override = None
         self.journal_states = []
         self.migrations_run = 0
 
@@ -83,16 +91,25 @@ class Host:
         self.log.append("recreate:%s:%s" % (step, which))
         if self.crash_on == (step, which):
             raise Crash()
+        if self.raise_before_effect == (step, which):
+            raise RuntimeError("pre-effect")
         self.recreated_at[step] = self.clock()
         self.target[step] = which
+        self.images[step] = TGT_IMG[step] if which == "target" else BASE_IMG[step]
+        self.n += 1
+        self.cids[step] = "c-%s-%d" % (step, self.n)
+        if self.raise_after_effect == (step, which):
+            raise RuntimeError("post-effect")
     def ready(self, step):
         if self.target.get(step) == "baseline":
             return not self.rollback_never_ready
         if self.never_ready[step]:
             return False
         return self.clock() - self.recreated_at[step] >= self.ready_after[step]
-    def evidence(self): return {"images": {"api": "sha256:" + "3" * 64, "web": "sha256:" + "4" * 64},
-                                "containers": {"api": "c1", "web": "c2"}}
+    def evidence(self):
+        if self.evidence_override is not None:
+            return self.evidence_override
+        return {"images": dict(self.images), "containers": dict(self.cids)}
 
 
 class AutoBase(unittest.TestCase):
@@ -115,6 +132,7 @@ class AutoHappyAndLatency(AutoBase):
         self.assertEqual(self.h.migrations_run, 1)
         for k in ("ef_history_before", "ef_history_after", "release_sha", "images", "containers", "duration_s"):
             self.assertIn(k, r)
+        self.assertEqual(r["images"], TGT_IMG)
         self.assertIn(r["outcome"], auto.OUTCOMES)
 
     def test_e3_slow_api_six_seconds_passes(self):
@@ -164,7 +182,12 @@ class AutoStopBeforeDb(AutoBase):
             self.assert_pre_effect("MIGRATION_NOT_PROVEN_ADDITIVE")  # E8 included (API N cannot run on N+1 schema)
 
     def test_plan_without_set_hash_or_garbage(self):
-        for plan in ({}, {"migrations": []}, None, {"migrations": ["x"], "ordered_set_sha256": SET}):
+        for plan in ({}, {"migrations": []}, None, {"migrations": ["x"], "ordered_set_sha256": SET},
+                     {"migrations": [], "ordered_set_sha256": SET}):
+            self.assertEqual(auto.classify(plan), "MANUAL")
+        for bad in ("x", "sha256:abc", "", None, 5, SET.upper()):
+            plan = good_plan()
+            plan["ordered_set_sha256"] = bad
             self.assertEqual(auto.classify(plan), "MANUAL")
 
     def test_e5_g6_restore_unavailable(self):
@@ -215,6 +238,90 @@ class AutoRollbackAndBlock(AutoBase):
         self.h.never_ready["web"] = True
         r = self.go()                                         # baseline ready immediately in fake
         self.assertEqual(r["outcome"], auto.OUT_ROLLED_BACK)
+
+    def test_post_effect_exception_is_rolled_back_api_and_web(self):
+        for step in ("api", "web"):
+            self.setUp()
+            self.h.raise_after_effect = (step, "target")
+            r = self.go()
+            self.assertEqual(r["outcome"], auto.OUT_ROLLED_BACK)
+            self.assertEqual(self.h.images, BASE_IMG)            # physically back on baseline, not just a label
+            self.assertIn("recreate:%s:baseline" % step, self.h.log)
+
+    def test_pre_effect_exception_still_restores_baseline_and_verifies(self):
+        self.h.raise_before_effect = ("api", "target")
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_ROLLED_BACK)
+        self.assertEqual(self.h.images, BASE_IMG)
+
+    def test_rollback_exception_blocks(self):
+        self.h.raise_after_effect = ("web", "baseline")
+        self.h.never_ready["web"] = True
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+
+    def test_rollback_no_short_circuit_both_steps_verified_separately(self):
+        probes = []
+        orig = self.h.ready
+        def ready(step):
+            probes.append((step, self.h.target.get(step)))
+            if step == "web" and self.h.target.get(step) == "baseline":
+                return False                                      # WEB baseline unhealthy
+            return orig(step)
+        self.h.ready = ready
+        self.h.never_ready["web"] = True
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+        self.assertEqual(r["rollback_results"], {"web": False, "api": True})
+        self.assertIn(("api", "baseline"), probes)               # API baseline probe ran after WEB failed
+
+    def test_rollback_requires_baseline_image_identity_not_only_health(self):
+        self.h.never_ready["api"] = True
+        orig = self.h.recreate
+        def stuck(step, which):
+            orig(step, which)
+            if which == "baseline":
+                self.h.images[step] = TGT_IMG[step]               # recreate "succeeded" but image is wrong
+        self.h.recreate = stuck
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+        self.assertTrue(r["failure_class"].startswith("ROLLBACK_NOT_VERIFIED"))
+
+    def test_lease_lost_during_rollback_blocks(self):
+        self.h.never_ready["web"] = True
+        seq = {"n": 0}
+        def lease():
+            seq["n"] += 1
+            return seq["n"] < 3
+        self.h.lease_alive = lease
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+
+    def test_empty_or_wrong_evidence_never_applies(self):
+        for ev in ({}, {"images": {}, "containers": {}}, []):
+            self.setUp()
+            self.h.evidence_override = ev
+            r = self.go()
+            self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+            self.assertNotIn("APPLIED", self.h.journal_states)
+
+    def test_wrong_target_image_or_unchanged_container_blocks(self):
+        self.h.recreate_orig = self.h.recreate
+        def wrong(step, which):
+            self.h.recreate_orig(step, which)
+            if step == "web" and which == "target":
+                self.h.images["web"] = BASE_IMG["web"]
+        self.h.recreate = wrong
+        r = self.go()
+        self.assertEqual(r["failure_class"], "TARGET_IDENTITY_MISMATCH")
+        self.setUp()
+        orig = self.h.recreate
+        def same_id(step, which):
+            before = self.h.cids[step]
+            orig(step, which)
+            self.h.cids[step] = before
+        self.h.recreate = same_id
+        self.assertEqual(self.go()["failure_class"], "TARGET_IDENTITY_MISMATCH")
 
     def test_rollback_not_verified_blocks(self):
         self.h.never_ready["api"] = True
@@ -270,7 +377,7 @@ class AutoRollbackAndBlock(AutoBase):
         calls = {"n": 0}
         def lease():
             calls["n"] += 1
-            return calls["n"] < 2                             # alive after migration, lost at final verification
+            return calls["n"] < 4                             # alive through migration/API/WEB, lost at final verification
         self.h.lease_alive = lease
         r = self.go()
         self.assertEqual(r["failure_class"], "FINAL_VERIFICATION_FAILED")
@@ -288,7 +395,7 @@ class AutoHermeticImports(unittest.TestCase):
         tree = ast.parse((ROOT / "scripts/qa/qa525-vnext-auto.py").read_text())
         names = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
                  for a in (n.names if isinstance(n, ast.Import) else [ast.alias(name=n.module or "")])}
-        self.assertEqual(names - {"importlib", "pathlib"}, set())
+        self.assertEqual(names - {"importlib", "pathlib", "re"}, set())
 
 
 if __name__ == "__main__":
