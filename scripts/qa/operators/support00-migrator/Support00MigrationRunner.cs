@@ -19,7 +19,11 @@ public static class Support00MigrationRunner
             || expected.Contains(Target) || applied.Length != 99
             || applied.Distinct().Count() != 99
             || !expected.ToHashSet().SetEquals(applied)
-            || !pending.SequenceEqual([Target]))
+            || pending.Length == 0 || pending[0] != Target
+            // Migrations created AFTER this cut may exist in the assembly and stay pending: MigrateAsync(Target)
+            // never applies them. Anything pending that sorts before Target is still rejected.
+            || pending.Skip(1).Any(id => !System.Text.RegularExpressions.Regex.IsMatch(id, "^[0-9]{14}_[A-Za-z0-9_]{1,100}$")
+                || string.CompareOrdinal(id, Target) <= 0))
             throw new InvalidOperationException("SUPPORT00_EXACT_PENDING_HISTORY_REQUIRED");
     }
 

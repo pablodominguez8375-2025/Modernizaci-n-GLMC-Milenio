@@ -8,9 +8,15 @@ namespace PMGM.Api.Migrations;
 
 /// <summary>
 /// #1035: estado y origen de cada Taller para Sistema › Talleres.
-/// Solo agrega columnas con valor por defecto: no borra, no reescribe datos
-/// existentes ni cambia restricciones previas. Es compatible con la API anterior
-/// (que ignora las columnas nuevas).
+///
+/// Solo operaciones nativas de EF (AddColumn / AddCheckConstraint): SIN <c>migrationBuilder.Sql</c>, de modo que el
+/// clasificador del actualizador pueda PROBAR que es aditiva sin allowlist de SQL manual. Una prueba
+/// (WorkshopRegistryMigrationShapeTests) fija esa forma: cualquier SQL manual u operación distinta rompe CI.
+///
+/// Costo: ADD COLUMN con DEFAULT constante es solo de metadatos en PostgreSQL 11+; el CHECK recorre una tabla de
+/// decenas de filas. Compatible con API N: las columnas nuevas tienen DEFAULT, los INSERT de la API anterior siguen
+/// funcionando y sus SELECT nombran solo columnas antiguas (probado contra PostgreSQL real).
+/// Sin UPDATE de filas existentes: el origen de Gran Logia/soporte se deriva al leer.
 /// </summary>
 [DbContext(typeof(PmgmDbContext))]
 [Migration("20261118150000_AddWorkshopRegistryState")]
@@ -18,46 +24,27 @@ public sealed class AddWorkshopRegistryState : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        // Expand puro y de costo acotado:
-        //  - ADD COLUMN con DEFAULT constante es solo de metadatos en PostgreSQL 11+ (sin reescribir la tabla).
-        //  - El CHECK se agrega NOT VALID y se valida aparte (VALIDATE toma SHARE UPDATE EXCLUSIVE, no bloquea lecturas ni escrituras).
-        //  - lock_timeout evita esperar indefinidamente el ACCESS EXCLUSIVE breve del ALTER si hay transacciones largas.
-        //  - Sin UPDATE de filas existentes: el origen de Gran Logia/soporte se deriva al leer.
-        // Compatibilidad con API N: las columnas nuevas tienen DEFAULT, así que los INSERT de la API anterior
-        // (que no las conocen) siguen funcionando, y sus SELECT nombran solo columnas antiguas.
-        migrationBuilder.Sql("""
-            SET LOCAL lock_timeout = '5s';
-
-            ALTER TABLE core.organizations
-                ADD COLUMN IF NOT EXISTS "Status" character varying(20) NOT NULL DEFAULT 'active',
-                ADD COLUMN IF NOT EXISTS "RetiredAtUtc" timestamp with time zone NULL,
-                ADD COLUMN IF NOT EXISTS "RetiredReason" character varying(500) NULL,
-                ADD COLUMN IF NOT EXISTS "Origin" character varying(40) NOT NULL DEFAULT 'other';
-
-            DO $workshop_registry$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint
-                    WHERE conname = 'CK_organizations_Status'
-                      AND conrelid = 'core.organizations'::regclass
-                ) THEN
-                    ALTER TABLE core.organizations
-                        ADD CONSTRAINT "CK_organizations_Status"
-                        CHECK ("Status" IN ('active', 'retired')) NOT VALID;
-                END IF;
-            END
-            $workshop_registry$;
-
-            ALTER TABLE core.organizations VALIDATE CONSTRAINT "CK_organizations_Status";
-            """);
+        migrationBuilder.AddColumn<string>(
+            name: "Status", schema: "core", table: "organizations", type: "character varying(20)",
+            maxLength: 20, nullable: false, defaultValue: "active");
+        migrationBuilder.AddColumn<DateTimeOffset>(
+            name: "RetiredAtUtc", schema: "core", table: "organizations", type: "timestamp with time zone",
+            nullable: true);
+        migrationBuilder.AddColumn<string>(
+            name: "RetiredReason", schema: "core", table: "organizations", type: "character varying(500)",
+            maxLength: 500, nullable: true);
+        migrationBuilder.AddColumn<string>(
+            name: "Origin", schema: "core", table: "organizations", type: "character varying(40)",
+            maxLength: 40, nullable: false, defaultValue: "other");
+        migrationBuilder.AddCheckConstraint(
+            name: "CK_organizations_Status", schema: "core", table: "organizations",
+            sql: "\"Status\" IN ('active', 'retired')");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
         // Rollback conservador: no se eliminan columnas con estado de baja ni su motivo.
         // Solo se retira la restricción agregada.
-        migrationBuilder.Sql("""
-            ALTER TABLE core.organizations DROP CONSTRAINT IF EXISTS "CK_organizations_Status";
-            """);
+        migrationBuilder.DropCheckConstraint(name: "CK_organizations_Status", schema: "core", table: "organizations");
     }
 }
