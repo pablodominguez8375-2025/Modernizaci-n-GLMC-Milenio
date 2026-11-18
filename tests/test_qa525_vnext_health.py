@@ -201,5 +201,55 @@ class HealthTests(unittest.TestCase):
             self.assertNotIn(token, raw)
 
 
+
+class WaitUntilReadyTests(unittest.TestCase):
+    class Clock:
+        def __init__(self):
+            self.t = 0.0
+            self.sleeps = []
+
+        def __call__(self):
+            return self.t
+
+        def sleep(self, seconds):
+            self.sleeps.append(seconds)
+            self.t += seconds
+
+    def test_api_that_listens_after_six_seconds_is_waited_for(self):
+        clock = self.Clock()
+        self.assertTrue(health.wait_until_ready(lambda: clock.t >= 6, clock=clock, sleep=clock.sleep))
+        self.assertEqual(sum(clock.sleeps), 6)
+
+    def test_never_ready_stops_at_the_deadline_without_extra_attempts(self):
+        clock = self.Clock()
+        calls = []
+        self.assertFalse(health.wait_until_ready(lambda: calls.append(clock.t) or False, clock=clock,
+                                                 sleep=clock.sleep, budget=10, retry=2))
+        self.assertLessEqual(sum(clock.sleeps), 10)
+        self.assertLessEqual(max(calls), 10)
+
+    def test_only_exact_true_counts(self):
+        clock = self.Clock()
+        for value in (1, "ok", {"status": "ready"}, None):
+            self.assertFalse(health.wait_until_ready(lambda v=value: v, clock=clock, sleep=clock.sleep, budget=4, retry=2))
+
+    def test_invalid_budget_or_callables_are_rejected(self):
+        clock = self.Clock()
+        for kwargs in ({"budget": 0}, {"budget": -5}, {"budget": 601}, {"budget": True}, {"budget": "9"},
+                       {"retry": 0}, {"retry": 999}, {"retry": True}):
+            with self.assertRaises(health.Stop):
+                health.wait_until_ready(lambda: True, clock=clock, sleep=clock.sleep, **kwargs)
+        with self.assertRaises(health.Stop):
+            health.wait_until_ready(None, clock=clock, sleep=clock.sleep)
+        with self.assertRaises(health.Stop):
+            health.wait_until_ready(lambda: True, clock=None, sleep=clock.sleep)
+
+    def test_library_still_imports_only_json_and_re(self):
+        tree = ast.parse(SRC.read_text())
+        names = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+        names |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+        self.assertEqual(names, {"json", "re"})
+
+
 if __name__ == "__main__":
     unittest.main()

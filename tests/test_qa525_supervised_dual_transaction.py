@@ -35,6 +35,20 @@ def baseline():
     return result
 
 
+class Clock:
+    """Deterministic clock: sleep() advances time; no real waiting."""
+    def __init__(self):
+        self.t = 1000.0
+        self.sleeps = []
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.t += seconds
+
+
 class Fake:
     def __init__(self):
         self.initial = baseline()
@@ -43,6 +57,10 @@ class Fake:
         self.fail_web = False
         self.fail_rollback = False
         self.health_fail_first = False
+        self.health_fail_always = False
+        self.clock = None
+        self.api_ready_after = None     # seconds after each recreation of a service before it answers
+        self.last_recreate = None
         self.health_calls = 0
         self.audit_events = []
 
@@ -64,6 +82,8 @@ class Fake:
         self.commands.append((service, image, files))
         self.now[service]["image"] = image
         self.now[service]["id"] = format(len(self.commands) + 100, "064x")
+        if self.clock is not None:
+            self.last_recreate = self.clock.t
 
     def snapshot(self):
         return copy.deepcopy(self.now)
@@ -76,6 +96,11 @@ class Fake:
 
     def health(self):
         self.health_calls += 1
+        if self.health_fail_always:
+            return False
+        if self.api_ready_after is not None:
+            # real-timing model: API listens `api_ready_after` s after its last recreation (6 s observed in glmdch)
+            return self.clock.t - self.last_recreate >= self.api_ready_after
         return not (self.health_fail_first and self.health_calls == 1)
 
     def audit(self, event, sha):
@@ -93,14 +118,22 @@ class TransactionTests(unittest.TestCase):
         self.addCleanup(self.root.stop)
         self.fake = Fake()
 
-    def do(self, evidence=None):
+    def do(self, evidence=None, budget=None):
+        extra = {}
+        if self.fake.clock is not None:
+            extra = dict(clock=self.fake.clock, sleep=self.fake.clock.sleep)
+        if budget is not None:
+            extra["health_budget"] = budget
         return tx.transact(
             before=copy.deepcopy(self.fake.initial), new=NEW, source_sha=TARGET,
             layers=LAYERS, workdir=str(WORK), state_dir=self.state,
             run=self.fake.run, live_snapshot=self.fake.snapshot,
             evidence=evidence or self.fake.evidence,
-            health=self.fake.health, audit=self.fake.audit,
+            health=self.fake.health, audit=self.fake.audit, **extra,
         )
+
+    def journal(self):
+        return json.loads(next(self.state.glob("dual-*.json")).read_text())
 
     def test_success_never_changes_dependency_or_oneshot(self):
         receipt = self.do()
@@ -123,13 +156,76 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(json.loads(next(self.state.glob("dual-*.json")).read_text())["status"], "ROLLED_BACK")
         self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_ROLLED_BACK"])
 
-    def test_health_fail_reverts_both(self):
+    def test_transient_first_health_failure_is_retried_not_rolled_back(self):
+        # Behaviour change of 18-nov-2026: one immediate false must NOT roll back a healthy new deployment.
+        self.fake.clock = Clock()
+        self.fake.last_recreate = self.fake.clock.t
         self.fake.health_fail_first = True
-        with self.assertRaises(tx.Blocked):
+        self.assertEqual(self.do()["status"], "DUAL_API_WEB_APPLIED")
+        self.assertEqual(self.journal()["status"], "APPLIED")
+        self.assertNotIn("failure_class", self.journal())
+        self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_APPLIED"])
+
+    def test_slow_api_six_seconds_passes_on_first_attempt(self):
+        # Real glmdch timing: the API needs ~6 s to listen after recreation (--wait returns earlier).
+        self.fake.clock = Clock()
+        self.fake.api_ready_after = 6
+        self.assertEqual(self.do()["status"], "DUAL_API_WEB_APPLIED")
+        self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_APPLIED"])
+        self.assertEqual(sum(self.fake.clock.sleeps), 6)
+
+    def test_slow_api_also_passes_rollback_verification(self):
+        # The exact failure of 18-nov: forward fails for real, rollback recreates the API last and must be WAITED for.
+        self.fake.clock = Clock()
+        self.fake.api_ready_after = 6
+        self.fake.fail_web = True
+        with self.assertRaises(RuntimeError):
             self.do()
-        self.assertEqual(self.fake.now["api"]["image"], self.fake.initial["api"]["image"])
-        self.assertEqual(self.fake.now["web"]["image"], self.fake.initial["web"]["image"])
+        self.assertEqual(self.journal()["status"], "ROLLED_BACK")
+        self.assertNotIn("failure_class", self.journal())
         self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_ROLLED_BACK"])
+
+    def test_forward_health_never_ok_reverts_both_within_budget(self):
+        self.fake.clock = Clock()
+        self.fake.last_recreate = self.fake.clock.t
+        self.fake.health_fail_always = True
+        self.fake.fail_rollback = False
+        with self.assertRaisesRegex(tx.Blocked, "DUAL_ROLLBACK_FAILED_MANUAL_RECOVERY_REQUIRED"):
+            self.do(budget=20)
+        # physical rollback was correct; only verification failed -> distinguishable, still fail-closed
+        self.assertEqual(self.journal()["status"], "RECOVERY_MANUALLY_REQUIRED")
+        self.assertEqual(self.journal()["failure_class"], "ROLLBACK_PHYSICAL_RESTORED_HEALTH_UNVERIFIED")
+        for name in tx.TARGETS:
+            self.assertEqual(self.fake.now[name]["image"], self.fake.initial[name]["image"])
+        self.assertLessEqual(sum(self.fake.clock.sleeps), 2 * 20 + 2)
+        self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_RECOVERY_REQUIRED"])
+
+    def test_forward_health_never_ok_but_rollback_healthy_is_rolled_back(self):
+        self.fake.clock = Clock()
+        self.fake.last_recreate = self.fake.clock.t
+        # unhealthy only while the NEW images run
+        original = self.fake.health
+        def health():
+            if self.fake.now["api"]["image"] == NEW["api"] or self.fake.now["web"]["image"] == NEW["web"]:
+                return False
+            return original()
+        self.fake.health = health
+        with self.assertRaisesRegex(tx.Blocked, "POST_APPLY_HEALTH_FAILED"):
+            self.do(budget=10)
+        self.assertEqual(self.journal()["status"], "ROLLED_BACK")
+        self.assertNotIn("failure_class", self.journal())
+        self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_ROLLED_BACK"])
+
+    def test_wait_budget_must_be_bounded(self):
+        for bad in (0, -1, 601, None, "5"):
+            with self.assertRaisesRegex(tx.Blocked, "HEALTH_WAIT_INVALID"):
+                tx.wait_health(lambda: True, bad)
+
+    def test_wait_health_only_accepts_exact_true(self):
+        clock = Clock()
+        self.assertFalse(tx.wait_health(lambda: 1, 5, clock, clock.sleep))
+        self.assertFalse(tx.wait_health(lambda: "yes", 5, clock, clock.sleep))
+        self.assertTrue(tx.wait_health(lambda: True, 5, clock, clock.sleep))
 
     def test_revoked_post_evidence_reverts_both_even_when_health_is_green(self):
         phases = []
@@ -157,6 +253,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(json.loads(next(self.state.glob("dual-*.json")).read_text())["status"],
                          "RECOVERY_MANUALLY_REQUIRED")
         self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_RECOVERY_REQUIRED"])
+        self.assertEqual(self.journal()["failure_class"], "ROLLBACK_PHYSICAL_NOT_RESTORED")
 
     def test_unreviewed_evidence_fails_before_mutation(self):
         with self.assertRaisesRegex(tx.Blocked, "SIGNED_G6_SENSITIVE"):
