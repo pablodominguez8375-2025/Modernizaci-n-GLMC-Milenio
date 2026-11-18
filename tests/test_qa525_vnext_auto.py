@@ -9,7 +9,15 @@ auto = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(auto)
 
 SHA = "a" * 40
-SET = "sha256:" + "e" * 64
+IDS = ["20261118000001_add_col"]
+
+
+def set_hash(ids):
+    import hashlib
+    return "sha256:" + hashlib.sha256(("\n".join(ids) + "\n").encode()).hexdigest()
+
+
+SET = set_hash(IDS)
 BASE_IMG = {"api": "sha256:" + "b" * 64, "web": "sha256:" + "c" * 64}
 TGT_IMG = {"api": "sha256:" + "3" * 64, "web": "sha256:" + "4" * 64}
 REL = {"sha": SHA, "nonce": "n" * 32, "expected_images": TGT_IMG}
@@ -30,7 +38,7 @@ class Crash(BaseException):
 
 def good_plan():
     return {"ordered_set_sha256": SET, "migrations": [{
-        "id": "20261118_add_col", "additive": True, "backward_compatible_with_api_n": True, "arbitrary_sql": False,
+        "id": IDS[0], "additive": True, "backward_compatible_with_api_n": True, "arbitrary_sql": False,
         "unbounded_backfill": False, "incompatible_ddl_lock": False, "needs_api_n_plus_1": False}]}
 
 
@@ -143,9 +151,10 @@ class AutoHappyAndLatency(AutoBase):
         self.go()
         log = self.h.log
         self.assertLess(log.index("preflight"), log.index("supply"))
-        self.assertLess(log.index("supply"), log.index("nonce"))
-        self.assertLess(log.index("nonce"), log.index("locks"))
-        self.assertLess(log.index("locks"), log.index("migrate"))
+        self.assertLess(log.index("supply"), log.index("locks"))
+        self.assertLess(log.index("locks"), log.index("nonce"))
+        self.assertLess(log.index("nonce"), log.index("journal:PENDING"))
+        self.assertLess(log.index("journal:PENDING"), log.index("migrate"))
         self.assertLess(log.index("migrate"), log.index("recreate:api:target"))
         self.assertLess(log.index("recreate:api:target"), log.index("recreate:web:target"))
 
@@ -207,13 +216,32 @@ class AutoStopBeforeDb(AutoBase):
         self.h.journal_states.clear()
         r = self.go()
         self.assertEqual(r["failure_class"], "NONCE_NOT_SPENDABLE")
-        self.assertEqual(self.effects(), [])
+        self.assertEqual([x for x in self.effects() if x != "locks"], [])    # locks taken, nothing else
+        self.assertEqual(self.h.log[-1], "unlock")
+        self.assertNotIn("journal:PENDING", self.h.log)
 
-    def test_locks_not_acquired(self):
+    def test_locks_not_acquired_does_not_burn_nonce(self):
         self.h.locks = False
         r = self.go()
         self.assertEqual(r["failure_class"], "LOCKS_NOT_ACQUIRED")
         self.assertNotIn("migrate", self.h.log)
+        self.assertEqual(self.h.nonces, set())
+        self.assertNotIn("nonce", self.h.log)
+
+    def test_manipulated_ef_ids_or_hash_are_manual(self):
+        base = good_plan()
+        cases = []
+        p = good_plan(); p["ordered_set_sha256"] = "sha256:" + "0" * 64; cases.append(p)          # forged hash
+        p = good_plan(); p["migrations"][0]["id"] = "20261118000002_other"; cases.append(p)        # id changed, hash stale
+        p = good_plan(); p["migrations"] = p["migrations"] * 2; cases.append(p)                   # duplicate ids
+        two = [dict(base["migrations"][0], id="20261118000002_b"), dict(base["migrations"][0], id=IDS[0])]
+        cases.append({"ordered_set_sha256": set_hash([m["id"] for m in two]), "migrations": two})  # unordered
+        p = good_plan(); p["migrations"][0]["id"] = "../x"; p["ordered_set_sha256"] = set_hash(["../x"]); cases.append(p)
+        for plan in cases:
+            self.assertEqual(auto.classify(plan), "MANUAL")
+        two_ok = sorted(two, key=lambda m: m["id"])
+        self.assertEqual(auto.classify({"ordered_set_sha256": set_hash([m["id"] for m in two_ok]),
+                                        "migrations": two_ok}), "ADDITIVE")
 
 
 class AutoRollbackAndBlock(AutoBase):
@@ -313,7 +341,9 @@ class AutoRollbackAndBlock(AutoBase):
                 self.h.images["web"] = BASE_IMG["web"]
         self.h.recreate = wrong
         r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_ROLLED_BACK)
         self.assertEqual(r["failure_class"], "TARGET_IDENTITY_MISMATCH")
+        self.assertEqual(self.h.images, BASE_IMG)
         self.setUp()
         orig = self.h.recreate
         def same_id(step, which):
@@ -371,17 +401,65 @@ class AutoRollbackAndBlock(AutoBase):
             self.assertNotIn("APPLIED", self.h.journal_states)
             self.assertEqual(self.h.log[-1], "unlock")
 
-    def test_health_http_alone_never_applies(self):
-        self.h.schema = True
-        orig = self.h.lease_alive
+    def test_lease_lost_at_final_verification_blocks_without_rollback(self):
         calls = {"n": 0}
         def lease():
             calls["n"] += 1
-            return calls["n"] < 4                             # alive through migration/API/WEB, lost at final verification
+            return calls["n"] < 4                             # alive through migration/API/WEB, lost at final check
         self.h.lease_alive = lease
         r = self.go()
-        self.assertEqual(r["failure_class"], "FINAL_VERIFICATION_FAILED")
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+        self.assertEqual(r["failure_class"], "LEASE_LOST_FINAL_VERIFICATION")
         self.assertNotIn("APPLIED", self.h.journal_states)
+        self.assertFalse([x for x in self.h.log if x.endswith(":baseline")])    # no unsafe physical action
+
+    def test_lease_lost_during_api_or_web_stops_all_physical_action(self):
+        for n_ok, code in ((2, "LEASE_LOST_DURING_API"), (3, "LEASE_LOST_DURING_WEB")):
+            self.setUp()
+            calls = {"n": 0}
+            def lease(calls=calls, n_ok=n_ok):
+                calls["n"] += 1
+                return calls["n"] < n_ok
+            self.h.lease_alive = lease
+            r = self.go()
+            self.assertEqual(r["failure_class"], code)
+            self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+            self.assertFalse([x for x in self.h.log if x.endswith(":baseline")])
+
+    def test_final_ef_history_revalidated_with_valid_lease_rolls_back_and_blocks(self):
+        calls = {"n": 0}
+        def matches(s):
+            calls["n"] += 1
+            return calls["n"] < 2                             # ok after migration, divergent at the end
+        self.h.ef_history_matches = matches
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+        self.assertEqual(r["failure_class"], "FINAL_SCHEMA_OR_EF_DIVERGENT")
+        self.assertEqual(self.h.images, BASE_IMG)             # API/WEB restored and verified
+        self.assertEqual(r["rollback_results"], {"web": True, "api": True})
+        self.assertNotIn("APPLIED", self.h.journal_states)
+        self.assertEqual(self.h.journal_states[-1], "RECOVERY_MANUALLY_REQUIRED")
+        self.assertEqual(self.h.migrations_run, 1)            # no re-run, no DB restore
+
+    def test_final_schema_divergence_same_policy(self):
+        calls = {"n": 0}
+        def schema():
+            calls["n"] += 1
+            return calls["n"] < 2
+        self.h.schema_ok = schema
+        r = self.go()
+        self.assertEqual(r["failure_class"], "FINAL_SCHEMA_OR_EF_DIVERGENT")
+        self.assertEqual(self.h.images, BASE_IMG)
+
+    def test_lease_lost_before_rollback_blocks(self):
+        self.h.never_ready["web"] = True
+        calls = {"n": 0}
+        def lease():
+            calls["n"] += 1
+            return calls["n"] < 4                             # migration, api, (web: not ready) -> before rollback lost
+        self.h.lease_alive = lease
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
 
     def test_locks_always_released(self):
         self.h.migrate_exc = RuntimeError("x")
@@ -395,7 +473,7 @@ class AutoHermeticImports(unittest.TestCase):
         tree = ast.parse((ROOT / "scripts/qa/qa525-vnext-auto.py").read_text())
         names = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
                  for a in (n.names if isinstance(n, ast.Import) else [ast.alias(name=n.module or "")])}
-        self.assertEqual(names - {"importlib", "pathlib", "re"}, set())
+        self.assertEqual(names - {"hashlib", "importlib", "pathlib", "re"}, set())
 
 
 if __name__ == "__main__":
