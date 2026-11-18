@@ -369,6 +369,54 @@ class AutoRollbackAndBlock(AutoBase):
             self.assertEqual(self.h.migrations_run, 0)
             self.assertEqual(self.h.log[-1], "unlock")
 
+    def test_rollback_step_effect_then_lease_lost_then_exception_stops_next_recreate(self):
+        self.h.never_ready["web"] = True
+        state = {"lost": False}
+        orig = self.h.recreate
+        def rec(step, which):
+            orig(step, which)                                   # physical effect happens first
+            if step == "web" and which == "baseline":
+                state["lost"] = True
+                raise RuntimeError("lost lease while recreating")
+        self.h.recreate = rec
+        self.h.lease_alive = lambda: not state["lost"]
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+        self.assertNotIn("recreate:api:baseline", self.h.log)
+        self.assertEqual(self.h.journal_states[-1], "RECOVERY_MANUALLY_REQUIRED")
+        self.assertEqual(r["rollback_results"], {"web": False, "api": False})
+
+    def test_rollback_lease_check_raising_is_fail_closed(self):
+        self.h.never_ready["web"] = True
+        calls = {"n": 0}
+        orig = self.h.recreate
+        def rec(step, which):
+            orig(step, which)
+            if step == "web" and which == "baseline":
+                calls["n"] = 1
+        self.h.recreate = rec
+        def lease():
+            if calls["n"]:
+                raise RuntimeError("backend down")
+            return True
+        self.h.lease_alive = lease
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)
+        self.assertNotIn("recreate:api:baseline", self.h.log)
+
+    def test_rollback_exception_with_valid_lease_still_restores_next_step(self):
+        self.h.never_ready["web"] = True
+        orig = self.h.recreate
+        def rec(step, which):
+            orig(step, which)
+            if step == "web" and which == "baseline":
+                raise RuntimeError("transient")
+        self.h.recreate = rec
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_BLOCKED)        # web not verified -> manual
+        self.assertIn("recreate:api:baseline", self.h.log)      # authority intact: api still restored
+        self.assertEqual(r["rollback_results"], {"web": False, "api": True})
+
     def test_pre_effect_exception_still_restores_baseline_and_verifies(self):
         self.h.raise_before_effect = ("api", "target")
         r = self.go()

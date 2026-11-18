@@ -182,18 +182,27 @@ def _locked(host, release, plan, baseline, started, clock, sleep, budget, retry)
     except Exception:
         return _blocked(host, receipt, "LEASE_LOST_BEFORE_ROLLBACK", started, clock)
     results = {}
-    lease_ok = True
     for step in reversed(attempted):
-        if not lease_ok:          # without the lease no further physical action is taken
+        # the lease is re-verified before EVERY recreation and after any adapter exception (review 6984454283 P1):
+        # a failed/raising step never grants authority for the next one
+        try:
+            lease_ok = host.lease_alive() is True
+        except Exception:
+            lease_ok = False
+        if not lease_ok:
             results[step] = False
             continue
         try:
             host.recreate(step, "baseline")
             results[step] = _wait(host, step, clock, sleep, budget, retry)
-            lease_ok = host.lease_alive() is True
-            results[step] = results[step] and lease_ok
         except Exception:
             results[step] = False
+    try:
+        results_lease_final = host.lease_alive() is True
+    except Exception:
+        results_lease_final = False
+    if not results_lease_final:
+        results = {k: False for k in results}
     receipt["rollback_results"] = dict(results)
     try:
         restored = all(results.values()) and _baseline_identity_ok(host.evidence(), baseline, attempted)
