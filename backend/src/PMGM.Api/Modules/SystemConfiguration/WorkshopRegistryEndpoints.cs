@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
@@ -12,7 +13,10 @@ public sealed record WorkshopRegistryRequest(string? Reason, string? Confirmatio
 /// <summary>
 /// Sistema › Talleres (#1035). Ver y descargar: Máster y superusuarios. Eliminar, dar de baja y reactivar: solo Máster.
 /// «Tiene datos asociados» se calcula sobre el catálogo de PostgreSQL (toda tabla con una columna uuid que apunte a
-/// core.organizations, por clave foránea o por nombre OrganizationId/ParentOrganizationId) y solo se expone como booleano (Ley 21.719).
+/// core.organizations por clave foránea o cuyo nombre termine en OrganizationId/WorkshopId/LodgeId/TallerId, p. ej.
+/// OriginOrganizationId, SourceOrganizationId) y solo se expone como booleano (Ley 21.719). Es un superconjunto a
+/// propósito: ante duda, «tiene datos» (solo se da de baja, nunca se elimina). Una prueba de inventario falla si aparece
+/// una columna uuid con ese nombre que la huella no cubra.
 /// No se cuentan los eventos de auditoría: la auditoría se conserva aparte y no impide eliminar un Taller vacío.
 /// </summary>
 public static class WorkshopRegistryEndpoints
@@ -28,7 +32,7 @@ public static class WorkshopRegistryEndpoints
           AND NOT (n.nspname = 'core' AND c.relname = 'organizations' AND a.attname = 'Id')
           AND NOT (c.relname = 'audit_events')
           AND NOT (c.relname LIKE '\_\_EFMigrations%')
-          AND (a.attname IN ('OrganizationId','ParentOrganizationId')
+          AND (a.attname ~* '(organi[sz]ation|workshop|lodge|taller)id$'
                OR EXISTS (SELECT 1 FROM pg_constraint k
                           WHERE k.contype = 'f' AND k.conrelid = c.oid
                             AND k.confrelid = 'core.organizations'::regclass AND a.attnum = ANY (k.conkey)))
@@ -46,6 +50,28 @@ public static class WorkshopRegistryEndpoints
         return endpoints;
     }
 
+    /// <summary>Columnas (esquema, tabla, columna) que la huella inspecciona. Solo lectura.</summary>
+    public static async Task<IReadOnlyList<(string Schema, string Table, string Column)>> FootprintTargetsAsync(PmgmDbContext db, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var opened = connection.State != ConnectionState.Open;
+        if (opened) await connection.OpenAsync(ct);
+        try
+        {
+            var targets = new List<(string, string, string)>();
+            await using var command = connection.CreateCommand();
+            command.CommandText = FootprintColumnsSql;
+            if (db.Database.CurrentTransaction is { } tx) command.Transaction = tx.GetDbTransaction();
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) targets.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+            return targets;
+        }
+        finally
+        {
+            if (opened) await connection.CloseAsync();
+        }
+    }
+
     /// <summary>Ids de organización que tienen algún registro asociado. Solo lectura.</summary>
     public static async Task<HashSet<Guid>> OrganizationsWithDataAsync(PmgmDbContext db, CancellationToken ct)
     {
@@ -54,14 +80,7 @@ public static class WorkshopRegistryEndpoints
         if (opened) await connection.OpenAsync(ct);
         try
         {
-            var targets = new List<(string Schema, string Table, string Column)>();
-            await using (var command = connection.CreateCommand())
-            {
-                command.CommandText = FootprintColumnsSql;
-                if (db.Database.CurrentTransaction is { } tx) command.Transaction = tx.GetDbTransaction();
-                await using var reader = await command.ExecuteReaderAsync(ct);
-                while (await reader.ReadAsync(ct)) targets.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
-            }
+            var targets = await FootprintTargetsAsync(db, ct);
 
             var found = new HashSet<Guid>();
             foreach (var (schema, table, column) in targets)
@@ -95,9 +114,31 @@ public static class WorkshopRegistryEndpoints
             .ToList();
     }
 
+    private static string? PostgresState(Exception ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+            if (current is PostgresException pg) return pg.SqlState;
+        return null;
+    }
+
+    private static async Task TryAuditAsync(HttpContext ctx, PmgmDbContext db, IAuditService audit, string action, Guid id, string code)
+    {
+        try
+        {
+            audit.Add(ctx, "system.workshops." + action + "_rejected", "Organization", id.ToString(), id, AuditResults.Rejected, new { action, code });
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            db.ChangeTracker.Clear();     // la auditoría de un fallo no debe ocultar el fallo original
+        }
+    }
+
     private static string ShortCode(Guid id) => id.ToString("N")[..8].ToUpperInvariant();
 
-    private static async Task<IResult> GetRegistry(HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    private static bool RetireEnabled(IConfiguration config) => config.GetValue<bool>("WorkshopRegistry:RetireEnabled");
+
+    private static async Task<IResult> GetRegistry(HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IConfiguration config, CancellationToken ct)
     {
         ctx.Response.Headers.CacheControl = "private, no-store";
         if (!access.IsPlatformOperator(ctx.User)) return Results.Forbid();
@@ -113,7 +154,7 @@ public static class WorkshopRegistryEndpoints
             orienteCode = x.OrienteCode,
             city = x.City,
             createdAtUtc = x.CreatedAtUtc,
-            origin = WorkshopRegistryCodes.NormalizeOrigin(x.Origin),
+            origin = WorkshopRegistryCodes.DisplayOrigin(x.Origin, x.Type),
             status = x.Status,
             retiredAtUtc = x.RetiredAtUtc,
             hasData = withData.Contains(x.Id),
@@ -123,6 +164,7 @@ public static class WorkshopRegistryEndpoints
         {
             items,
             canManage = access.IsPlatformSuperAdmin(ctx.User),
+            retireEnabled = RetireEnabled(config),
             reasonMinLength = WorkshopRegistryCodes.ReasonMinLength,
             reasonMaxLength = WorkshopRegistryCodes.ReasonMaxLength
         });
@@ -135,14 +177,14 @@ public static class WorkshopRegistryEndpoints
         var rows = await LoadAsync(db, ct);
         var withData = await OrganizationsWithDataAsync(db, ct);
         var bytes = WorkshopRegistryCsv.Build(rows.Select(x => new WorkshopCsvRow(x.Id, ShortCode(x.Id), x.Number, x.Name, x.Type,
-            x.OrienteCode, x.City, WorkshopRegistryCodes.NormalizeOrigin(x.Origin), x.Status, withData.Contains(x.Id), x.CreatedAtUtc)));
-        audit.Add(ctx, "system.workshops.exported", "WorkshopRegistry", "all", null, AuditResults.Success, new { rows = rows.Count });
+            x.OrienteCode, x.City, WorkshopRegistryCodes.DisplayOrigin(x.Origin, x.Type), x.Status, withData.Contains(x.Id), x.CreatedAtUtc)));
+        audit.Add(ctx, "system.workshops.exported", "WorkshopRegistry", "all", null, AuditResults.Success);
         await db.SaveChangesAsync(ct);
         return Results.File(bytes, "text/csv; charset=utf-8", "talleres-registrados.csv");
     }
 
     private static async Task<IResult> Run(Guid id, string action, WorkshopRegistryRequest? request, HttpContext ctx,
-        PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+        PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, IConfiguration config, CancellationToken ct)
     {
         ctx.Response.Headers.CacheControl = "private, no-store";
         if (!access.IsPlatformOperator(ctx.User)) return Results.Forbid();
@@ -154,7 +196,7 @@ public static class WorkshopRegistryEndpoints
         if (organization is null) return Results.NotFound();
         var hasData = (await OrganizationsWithDataAsync(db, ct)).Contains(id);
         var facts = new WorkshopRegistryFacts(id, organization.Number, organization.Type, organization.Status, hasData);
-        var decision = WorkshopRegistryPolicy.Decide(action, isMaster, facts, request?.Reason, request?.Confirmation);
+        var decision = WorkshopRegistryPolicy.Decide(action, isMaster, facts, request?.Reason, request?.Confirmation, RetireEnabled(config));
 
         if (decision != WorkshopRegistryDecisionCode.Allowed)
         {
@@ -167,7 +209,7 @@ public static class WorkshopRegistryEndpoints
                 WorkshopRegistryDecisionCode.NotMaster or WorkshopRegistryDecisionCode.Protected => Results.Forbid(),
                 WorkshopRegistryDecisionCode.InvalidReason or WorkshopRegistryDecisionCode.ConfirmationMismatch =>
                     Results.BadRequest(new { code = decision.ToString() }),
-                _ => Results.Conflict(new { code = decision.ToString() })
+                _ => Results.Conflict(new { code = decision.ToString() })  // HasData, NotActive, AlreadyRetired, NotRetired, RetireNotEnabled
             };
         }
 
@@ -195,15 +237,29 @@ public static class WorkshopRegistryEndpoints
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (Exception ex) when (PostgresState(ex) is not null)
         {
-            // Una clave foránea apareció entre la lectura y la escritura: el Taller tiene datos.
+            var state = PostgresState(ex)!;
             await transaction.RollbackAsync(CancellationToken.None);
             db.ChangeTracker.Clear();
-            audit.Add(ctx, "system.workshops." + action + "_rejected", "Organization", id.ToString(), id, AuditResults.Rejected,
-                new { action, code = nameof(WorkshopRegistryDecisionCode.HasData) });
-            await db.SaveChangesAsync(CancellationToken.None);
-            return Results.Conflict(new { code = nameof(WorkshopRegistryDecisionCode.HasData) });
+            // 23503 = violación de clave foránea (apareció un dato entre la lectura y la escritura): el Taller tiene datos.
+            // 40001/40P01 = conflicto de serialización o deadlock: nada se aplicó, se puede reintentar con seguridad.
+            var (code, known) = state switch
+            {
+                "23503" => (nameof(WorkshopRegistryDecisionCode.HasData), true),
+                "40001" or "40P01" => ("CONCURRENT_CHANGE_RETRY", true),
+                _ => ("UNEXPECTED_DATABASE_ERROR", false)
+            };
+            await TryAuditAsync(ctx, db, audit, action, id, code);
+            if (!known) throw;
+            return Results.Conflict(new { code });
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            db.ChangeTracker.Clear();
+            await TryAuditAsync(ctx, db, audit, action, id, "UNEXPECTED_ERROR");
+            throw;
         }
         return Results.Ok(new { id, action, completed = true });
     }

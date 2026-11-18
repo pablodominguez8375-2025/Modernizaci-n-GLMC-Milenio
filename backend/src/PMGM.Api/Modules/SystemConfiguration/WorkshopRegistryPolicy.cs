@@ -20,6 +20,14 @@ public static class WorkshopRegistryCodes
     public const int ReasonMaxLength = 500;
     public static readonly string[] Origins = ["initial_load", "qa_seed", "bootstrap", "other"];
     public static string NormalizeOrigin(string? origin) => Array.IndexOf(Origins, origin) >= 0 ? origin! : "other";
+    /// <summary>Gran Logia y soporte son configuración inicial aunque la columna diga «other» (sin UPDATE en la migración).</summary>
+    public static string DisplayOrigin(string? origin, string? type)
+    {
+        var normalized = NormalizeOrigin(origin);
+        var technical = string.Equals(type, GrandLodgeType, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(type, SupportType, StringComparison.OrdinalIgnoreCase);
+        return technical && normalized == "other" ? "bootstrap" : normalized;
+    }
 }
 
 public enum WorkshopRegistryDecisionCode
@@ -33,13 +41,23 @@ public enum WorkshopRegistryDecisionCode
     HasData,
     NotActive,
     NotRetired,
-    AlreadyRetired
+    AlreadyRetired,
+    RetireNotEnabled
 }
 
 public sealed record WorkshopRegistryFacts(Guid Id, string? Number, string Type, string Status, bool HasData)
 {
+    /// <summary>Id fijo del Taller 00 de soporte (migración #812).</summary>
+    public static readonly Guid SupportWorkshopId = Guid.Parse("b12c0000-0000-4000-8000-000000000000");
+
+    /// <summary>
+    /// Protegidos: Gran Logia, organización técnica de soporte (por tipo, por su Id fijo) y CUALQUIER organización
+    /// con número «00», sea cual sea su tipo (nunca puede ser un Taller real que se elimine o se dé de baja).
+    /// </summary>
     public bool Protected => string.Equals(Type, WorkshopRegistryCodes.GrandLodgeType, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(Type, WorkshopRegistryCodes.SupportType, StringComparison.OrdinalIgnoreCase);
+        || string.Equals(Type, WorkshopRegistryCodes.SupportType, StringComparison.OrdinalIgnoreCase)
+        || Id == SupportWorkshopId
+        || string.Equals((Number ?? string.Empty).Trim(), "00", StringComparison.Ordinal);
     public string ShortCode => Id.ToString("N")[..8].ToUpperInvariant();
     /// <summary>Texto que el Máster escribe para confirmar: el número, o el código corto si no tiene.</summary>
     public string ConfirmationText => string.IsNullOrWhiteSpace(Number) ? ShortCode : Number!;
@@ -52,7 +70,11 @@ public sealed record WorkshopRegistryFacts(Guid Id, string? Number, string Type,
 /// </summary>
 public static class WorkshopRegistryPolicy
 {
-    public static WorkshopRegistryDecisionCode Decide(string? action, bool isMaster, WorkshopRegistryFacts facts, string? reason, string? confirmation)
+    /// <param name="retireEnabled">
+    /// «Dar de baja» solo marca el registro: los demás módulos aún no filtran ni bloquean escrituras sobre un Taller de baja.
+    /// Hasta que exista esa cobertura transversal (PR aparte), la baja queda bloqueada de forma explícita.
+    /// </param>
+    public static WorkshopRegistryDecisionCode Decide(string? action, bool isMaster, WorkshopRegistryFacts facts, string? reason, string? confirmation, bool retireEnabled)
     {
         if (!WorkshopRegistryActions.IsKnown(action)) return WorkshopRegistryDecisionCode.UnknownAction;
         if (!isMaster) return WorkshopRegistryDecisionCode.NotMaster;
@@ -69,6 +91,7 @@ public static class WorkshopRegistryPolicy
                 if (facts.Status != WorkshopRegistryCodes.Active) return WorkshopRegistryDecisionCode.NotActive;
                 return facts.HasData ? WorkshopRegistryDecisionCode.HasData : WorkshopRegistryDecisionCode.Allowed;
             case WorkshopRegistryActions.Retire:
+                if (!retireEnabled) return WorkshopRegistryDecisionCode.RetireNotEnabled;
                 return facts.Status == WorkshopRegistryCodes.Active ? WorkshopRegistryDecisionCode.Allowed : WorkshopRegistryDecisionCode.AlreadyRetired;
             default:
                 return facts.Status == WorkshopRegistryCodes.Retired ? WorkshopRegistryDecisionCode.Allowed : WorkshopRegistryDecisionCode.NotRetired;

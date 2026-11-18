@@ -23,8 +23,8 @@ public sealed class WorkshopRegistryHttpTests
 {
     private static readonly string? Connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
 
-    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection)
-        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.ConfigureTestServices(s => s
+    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection, bool retireEnabled = true)
+        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.UseSetting("WorkshopRegistry:RetireEnabled", retireEnabled ? "true" : "false").ConfigureTestServices(s => s
             .AddAuthentication(o => { o.DefaultAuthenticateScheme = Auth.Name; o.DefaultChallengeScheme = Auth.Name; o.DefaultForbidScheme = Auth.Name; })
             .AddScheme<AuthenticationSchemeOptions, Auth>(Auth.Name, _ => { })));
 
@@ -142,6 +142,48 @@ public sealed class WorkshopRegistryHttpTests
 
         using var anonymous = As(factory, "anonymous");
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/system/workshops", ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Retire_is_blocked_by_default_and_the_registry_says_so()
+    {
+        if (string.IsNullOrWhiteSpace(Connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(Connection, retireEnabled: false);
+        var org = new Organization { Name = "Taller baja bloqueada " + Guid.NewGuid().ToString("N")[..6], Type = "workshop" };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.Organizations.Add(org);
+            await db.SaveChangesAsync(ct);
+        }
+        using var master = As(factory, "master");
+        Assert.False((await Registry(master, ct)).GetProperty("retireEnabled").GetBoolean());
+        var response = await master.PostAsJsonAsync($"/api/system/workshops/{org.Id}/retire", new { reason = "Intento con baja bloqueada", confirmation = org.Id.ToString("N")[..8].ToUpperInvariant() }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("RetireNotEnabled", (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString());
+        await using var check = factory.Services.CreateAsyncScope();
+        Assert.True(await check.ServiceProvider.GetRequiredService<PmgmDbContext>().Organizations.AnyAsync(x => x.Id == org.Id && x.Status == "active", ct));
+    }
+
+    [Fact]
+    public async Task Technical_origin_is_derived_and_export_audit_does_not_record_counts()
+    {
+        if (string.IsNullOrWhiteSpace(Connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(Connection);
+        await using (var scope = factory.Services.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().Database.MigrateAsync(ct);
+        using var master = As(factory, "master");
+        var support = Item(await Registry(master, ct), Guid.Parse("b12c0000-0000-4000-8000-000000000000"));
+        Assert.Equal("bootstrap", support.GetProperty("origin").GetString());
+        Assert.True(support.GetProperty("protected").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, (await master.GetAsync("/api/system/workshops/export.csv", ct)).StatusCode);
+        await using var check = factory.Services.CreateAsyncScope();
+        var db = check.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        var last = await db.AuditEvents.AsNoTracking().Where(a => a.Action == "system.workshops.exported").OrderByDescending(a => a.OccurredAtUtc).FirstAsync(ct);
+        Assert.DoesNotContain("rows", last.MetadataJson ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
