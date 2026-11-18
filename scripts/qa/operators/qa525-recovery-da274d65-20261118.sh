@@ -10,7 +10,6 @@ umask 077
 SRC=da274d651d8e9e056525413406c0aab62131504f
 DIGEST=sha256:f869f3e12e048d70aaecf5e4e2f5b348d6378cf02aaa9fc0e5ee3243460f2e82
 OLD=6eed4f00b7917da3cca36bbda70e16d16328648d
-GO_START=2026-11-18T00:13:00Z
 L=/usr/local/sbin/pmgm-qa-update
 STATE=/opt/centenario/qa525-signed-prepare
 OWNER=0:0
@@ -24,7 +23,7 @@ stop() { printf 'QA525_RECOVERY=STOP_%s_NO_RETRY\n' "$1"; exit 2; }
 priv() { [[ "$(sudo stat -c '%u:%g %a %h' -- "$1" 2>/dev/null || :)" == "$OWNER 600 1" ]] && sudo test -f "$1" && sudo test ! -L "$1"; }
 ev_has() { local rc=0; sudo grep -Eq "$1[: ]+$SRC\$" "$E" || rc=$?; case "$rc" in 0) return 0;; 1) return 1;; *) stop EVENTS_READ_ERROR;; esac; }
 state_ok() {
-  local f name line cid img st pj sv rev started nonce names js raw b rc cnt fp im
+  local f name line cid img st pj sv rev nonce names js raw b rc cnt fp im
   for f in "${F[@]}"; do priv "$f" || stop EVIDENCE_FILE_UNTRUSTED; done
   sudo test ! -e "$M" && sudo test ! -L "$M" || stop ARCHIVE_MARKER_PRESENT
   raw=$(sudo find "$STATE" -maxdepth 1 -name 'dual-*.json.next') || stop JOURNAL_NEXT_SCAN
@@ -51,25 +50,24 @@ state_ok() {
   priv "$STATE/approval-consumed-$nonce" || stop NONCE_MARKER_UNTRUSTED
   [[ "$(sudo cat -- "$STATE/approval-consumed-$nonce")" == "$SRC" ]] || stop NONCE_NOT_CONSUMED_FOR_CUT
   for name in api web; do
-    sudo jq -e --arg n "$name" --slurpfile p "$P" '.new_images[$n]==$p[0][$n+"_image_id"] and (.old_images[$n]|test("^sha256:[a-f0-9]{64}$"))' "$J" >/dev/null || stop JOURNAL_PREPARED_BINDING
+    sudo jq -e --arg n "$name" --slurpfile p "$P" '.old_images[$n]==$p[0].baseline[$n].image_id and .new_images[$n]==$p[0][$n+"_image_id"]' "$J" >/dev/null || stop JOURNAL_PREPARED_BINDING
   done
   priv "$E" || stop EVENTS_UNTRUSTED
   ev_has DUAL_API_WEB_RECOVERY_REQUIRED || stop RECOVERY_EVENT_MISSING
   ! ev_has DUAL_API_WEB_APPLIED || stop TARGET_APPLIED_EVENT
   ! ev_has DUAL_API_WEB_ROLLED_BACK || stop TARGET_ROLLED_BACK_EVENT
-  sudo jq -e '(.baseline|type=="array") and ((.baseline|sort)==["api","clamav","gateway","keycloak","minio","postgres","web"])' "$P" >/dev/null || stop BASELINE_NAMES
-  mapfile -t names < <(sudo jq -r '.baseline[]' "$P") || stop BASELINE_KEYS
-  [[ "${#names[@]}" == 7 ]] || stop BASELINE_COUNT
+  mapfile -t names < <(sudo jq -r '.baseline|keys[]' "$P") || stop BASELINE_KEYS
+  [[ " ${names[*]} " == *" api "* && " ${names[*]} " == *" web "* && "${#names[@]}" == 7 ]] || stop BASELINE_API_WEB_MISSING
   for name in "${names[@]}"; do
     [[ "$name" =~ ^[a-z0-9_-]{1,40}$ ]] || stop BASELINE_NAME
-    line=$(sudo docker inspect --format '{{.Id}} {{.Image}} {{.State.Status}} {{index .Config.Labels "com.docker.compose.project"}} {{index .Config.Labels "com.docker.compose.service"}} {{.State.StartedAt}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "centenario-qa-lab2-$name-1") || stop BASELINE_INSPECT
-    read -r cid img st pj sv started rev <<<"$line"
+    line=$(sudo docker inspect --format '{{.Id}} {{.Image}} {{.State.Status}} {{index .Config.Labels "com.docker.compose.project"}} {{index .Config.Labels "com.docker.compose.service"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "centenario-qa-lab2-$name-1") || stop BASELINE_INSPECT
+    read -r cid img st pj sv rev <<<"$line"
     [[ "$st" == running && "$pj" == centenario-qa-lab2 && "$sv" == "$name" ]] || stop BASELINE_STATE
+    sudo jq -e --arg n "$name" --arg i "$img" '.baseline[$n].image_id==$i' "$P" >/dev/null || stop BASELINE_IMAGE_DRIFT
     if [[ "$name" == api || "$name" == web ]]; then
-      sudo jq -e --arg n "$name" --arg i "$img" '.old_images[$n]==$i' "$J" >/dev/null || stop BASELINE_IMAGE_DRIFT
       [[ "$rev" == "$OLD" ]] || stop TARGET_NOT_OLD_REVISION
     else
-      [[ "$started" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$ && "$started" < "$GO_START" ]] || stop DEPENDENCY_CONTAINER_CHANGED
+      sudo jq -e --arg n "$name" --arg c "$cid" '.baseline[$n].container_fingerprint==$c' "$P" >/dev/null || stop DEPENDENCY_CONTAINER_CHANGED
     fi
   done
   for name in api web; do
@@ -140,7 +138,7 @@ hold_locks() {
 run_recovery_locked() {
   local l body rc=0
   for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; done
-  body="set -Eeuo pipefail; umask 077; $(declare -p SRC DIGEST OLD GO_START STATE OWNER J P M E CUT F LOCKS SITE); $(declare -f stop priv ev_has state_ok recover lock_hook hold_locks); sudo() { \"\$@\"; }; hold_locks; recover"
+  body="set -Eeuo pipefail; umask 077; $(declare -p SRC DIGEST OLD STATE OWNER J P M E CUT F LOCKS SITE); $(declare -f stop priv ev_has state_ok recover lock_hook hold_locks); sudo() { \"\$@\"; }; hold_locks; recover"
   sudo bash -c "$body" || rc=$?
   [[ "$rc" == 0 ]] || stop RECOVERY_FAILED_SEE_ABOVE_MARKER_MAY_REMAIN
 }

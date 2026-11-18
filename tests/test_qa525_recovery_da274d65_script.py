@@ -12,7 +12,6 @@ TEXT = SCRIPT.read_text()
 SRC = "da274d651d8e9e056525413406c0aab62131504f"
 DIGEST = "sha256:f869f3e12e048d70aaecf5e4e2f5b348d6378cf02aaa9fc0e5ee3243460f2e82"
 OLD = "6eed4f00b7917da3cca36bbda70e16d16328648d"
-GO_START = "2026-11-18T00:13:00Z"
 NAMES = ["api", "clamav", "gateway", "keycloak", "minio", "postgres", "web"]
 NONCE = "cd" * 32
 
@@ -45,7 +44,7 @@ class Fixture:
         write(self.state / "prepared.json", {
             "status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT", "source_sha": SRC,
             "source_asset_sha256": DIGEST, "schema_mode": "support00_postdb", "review_mode": "single_operator_qa",
-            "may_apply": False, "images_built": True, "services_unchanged": True, "baseline": list(NAMES),
+            "may_apply": False, "images_built": True, "services_unchanged": True, "baseline": self.base(),
             "api_image_id": "sha256:" + "a" * 64, "web_image_id": "sha256:" + "b" * 64})
         write(self.state / ("dual-%s.json" % SRC), {
             "source_sha": SRC, "status": "RECOVERY_MANUALLY_REQUIRED",
@@ -69,8 +68,14 @@ class Fixture:
         self._stubs()
         self.originals = {p.name: sha(p) for p in self.five()}
 
-    def set_container(self, n, cid, img, st, rev, started="2026-10-01T00:00:00.123456789Z"):
-        write(self.t / "containers" / n, "%s %s %s centenario-qa-lab2 %s %s %s" % (cid, img, st, n, started, rev), 0o644)
+    def base(self):
+        out = {}
+        for i, n in enumerate(NAMES):
+            out[n] = {"container_fingerprint": "c" * 64 if n in self.imgs else "d" * 64, "image_id": self.imgs.get(n, "sha256:" + str(i) * 64), "running": True}
+        return out
+
+    def set_container(self, n, cid, img, st, rev):
+        write(self.t / "containers" / n, "%s %s %s centenario-qa-lab2 %s %s" % (cid, img, st, n, rev), 0o644)
 
     def five(self):
         return [self.state / "prepared.json", self.etc / "qa525-sensitive-reviewed.json",
@@ -101,7 +106,7 @@ class Fixture:
         script = f'''set -Eeuo pipefail
 export PATH="{self.bin}:$PATH"
 sudo() {{ "$@"; }}
-SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; GO_START={GO_START}; STATE="{self.state}"; OWNER="$(id -u):$(id -g)"; SITE=https://x.invalid
+SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; STATE="{self.state}"; OWNER="$(id -u):$(id -g)"; SITE=https://x.invalid
 J="$STATE/dual-$SRC.json"; P="$STATE/prepared.json"; M="$STATE/expired-prepared-archive-pending.json"
 E="$STATE/dual-events.log"; CUT="{self.etc}/qa525-supervised-cut.json"
 F=("$P" "{self.etc}/qa525-sensitive-reviewed.json" "{self.etc}/qa525-single-operator-postdb-approved.json" "$CUT" "$J")
@@ -198,8 +203,7 @@ class Recovery(unittest.TestCase):
             "TARGET_NOT_OLD_REVISION": lambda fx: fx.set_container("api", "1" * 64, "sha256:" + "1" * 64, "running", SRC),
             "BASELINE_IMAGE_DRIFT": lambda fx: fx.set_container("web", "2" * 64, "sha256:" + "9" * 64, "running", OLD),
             "BASELINE_STATE": lambda fx: fx.set_container("api", "1" * 64, "sha256:" + "1" * 64, "exited", OLD),
-            "DEPENDENCY_CONTAINER_CHANGED": lambda fx: fx.set_container("minio", "9" * 64, "sha256:" + "3" * 64, "running", "", "2026-11-18T00:14:00.1Z"),
-            "BASELINE_NAMES": lambda fx: write(fx.state / "prepared.json", dict(json.loads((fx.state / "prepared.json").read_text()), baseline=["api", "web"])),
+            "DEPENDENCY_CONTAINER_CHANGED": lambda fx: fx.set_container("minio", "9" * 64, "sha256:" + "4" * 64, "running", ""),
             "JOURNAL_PREPARED_BINDING": lambda fx: write(fx.state / ("dual-%s.json" % SRC), {"source_sha": SRC, "status": "RECOVERY_MANUALLY_REQUIRED", "old_images": {"api": fx.imgs["api"], "web": fx.imgs["web"]}, "new_images": {"api": "sha256:" + "e" * 64, "web": "sha256:" + "b" * 64}}),
             "CANDIDATE_IMAGE_REVISION": lambda fx: write(fx.t / "images" / ("sha256:" + "a" * 64), OLD, 0o644),
             "PUBLIC_VERSION_NOT_OLD": lambda fx: write(fx.t / "public.json", {"environment": "QA_SYNTHETIC", "source_sha": SRC}, 0o644),

@@ -35,7 +35,7 @@ class Manual(unittest.TestCase):
         for f in sum(lay.values(), []): os.chmod(f, 0o644)
         write(self.state / "prepared.json", {"status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT", "source_sha": SRC, "source_asset_sha256": DIGEST,
               "schema_mode": "support00_postdb", "review_mode": "single_operator_qa", "may_apply": False, "images_built": True, "services_unchanged": True,
-              "baseline": NAMES, "api_image_id": NEWI["api"], "web_image_id": NEWI["web"]})
+              "baseline": self.base(), "api_image_id": NEWI["api"], "web_image_id": NEWI["web"]})
         write(self.state / ("dual-%s.json" % SRC), {"source_sha": SRC, "status": "RECOVERY_MANUALLY_REQUIRED", "old_images": OLDI, "new_images": NEWI, "original_layers": lay})
         write(self.etc / "qa525-sensitive-reviewed.json", {"source_sha": SRC, "release_asset_sha256": DIGEST})
         write(self.etc / "qa525-single-operator-postdb-approved.json", {"source_sha": SRC, "release_asset_sha256": DIGEST})
@@ -54,9 +54,12 @@ class Manual(unittest.TestCase):
 
     def tearDown(self): self._d.cleanup()
 
+    def base(self):
+        return {n: {"container_fingerprint": "c" * 64 if n in OLDI else "d" * 64, "image_id": OLDI.get(n, "sha256:" + "9" * 64), "running": True} for n in NAMES}
+
     def set(self, n, cid, img, st):
         rev = OLD if n in ("api", "web") else ""
-        write(self.cont / n, "%s %s %s centenario-qa-lab2 %s 2026-10-01T00:00:00.1Z %s" % (cid, img, st, n, rev), 0o644)
+        write(self.cont / n, "%s %s %s centenario-qa-lab2 %s %s" % (cid, img, st, n, rev), 0o644)
 
     def stubs(self):
         T = str(self.t)
@@ -74,7 +77,7 @@ if [ "$1" = compose ]; then
   [ "$svc" = api ] && [ -n "${SLOW_AFTER_API:-}" ] && echo "$SLOW_AFTER_API" > @T@/slow
   [ -n "${HEALTH_FAIL_AFTER_COMPOSE:-}" ] && : > @T@/health_fail
   img=$(jq -r ".services.$svc.image" "$ov")
-  echo "$(cut -d' ' -f1 @T@/containers/$svc | sed 's/./f/g') $img running centenario-qa-lab2 $svc 2026-11-18T01:00:00.1Z $(cut -d' ' -f7 @T@/containers/$svc)" > @T@/containers/$svc
+  echo "$(cut -d' ' -f1 @T@/containers/$svc | sed 's/./f/g') $img running centenario-qa-lab2 $svc $(cut -d' ' -f6 @T@/containers/$svc)" > @T@/containers/$svc
   # rev follows the image: new image => da274d65, else OLD
   exit 0
 fi
@@ -98,7 +101,7 @@ esac''')
         script = f'''set -Eeuo pipefail
 export PATH="{self.bin}:$PATH"
 sudo() {{ "$@"; }}
-SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; GO_START=2026-11-18T00:13:00Z; G6_END=$(( $(date -u +%s) + 90000 )); WORKDIR="{self.t}"; ENVF=/dev/null; PROJ=centenario-qa-lab2
+SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; G6_END=$(( $(date -u +%s) + 90000 )); WORKDIR="{self.t}"; ENVF=/dev/null; PROJ=centenario-qa-lab2
 DEPS=(keycloak postgres minio gateway clamav); ONES=(db-grants migrator minio-init); HPATHS=(/ /health/web /health/ready /identity/realms/pmgm/.well-known/openid-configuration)
 STATE="{self.state}"; OWNER="$(id -u):$(id -g)"; SITE=https://x.invalid
 J="$STATE/dual-$SRC.json"; P="$STATE/prepared.json"; M="$STATE/expired-prepared-archive-pending.json"
@@ -150,7 +153,7 @@ source "{self.t}/fn.sh"
     def test_dependency_container_changed_during_apply_rolls_back(self):
         # compose stub recreates only api/web; simulate a dependency recreation by wrapping docker
         p = self.bin / "docker"; body = p.read_text()
-        p.write_text(body.replace('if [ "$1" = compose ]; then', 'if [ "$1" = compose ]; then echo "ffff sha256:9 running centenario-qa-lab2 minio 2026-11-18T01:00:00.1Z " > @T@/containers/minio;'.replace("@T@", str(self.t)), 1))
+        p.write_text(body.replace('if [ "$1" = compose ]; then', 'if [ "$1" = compose ]; then echo "ffff sha256:9 running centenario-qa-lab2 minio " > @T@/containers/minio;'.replace("@T@", str(self.t)), 1))
         r = self.go("run_apply_locked")
         self.assertNotEqual(r.returncode, 0)
         self.assertNotIn("PASS_VERIFIED", r.stdout)
@@ -185,6 +188,17 @@ source "{self.t}/fn.sh"
                     self.assertIn("STOP_" + code, r.stdout); self.assertEqual(self.receipts(), [])
                 else:
                     self.stop_code(code, m)
+
+    def test_a0_prereq_checks_layers_and_overrides_without_changes(self):
+        r = self.go("prereq_ok; echo PREREQ_OK")
+        self.assertIn("PREREQ_OK", r.stdout, r.stdout + r.stderr)
+        for code, m in (("OVERRIDE_CONTENT", lambda: write(self.state / ("qa525-api-%s-%s.json" % (SRC, OLDI["api"][7:])), "{}\n")),
+                        ("OVERRIDE_MISSING_OR_UNTRUSTED", lambda: (self.state / ("qa525-web-%s-%s.json" % (SRC, NEWI["web"][7:]))).unlink()),
+                        ("LAYER_UNTRUSTED", lambda: os.chmod(self.t / "lay" / "w1.json", 0o666))):
+            with self.subTest(code=code):
+                self.tearDown(); self.setUp(); m()
+                r = self.go("prereq_ok; echo PREREQ_OK")
+                self.assertIn("STOP_" + code, r.stdout + r.stderr); self.assertNotIn("PREREQ_OK", r.stdout)
 
     def test_busy_lock(self):
         import fcntl
