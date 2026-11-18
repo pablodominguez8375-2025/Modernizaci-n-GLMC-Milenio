@@ -55,6 +55,20 @@ public sealed class WorkshopRegistryHttpTests
             await db.Database.MigrateAsync(ct);
             // Runbook de T1: tras migrar TODOS los modulos se reinstala la guardia para cubrir las tablas de otros contextos.
             // Sin esto la baja se rechaza a proposito (409 GUARD_INCOMPLETE, fail-closed).
+            // GATE de release (#1039): las columnas de organizacion que otros modulos crean DESPUES de T1 y aun no tienen guardia
+            // son exactamente las conocidas. Un modulo nuevo con columna de organizacion rompe esta prueba hasta que alguien lo
+            // revise y lo agregue aqui (o llame al instalador en su propia migracion): nunca queda sin cubrir en silencio.
+            var known = new HashSet<string>
+            {
+                "core.admission_cases.OrganizationId", "core.admission_cases.OriginOrganizationId",
+                "core.assembly_debt_decision_events.OrganizationId", "core.assembly_member_statuses.OrganizationId",
+                "core.assembly_treasury_certification_events.OrganizationId", "core.assembly_treasury_signed_reviews.OrganizationId",
+                "core.assembly_workshop_balance_events.OrganizationId", "core.calendar_events.OrganizationId",
+                "core.candidate_intake_profiles.OrganizationId", "core.data_quality_cases.OrganizationId",
+            };
+            var unknownUncovered = (await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct))
+                .Where(x => !known.Contains(x)).ToList();
+            Assert.True(unknownUncovered.Count == 0, "Columnas de organizacion nuevas sin guardia ni revision: " + string.Join(", ", unknownUncovered));
             await db.Database.ExecuteSqlRawAsync("SELECT core.install_workshop_retired_guard()", ct);
             Assert.Empty(await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct));
             db.Organizations.AddRange(parent, empty);
