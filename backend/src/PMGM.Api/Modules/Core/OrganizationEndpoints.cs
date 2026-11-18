@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PMGM.Api.Modules.SystemConfiguration;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
@@ -45,6 +46,8 @@ public static class OrganizationEndpoints
             // El Taller 00 de soporte no integra el directorio de organizaciones
             // reales. Su futura API privada tendrá autorización propia.
             .Where(x => x.Type.ToLower() != SupportWorkshopPolicy.OrganizationType)
+            // Un Taller dado de baja no es opción de selección (T2b #1035); su historia se lee por Id.
+            .Where(x => x.Status == WorkshopRegistryCodes.Active)
             .OrderBy(x => x.Type)
             .ThenBy(x => x.Number)
             .ThenBy(x => x.Name)

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
+using PMGM.Api.Modules.SystemConfiguration;
 namespace PMGM.Api.Modules.Hospitalaria;
 
 public static class HospitalariaContributionGenerator
@@ -14,7 +15,7 @@ public static class HospitalariaContributionGenerator
         var today = Today();
         var rates = await db.HospitalariaContributionRates.AsNoTracking().OrderBy(x => x.EffectiveFrom).ToListAsync(ct);
         if (rates.Count == 0) { await tx.CommitAsync(ct); return; }
-        var workshops = await db.Organizations.AsNoTracking().Where(x => x.Type == "workshop").Select(x => new { x.Id, x.CreatedAtUtc }).ToListAsync(ct);
+        var workshops = await db.Organizations.AsNoTracking().Where(x => x.Type == "workshop" && x.Status == WorkshopRegistryCodes.Active).Select(x => new { x.Id, x.CreatedAtUtc }).ToListAsync(ct);
         var existing = await db.HospitalariaContributionObligations.AsNoTracking().Select(x => new { x.OrganizationId, x.PeriodYear, x.PeriodMonth }).ToListAsync(ct);
         var keys = existing.Select(x => (x.OrganizationId, x.PeriodYear, x.PeriodMonth)).ToHashSet();
         var first = rates[0].EffectiveFrom;
