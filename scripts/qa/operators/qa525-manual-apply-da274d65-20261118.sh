@@ -105,8 +105,8 @@ apply_manual() {
     done <<<"${LAY[$n]}"
   done
   ov() { local s=$1 img=$2 p="$STATE/qa525-$1-$SRC-${2#sha256:}.json"
-    [[ -f "$p" && ! -L "$p" && "$(stat -c '%u:%g %a %h' -- "$p")" == "$OWNER 600 1" ]] || stop OVERRIDE_MISSING_OR_UNTRUSTED
-    [[ "$(cat -- "$p")" == "$(printf '{"services": {"%s": {"image": "%s"}}}' "$s" "$img")" ]] || stop OVERRIDE_CONTENT
+    [[ -f "$p" && ! -L "$p" && "$(stat -c '%u:%g %a %h' -- "$p")" == "$OWNER 600 1" ]] || stop OVERRIDE_MISSING_OR_UNTRUSTED >&2
+    [[ "$(cat -- "$p")" == "$(printf '{"services": {"%s": {"image": "%s"}}}' "$s" "$img")" ]] || stop OVERRIDE_CONTENT >&2
     printf '%s' "$p"; }
   local OV_NEW_API OV_NEW_WEB OV_OLD_API OV_OLD_WEB
   OV_NEW_API=$(ov api "$new_api"); OV_NEW_WEB=$(ov web "$new_web"); OV_OLD_API=$(ov api "$old_api"); OV_OLD_WEB=$(ov web "$old_web")
