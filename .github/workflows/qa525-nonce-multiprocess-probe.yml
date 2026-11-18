@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'tests/qa525_nonce_multiprocess_probe.py'
+      - 'tests/qa525_journal_durability_probe.py'
       - '.github/workflows/qa525-nonce-multiprocess-probe.yml'
   workflow_dispatch:
 jobs:
@@ -15,3 +16,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run independent process durability probe
         run: python3 tests/qa525_nonce_multiprocess_probe.py
+      - name: Run journal crash-boundary durability probe
+        run: python3 tests/qa525_journal_durability_probe.py
