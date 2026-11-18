@@ -93,9 +93,10 @@ class Fixture:
             p.chmod(0o755)
         T = str(self.t)
         stub("docker", ('name="${@: -1}"; name="${name#centenario-qa-lab2-}"; name="${name%-1}"; '
-                        'case "$*" in *config_files*) cat "@T@/containers/$name.layers" || exit 1;; *) cat "@T@/containers/$name" || exit 1;; esac').replace("@T@", T))
-        stub("curl", ('u="${@: -1}"; case "$u" in */qa-version.json) cat "@T@/public.json";; *) [ -e "@T@/health_fail" ] && exit 22; exit 0;; esac').replace("@T@", T))
+                        'case "$*" in *NetworkSettings*) echo "172.20.0.9 ";; *config_files*) cat "@T@/containers/$name.layers" || exit 1;; *) cat "@T@/containers/$name" || exit 1;; esac').replace("@T@", T))
+        stub("curl", ('u="${@: -1}"; case "$u" in http://172.20.0.9:8080/*) [ -e "@T@/api_direct_fail" ] && exit 22; exit 0;; http://172.20.0.9:80/health/web) [ -e "@T@/web_direct_fail" ] && exit 22; exit 0;; http://172.20.0.9:80/qa-version.json) cat "@T@/web_direct.json";; */qa-version.json) cat "@T@/public.json";; *) [ -e "@T@/health_fail" ] && exit 22; exit 0;; esac').replace("@T@", T))
         write(self.t / "public.json", self.public, 0o644)
+        write(self.t / "web_direct.json", self.public, 0o644)
 
     def functions(self):
         block = TEXT.split("# >>> FUNCTIONS", 1)[1].split("\n", 1)[1].split("# <<< FUNCTIONS", 1)[0]
@@ -224,6 +225,15 @@ class Reconcile(unittest.TestCase):
 
     def test_public_version_not_new(self):
         self.stop("PUBLIC_VERSION_NOT_NEW", lambda f: write(f.t / "public.json", {"environment": "QA_SYNTHETIC", "source_sha": "6" * 40}, 0o644))
+
+    def test_api_direct_not_ready(self):
+        self.stop("API_DIRECT_NOT_READY", lambda f: write(f.t / "api_direct_fail", "", 0o644))
+
+    def test_web_direct_unhealthy(self):
+        self.stop("WEB_DIRECT_NOT_HEALTHY", lambda f: write(f.t / "web_direct_fail", "", 0o644))
+
+    def test_web_direct_old_version(self):
+        self.stop("WEB_DIRECT_VERSION_NOT_NEW", lambda f: write(f.t / "web_direct.json", {"environment": "QA_SYNTHETIC", "source_sha": "6" * 40}, 0o644))
 
     def test_public_health(self):
         self.stop("PUBLIC_HEALTH", lambda f: write(f.t / "health_fail", "", 0o644))

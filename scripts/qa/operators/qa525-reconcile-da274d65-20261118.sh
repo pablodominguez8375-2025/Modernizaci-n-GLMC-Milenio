@@ -27,7 +27,7 @@ stop() { printf 'QA525_RECONCILE=STOP_%s_NO_RETRY\n' "$1"; exit 2; }
 priv() { [[ "$(sudo stat -c '%u:%g %a %h' -- "$1" 2>/dev/null || :)" == "$OWNER 600 1" ]] && sudo test -f "$1" && sudo test ! -L "$1"; }
 ev_has() { local rc=0; sudo grep -Eq "$1[: ]+$SRC\$" "$E" || rc=$?; case "$rc" in 0) return 0;; 1) return 1;; *) stop EVENTS_READ_ERROR;; esac; }
 state_ok() {
-  local f name line cid img st pj sv rev nonce names raw b cnt want lab nd R S
+  local f name line cid img st pj sv rev nonce names raw b cnt want lab nd R S ip
   priv "$J" || stop JOURNAL_UNTRUSTED
   priv "$P" || stop PREPARED_UNTRUSTED
   priv "$CUT" || stop CUT_UNTRUSTED
@@ -92,6 +92,14 @@ state_ok() {
       sudo jq -e --arg n "$name" --arg c "$cid" '.baseline[$n].container_fingerprint==$c and .baseline[$n].image_id=="'"$img"'"' "$P" >/dev/null || stop DEPENDENCY_CHANGED
     fi
   done
+  # sondeo HTTP DIRECTO a las instancias (mismo criterio del postflight de v4), antes de la salud pública
+  ip=$(sudo docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "centenario-qa-lab2-api-1" | awk '{print $1}') || stop API_IP
+  [[ "$ip" =~ ^[0-9.]+$ ]] || stop API_IP_INVALID
+  curl -fsS -o /dev/null --max-time 12 --proto '=http' "http://$ip:8080/health/ready" || stop API_DIRECT_NOT_READY
+  ip=$(sudo docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "centenario-qa-lab2-web-1" | awk '{print $1}') || stop WEB_IP
+  [[ "$ip" =~ ^[0-9.]+$ ]] || stop WEB_IP_INVALID
+  curl -fsS -o /dev/null --max-time 12 --proto '=http' "http://$ip:80/health/web" || stop WEB_DIRECT_NOT_HEALTHY
+  curl -fsS --max-time 12 --proto '=http' "http://$ip:80/qa-version.json" | jq -e --arg s "$SRC" '.environment=="QA_SYNTHETIC" and .source_sha==$s' >/dev/null || stop WEB_DIRECT_VERSION_NOT_NEW
   curl -fsS --max-time 30 --proto '=https' "$SITE/qa-version.json" | jq -e --arg s "$SRC" '.environment=="QA_SYNTHETIC" and .source_sha==$s' >/dev/null || stop PUBLIC_VERSION_NOT_NEW
   for f in /health/ready /identity/realms/pmgm/.well-known/openid-configuration; do curl -fsS -o /dev/null --max-time 30 --proto '=https' "$SITE$f" || stop PUBLIC_HEALTH; done
 }
