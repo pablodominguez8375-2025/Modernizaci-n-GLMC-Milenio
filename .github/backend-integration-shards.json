@@ -62,7 +62,8 @@
       "SupportLodgeDataHealthHttpTests",
       "QaSyntheticPlanContractTests",
       "InitialLoadWindowAtomicPostgreSqlTests",
-      "InitialLoadBatchLedgerPostgreSqlTests"
+      "InitialLoadBatchLedgerPostgreSqlTests",
+      "WorkshopRegistryHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
@@ -124,7 +125,8 @@
       "CalendarGradeAccessPostgreSqlTests",
       "CalendarNotificationRecipientPostgreSqlTests",
       "QaSyntheticPlanHttpTests",
-      "InitialLoadCsvPreviewHttpTests"
+      "InitialLoadCsvPreviewHttpTests",
+      "WorkshopRegistryPostgreSqlTests"
     ]
   }
 }
