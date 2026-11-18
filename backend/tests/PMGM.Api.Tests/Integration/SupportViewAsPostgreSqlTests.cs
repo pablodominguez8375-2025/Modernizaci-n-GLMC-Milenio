@@ -318,8 +318,9 @@ public sealed class SupportViewAsPostgreSqlTests
             var after = (await db.Database.GetAppliedMigrationsAsync(ct)).ToArray();
             Assert.Equal(100, after.Length);
             Assert.Contains(PMGM.Qa.Support00MigrationRunner.Target, after);
+            // Migrations created after the Support00 cut stay pending (never applied here): project legacy columns only.
             var support = Assert.Single(await db.Organizations.AsNoTracking()
-                .Where(o => o.Type == "support").ToListAsync(ct));
+                .Where(o => o.Type == "support").Select(o => new { o.Id, o.Number }).ToListAsync(ct));
             Assert.Equal(Guid.Parse("b12c0000-0000-4000-8000-000000000000"), support.Id);
             Assert.Equal("00", support.Number);
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -342,6 +343,25 @@ public sealed class SupportViewAsPostgreSqlTests
             [PMGM.Qa.Support00MigrationRunner.Target]);
         Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
             expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, "unknown"]));
+        // Migrations created after the cut may stay pending (they are never applied by MigrateAsync(Target))...
+        PMGM.Qa.Support00MigrationRunner.ValidateBefore(expected, expected,
+            [PMGM.Qa.Support00MigrationRunner.Target, "20261118150000_AddWorkshopRegistryState"]);
+        // ...but only well-formed IDs that sort after Target; Target must be first and never repeated.
+        foreach (var bad in new[] { "20261030223000_SeedSupportWorkshop00", "20261001000000_EarlierThanTarget", "unknown", "2026111815_Short",
+                     "20261118150000_AddWorkshopRegistryState\n" })
+            Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+                expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, bad]));
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, ["20261118150000_AddWorkshopRegistryState", PMGM.Qa.Support00MigrationRunner.Target]));
+        // Unique, strictly ascending and part of the assembly's known migrations.
+        const string later = "20261118150000_AddWorkshopRegistryState";
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, later, later]));
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, "20261120000000_B", "20261119000000_A"]));
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, "20261118160000_WellFormedButUnknown"], [later]));
+        PMGM.Qa.Support00MigrationRunner.ValidateBefore(expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, later], [later]);
         Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
             expected, expected.Skip(1).Append("different").ToArray(), [PMGM.Qa.Support00MigrationRunner.Target]));
         Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
