@@ -50,6 +50,19 @@ class Qa525VnextReleaseBoundPolicyTests(unittest.TestCase):
         p,r,t = fixture()
         p["migrations"][0]["arbitrary_unreviewed"] = True
         self.assertFalse(policy.plan_attested(p,r,t))
+    def test_ordered_set_hash_mismatch_rejected_even_with_matching_plan_pin(self):
+        p,r,t = fixture()
+        p["ordered_set_sha256"] = "sha256:" + "f" * 64
+        t["plan_sha256"] = "sha256:" + hashlib.sha256(policy.canonical(p)).hexdigest()
+        self.assertFalse(policy.plan_attested(p,r,t))
+    def test_duplicate_migration_id_rejected(self):
+        p,r,t = fixture()
+        p["migrations"].append(dict(p["migrations"][0]))
+        self.assertFalse(policy.plan_attested(p,r,t))
+    def test_invalid_migration_id_rejected(self):
+        p,r,t = fixture()
+        p["migrations"][0]["id"] = "invalid"
+        self.assertFalse(policy.plan_attested(p,r,t))
     def test_nonboolean_flag_rejected(self):
         p,r,t = fixture()
         p["migrations"][0]["additive"] = 1
