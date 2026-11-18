@@ -17,6 +17,7 @@ The simulated stack is NOT physical evidence (G6 or host): it is the executable 
 """
 import hashlib
 import importlib.util
+import threading
 from pathlib import Path
 import unittest
 
@@ -85,6 +86,11 @@ class SimStack:
         self.destructive = False
         self.preflight_ok = True
         self.supply_ok = True
+        # The signed GO, INDEPENDENT of the release dict the orchestrator receives: the host authenticates it, binds the
+        # pins and the nonce to it. A real harness must expose the same fields (sig_ok=False => everything fails closed).
+        self.go = {"sig_ok": True, "nonce": RELEASE["nonce"], "release_sha": SHA,
+                   "plan_sha256": policy.plan_digest(additive_plan())}
+        self._nonce_lock = threading.Lock()     # the one-shot store is atomic across processes
 
     def _box(self, step, image):
         self.counter += 1
@@ -107,9 +113,11 @@ class SimHost:
         self.calls = 0
         self.crash_at = crash_at
         self.crash_label = None
+        self.trace = []
 
     def _tick(self, label):
         self.calls += 1
+        self.trace.append(label)
         if self.crash_at is not None and self.calls == self.crash_at:
             self.crash_label = label
             raise E2eCrash(label)
@@ -133,7 +141,10 @@ class SimHost:
         self._tick("plan_attested")
         # REAL policy (#1036). Pins are built independently of the host world: from what was SIGNED
         # (the additive plan, release sha and image identities), never from what the world reports now.
-        pins = {"release_sha": SHA, "plan_sha256": policy.plan_digest(additive_plan()),
+        go = self.s.go
+        if go.get("sig_ok") is not True:        # unauthenticated pins are never trusted
+            return False
+        pins = {"release_sha": go["release_sha"], "plan_sha256": go["plan_sha256"],
                 "baseline_images": dict(BASE), "expected_images": dict(TARGET)}
         return policy.plan_attested(plan, release, pins)
 
@@ -159,10 +170,14 @@ class SimHost:
 
     def spend_nonce(self, nonce):
         self._tick("spend_nonce")
-        if nonce in self.s.nonces:
+        go = self.s.go
+        if go.get("sig_ok") is not True or nonce != go["nonce"]:   # only the exact authorized nonce can be spent
             return False
-        self.s.nonces.add(nonce)
-        return True
+        with self.s._nonce_lock:
+            if nonce in self.s.nonces:
+                return False
+            self.s.nonces.add(nonce)
+            return True
 
     def lease_alive(self):
         self._tick("lease_alive")
@@ -238,7 +253,7 @@ WORLD_API = (
     "snapshot", "world_is_applied", "history", "columns", "containers", "journal", "nonces", "locks_held", "lease",
     "migrate_runs", "recreates", "api_target_boots", "api_target_delay", "web_target_boots",
     "migrate_fails_before_commit", "migrate_commits_then_raises", "g6_ok", "g6_release", "destructive",
-    "preflight_ok", "supply_ok", "_box",
+    "preflight_ok", "supply_ok", "go", "_box",
 )
 HOST_PORTS = (
     "preflight", "supply", "migration_plan", "plan_attested", "evidence", "g6_evidence", "acquire_locks",
@@ -288,7 +303,7 @@ class Qa525AutoE2eContractSurface(E2eBase):
 
         class Spy(SimHost):
             def __getattribute__(self, name):
-                if not name.startswith("_") and name not in ("s", "calls", "crash_at", "crash_label"):
+                if not name.startswith("_") and name not in ("s", "calls", "crash_at", "crash_label", "trace"):
                     used.add(name)
                 return super().__getattribute__(name)
 
@@ -559,6 +574,72 @@ class Qa525AutoE2eCrashSweep(E2eBase):
         self.assertEqual(r["failure_class"], "BASELINE_EVIDENCE_INVALID")
         self.assertEqual(s.snapshot(), before)
         self.assertEqual(s.migrate_runs, 1)
+
+
+class Qa525AutoE2eGoAuthorization(E2eBase):
+    """Independent signed GO: exact nonce, bound pins, one-shot across restarts and processes, fail-closed when unsigned."""
+
+    def stop_untouched(self, release=None):
+        before = self.stack.snapshot()
+        r = self.go(release=release)
+        self.assertEqual(r["outcome"], auto.OUT_STOP)
+        self.assertEqual(self.stack.snapshot(), before)
+        self.assertEqual(self.stack.nonces, set())
+        self.assert_invariants()
+        return r
+
+    def test_g1_changed_nonce_is_not_spendable_and_burns_nothing(self):
+        r = self.stop_untouched(dict(RELEASE, nonce="x" * 32))
+        self.assertEqual(r["failure_class"], "NONCE_NOT_SPENDABLE")
+
+    def test_g2_unsigned_go_fails_closed_before_any_effect(self):
+        self.stack.go["sig_ok"] = False
+        self.stop_untouched()
+
+    def test_g3_go_bound_to_another_release_or_plan_is_not_attested(self):
+        for key, value in (("release_sha", "b" * 40), ("plan_sha256", "sha256:" + "0" * 64)):
+            self.stack = self.new_world(self.clock)
+            self.stack.go[key] = value
+            self.stop_untouched()
+
+    def test_g4_nonce_is_one_shot_after_success_and_after_restart(self):
+        r = self.go()
+        self.assertEqual(r["outcome"], auto.OUT_APPLIED)
+        self.assertEqual(self.stack.nonces, {RELEASE["nonce"]})
+        for _ in range(2):                                       # a "restarted" process: fresh host over the same world
+            again = self.go(host=self.new_host(self.stack))
+            self.assertNotEqual(again["outcome"], auto.OUT_APPLIED)
+        self.assertEqual(self.stack.migrate_runs, 1)
+        self.assert_invariants()
+
+    def test_g5_two_concurrent_processes_spend_the_nonce_exactly_once(self):
+        results, barrier = [], threading.Barrier(8)
+
+        def worker():
+            host = self.new_host(self.stack)
+            barrier.wait()
+            results.append(host.spend_nonce(RELEASE["nonce"]))
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        self.assertEqual(results.count(True), 1)
+        self.assertEqual(self.stack.nonces, {RELEASE["nonce"]})
+
+    def test_g6_crash_after_spend_before_any_mutation_leaves_nonce_spent_and_blocks_replay(self):
+        probe = self.new_host(self.new_world(E2eClock()))
+        auto.run(probe, RELEASE, clock=self.clock, sleep=self.clock.sleep)
+        crash_at = probe.trace.index("journal:PENDING") + 1
+        self.assertLess(probe.trace.index("spend_nonce"), crash_at - 1)
+        host = self.new_host(self.stack, crash_at=crash_at)
+        with self.assertRaises(E2eCrash):
+            auto.run(host, RELEASE, clock=self.clock, sleep=self.clock.sleep)
+        self.assertEqual(self.stack.nonces, {RELEASE["nonce"]})
+        self.assertEqual((self.stack.migrate_runs, self.stack.history, self.stack.columns), (0, [], set()))
+        self.stack.locks_held = False                            # the OS drops the lock with the process
+        again = self.go()
+        self.assertNotEqual(again["outcome"], auto.OUT_APPLIED)  # spent nonce / PENDING journal: never a blind rerun
+        self.assertEqual(self.stack.migrate_runs, 0)
 
 
 class Qa525AutoE2eRealPolicyBridge(E2eBase):
