@@ -11,6 +11,8 @@ SRC=da274d651d8e9e056525413406c0aab62131504f
 DIGEST=sha256:f869f3e12e048d70aaecf5e4e2f5b348d6378cf02aaa9fc0e5ee3243460f2e82
 OLD=6eed4f00b7917da3cca36bbda70e16d16328648d
 G6_END=1795129839
+FWD_BUDGET=480
+RB_BUDGET=480
 WORKDIR=/opt/centenario/qa-lab-firstboot/recovery-v2
 ENVF=/opt/centenario/qa-auto-lite/empty.env
 PROJ=centenario-qa-lab2
@@ -85,6 +87,11 @@ state_ok() {
   curl -fsS --max-time 30 --proto '=https' "$SITE/qa-version.json" | jq -e --arg s "$OLD" '.environment=="QA_SYNTHETIC" and .source_sha==$s' >/dev/null || stop PUBLIC_VERSION_NOT_OLD
   for f in /health/ready /identity/realms/pmgm/.well-known/openid-configuration; do curl -fsS -o /dev/null --max-time 30 --proto '=https' "$SITE$f" || stop PUBLIC_HEALTH; done
 }
+no_prior_attempt() {
+  local raw
+  raw=$(sudo find "$STATE" -maxdepth 1 -name "manual-apply-$SRC-*") || stop ATTEMPT_SCAN
+  [[ -z "$raw" ]] || stop MANUAL_APPLY_ALREADY_ATTEMPTED
+}
 prereq_ok() {
   local n k f s img p ls
   for n in api web; do
@@ -107,7 +114,7 @@ prereq_ok() {
 }
 apply_manual() {
   local n i f b out ts R RS new_api new_web old_api old_web ov line cid
-  declare -A LAY BEFORE
+  declare -A LAY
   state_ok
   [[ "$(date -u +%s)" -lt $((G6_END-3600)) ]] || stop G6_WINDOW_TOO_CLOSE_OR_EXPIRED
   new_api=$(jq -r '.new_images.api' "$J"); new_web=$(jq -r '.new_images.web' "$J")
@@ -128,35 +135,61 @@ apply_manual() {
     printf '%s' "$p"; }
   local OV_NEW_API OV_NEW_WEB OV_OLD_API OV_OLD_WEB
   OV_NEW_API=$(ov api "$new_api"); OV_NEW_WEB=$(ov web "$new_web"); OV_OLD_API=$(ov api "$old_api"); OV_OLD_WEB=$(ov web "$old_web")
-  info() { docker inspect --format '{{.Id}} {{.Image}} {{.State.Status}} {{index .Config.Labels "com.docker.compose.project"}} {{index .Config.Labels "com.docker.compose.service"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$PROJ-$1-1"; }
+  info() { docker inspect --format '{{.Id}} {{.Image}} {{.State.Status}} {{.State.Restarting}} {{.RestartCount}}' "$PROJ-$1-1"; }
+  no_prior_attempt
+  local DL=0 OLD_API_CID OLD_WEB_CID NEW_API_CID NEW_WEB_CID jsha
+  declare -A BEFORE
   for n in "${DEPS[@]}" "${ONES[@]}"; do line=$(info "$n") || stop BEFORE_INSPECT; read -r cid _ <<<"$line"; BEFORE[$n]=$cid; done
+  line=$(info api) || stop BEFORE_INSPECT; read -r OLD_API_CID _ <<<"$line"
+  line=$(info web) || stop BEFORE_INSPECT; read -r OLD_WEB_CID _ <<<"$line"
+  jsha=$(sha256sum -- "$J" | cut -d' ' -f1)
+  dl_ok() { [[ "$(date +%s)" -lt "$DL" ]]; }
+  bound() { # service image previous_container_id: instancia NUEVA, de esa imagen, corriendo y sin reinicios
+    local line cid img st rs rc
+    line=$(info "$1") || return 1; read -r cid img st rs rc <<<"$line"
+    [[ "$cid" != "$3" && "$img" == "$2" && "$st" == running && "$rs" == false && "$rc" == 0 ]]; }
   compose() { # service override
+    dl_ok || return 1
     local s=$1 e=$2 args=(compose --project-name "$PROJ" --project-directory "$WORKDIR" --env-file "$ENVF") f
     while IFS= read -r f; do args+=(--file "$f"); done <<<"${LAY[$s]}"
     args+=(--file "$e" up --detach --no-deps --no-build --pull never --force-recreate --wait --wait-timeout 90 "$s")
     ( cd "$WORKDIR" && docker "${args[@]}" >/dev/null 2>&1 ); }
-  ready() { # espera salud real y versión pública $1 (hasta ~150 s)
+  ready_api() { # API: contenedor NUEVO ligado a imagen+ID y salud pública OK; plazo global
+    local k
+    for k in $(seq 1 45); do
+      dl_ok || return 1
+      if bound api "$1" "$2" && curl -fsS -o /dev/null --max-time 12 --proto '=https' "$SITE/health/ready" 2>/dev/null; then return 0; fi
+      sleep 2
+    done; return 1; }
+  ready() { # salud pública completa + versión pública $1; plazo global
     local k p c
     for k in $(seq 1 75); do
+      dl_ok || return 1
       c=0
       for p in "${HPATHS[@]}"; do curl -fsS -o /dev/null --max-time 12 --proto '=https' "$SITE$p" 2>/dev/null || c=1; done
       if [[ "$c" == 0 ]] && curl -fsS --max-time 12 --proto '=https' "$SITE/qa-version.json" 2>/dev/null | jq -e --arg s "$1" '.environment=="QA_SYNTHETIC" and .source_sha==$s' >/dev/null; then return 0; fi
       sleep 2
     done; return 1; }
-  verify() { # api_img web_img
-    local n line cid img st
-    for n in api web; do line=$(info "$n") || return 1; read -r cid img st _ <<<"$line"; [[ "$st" == running ]] || return 1
+  verify() { # api_img web_img: imágenes, estado y dependencias/one-shots intactas
+    local n line cid img st rs rc
+    for n in api web; do line=$(info "$n") || return 1; read -r cid img st rs rc <<<"$line"; [[ "$st" == running && "$rs" == false ]] || return 1
       [[ "$n" == api && "$img" == "$1" || "$n" == web && "$img" == "$2" ]] || return 1; done
     for n in "${DEPS[@]}" "${ONES[@]}"; do line=$(info "$n") || return 1; read -r cid img st _ <<<"$line"; [[ "$cid" == "${BEFORE[$n]}" ]] || return 1; done
     for n in "${DEPS[@]}"; do line=$(info "$n") || return 1; read -r cid img st _ <<<"$line"; [[ "$st" == running ]] || return 1; done; }
-  forward() { compose api "$OV_NEW_API" && ready_api && compose web "$OV_NEW_WEB" && ready "$SRC" && verify "$new_api" "$new_web"; }
-  ready_api() { local k; for k in $(seq 1 45); do curl -fsS -o /dev/null --max-time 12 --proto '=https' "$SITE/health/ready" 2>/dev/null && return 0; sleep 2; done; return 1; }
-  rollback() { compose web "$OV_OLD_WEB" || :; compose api "$OV_OLD_API" || :; ready "$OLD" && verify "$old_api" "$old_web"; }
+  forward() { DL=$(( $(date +%s) + FWD_BUDGET ))
+    compose api "$OV_NEW_API" && ready_api "$new_api" "$OLD_API_CID" && compose web "$OV_NEW_WEB" && bound web "$new_web" "$OLD_WEB_CID" && ready "$SRC" && bound api "$new_api" "$OLD_API_CID" && verify "$new_api" "$new_web"; }
+  rollback() { local fa fw line; DL=$(( $(date +%s) + RB_BUDGET ))
+    line=$(info api) && read -r fa _ <<<"$line" || fa=""; line=$(info web) && read -r fw _ <<<"$line" || fw=""
+    compose web "$OV_OLD_WEB" || :; compose api "$OV_OLD_API" || :
+    bound web "$old_web" "$fw" && ready_api "$old_api" "$fa" && ready "$OLD" && verify "$old_api" "$old_web"; }
   ts=$(date -u +%Y%m%dT%H%M%SZ); RS="$STATE/manual-apply-$SRC-$ts.started.json"; R="$STATE/manual-apply-$SRC-$ts.result.json"
-  receipt() { # status path
-    ( set -C; jq -n -c --arg s "$SRC" --arg st "$1" --arg t "$ts" --arg na "$new_api" --arg nw "$new_web" --arg oa "$old_api" --arg ow "$old_web" '{status:$st,source_sha:$s,started:$t,new_images:{api:$na,web:$nw},old_images:{api:$oa,web:$ow},operator_journal_untouched:true}' > "$2" ) && chmod 600 "$2" && sync -f "$2"; }
+  receipt() { # status path; ancla: journal sha, imágenes e IDs de contenedor antes/después, versión pública
+    local na nw pv
+    na=$(info api 2>/dev/null | cut -d' ' -f1 || :); nw=$(info web 2>/dev/null | cut -d' ' -f1 || :)
+    pv=$(curl -fsS --max-time 12 --proto '=https' "$SITE/qa-version.json" 2>/dev/null | jq -c '{environment,source_sha}' 2>/dev/null || echo null)
+    ( set -C; jq -n -c --arg s "$SRC" --arg st "$1" --arg t "$ts" --arg na "$new_api" --arg nw "$new_web" --arg oa "$old_api" --arg ow "$old_web" --arg js "$jsha" --arg oac "$OLD_API_CID" --arg owc "$OLD_WEB_CID" --arg cac "$na" --arg cwc "$nw" --argjson pv "${pv:-null}" '{status:$st,source_sha:$s,started:$t,new_images:{api:$na,web:$nw},old_images:{api:$oa,web:$ow},old_containers:{api:$oac,web:$owc},current_containers:{api:$cac,web:$cwc},public_version:$pv,operator_journal_sha256:$js,operator_journal_status_at_start:"RECOVERY_MANUALLY_REQUIRED",operator_journal_untouched:true,no_second_apply_without_approved_reconciliation:true}' > "$2" ) && chmod 600 "$2" && sync -f "$2"; }
   receipt MANUAL_APPLY_STARTED "$RS" || stop RECEIPT_START
-  if forward; then receipt MANUAL_APPLY_VERIFIED_API_WEB "$R" || stop RECEIPT_RESULT; printf 'QA525_MANUAL_APPLY=PASS_VERIFIED api=%s web=%s\n' "$new_api" "$new_web"; return 0; fi
+  if forward; then receipt MANUAL_APPLY_VERIFIED_API_WEB "$R" || stop RECEIPT_RESULT; printf 'QA525_MANUAL_APPLY=PASS_VERIFIED api=%s web=%s\nQA525_MANUAL_APPLY_NOTE=journal del operador sigue RECOVERY_MANUALLY_REQUIRED; NO reejecutar; conciliar con procedimiento aprobado\n' "$new_api" "$new_web"; return 0; fi
   if rollback; then receipt MANUAL_APPLY_ROLLED_BACK_VERIFIED "$R" || :; stop MANUAL_APPLY_FAILED_ROLLED_BACK_OK; fi
   receipt MANUAL_APPLY_ROLLBACK_FAILED_MANUAL_RECOVERY "$R" || :; stop MANUAL_APPLY_ROLLBACK_FAILED_MANUAL_RECOVERY
 }
@@ -184,7 +217,7 @@ hold_locks() {
 run_apply_locked() {
   local l body rc=0
   for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; done
-  body="set -Eeuo pipefail; umask 077; $(declare -p SRC DIGEST OLD G6_END WORKDIR ENVF PROJ DEPS ONES HPATHS STATE OWNER J P M E CUT F LOCKS SITE); $(declare -f stop priv ev_has state_ok prereq_ok lock_hook hold_locks apply_manual); sudo() { \"\$@\"; }; hold_locks; apply_manual"
+  body="set -Eeuo pipefail; umask 077; $(declare -p SRC DIGEST OLD G6_END FWD_BUDGET RB_BUDGET WORKDIR ENVF PROJ DEPS ONES HPATHS STATE OWNER J P M E CUT F LOCKS SITE); $(declare -f stop priv ev_has state_ok no_prior_attempt prereq_ok lock_hook hold_locks apply_manual); sudo() { \"\$@\"; }; hold_locks; apply_manual"
   sudo bash -c "$body" || rc=$?
   [[ "$rc" == 0 ]] || stop MANUAL_APPLY_FAILED_SEE_ABOVE
 }
@@ -201,6 +234,7 @@ for l in "${LOCKS[@]}"; do priv "$l" || stop LOCK_FILE_UNTRUSTED_OR_MISSING; don
 s=$(sudo "$L" --status) || stop STATUS
 printf '%s\n' "$s" | jq -e '.status=="QA525_UPDATE_STATUS_READ_ONLY" and .services_running==true and .prepared_exists==true and .archive_reconciliation_required==false and .may_apply==false' >/dev/null || stop STATUS_MISMATCH
 state_ok
+no_prior_attempt
 prereq_ok
 [[ "$(date -u +%s)" -lt $((G6_END-3600)) ]] || stop G6_WINDOW_TOO_CLOSE_OR_EXPIRED
 printf 'QA525_MANUAL_A0=PASS_BASELINE_RESTORED_READY_TO_APPLY runtime=%s\n' "$OLD"

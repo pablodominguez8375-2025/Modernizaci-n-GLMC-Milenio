@@ -69,16 +69,19 @@ class Manual(unittest.TestCase):
         stub("docker", r'''
 echo "$@" >> @T@/docker.log
 if [ "$1" = image ]; then echo "da274d651d8e9e056525413406c0aab62131504f"; exit 0; fi
-if [ "$1" = inspect ]; then n="${@: -1}"; n="${n#centenario-qa-lab2-}"; n="${n%-1}"; cat "@T@/containers/$n" || exit 1; exit 0; fi
+if [ "$1" = inspect ]; then n="${@: -1}"; n="${n#centenario-qa-lab2-}"; n="${n%-1}"; [ -f "@T@/containers/$n" ] || exit 1
+  case "$*" in *Restarting*) read -r a b c _ < "@T@/containers/$n"; echo "$a $b $c false 0";; *) cat "@T@/containers/$n";; esac; exit 0; fi
 if [ "$1" = compose ]; then
   svc="${@: -1}"; ov=""; prev=""; for a in "$@"; do [ "$prev" = --file ] && ov="$a"; prev="$a"; done
   c=$(cat @T@/ctl_count 2>/dev/null || echo 0); c=$((c+1)); echo $c > @T@/ctl_count
   [ "${FAIL_COMPOSE_AT:-0}" = "$c" ] && exit 1
   [ "$svc" = api ] && [ -n "${SLOW_AFTER_API:-}" ] && echo "$SLOW_AFTER_API" > @T@/slow
   [ -n "${HEALTH_FAIL_AFTER_COMPOSE:-}" ] && : > @T@/health_fail
+  [ -n "${STUB_NO_RECREATE:-}" ] && exit 0
   img=$(jq -r ".services.$svc.image" "$ov")
-  echo "$(cut -d' ' -f1 @T@/containers/$svc | sed 's/./f/g') $img running centenario-qa-lab2 $svc $(cut -d' ' -f6 @T@/containers/$svc)" > @T@/containers/$svc
-  # rev follows the image: new image => da274d65, else OLD
+  st=running; [ "${NEW_API_DOWN:-}" = 1 ] && [ "$svc" = api ] && [ "$img" = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ] && st=exited
+  cid=$(printf '%064x' $((c+11256832)))
+  echo "$cid $img $st centenario-qa-lab2 $svc $(cut -d' ' -f6 @T@/containers/$svc)" > @T@/containers/$svc
   exit 0
 fi
 exit 0''')
@@ -101,7 +104,7 @@ esac''')
         script = f'''set -Eeuo pipefail
 export PATH="{self.bin}:$PATH"
 sudo() {{ "$@"; }}
-SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; G6_END=$(( $(date -u +%s) + 90000 )); WORKDIR="{self.t}"; ENVF=/dev/null; PROJ=centenario-qa-lab2
+SRC={SRC}; DIGEST={DIGEST}; OLD={OLD}; G6_END=$(( $(date -u +%s) + 90000 )); FWD_BUDGET=${{T_FWD:-480}}; RB_BUDGET=${{T_RB:-480}}; WORKDIR="{self.t}"; ENVF=/dev/null; PROJ=centenario-qa-lab2
 DEPS=(keycloak postgres minio gateway clamav); ONES=(db-grants migrator minio-init); HPATHS=(/ /health/web /health/ready /identity/realms/pmgm/.well-known/openid-configuration)
 STATE="{self.state}"; OWNER="$(id -u):$(id -g)"; SITE=https://x.invalid
 J="$STATE/dual-$SRC.json"; P="$STATE/prepared.json"; M="$STATE/expired-prepared-archive-pending.json"
@@ -199,6 +202,36 @@ source "{self.t}/fn.sh"
                 self.tearDown(); self.setUp(); m()
                 r = self.go("prereq_ok; echo PREREQ_OK")
                 self.assertIn("STOP_" + code, r.stdout + r.stderr); self.assertNotIn("PREREQ_OK", r.stdout)
+
+    def test_old_healthy_new_api_down_is_not_success(self):
+        """Public health stays green (old instance semantics) but the NEW api container is down: must not pass."""
+        r = self.go("run_apply_locked", {"NEW_API_DOWN": "1"})
+        self.assertNotEqual(r.returncode, 0); self.assertNotIn("PASS_VERIFIED", r.stdout)
+        self.assertIn("MANUAL_APPLY_FAILED_ROLLED_BACK_OK", r.stdout); self.assertEqual(self.images(), OLDI)
+
+    def test_no_recreation_is_not_success_even_if_public_health_ok(self):
+        r = self.go("run_apply_locked", {"STUB_NO_RECREATE": "1"})
+        self.assertNotEqual(r.returncode, 0); self.assertNotIn("PASS_VERIFIED", r.stdout)
+        res = [p for p in self.receipts() if p.name.endswith(".result.json")]
+        self.assertNotEqual(json.loads(res[0].read_text())["status"], "MANUAL_APPLY_VERIFIED_API_WEB")
+
+    def test_global_deadline_forward_fails_closed_then_rolls_back(self):
+        r = self.go("run_apply_locked", {"T_FWD": "0"})
+        self.assertNotEqual(r.returncode, 0); self.assertNotIn("PASS_VERIFIED", r.stdout)
+        self.assertIn("MANUAL_APPLY_FAILED_ROLLED_BACK_OK", r.stdout); self.assertEqual(self.images(), OLDI)
+
+    def test_second_apply_refused_after_any_attempt(self):
+        write(self.state / ("manual-apply-%s-20261118T000000Z.started.json" % SRC), "{}")
+        r = self.go("run_apply_locked"); self.assertIn("STOP_MANUAL_APPLY_ALREADY_ATTEMPTED", r.stdout + r.stderr)
+        self.assertEqual(self.images(), OLDI)
+        r = self.go("no_prior_attempt; echo OK"); self.assertIn("STOP_MANUAL_APPLY_ALREADY_ATTEMPTED", r.stdout + r.stderr)
+
+    def test_receipt_anchors(self):
+        r = self.go("run_apply_locked", {"SLOW_AFTER_API": "2"}); self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        d = json.loads([p for p in self.receipts() if p.name.endswith(".result.json")][0].read_text())
+        for k in ("operator_journal_sha256", "old_containers", "current_containers", "public_version", "new_images", "old_images"): self.assertIn(k, d)
+        self.assertEqual(d["operator_journal_sha256"], self.orig_journal); self.assertEqual(d["public_version"]["source_sha"], SRC)
+        self.assertTrue(d["no_second_apply_without_approved_reconciliation"]); self.assertIn("conciliar", r.stdout)
 
     def test_busy_lock(self):
         import fcntl
