@@ -51,9 +51,11 @@ EXPECT = frozenset({"repository", "source_repository_id", "installed", "classifi
 BUILD_ARG_KEYS = frozenset({"VITE_API_BASE_URL", "VITE_USE_MOCKS", "VITE_OIDC_AUTHORITY",
                             "VITE_OIDC_CLIENT_ID", "VITE_OIDC_SCOPE", "VITE_OIDC_ALLOW_HTTP_LOCAL",
                             "VITE_OIDC_ALLOW_HTTP_QA"})
-# OCI config keys that define how the WEB container runs; Labels are excluded (CI metadata).
-SHAPE_KEYS = ("Cmd", "Entrypoint", "Env", "ExposedPorts", "Healthcheck", "StopSignal", "User",
-              "Volumes", "WorkingDir")
+# OCI config keys that define how the WEB container runs (P2 of the independent review:
+# Labels, Shell and OnBuild are included too; the workflow adds no labels of its own).
+SHAPE_KEYS = ("Cmd", "Entrypoint", "Env", "ExposedPorts", "Healthcheck", "Labels", "OnBuild",
+              "Shell", "StopSignal", "User", "Volumes", "WorkingDir")
+MAX_ISSUE_AGE_S = 7 * 24 * 3600
 
 # Decisions (not authorizations). Stop codes are `reject`.
 AUTO_WEB_CANDIDATE = "AUTO_WEB_CANDIDATE_CHECKED_NO_APPLY"
@@ -115,12 +117,17 @@ def image_binding(image_config, content_layer_count):
     Used by CI to fill the envelope and by the host on the LOADED image (review P1-3)."""
     if type(image_config) is not dict or type(content_layer_count) is not int or content_layer_count < 1:
         raise Stop("IMAGE_CONFIG_INVALID")
+    pairs = (("config", "Config"), ("rootfs", "RootFS"), ("architecture", "Architecture"), ("os", "Os"))
+    if any(lower in image_config and upper in image_config for lower, upper in pairs):
+        raise Stop("IMAGE_CONFIG_AMBIGUOUS")  # OCI and docker-inspect spellings must not coexist
     cfg = image_config.get("config", image_config.get("Config"))
     rootfs = image_config.get("rootfs", image_config.get("RootFS"))
     arch = image_config.get("architecture", image_config.get("Architecture"))
     osname = image_config.get("os", image_config.get("Os"))
     if type(cfg) is not dict or type(rootfs) is not dict or type(arch) is not str or type(osname) is not str:
         raise Stop("IMAGE_CONFIG_INVALID")
+    if "diff_ids" in rootfs and "Layers" in rootfs:
+        raise Stop("IMAGE_CONFIG_AMBIGUOUS")
     diff_ids = rootfs.get("diff_ids", rootfs.get("Layers"))
     if (type(diff_ids) is not list or len(diff_ids) <= content_layer_count
             or any(type(d) is not str or DIGEST.fullmatch(d) is None for d in diff_ids)):
@@ -278,7 +285,9 @@ def check(raw, *, expect, classifier_module, now):
         raise Stop("ENVELOPE_SEQUENCE_OUTSIDE_POLICY")
 
     issued, start, end = _when(env["issued_at"]), _when(env["not_before"]), _when(env["expires_at"])
-    if not issued <= start < end or (end - start).total_seconds() > MAX_VALIDITY_S:
+    if (not issued <= start < end or (end - start).total_seconds() > MAX_VALIDITY_S
+            or (start - issued).total_seconds() > MAX_VALIDITY_S
+            or (now - issued).total_seconds() > MAX_ISSUE_AGE_S):
         raise Stop("ENVELOPE_WINDOW_INVALID")
     if now >= end:
         raise Stop("ENVELOPE_EXPIRED")

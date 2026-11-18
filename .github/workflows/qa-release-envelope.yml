@@ -25,7 +25,60 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  e2e:
+    # Runs npm/vite/Chrome on candidate code: NO OIDC token permission, NO attestations (lesson: untrusted
+    # dependencies must never share a job with the signing permission).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Only dev
+        run: test "$GITHUB_REF" = "refs/heads/dev"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: F4-B shadow E2E gate (mock showcase, every view, console errors recorded)
+        run: |
+          set -euo pipefail
+          npm ci --prefix frontend --ignore-scripts --no-audit --no-fund --loglevel=error
+          VITE_USE_MOCKS=true VITE_BASE_PATH=/Modernizaci-n-GLMC-Milenio/ VITE_API_BASE_URL= \
+            VITE_OIDC_AUTHORITY= VITE_OIDC_CLIENT_ID= VITE_SHOWCASE_SHA="$GITHUB_SHA" \
+            npx --prefix frontend vite build frontend --outDir "$RUNNER_TEMP/site/Modernizaci-n-GLMC-Milenio"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/site" >/dev/null 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ >/dev/null && break; sleep 0.5; done
+          BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          mkdir -p "$RUNNER_TEMP/e2e"
+          # Record only: a failed walk or console errors make the F4-B shadow verdict MANUAL; they
+          # never block the F4-A envelope.
+          PMGM_VISUAL_MODE=pr node .github/scripts/capture-showcase-views.mjs "$BROWSER" \
+            http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ "$RUNNER_TEMP/e2e" || true
+          test -f "$RUNNER_TEMP/e2e/console-errors.json" || echo '{}' > "$RUNNER_TEMP/e2e/console-errors.json"
+      - name: F4-B shadow AST facts (TypeScript compiler runs here, never in the signing job)
+        env:
+          INSTALLED_JSON: ${{ inputs.installed_json }}
+        run: |
+          set -euo pipefail
+          GITHUB_SHA="$GITHUB_SHA" python3 -I scripts/qa/qa525-vnext-release-envelope-ci.py --repo . \
+            --installed-json "$INSTALLED_JSON" --candidate-sha "$GITHUB_SHA" --sequence 1 \
+            --issued-at x --not-before x --expires-at x --image-inspect x --image-archive x \
+            --base-digests-json x --build-args-json x --content-layer-count 2 --out-dir "$RUNNER_TEMP/e2e" \
+            --emit-f4b-facts "$RUNNER_TEMP/e2e/f4b-facts.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: autoweb-e2e-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/e2e/console-errors.json
+            ${{ runner.temp }}/e2e/f4b-facts.json
+          if-no-files-found: error
+          retention-days: 7
+
   envelope:
+    needs: e2e
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -41,6 +94,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Fetch the E2E report produced WITHOUT id-token permission
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: autoweb-e2e-${{ github.sha }}
+          path: ${{ runner.temp }}/e2e
       - name: Resolve base images by digest
         run: |
           set -euo pipefail
@@ -48,7 +106,7 @@ jobs:
           node=$(docker image inspect --format '{{index .RepoDigests 0}}' node:24-alpine | cut -d@ -f2)
           nginx=$(docker image inspect --format '{{index .RepoDigests 0}}' nginx:stable-alpine | cut -d@ -f2)
           printf '{"build":"%s","final":"%s"}' "$node" "$nginx" > "$RUNNER_TEMP/base-digests.json"
-      - name: Build WEB image (no pull: uses the digests resolved above)
+      - name: "Build WEB image (no pull, uses the digests resolved above)"
         run: |
           set -euo pipefail
           args=()
@@ -75,10 +133,11 @@ jobs:
             --image-inspect "$RUNNER_TEMP/image-inspect.json" --image-archive "$RUNNER_TEMP/web-image.tar" \
             --base-digests-json "$RUNNER_TEMP/base-digests.json" \
             --build-args-json ops/qa525/autoweb/web-build-args.json \
-            --content-layer-count "$CONTENT_LAYER_COUNT" --out-dir "$RUNNER_TEMP/out"
+            --content-layer-count "$CONTENT_LAYER_COUNT" --out-dir "$RUNNER_TEMP/out" \
+            --e2e-report "$RUNNER_TEMP/e2e/console-errors.json" --f4b-facts "$RUNNER_TEMP/e2e/f4b-facts.json"
           cp "$RUNNER_TEMP/web-image.tar" "$RUNNER_TEMP/out/web-image.tar"
           tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
-            -C "$RUNNER_TEMP/out" -cf "$RUNNER_TEMP/autoweb-release.tar" envelope.json sbom.json web-image.tar
+            -C "$RUNNER_TEMP/out" -cf "$RUNNER_TEMP/autoweb-release.tar" envelope.json f4b-shadow.json sbom.json web-image.tar
       - name: Attest the single asset and the envelope bytes
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:

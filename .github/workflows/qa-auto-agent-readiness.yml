@@ -6,6 +6,7 @@ on:
       - 'scripts/qa/qa-agent-readiness.py'
       - 'tests/test_qa_agent_readiness.py'
       - 'scripts/qa/qa525-vnext-*.py'
+      - 'scripts/qa/qa525-vnext-*.cjs'
       - 'tests/test_qa525_vnext_*.py'
       - 'docs/qa/QA-AUTO-DEPLOY-READINESS.md'
       - '.github/workflows/qa-auto-agent-readiness.yml'
@@ -15,6 +16,7 @@ on:
       - 'scripts/qa/qa-agent-readiness.py'
       - 'tests/test_qa_agent_readiness.py'
       - 'scripts/qa/qa525-vnext-*.py'
+      - 'scripts/qa/qa525-vnext-*.cjs'
       - 'tests/test_qa525_vnext_*.py'
       - '.github/workflows/qa-auto-agent-readiness.yml'
 permissions:
@@ -33,9 +35,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends restic
           restic version
+      - name: Install the pinned frontend toolchain for the F4-B shadow analyzer (TypeScript AST)
+        run: npm ci --prefix frontend --ignore-scripts --no-audit --no-fund --loglevel=error
       - name: Syntax and safety contract
         env:
           QA525_REQUIRE_RESTIC: "1"
+          QA525_REQUIRE_TS: "1"
         run: |
           python3 -m py_compile scripts/qa/qa-agent-readiness.py tests/test_qa_agent_readiness.py
           python3 -m unittest discover -s tests -p test_qa_agent_readiness.py -v

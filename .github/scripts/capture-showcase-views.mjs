@@ -120,8 +120,23 @@ await new Promise((resolve, reject) => {
 
 let nextId = 1
 const pending = new Map()
+// QA525 F4-B E2E gate: every uncaught exception, console.error/assert and browser error log
+// (e.g. failed resource loads) seen while walking the showcase. Written to console-errors.json;
+// PMGM_FAIL_ON_CONSOLE_ERRORS=1 makes any entry fatal.
+const consoleErrors = []
+function recordConsoleError(kind, text, url) {
+  consoleErrors.push({ kind, text: String(text ?? '').slice(0, 300), url: String(url ?? '').slice(0, 200) })
+}
 socket.addEventListener('message', event => {
   const message = JSON.parse(event.data)
+  if (message.method === 'Runtime.exceptionThrown') {
+    const d = message.params?.exceptionDetails
+    recordConsoleError('exception', d?.exception?.description ?? d?.text, d?.url)
+  } else if (message.method === 'Runtime.consoleAPICalled' && ['error', 'assert'].includes(message.params?.type)) {
+    recordConsoleError('console.' + message.params.type, (message.params.args ?? []).map(a => a.value ?? a.description ?? '').join(' '), message.params.stackTrace?.callFrames?.[0]?.url)
+  } else if (message.method === 'Log.entryAdded' && message.params?.entry?.level === 'error') {
+    recordConsoleError('log.' + (message.params.entry.source ?? 'other'), message.params.entry.text, message.params.entry.url)
+  }
   if (!message.id) return
   const entry = pending.get(message.id)
   if (!entry) return
@@ -785,9 +800,11 @@ async function stopChromeAndClean() {
   }
 }
 
+let walkFailed = false
 try {
   await cdp('Page.enable')
   await cdp('Runtime.enable')
+  await cdp('Log.enable')
 
   for (const viewport of viewports) {
     for (const scenario of scenarios) {
@@ -828,6 +845,16 @@ try {
   }
   if (visualMode === 'full') await auditEveryMobileMenuView()
   else console.log(`PR VISUAL MATRIX OK: ${scenarios.length} scenarios x ${viewports.length} viewports`)
+} catch (error) {
+  walkFailed = true
+  throw error
 } finally {
   await stopChromeAndClean()
+  const report = { schema: 'pmgm-showcase-console-errors-v1', walk_completed: !walkFailed, count: consoleErrors.length, entries: consoleErrors.slice(0, 50) }
+  await writeFile(path.join(outputDir, 'console-errors.json'), JSON.stringify(report, null, 2) + '\n')
+  console.log(`CONSOLE ERRORS: ${consoleErrors.length}`)
+}
+if (process.env.PMGM_FAIL_ON_CONSOLE_ERRORS === '1' && consoleErrors.length > 0) {
+  console.error(`CONSOLE ERRORS GATE FAILED: ${consoleErrors.length} (see console-errors.json)`)
+  process.exit(1)
 }

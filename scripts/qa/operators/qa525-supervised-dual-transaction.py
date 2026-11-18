@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import time
 
 PROJECT = "centenario-qa-lab2"
 # Exact physical environment context required by dev's QA525 host preflight.
@@ -23,6 +24,24 @@ ONESHOTS = ("db-grants", "migrator", "minio-init")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 IMAGE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 HASH = re.compile(r"[0-9a-f]{64}\Z")
+# Lesson of the 18-nov-2026 cut (#525): `compose --wait` returns before the API listens (~6 s, no Docker healthcheck),
+# and a single immediate public probe failed BOTH the forward verification and the rollback verification even though
+# the physical rollback was correct. Verification is therefore a bounded wait, never a single immediate probe.
+HEALTH_BUDGET_S = 180
+HEALTH_RETRY_S = 2
+
+
+def wait_health(health, budget=HEALTH_BUDGET_S, clock=time.monotonic, sleep=time.sleep):
+    """True only if health() returns exactly True within `budget` seconds; False otherwise (never raises on False)."""
+    require(type(budget) in (int, float) and 0 < budget <= 600 and callable(health)
+            and callable(clock) and callable(sleep), "HEALTH_WAIT_INVALID")
+    deadline = clock() + budget
+    while True:
+        if health() is True:
+            return True
+        if clock() + HEALTH_RETRY_S >= deadline:
+            return False
+        sleep(HEALTH_RETRY_S)
 
 
 class Blocked(Exception):
@@ -134,7 +153,8 @@ def compose_args(workdir, base_layers, extra, service):
 
 
 def transact(*, before, new, source_sha, layers, workdir, state_dir, run,
-             live_snapshot, evidence, health, audit):
+             live_snapshot, evidence, health, audit, health_budget=HEALTH_BUDGET_S,
+             clock=time.monotonic, sleep=time.sleep):
     """One locked session. Callbacks MUST verify physical host, not receipts.
 
     Caller holds exclusive QA update locks for the entire call. Once mutation
@@ -186,7 +206,7 @@ def transact(*, before, new, source_sha, layers, workdir, state_dir, run,
                 and all(current[x]["image"] == new[x]
                         and current[x]["status"] == "running" for x in TARGETS),
                 "POST_APPLY_INVARIANT_FAILED")
-        require(health() is True, "POST_APPLY_HEALTH_FAILED")
+        require(wait_health(health, health_budget, clock, sleep), "POST_APPLY_HEALTH_FAILED")
         require(evidence("post", source_sha, before, new) is True,
                 "POST_APPLY_EVIDENCE_INVALID")
         audit("DUAL_API_WEB_APPLIED", source_sha)
@@ -202,15 +222,22 @@ def transact(*, before, new, source_sha, layers, workdir, state_dir, run,
                 run(compose_args(workdir, layers["web"], web_old, "web"))
                 run(compose_args(workdir, layers["api"], api_old, "api"))
                 current = live_snapshot()
-                require(set(current) == set(before)
-                        and all(current[x] == before[x] for x in DEPENDENCIES + ONESHOTS)
-                        and all(current[x]["image"] == before[x]["image"]
-                                and current[x]["status"] == "running" for x in TARGETS)
-                        and health() is True, "ROLLBACK_RUNTIME_NOT_RESTORED")
+                restored = (set(current) == set(before)
+                            and all(current[x] == before[x] for x in DEPENDENCIES + ONESHOTS)
+                            and all(current[x]["image"] == before[x]["image"]
+                                    and current[x]["status"] == "running" for x in TARGETS))
+                if restored:
+                    # Physically restored: remember it BEFORE the (bounded) health wait so a verification-only
+                    # failure is distinguishable from a physical failure in the journal.
+                    journal["failure_class"] = "ROLLBACK_PHYSICAL_RESTORED_HEALTH_UNVERIFIED"
+                require(restored and wait_health(health, health_budget, clock, sleep),
+                        "ROLLBACK_RUNTIME_NOT_RESTORED")
+                journal.pop("failure_class", None)
                 journal["status"] = "ROLLED_BACK"
                 _replace_journal(record, journal)
                 audit("DUAL_API_WEB_ROLLED_BACK", source_sha)
             except BaseException:
+                journal.setdefault("failure_class", "ROLLBACK_PHYSICAL_NOT_RESTORED")
                 journal["status"] = "RECOVERY_MANUALLY_REQUIRED"
                 _replace_journal(record, journal)
                 audit("DUAL_API_WEB_RECOVERY_REQUIRED", source_sha)

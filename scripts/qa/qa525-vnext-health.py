@@ -41,6 +41,30 @@ class Stop(Exception):
     """Fixed diagnostic code; never carries external content."""
 
 
+# Lesson of the 18-nov-2026 cut (#525): one immediate probe right after a recreate failed the forward AND the
+# rollback verification although the physical rollback was correct (the API needs ~6 s to listen and has no Docker
+# healthcheck). Any apply/rollback verification MUST use this bounded wait, never a single probe. The clock and
+# sleep are INJECTED (this library imports no time, process or network module).
+DEFAULT_BUDGET_S = 180
+DEFAULT_RETRY_S = 2
+MAX_BUDGET_S = 600
+
+
+def wait_until_ready(check, *, clock, sleep, budget=DEFAULT_BUDGET_S, retry=DEFAULT_RETRY_S):
+    """True only if check() returns exactly True before the deadline; never retries after the deadline."""
+    if (not callable(check) or not callable(clock) or not callable(sleep)
+            or type(budget) not in (int, float) or isinstance(budget, bool) or not 0 < budget <= MAX_BUDGET_S
+            or type(retry) not in (int, float) or isinstance(retry, bool) or not 0 < retry <= budget):
+        raise Stop("HEALTH_WAIT_INVALID")
+    deadline = clock() + budget
+    while True:
+        if check() is True:
+            return True
+        if clock() + retry >= deadline:
+            return False
+        sleep(retry)
+
+
 def _unique(pairs):
     result = {}
     for key, value in pairs:
