@@ -86,14 +86,14 @@ export default function WorkshopRegistryPanel({ api }: { api: PmgmApiClient }) {
     <HelpNote>{registry.canManage
       ? 'Puede eliminar un Taller creado por error solo si no tiene datos asociados. Si ya tiene datos, se da de baja: queda oculto y sin operación, y su historia se conserva. Cada acción pide motivo y queda en la auditoría.'
       : 'Puede ver y descargar el registro. Eliminar o dar de baja un Taller lo hace solo el Máster.'}</HelpNote>
-    {registry.canManage && registry.retireEnabled === false && <p role="status" className="workshop-registry-notice">Dar de baja aún no está habilitado en este servidor. Los Talleres con datos asociados no se pueden eliminar ni dar de baja por ahora.</p>}
+    {registry.canManage && registry.retireEnabled !== true && <p role="status" className="workshop-registry-notice">Dar de baja aún no está habilitado en este servidor. Los Talleres con datos asociados no se pueden eliminar ni dar de baja por ahora.</p>}
     {done && <p role="status" className="account-lifecycle-done">{done}</p>}
     {error && <p role="alert" className="error-banner">{error}</p>}
     <label className="workshop-registry-search"><span>Buscar por número, nombre, código o ciudad</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
     {visible.length === 0 && <p>No hay Talleres que coincidan.</p>}
     <ul className="workshop-registry-list">
       {visible.map(item => {
-        const actions = availableWorkshopActions(item, registry.canManage, registry.retireEnabled !== false)
+        const actions = availableWorkshopActions(item, registry.canManage, registry.retireEnabled === true)
         return <li key={item.id} className={`system-user-row workshop-registry-row${item.status === 'retired' ? ' is-retired' : ''}`}>
           <strong>{workshopLabel(item)}</strong>
           <div className="workshop-registry-badges">

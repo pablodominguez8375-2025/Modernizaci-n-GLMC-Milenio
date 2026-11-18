@@ -25,7 +25,7 @@ export interface WorkshopRegistryItem {
   hasData: boolean
   protected: boolean
 }
-/** `retireEnabled`: el servidor aún no activa «Dar de baja» hasta cerrar el corte de la guardia de BD (T1); si falta, se asume habilitado (demo). */
+/** `retireEnabled`: el servidor activa «Dar de baja» solo tras cerrar el corte de la guardia de BD (T1). DEFAULT-DENY: solo `true` la habilita; si falta (servidor antiguo) o es false, la UI no la ofrece. La demo lo declara explícitamente. */
 export interface WorkshopRegistry { items: WorkshopRegistryItem[]; canManage: boolean; reasonMinLength: number; reasonMaxLength: number; retireEnabled?: boolean }
 export interface WorkshopRegistryRequest { reason: string; confirmation?: string }
 export interface WorkshopRegistryResult { id: string; action: WorkshopRegistryAction; completed: boolean }
@@ -38,7 +38,7 @@ export const workshopLabel = (item: Pick<WorkshopRegistryItem, 'name' | 'number'
 export const workshopConfirmationText = (item: Pick<WorkshopRegistryItem, 'number' | 'shortCode'>) => item.number ?? item.shortCode
 
 /** Acciones que la UI ofrece; el servidor vuelve a validar todo. */
-export function availableWorkshopActions(item: WorkshopRegistryItem, canManage: boolean, retireEnabled = true): WorkshopRegistryAction[] {
+export function availableWorkshopActions(item: WorkshopRegistryItem, canManage: boolean, retireEnabled = false): WorkshopRegistryAction[] {
   if (!canManage || item.protected) return []
   if (item.status === 'retired') return ['reactivate']
   if (item.hasData) return retireEnabled ? ['retire'] : []
@@ -103,7 +103,7 @@ export class WorkshopRegistryDemo {
     ]
   }
   private authorize() { if (!this.canRead()) throw new Error('Su cuenta no tiene permiso para ver el registro de Talleres.') }
-  registry(): WorkshopRegistry { this.authorize(); return { items: structuredClone(this.items), canManage: this.isMaster(), reasonMinLength: 10, reasonMaxLength: 500 } }
+  registry(): WorkshopRegistry { this.authorize(); return { items: structuredClone(this.items), canManage: this.isMaster(), reasonMinLength: 10, reasonMaxLength: 500, retireEnabled: true } }
   csv(): { blob: Blob; fileName: string } { this.authorize(); return { blob: new Blob([workshopRegistryCsv(this.items)], { type: 'text/csv;charset=utf-8' }), fileName: 'talleres-registrados.csv' } }
   run(id: string, action: WorkshopRegistryAction, request: WorkshopRegistryRequest): WorkshopRegistryResult {
     this.authorize()
