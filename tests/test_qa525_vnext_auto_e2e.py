@@ -25,6 +25,10 @@ _spec = importlib.util.spec_from_file_location("qa525_vnext_auto_e2e_module", RO
 auto = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(auto)
 
+_pspec = importlib.util.spec_from_file_location("qa525_vnext_policy_e2e_module", ROOT / "scripts/qa/qa525-vnext-policy.py")
+policy = importlib.util.module_from_spec(_pspec)
+_pspec.loader.exec_module(policy)
+
 SHA = "a" * 40
 MIG = "20261118000001_add_nullable_col"
 SET = "sha256:" + hashlib.sha256((MIG + "\n").encode()).hexdigest()
@@ -127,7 +131,11 @@ class SimHost:
 
     def plan_attested(self, plan, release):
         self._tick("plan_attested")
-        return repr(additive_plan(**destructive_flag(self.s))) == repr(plan)
+        # REAL policy (#1036). Pins are built independently of the host world: from what was SIGNED
+        # (the additive plan, release sha and image identities), never from what the world reports now.
+        pins = {"release_sha": SHA, "plan_sha256": policy.plan_digest(additive_plan()),
+                "baseline_images": dict(BASE), "expected_images": dict(TARGET)}
+        return policy.plan_attested(plan, release, pins)
 
     def evidence(self):
         self._tick("evidence")
@@ -551,6 +559,39 @@ class Qa525AutoE2eCrashSweep(E2eBase):
         self.assertEqual(r["failure_class"], "BASELINE_EVIDENCE_INVALID")
         self.assertEqual(s.snapshot(), before)
         self.assertEqual(s.migrate_runs, 1)
+
+
+class Qa525AutoE2eRealPolicyBridge(E2eBase):
+    """The REAL #1036 policy behind host.plan_attested, with pins independent of the host world."""
+
+    def _pins(self):
+        return {"release_sha": SHA, "plan_sha256": policy.plan_digest(additive_plan()),
+                "baseline_images": dict(BASE), "expected_images": dict(TARGET)}
+
+    def test_exact_plan_release_and_pins_are_attested(self):
+        self.assertIs(policy.plan_attested(additive_plan(), dict(RELEASE), self._pins()), True)
+
+    def test_real_migration_id_of_workshop_registry_is_attested(self):
+        mig = "20261118150000_AddWorkshopRegistryState"
+        plan = additive_plan(mig)
+        plan["ordered_set_sha256"] = "sha256:" + hashlib.sha256((mig + "\n").encode()).hexdigest()
+        pins = self._pins()
+        pins["plan_sha256"] = policy.plan_digest(plan)
+        self.assertIs(policy.plan_attested(plan, dict(RELEASE), pins), True)
+
+    def test_altered_plan_foreign_pin_and_other_release_are_not_attested(self):
+        self.assertIsNot(policy.plan_attested(additive_plan(arbitrary_sql=True), dict(RELEASE), self._pins()), True)
+        pins = self._pins()
+        pins["plan_sha256"] = "sha256:" + "0" * 64
+        self.assertIsNot(policy.plan_attested(additive_plan(), dict(RELEASE), pins), True)
+        self.assertIsNot(policy.plan_attested(additive_plan(), dict(RELEASE, sha="b" * 40), self._pins()), True)
+        self.assertIsNot(policy.plan_attested(additive_plan(), dict(RELEASE, expected_images={"api": "sha256:" + "9" * 64, "web": TARGET["web"]}), self._pins()), True)
+
+    def test_trailing_newline_in_migration_id_is_never_additive(self):
+        plan = additive_plan(MIG + "\n")
+        # consistent set hash, so ONLY the id check can reject it
+        plan["ordered_set_sha256"] = "sha256:" + hashlib.sha256(((MIG + "\n") + "\n").encode()).hexdigest()
+        self.assertEqual(auto.classify(plan), "MANUAL")
 
 
 if __name__ == "__main__":
