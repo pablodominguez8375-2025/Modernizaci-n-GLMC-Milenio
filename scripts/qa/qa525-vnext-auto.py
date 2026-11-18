@@ -58,7 +58,7 @@ def classify(plan):
     if not isinstance(migrations, list) or not migrations or not isinstance(sha, str) or not SHA256.match(sha):
         return "MANUAL"
     ids = [m.get("id") if isinstance(m, dict) else None for m in migrations]
-    if (not all(isinstance(i, str) and MIGRATION_ID.match(i) for i in ids) or len(set(ids)) != len(ids)
+    if (not all(isinstance(i, str) and MIGRATION_ID.fullmatch(i) for i in ids) or len(set(ids)) != len(ids)
             or ids != sorted(ids)
             or sha != "sha256:" + hashlib.sha256(("\n".join(ids) + "\n").encode()).hexdigest()):
         return "MANUAL"   # the ordered-set hash is RECOMPUTED here, never trusted (review observation B)
