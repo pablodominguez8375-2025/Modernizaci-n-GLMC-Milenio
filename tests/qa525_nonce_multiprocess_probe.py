@@ -73,6 +73,25 @@ def main():
         assert replay.returncode == 0 and replay.stdout.strip() == "REPLAY"
         assert not spend(Path(tmp), nonce, "d" * 64, plan), "nonce reused with different release"
         assert not spend(Path(tmp), nonce, release, "e" * 64), "nonce reused with different plan"
+        # An attacker-controlled symlink must not be followed for the lock.
+        symlink_dir = Path(tmp) / "symlink-lock"
+        symlink_dir.mkdir()
+        victim = Path(tmp) / "victim"
+        victim.write_text("DO_NOT_TOUCH")
+        (symlink_dir / ".lock").symlink_to(victim)
+        try:
+            spend(symlink_dir, nonce, release, plan)
+        except OSError:
+            pass
+        else:
+            raise AssertionError("symlink lock was followed")
+        assert victim.read_text() == "DO_NOT_TOUCH"
+        # A symlink at the nonce marker path must be treated as spent, not followed.
+        marker_dir = Path(tmp) / "symlink-marker"
+        marker_dir.mkdir()
+        (marker_dir / ("spent-" + nonce)).symlink_to(victim)
+        assert not spend(marker_dir, nonce, release, plan), "symlink marker replay accepted"
+        assert victim.read_text() == "DO_NOT_TOUCH"
         print("QA525_NONCE_MULTIPROCESS_PROBE=PASS (8 processes, 1 spend, 7 replay, persistent restart)")
         print("LIMIT: no signature verification, power-loss fault injection or host adapter certification")
 
