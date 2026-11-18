@@ -126,7 +126,8 @@
       "CalendarNotificationRecipientPostgreSqlTests",
       "QaSyntheticPlanHttpTests",
       "InitialLoadCsvPreviewHttpTests",
-      "WorkshopRegistryPostgreSqlTests"
+      "WorkshopRegistryPostgreSqlTests",
+      "WorkshopRetiredGuardPostgreSqlTests"
     ]
   }
 }
