@@ -53,6 +53,25 @@ public sealed class WorkshopRegistryHttpTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
+            // Runbook de T1: tras migrar TODOS los modulos se reinstala la guardia para cubrir las tablas de otros contextos.
+            // Sin esto la baja se rechaza a proposito (409 GUARD_INCOMPLETE, fail-closed).
+            // GATE de release (#1039): las columnas de organizacion sin guardia deben ser un SUBCONJUNTO de las 10 conocidas que
+            // hoy crean otros modulos despues de T1. No se exige igualdad porque la base de CI es compartida y el instalador
+            // pudo ejecutarse antes (cobertura ya completa). Un modulo nuevo con columna de organizacion sin guardia rompe esta
+            // prueba hasta que alguien la revise y la agregue aqui (o llame al instalador en su propia migracion).
+            var known = new HashSet<string>
+            {
+                "core.admission_cases.OrganizationId", "core.admission_cases.OriginOrganizationId",
+                "core.assembly_debt_decision_events.OrganizationId", "core.assembly_member_statuses.OrganizationId",
+                "core.assembly_treasury_certification_events.OrganizationId", "core.assembly_treasury_signed_reviews.OrganizationId",
+                "core.assembly_workshop_balance_events.OrganizationId", "core.calendar_events.OrganizationId",
+                "core.candidate_intake_profiles.OrganizationId", "core.data_quality_cases.OrganizationId",
+            };
+            var unknownUncovered = (await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct))
+                .Where(x => !known.Contains(x)).ToList();
+            Assert.True(unknownUncovered.Count == 0, "Columnas de organizacion nuevas sin guardia ni revision: " + string.Join(", ", unknownUncovered));
+            await db.Database.ExecuteSqlRawAsync("SELECT core.install_workshop_retired_guard()", ct);
+            Assert.Empty(await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.GuardCoverageMissingAsync(db, ct));
             db.Organizations.AddRange(parent, empty);
             await db.SaveChangesAsync(ct);
             db.Organizations.Add(new Organization { Name = $"Hijo {suffix}", Type = "workshop", ParentOrganizationId = parent.Id });

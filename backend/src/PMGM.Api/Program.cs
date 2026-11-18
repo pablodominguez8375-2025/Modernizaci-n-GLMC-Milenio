@@ -34,6 +34,7 @@ using PMGM.Api.Modules.UserAccounts;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<PMGM.Api.Infrastructure.WorkshopRetiredExceptionHandler>();
 // Support HTTP failure metadata only: bounded in-memory buffer, no payloads or PII.
 builder.Services.AddSingleton<SupportDiagnosticBuffer>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>

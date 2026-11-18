@@ -72,6 +72,41 @@ public static class WorkshopRegistryEndpoints
         }
     }
 
+    private const string GuardInstalledSql = """
+        SELECT n.nspname || '.' || c.relname || '.' || a
+        FROM pg_trigger g
+        JOIN pg_class c ON c.oid = g.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL unnest(string_to_array(encode(g.tgargs, 'escape'), E'\\000')) a
+        WHERE g.tgname = 'a00_workshop_retired_guard' AND NOT g.tgisinternal AND a <> ''
+        """;
+
+    /// <summary>
+    /// Columnas de organización de la huella SIN guardia de baja instalada (#1039 T1). Fail-closed: si T1 no está aplicada, o
+    /// apareció una tabla/columna nueva (o fuera de 'core'), la lista no está vacía y la baja se rechaza (GUARD_INCOMPLETE).
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> GuardCoverageMissingAsync(PmgmDbContext db, CancellationToken ct)
+    {
+        var targets = await FootprintTargetsAsync(db, ct);
+        var connection = db.Database.GetDbConnection();
+        var opened = connection.State != ConnectionState.Open;
+        if (opened) await connection.OpenAsync(ct);
+        try
+        {
+            var installed = new HashSet<string>(StringComparer.Ordinal);
+            await using var command = connection.CreateCommand();
+            command.CommandText = GuardInstalledSql;
+            if (db.Database.CurrentTransaction is { } tx) command.Transaction = tx.GetDbTransaction();
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) installed.Add(reader.GetString(0));
+            return targets.Select(x => $"{x.Schema}.{x.Table}.{x.Column}").Where(x => !installed.Contains(x)).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        }
+        finally
+        {
+            if (opened) await connection.CloseAsync();
+        }
+    }
+
     /// <summary>Ids de organización que tienen algún registro asociado. Solo lectura.</summary>
     public static async Task<HashSet<Guid>> OrganizationsWithDataAsync(PmgmDbContext db, CancellationToken ct)
     {
@@ -211,6 +246,15 @@ public static class WorkshopRegistryEndpoints
                     Results.BadRequest(new { code = decision.ToString() }),
                 _ => Results.Conflict(new { code = decision.ToString() })  // HasData, NotActive, AlreadyRetired, NotRetired, RetireNotEnabled
             };
+        }
+
+        if (action == WorkshopRegistryActions.Retire && (await GuardCoverageMissingAsync(db, ct)).Count > 0)
+        {
+            audit.Add(ctx, "system.workshops.retire_rejected", "Organization", id.ToString(), id, AuditResults.Rejected,
+                new { action, code = "GUARD_INCOMPLETE" });
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return Results.Conflict(new { code = "GUARD_INCOMPLETE" });
         }
 
         var reason = request!.Reason!.Trim();
