@@ -1,0 +1,17 @@
+name: QA525 nonce multiprocess probe
+on:
+  pull_request:
+    paths:
+      - 'tests/qa525_nonce_multiprocess_probe.py'
+      - '.github/workflows/qa525-nonce-multiprocess-probe.yml'
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run independent process durability probe
+        run: python3 tests/qa525_nonce_multiprocess_probe.py
