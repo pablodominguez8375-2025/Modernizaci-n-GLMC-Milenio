@@ -42,7 +42,7 @@ def plan_digest(plan):
     ids = [m["id"] for m in migrations]
     if ids != sorted(set(ids)):
         raise ValueError("PLAN_IDS_ORDER_OR_DUPLICATE")
-    ordered_sha = "sha256:" + hashlib.sha256(("\\n".join(ids) + "\\n").encode("ascii")).hexdigest()
+    ordered_sha = "sha256:" + hashlib.sha256(("\n".join(ids) + "\n").encode("ascii")).hexdigest()
     if not hmac.compare_digest(plan["ordered_set_sha256"], ordered_sha):
         raise ValueError("PLAN_ORDERED_SET_MISMATCH")
     return "sha256:" + hashlib.sha256(canonical(plan)).hexdigest()
