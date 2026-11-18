@@ -47,12 +47,13 @@ public sealed class WorkshopRegistryHttpTests
         var suffix = Guid.NewGuid().ToString("N")[..6];
         var parent = new Organization { Name = $"Taller con datos {suffix}", Number = "9" + Random.Shared.Next(10000, 99999), Type = "workshop", Origin = "initial_load" };
         var empty = new Organization { Name = $"Taller vacío {suffix}", Type = "workshop", Origin = "qa_seed" };
-        var grand = new Organization { Name = $"Gran Logia {suffix}", Type = "grand_lodge", Origin = "bootstrap" };
+        // Taller 00 de soporte: lo crea la migración #812; no se insertan Gran Logias para no alterar otras pruebas.
+        var support00 = Guid.Parse("b12c0000-0000-4000-8000-000000000000");
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
-            db.Organizations.AddRange(parent, empty, grand);
+            db.Organizations.AddRange(parent, empty);
             await db.SaveChangesAsync(ct);
             db.Organizations.Add(new Organization { Name = $"Hijo {suffix}", Type = "workshop", ParentOrganizationId = parent.Id });
             await db.SaveChangesAsync(ct);
@@ -66,7 +67,7 @@ public sealed class WorkshopRegistryHttpTests
         Assert.True(Item(registry, parent.Id).GetProperty("hasData").GetBoolean());
         Assert.False(Item(registry, empty.Id).GetProperty("hasData").GetBoolean());
         Assert.Equal("qa_seed", Item(registry, empty.Id).GetProperty("origin").GetString());
-        Assert.True(Item(registry, grand.Id).GetProperty("protected").GetBoolean());
+        Assert.True(Item(registry, support00).GetProperty("protected").GetBoolean());
         Assert.Equal(empty.Id.ToString("N")[..8].ToUpperInvariant(), Item(registry, empty.Id).GetProperty("shortCode").GetString());
 
         var code = empty.Id.ToString("N")[..8].ToUpperInvariant();
@@ -75,7 +76,7 @@ public sealed class WorkshopRegistryHttpTests
         var shortReason = await master.PostAsJsonAsync($"/api/system/workshops/{empty.Id}/delete", new { reason = "corto", confirmation = code }, ct);
         Assert.Equal(HttpStatusCode.BadRequest, shortReason.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await master.PostAsJsonAsync($"/api/system/workshops/{parent.Id}/delete", new { reason = "Intento con datos", confirmation = parent.Number }, ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await master.PostAsJsonAsync($"/api/system/workshops/{grand.Id}/retire", new { reason = "Intento protegido", confirmation = grand.Id.ToString("N")[..8].ToUpperInvariant() }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await master.PostAsJsonAsync($"/api/system/workshops/{support00}/retire", new { reason = "Intento protegido", confirmation = "00" }, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await master.PostAsJsonAsync($"/api/system/workshops/{Guid.NewGuid()}/retire", new { reason = "Taller inexistente", confirmation = "x" }, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await master.PostAsJsonAsync($"/api/system/workshops/{empty.Id}/purge", new { reason = "Acción desconocida", confirmation = code }, ct)).StatusCode);
 
