@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # A0 SOLO LECTURA (Talleres #1035). Corre como `soporte` en glmdch. No modifica nada, no escribe archivos, no imprime secretos.
-# v2 (corrige NO-GO 7009939051): pipefail + capturas comprobadas, línea base cotejada contra la lista de migraciones del corte da274d65
-# (derivada de git: backend/src/PMGM.Api/Migrations/ en da274d651d8e9e056525413406c0aab62131504f, 100 ids), rol de la app UNKNOWN => no se adivina.
-set -u
-set -o pipefail
+# v3 (corrige NO-GO 7009939051 y 7010295218). Procedencia de la lista de migraciones: provenance-check.sh (git) y provenance-manifest.txt.
+# Modo de errores: `set -eEu -o pipefail` + `trap ERR` (cualquier fallo inesperado = STOP) Y ADEMÁS cada pipeline/sustitución de comando
+# crítica lleva `|| stop` explícito (cinturón y tirantes); cada una tiene prueba negativa en tests/test-a0.sh (docker ps, docker image ls,
+# cada una de las 5 consultas SQL, preflight, contenedor de BD 0/2, baseline y esquema). Los `grep -c`/`grep -q` usados como pruebas están
+# dentro de condiciones (`if`/`||`/`&&`), donde un código 1 es información y no un error.
+# Rol de la aplicación: SOLO el que declare el Sponsor con APP_ROLE=<rol> desde una fuente autorizada y no secreta (nunca se infiere de
+# pg_stat_activity); sin APP_ROLE => ROLE_APP=UNKNOWN y A0 INCOMPLETO (exit 3). Los roles de sesión se muestran solo como CANDIDATOS informativos.
+set -eEu -o pipefail
 umask 077
 stop() { echo "STOP: $*" >&2; exit 2; }
+trap 'stop "error inesperado en la línea $LINENO"' ERR
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin; export PATH
 EXPECTED_SOURCE_SHA="da274d651d8e9e056525413406c0aab62131504f"
@@ -163,7 +168,9 @@ if [ -n "$MISSING$EXTRA" ]; then
   echo "BASELINE=UNKNOWN"; echo "faltan (esperadas y no aplicadas):"; printf '%s\n' "$MISSING"; echo "sobran (aplicadas y no esperadas):"; printf '%s\n' "$EXTRA"
   stop "el historial no coincide con el corte $EXPECTED_SOURCE_SHA; no se adapta a ciegas"
 fi
-for id in $DELTA_IDS; do printf '%s\n' "$HIST_SORTED" | grep -qx "$id" && stop "ya está aplicada una migración del delta: $id"; done
+for id in $DELTA_IDS; do
+  if printf '%s\n' "$HIST_SORTED" | grep -qx "$id"; then stop "ya está aplicada una migración del delta: $id"; fi
+done
 echo "BASELINE=OK (historial = corte $EXPECTED_SOURCE_SHA, sin delta)"
 
 SH="$(q <<'SQL'
@@ -180,24 +187,42 @@ select 'organizaciones_total=' || count(*) from core.organizations;
 select 'organizaciones_tipo:' || "Type" || '=' || count(*) from core.organizations group by "Type" order by "Type";
 SQL
 
-# 6) Roles: dueño de core.organizations (dato de catálogo) y roles de la APLICACIÓN = sesiones de cliente de la BD que no sean el dueño ni superusuario.
-#    Sin sesiones => ROLE_APP=UNKNOWN y A0 INCOMPLETO (no se adivina ni se enumeran roles globales).
+# 6) Roles. Dueño de core.organizations = dato de catálogo. Rol de la app = SOLO el declarado por el Sponsor (APP_ROLE), validado. Sin él, UNKNOWN.
 echo "== ROLES RELEVANTES"
-ROLES="$(q <<'SQL'
-with owner as (select tableowner::text as r from pg_tables where schemaname='core' and tablename='organizations'),
- app as (select distinct usename::text as r from pg_stat_activity where datname=current_database() and backend_type='client backend' and usename is not null
-         and usename::text not in (select r from owner) and not coalesce((select rolsuper from pg_roles where rolname=usename::text), true)),
- c as (select r, 'owner' as k from owner union select r, 'app' from app)
-select k || '|' || r || '|super=' || coalesce((select rolsuper::text from pg_roles where rolname=r),'?')
- || '|insert=' || has_table_privilege(r,'core.organizations','INSERT')
- || '|update=' || has_table_privilege(r,'core.organizations','UPDATE')
- || '|delete=' || has_table_privilege(r,'core.organizations','DELETE')
- || '|truncate=' || has_table_privilege(r,'core.organizations','TRUNCATE')
- || '|create_en_core=' || has_schema_privilege(r,'core','CREATE')
-from c order by k, r;
+OWNER="$(q <<'SQL'
+select tableowner::text from pg_tables where schemaname='core' and tablename='organizations';
 SQL
-)" || stop "no se pudieron consultar roles/privilegios"
-printf '%s\n' "$ROLES"
-printf '%s\n' "$ROLES" | grep -q '^owner|' || { echo "ROLE_OWNER=UNKNOWN"; echo "A0_DIAG=INCOMPLETE_ROLE_UNKNOWN"; exit 3; }
-printf '%s\n' "$ROLES" | grep -q '^app|' || { echo "ROLE_APP=UNKNOWN (sin sesiones de un rol de aplicación visibles; obtener el rol desde la configuración autorizada, no secreta)"; echo "A0_DIAG=INCOMPLETE_ROLE_UNKNOWN"; exit 3; }
+)" || stop "no se pudo leer el dueño de core.organizations"
+printf '%s' "$OWNER" | grep -Eq '^[A-Za-z0-9_.$-]+$' || stop "dueño de core.organizations no válido o desconocido (ROLE_OWNER=UNKNOWN)"
+CANDS="$(q <<'SQL'
+select distinct usename::text from pg_stat_activity where datname=current_database() and backend_type='client backend' and usename is not null order by 1;
+SQL
+)" || stop "no se pudieron consultar las sesiones de cliente"
+echo "ROLE_OWNER=$OWNER"
+echo "CANDIDATOS_POR_SESION (informativo, no prueba identidad): $(printf '%s\n' "$CANDS" | grep -c . || true)"
+printf '%s\n' "$CANDS" | sed 's/^/  candidato:/'
+priv() { # $1 = rol ya validado por regex
+  q <<SQL
+select '$1|super=' || coalesce((select rolsuper::text from pg_roles where rolname='$1'),'?')
+ || '|existe=' || exists(select 1 from pg_roles where rolname='$1')
+ || '|insert=' || has_table_privilege('$1','core.organizations','INSERT')
+ || '|update=' || has_table_privilege('$1','core.organizations','UPDATE')
+ || '|delete=' || has_table_privilege('$1','core.organizations','DELETE')
+ || '|truncate=' || has_table_privilege('$1','core.organizations','TRUNCATE')
+ || '|create_en_core=' || has_schema_privilege('$1','core','CREATE');
+SQL
+}
+OPRIV="$(priv "$OWNER")" || stop "no se pudieron leer privilegios del dueño"
+echo "privilegios del dueño: $OPRIV"
+if [ -z "${APP_ROLE:-}" ]; then
+  echo "ROLE_APP=UNKNOWN (no hay fuente autorizada declarada; el Sponsor debe pasar APP_ROLE=<rol> desde la configuración autorizada, sin secretos)"
+  echo "A0_DIAG=INCOMPLETE_ROLE_UNKNOWN"; exit 3
+fi
+printf '%s' "$APP_ROLE" | grep -Eq '^[A-Za-z0-9_.$-]+$' || stop "APP_ROLE tiene caracteres no válidos"
+[ "$APP_ROLE" != "$OWNER" ] || stop "APP_ROLE no puede ser el dueño de core.organizations"
+APRIV="$(priv "$APP_ROLE")" || stop "no se pudieron leer privilegios de APP_ROLE"
+printf '%s\n' "$APRIV" | grep -q '|existe=true|' || stop "APP_ROLE no existe en la BD"
+printf '%s\n' "$APRIV" | grep -q '|super=false|' || stop "APP_ROLE es superusuario o no verificable"
+echo "ROLE_APP=$APP_ROLE (declarado por el Sponsor; coincide con una sesión de cliente: $(if printf '%s\n' "$CANDS" | grep -qx "$APP_ROLE"; then echo si; else echo no; fi))"
+echo "privilegios de la app: $APRIV"
 echo "A0_DIAG=DONE (solo lectura; no se escribió ningún archivo)"

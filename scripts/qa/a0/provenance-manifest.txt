@@ -1,0 +1,13 @@
+# Manifiesto de PROCEDENCIA del A0 (Talleres #1035). Generado por Claude el 2026-11-19. No es una firma; es evidencia reproducible.
+# Reproducir: desde un clon con ambos commits, `bash scripts/qa/a0/provenance-check.sh` (PROVENANCE=OK) y `sha256sum scripts/qa/a0/*.sh scripts/qa/a0/tests/test-a0.sh`.
+base_commit=da274d651d8e9e056525413406c0aab62131504f
+base_meaning=corte que corre QA real en glmdch; evidencia independiente: postflight MANUAL_APPLY_VERIFIED_API_WEB (#525 comentario 6966428945) y qa-version.json = SHA. La correspondencia con la BD REAL la prueba el propio A0 (historial EF == lista del corte; si no, BASELINE=UNKNOWN y STOP).
+base_migration_ids=100
+base_migration_ids_sha256=50896346f08f4cf9d6613e1dd663bbb9f305fd6f863e6676093ab58e939dd744
+release_commit=5563d8909e63aba43abb270938842c49d9140a99
+release_migration_ids=104
+release_migration_ids_sha256=aa1271e0819466a021f4e11568731b37d8f1c7567713cb951d9f72acd0b23eee
+delta_migration_ids=20261118150000_AddWorkshopRegistryState,20261118170000_AddWorkshopRetiredGuard,20261119010000_AddWorkshopStatusTransitions,20261119010100_AddWorkshopStatusTransitionsAppendOnly
+migrations_removed_between_base_and_release=0
+derivation=git ls-tree -r --name-only <commit> | grep -E '/Migrations/[0-9]{14}_[A-Za-z0-9]+\.cs$' | grep -v Designer | sed ... | LC_ALL=C sort
+release_candidate_published_by_ChatGPT=qa-signed-5563d890 digest 15474500d23082cffb8a261b45e257d57388f890519cc6840a0e16961204a051 (publicado != firma verificada en host != GO; no verificado por Claude)
