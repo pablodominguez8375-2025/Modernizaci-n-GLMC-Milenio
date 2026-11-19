@@ -127,6 +127,14 @@ public sealed class WorkshopRegistryHttpTests
         Assert.True(await audit.AnyAsync(a => a.Action == "system.workshops.reactivate" && a.EntityId == parent.Id.ToString(), ct));
         Assert.True(await audit.AnyAsync(a => a.Action == "system.workshops.delete_rejected" && a.EntityId == parent.Id.ToString(), ct));
         Assert.True(await audit.AnyAsync(a => a.Action == "system.workshops.exported", ct));
+        // #1044: cada baja y reactivación quedó en el historial append-only, en orden, con correlación a la petición.
+        var history = await check.ServiceProvider.GetRequiredService<PmgmDbContext>().WorkshopStatusTransitions.AsNoTracking()
+            .Where(x => x.SubjectRef == parent.Id).OrderBy(x => x.Sequence).ToListAsync(ct);
+        Assert.Equal(["active>retired", "retired>active"], history.Select(x => x.PreviousStatus + ">" + x.NextStatus).ToArray());
+        Assert.All(history, x => Assert.False(string.IsNullOrWhiteSpace(x.ReasonRef)));
+        Assert.True(history[0].EffectiveAtUtc <= history[1].EffectiveAtUtc);
+        // Un intento rechazado no escribe transición (la segunda baja fue 409 antes de reactivar).
+        Assert.Equal(2, history.Count);
     }
 
     [Fact]

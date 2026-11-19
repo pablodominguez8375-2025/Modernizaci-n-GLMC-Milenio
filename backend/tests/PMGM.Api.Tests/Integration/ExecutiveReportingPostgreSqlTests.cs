@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.ExecutiveReporting;
+using PMGM.Api.Modules.SystemConfiguration;
 using PMGM.Api.Modules.Hospitalaria.Entities;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
@@ -133,7 +134,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
         });
         await lodgeDb.SaveChangesAsync(cancellationToken);
 
-        var service = new ExecutiveReportingService(db, lodgeDb);
+        var service = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
         var report = await service.BuildAsync(
             new DateOnly(2026, 9, 9),
             new DateOnly(2026, 1, 1),
@@ -152,5 +153,186 @@ public sealed class ExecutiveReportingPostgreSqlTests
         Assert.True(targetRow.AttentionRequired);
         Assert.Contains("treasury_delinquent", targetRow.AttentionFlags);
         Assert.Contains("hospitalaria_overdue", targetRow.AttentionFlags);
+    }
+
+    [Fact]
+    public async Task Retired_workshop_keeps_historical_row_but_leaves_operational_metrics()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+        await using var lodgeDb = new LodgeManagementDbContext(new DbContextOptionsBuilder<LodgeManagementDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.MigrateAsync(ct); await lodgeDb.Database.MigrateAsync(ct);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var workshop = new Organization { Name = $"Taller Baja {suffix}", Number = $"7{suffix[..2]}", Type = "workshop" };
+        var person = new Person { FirstNames = "Hermano", LastNames = $"De Baja {suffix}" };
+        var member = new Member { Person = person, InstitutionalNumber = $"QB-{suffix}" };
+        db.AddRange(workshop, person, member);
+        db.Memberships.Add(new Membership { Member = member, Organization = workshop, MembershipType = "regular", StartDate = new DateOnly(2020, 1, 1), Status = MembershipCodes.MembershipStatus.Active });
+        db.FinancialRegularitySnapshots.Add(new FinancialRegularitySnapshot { Organization = workshop, MemberId = null, Scope = "organization", Status = "delinquent", AsOfDate = new DateOnly(2026, 9, 1) });
+        await db.SaveChangesAsync(ct);
+
+        var service = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+        var asOf = new DateOnly(2026, 9, 9); var from = new DateOnly(2026, 1, 1);
+        var before = await service.BuildAsync(asOf, from, ct);
+        Assert.Equal("active", Assert.Single(before.Workshops, x => x.OrganizationId == workshop.Id).Status);
+        Assert.True(Assert.Single(before.Workshops, x => x.OrganizationId == workshop.Id).AttentionRequired);
+
+        try
+        {
+            workshop.Status = "retired"; workshop.RetiredAtUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero); workshop.RetiredReason = "prueba T2b-2";
+            // Baseline autorizado (backfill): sin historial previo la fecha de corte anterior sería «desconocida» (fail-closed).
+            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = "active", NextStatus = "retired", EffectiveAtUtc = workshop.RetiredAtUtc.Value, Origin = WorkshopTransitionOrigins.Backfill });
+            await db.SaveChangesAsync(ct);
+            var after = await service.BuildAsync(asOf, from, ct);
+            var row = Assert.Single(after.Workshops, x => x.OrganizationId == workshop.Id);
+            Assert.Equal("retired", row.Status); Assert.NotNull(row.RetiredAtUtc);
+            Assert.Equal(1, row.CurrentMembers); Assert.False(row.AttentionRequired); Assert.Empty(row.AttentionFlags);
+            Assert.Equal(before.Overview.Workshops - 1, after.Overview.Workshops);
+            Assert.Equal(before.Overview.CurrentMembers - 1, after.Overview.CurrentMembers);
+            Assert.Equal(before.Overview.Financial.WorkshopsTreasuryDelinquent - 1, after.Overview.Financial.WorkshopsTreasuryDelinquent);
+            Assert.Equal(before.Overview.WorkshopsRequiringAttention - 1, after.Overview.WorkshopsRequiringAttention);
+            Assert.Equal(before.Overview.RetiredWorkshops + 1, after.Overview.RetiredWorkshops);
+
+            // Un corte ANTERIOR a la baja no reescribe la historia: el Taller sigue activo en esa fecha.
+            var earlier = await service.BuildAsync(new DateOnly(2026, 8, 15), from, ct);
+            Assert.Equal("active", Assert.Single(earlier.Workshops, x => x.OrganizationId == workshop.Id).Status);
+        }
+        finally
+        {
+            // La base de CI es compartida entre pruebas: reactivar para no dejar un Taller de baja a otras pruebas.
+            workshop.Status = "active"; workshop.RetiredAtUtc = null; workshop.RetiredReason = null; await db.SaveChangesAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Unknown_history_is_a_separate_set_and_never_counts_as_active_or_operational()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+        await using var lodgeDb = new LodgeManagementDbContext(new DbContextOptionsBuilder<LodgeManagementDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.MigrateAsync(ct); await lodgeDb.Database.MigrateAsync(ct);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var workshop = new Organization { Name = $"Taller Desconocido {suffix}", Number = $"7{suffix[..2]}", Type = "workshop" };
+        var person = new Person { FirstNames = "Hermano", LastNames = $"Desconocido {suffix}" };
+        var member = new Member { Person = person, InstitutionalNumber = $"QU-{suffix}" };
+        db.AddRange(workshop, person, member);
+        db.Memberships.Add(new Membership { Member = member, Organization = workshop, MembershipType = "regular", StartDate = new DateOnly(2020, 1, 1), Status = MembershipCodes.MembershipStatus.Active });
+        await db.SaveChangesAsync(ct);
+        try
+        {
+            var certified = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+            var uncertified = new ExecutiveReportingService(db, lodgeDb);
+            var past = new DateOnly(2026, 9, 9);
+            var withBaseline = await certified.BuildAsync(past, new DateOnly(2026, 1, 1), ct);
+            var withoutBaseline = await uncertified.BuildAsync(past, new DateOnly(2026, 1, 1), ct);
+            // Con baseline el Taller es activo conocido; sin baseline (corte pasado) es «unknown»: no suma activos, afiliaciones ni retirados.
+            Assert.Equal("active", Assert.Single(withBaseline.Workshops, x => x.OrganizationId == workshop.Id).Status);
+            var row = Assert.Single(withoutBaseline.Workshops, x => x.OrganizationId == workshop.Id);
+            Assert.Equal("unknown", row.Status); Assert.False(row.StatusKnown); Assert.Empty(row.AttentionFlags); Assert.False(row.AttentionRequired);
+            Assert.Equal(withBaseline.Overview.Workshops - withBaseline.Workshops.Count(x => x.Status == "active"), withoutBaseline.Overview.Workshops - withoutBaseline.Workshops.Count(x => x.Status == "active"));
+            Assert.Equal(withoutBaseline.Workshops.Count(x => x.Status == "unknown"), withoutBaseline.Overview.UnknownStatusWorkshops);
+            Assert.Equal(withoutBaseline.Workshops.Count(x => x.Status == "retired"), withoutBaseline.Overview.RetiredWorkshops);   // los desconocidos no se suman a retirados conocidos
+            Assert.Equal(withoutBaseline.Workshops.Count(x => x.Status == "active"), withoutBaseline.Overview.Workshops);   // solo activos conocidos son operativos
+            Assert.True(withoutBaseline.Overview.CurrentMembers < withBaseline.Overview.CurrentMembers);                  // las afiliaciones del Taller desconocido no suman
+            // El presente SÍ es conocido sin baseline.
+            var today = await uncertified.BuildAsync(DateOnly.FromDateTime(DateTime.UtcNow), new DateOnly(2026, 1, 1), ct);
+            Assert.Equal("active", Assert.Single(today.Workshops, x => x.OrganizationId == workshop.Id).Status);
+        }
+        finally
+        {
+            await db.Organizations.Where(x => x.Id == workshop.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "active"), CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Transition_history_reconstructs_cycles_and_is_append_only()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+        await using var lodgeDb = new LodgeManagementDbContext(new DbContextOptionsBuilder<LodgeManagementDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.MigrateAsync(ct); await lodgeDb.Database.MigrateAsync(ct);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var workshop = new Organization { Name = $"Taller Ciclos {suffix}", Number = $"6{suffix[..2]}", Type = "workshop" };
+        db.Organizations.Add(workshop); await db.SaveChangesAsync(ct);
+        DateTimeOffset D(int m, int d) => new(2026, m, d, 12, 0, 0, TimeSpan.Zero);
+        // Una transición por SaveChanges: la identidad `Sequence` debe seguir el orden real (en producción cada baja/reactivación es su propia transacción).
+        foreach (var (from, to, at) in new[] { ("active", "retired", D(3, 1)), ("retired", "active", D(6, 1)), ("active", "retired", D(9, 1)) })
+        {
+            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = from, NextStatus = to, EffectiveAtUtc = at, Origin = WorkshopTransitionOrigins.Backfill });
+            await db.SaveChangesAsync(ct);
+        }
+        // La fila actual refleja la última transición.
+        workshop.Status = "retired"; workshop.RetiredAtUtc = D(9, 1); workshop.RetiredReason = "prueba ciclos";
+        await db.SaveChangesAsync(ct);
+        try
+        {
+            var service = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+            async Task<string> StatusAt(int m, int d) => Assert.Single((await service.BuildAsync(new DateOnly(2026, m, d), new DateOnly(2026, 1, 1), ct)).Workshops, x => x.OrganizationId == workshop.Id).Status;
+            Assert.Equal("active", await StatusAt(2, 28));
+            Assert.Equal("retired", await StatusAt(4, 1));
+            Assert.Equal("active", await StatusAt(7, 1));
+            Assert.Equal("retired", await StatusAt(9, 9));
+
+            // Append-only a nivel de BD (migración manual AppendOnly aplicada por MigrateAsync en la BD de prueba).
+            var first = await db.WorkshopStatusTransitions.AsNoTracking().OrderBy(x => x.Sequence).FirstAsync(x => x.SubjectRef == workshop.Id, ct);
+            var update = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("UPDATE core.workshop_status_transitions SET \"NextStatus\"='active' WHERE \"Id\"={0}", [first.Id], ct));
+            Assert.Contains("PM410", update.ToString());
+            var delete = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("DELETE FROM core.workshop_status_transitions WHERE \"Id\"={0}", [first.Id], ct));
+            Assert.Contains("PM410", delete.ToString());
+            var truncate = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("TRUNCATE core.workshop_status_transitions", ct));
+            Assert.Contains("PM410", truncate.ToString());
+
+            // Readback fail-closed: la API solo escribe transiciones si los tres triggers existen y están habilitados.
+            Assert.True(await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.TransitionTriggersInstalledAsync(db, ct));
+            // RecordedAtUtc lo asigna la BD (now()), no el reloj de la aplicación.
+            Assert.All(await db.WorkshopStatusTransitions.AsNoTracking().Where(x => x.SubjectRef == workshop.Id).ToListAsync(ct), x => Assert.True(x.RecordedAtUtc > new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero)));
+
+            // Integridad de INSERT (trigger): sujeto inexistente / no Taller, cadena rota, fecha retroactiva, actor obligatorio.
+            async Task<string> Insert(Guid subject, string from, string to, DateTimeOffset at, string origin = "runtime", string? actor = "sub", string? reason = "trace")
+            {
+                var e = await Assert.ThrowsAnyAsync<Exception>(async () =>
+                {
+                    await using var other = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+                    other.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = subject, PreviousStatus = from, NextStatus = to, EffectiveAtUtc = at, Origin = origin, ActorSubject = actor, ReasonRef = reason });
+                    await other.SaveChangesAsync(ct);
+                });
+                return e.ToString();
+            }
+            Assert.Contains("PM411", await Insert(Guid.NewGuid(), "active", "retired", DateTimeOffset.UtcNow));
+            var support = new Organization { Name = $"Otra organización {suffix}", Type = "other_org_test" };
+            db.Organizations.Add(support); await db.SaveChangesAsync(ct);
+            Assert.Contains("PM411", await Insert(support.Id, "active", "retired", DateTimeOffset.UtcNow));
+            Assert.Contains("PM412", await Insert(workshop.Id, "active", "retired", DateTimeOffset.UtcNow));          // la última quedó en retired
+            Assert.Contains("PM413", await Insert(workshop.Id, "retired", "active", D(1, 1)));                          // retroactiva en línea
+            Assert.Contains("23514", await Insert(workshop.Id, "retired", "active", DateTimeOffset.UtcNow, actor: null)); // actor obligatorio en runtime
+
+            // Una transición con fecha NO confiable no participa en series ni inventa fechas.
+            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = "retired", NextStatus = "active", EffectiveAtUtc = D(9, 2), Origin = WorkshopTransitionOrigins.Backfill, DateKnown = false });
+            await db.SaveChangesAsync(ct);
+            Assert.Equal("unknown", await StatusAt(12, 31));   // intervalo afectado por fila sin fecha confiable: nunca se infiere
+
+            // Reversión de transacción: no deja filas.
+            var before = await db.WorkshopStatusTransitions.CountAsync(x => x.SubjectRef == workshop.Id, ct);
+            await using (var tx = await db.Database.BeginTransactionAsync(ct))
+            {
+                db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = "active", NextStatus = "retired", EffectiveAtUtc = DateTimeOffset.UtcNow, ActorSubject = "sub", ReasonRef = "trace" });
+                await db.SaveChangesAsync(ct); await tx.RollbackAsync(ct);
+            }
+            db.ChangeTracker.Clear();
+            Assert.Equal(before, await db.WorkshopStatusTransitions.CountAsync(x => x.SubjectRef == workshop.Id, ct));
+        }
+        finally
+        {
+            await db.Organizations.Where(x => x.Type == "other_org_test" && x.Name.EndsWith(suffix)).ExecuteDeleteAsync(CancellationToken.None);
+            await db.Organizations.Where(x => x.Id == workshop.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "active").SetProperty(o => o.RetiredAtUtc, (DateTimeOffset?)null).SetProperty(o => o.RetiredReason, (string?)null), CancellationToken.None);
+        }
     }
 }

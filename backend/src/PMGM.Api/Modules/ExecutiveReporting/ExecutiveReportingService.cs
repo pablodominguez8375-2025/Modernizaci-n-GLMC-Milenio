@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Hospitalaria;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.SystemConfiguration;
 using PMGM.Api.Modules.Treasury;
 
 namespace PMGM.Api.Modules.ExecutiveReporting;
@@ -13,8 +14,17 @@ public interface IExecutiveReportingService
 
 public sealed class ExecutiveReportingService(
     PmgmDbContext db,
-    LodgeManagementDbContext lodgeDb) : IExecutiveReportingService
+    LodgeManagementDbContext lodgeDb,
+    Microsoft.Extensions.Configuration.IConfiguration? configuration = null) : IExecutiveReportingService
 {
+    /// <summary>
+    /// Inicio certificado de la captura de transiciones (config «Workshops:StatusBaselineUtc», fijada por el procedimiento del corte);
+    /// null = sin baseline certificada: solo el presente es «conocido» y los cortes pasados quedan «desconocidos» (fail-closed).
+    /// </summary>
+    public DateTimeOffset? StatusBaselineUtc { get; init; } =
+        DateTimeOffset.TryParse(configuration?["Workshops:StatusBaselineUtc"], System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal, out var configuredBaseline) ? configuredBaseline : null;
+
     public async Task<ExecutiveReportDto> BuildAsync(
         DateOnly asOf,
         DateOnly from,
@@ -25,8 +35,21 @@ public sealed class ExecutiveReportingService(
             .Where(x => x.Type == "workshop")
             .OrderBy(x => x.Number)
             .ThenBy(x => x.Name)
-            .Select(x => new WorkshopIdentityRow(x.Id, x.Name, x.Number))
+            .Select(x => new WorkshopIdentityRow(x.Id, x.Name, x.Number, x.Status, x.RetiredAtUtc))
             .ToListAsync(cancellationToken);
+
+        // #1035 T2b-2 (propuesta ChatGPT, pendiente de ratificación del PO): un Taller dado de baja a la fecha de corte
+        // conserva su fila histórica (etiquetada «De baja»), pero NO suma en las métricas operativas del Orden.
+        var workshopTransitionIds = workshops.Select(x => x.Id).ToList();
+        var transitionsByWorkshop = (await db.WorkshopStatusTransitions.AsNoTracking()
+                .Where(x => workshopTransitionIds.Contains(x.SubjectRef)).ToListAsync(cancellationToken))
+            .GroupBy(x => x.SubjectRef).ToDictionary(x => x.Key, x => (IReadOnlyList<WorkshopStatusTransition>)x.ToList());
+        var statusAsOf = workshops.ToDictionary(x => x.Id, x => WorkshopStatusHistory.Resolve(
+            transitionsByWorkshop.TryGetValue(x.Id, out var list) ? list : [], x.Status, x.RetiredAtUtc, asOf, StatusBaselineUtc));
+        // Tres conjuntos DISJUNTOS (fail-closed): solo los activos CONOCIDOS alimentan métricas operativas; los desconocidos no se infieren activos.
+        var knownActiveIds = workshops.Where(x => statusAsOf[x.Id].Known && !statusAsOf[x.Id].Retired).Select(x => x.Id).ToHashSet();
+        var retiredIds = workshops.Where(x => statusAsOf[x.Id].Known && statusAsOf[x.Id].Retired).Select(x => x.Id).ToHashSet();
+        var unknownIds = workshops.Where(x => !statusAsOf[x.Id].Known).Select(x => x.Id).ToHashSet();
 
         var workshopIds = workshops.Select(x => x.Id).ToList();
         var affiliations = workshopIds.Count == 0
@@ -172,6 +195,8 @@ public sealed class ExecutiveReportingService(
                 .Select(x => new ActivityRow(x.OrganizationId, x.InstructionDate))
                 .ToListAsync(cancellationToken);
 
+        var operationalAffiliations = affiliations.Where(x => knownActiveIds.Contains(x.OrganizationId)).ToList();
+        var operationalMemberIds = operationalAffiliations.Select(x => x.MemberId).Distinct().ToList();
         var workshopRows = new List<ExecutiveWorkshopRowDto>(workshops.Count);
         foreach (var workshop in workshops)
         {
@@ -215,11 +240,17 @@ public sealed class ExecutiveReportingService(
                 (x.SourceOrganizationId == workshop.Id || x.TargetOrganizationId == workshop.Id) &&
                 x.Status is MembershipCodes.TransferStatus.Requested or MembershipCodes.TransferStatus.Approved);
 
+            var retiredNow = retiredIds.Contains(workshop.Id);
+            var unknownNow = unknownIds.Contains(workshop.Id);
             var flags = new List<string>();
-            if (workshopFinancial?.Status == TreasuryCodes.RegularityStatus.Delinquent) flags.Add("treasury_delinquent");
-            if (workshopHospitalaria?.Status == HospitalariaCodes.RegularityStatus.Overdue) flags.Add("hospitalaria_overdue");
-            if (blocking > 0) flags.Add("blocking_member_status");
-            if (pendingTransfers > 0) flags.Add("pending_transfers");
+            // Taller de baja: historia sin banderas operativas de atención.
+            if (!retiredNow && !unknownNow)
+            {
+                if (workshopFinancial?.Status == TreasuryCodes.RegularityStatus.Delinquent) flags.Add("treasury_delinquent");
+                if (workshopHospitalaria?.Status == HospitalariaCodes.RegularityStatus.Overdue) flags.Add("hospitalaria_overdue");
+                if (blocking > 0) flags.Add("blocking_member_status");
+                if (pendingTransfers > 0) flags.Add("pending_transfers");
+            }
 
             workshopRows.Add(new ExecutiveWorkshopRowDto(
                 workshop.Id,
@@ -249,10 +280,13 @@ public sealed class ExecutiveReportingService(
                     instruction.Count(x => x.OrganizationId == workshop.Id),
                     pendingTransfers),
                 flags.Count > 0,
-                flags));
+                flags,
+                unknownNow ? WorkshopRegistryCodes.Unknown : retiredNow ? WorkshopRegistryCodes.Retired : WorkshopRegistryCodes.Active,
+                retiredNow ? statusAsOf[workshop.Id].RetiredAtUtc : null,
+                !unknownNow));
         }
 
-        var globalStatusByMember = currentMemberIds.ToDictionary(
+        var globalStatusByMember = operationalMemberIds.ToDictionary(
             memberId => memberId,
             memberId => ResolveStatus(statusRows, memberId, null));
 
@@ -260,25 +294,26 @@ public sealed class ExecutiveReportingService(
         var orderInactive = globalStatusByMember.Values.Count(x => x == MembershipCodes.InstitutionalStatus.Inactive);
         var orderBlocking = globalStatusByMember.Values.Count(IsBlocking);
         var delinquentMemberIds = latestFinancialByAffiliation.Values
-            .Where(x => x.Status == TreasuryCodes.RegularityStatus.Delinquent)
+            .Where(x => knownActiveIds.Contains(x.OrganizationId) && x.Status == TreasuryCodes.RegularityStatus.Delinquent)
             .Select(x => x.MemberId)
             .Distinct()
             .Count();
-        var affiliationsWithoutStatus = affiliations.Count(x =>
+        var affiliationsWithoutStatus = operationalAffiliations.Count(x =>
             !latestFinancialByAffiliation.ContainsKey((x.MemberId, x.OrganizationId)));
         var periodTransfersExecuted = transfers.Count(x =>
             x.RequestedDate >= from && x.RequestedDate <= asOf &&
             x.Status == MembershipCodes.TransferStatus.Executed);
         var pendingTransfersOrder = transfers.Count(x =>
+            (knownActiveIds.Contains(x.SourceOrganizationId) || knownActiveIds.Contains(x.TargetOrganizationId)) &&
             x.Status is MembershipCodes.TransferStatus.Requested or MembershipCodes.TransferStatus.Approved);
 
         var overview = new ExecutiveOverviewDto(
-            workshops.Count,
-            currentMemberIds.Count,
+            knownActiveIds.Count,
+            operationalMemberIds.Count,
             orderActive,
             orderInactive,
             orderBlocking,
-            pastOfficeholderMemberIds.Count,
+            pastOfficeholderMemberIds.Count(operationalMemberIds.Contains),
             new ExecutiveEventCountersDto(
                 periodStatusRows.Count(x => x.Status == MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal),
                 periodStatusRows.Count(x => x.Status == MembershipCodes.InstitutionalStatus.ForcedWithdrawal),
@@ -286,13 +321,15 @@ public sealed class ExecutiveReportingService(
                 periodStatusRows.Count(x => x.Status == MembershipCodes.InstitutionalStatus.Deceased),
                 periodTransfersExecuted),
             new ExecutiveOrderFinancialDto(
-                latestFinancialByAffiliation.Values.Count(x => x.Status == TreasuryCodes.RegularityStatus.Delinquent),
+                latestFinancialByAffiliation.Values.Count(x => knownActiveIds.Contains(x.OrganizationId) && x.Status == TreasuryCodes.RegularityStatus.Delinquent),
                 delinquentMemberIds,
                 affiliationsWithoutStatus,
-                workshopRows.Count(x => x.Financial.WorkshopTreasuryStatus == TreasuryCodes.RegularityStatus.Delinquent),
-                workshopRows.Count(x => x.Financial.WorkshopHospitalariaStatus == HospitalariaCodes.RegularityStatus.Overdue)),
+                workshopRows.Count(x => x.Status == WorkshopRegistryCodes.Active && x.Financial.WorkshopTreasuryStatus == TreasuryCodes.RegularityStatus.Delinquent),
+                workshopRows.Count(x => x.Status == WorkshopRegistryCodes.Active && x.Financial.WorkshopHospitalariaStatus == HospitalariaCodes.RegularityStatus.Overdue)),
             pendingTransfersOrder,
-            workshopRows.Count(x => x.AttentionRequired));
+            workshopRows.Count(x => x.AttentionRequired),
+            retiredIds.Count,
+            unknownIds.Count);
 
         return new ExecutiveReportDto(
             asOf,
@@ -332,7 +369,7 @@ public sealed class ExecutiveReportingService(
             or MembershipCodes.InstitutionalStatus.ForcedWithdrawal
             or MembershipCodes.InstitutionalStatus.Deceased;
 
-    private sealed record WorkshopIdentityRow(Guid Id, string Name, string? Number);
+    private sealed record WorkshopIdentityRow(Guid Id, string Name, string? Number, string Status, DateTimeOffset? RetiredAtUtc);
     private sealed record AffiliationRow(Guid MemberId, Guid OrganizationId);
     private sealed record StatusRow(Guid MemberId, Guid? OrganizationId, string Status, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
     private sealed record DegreeRow(Guid MemberId, string Degree, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
@@ -361,7 +398,9 @@ public sealed record ExecutiveOverviewDto(
     ExecutiveEventCountersDto Events,
     ExecutiveOrderFinancialDto Financial,
     int PendingTransfers,
-    int WorkshopsRequiringAttention);
+    int WorkshopsRequiringAttention,
+    int RetiredWorkshops = 0,
+    int UnknownStatusWorkshops = 0);
 
 public sealed record ExecutiveWorkshopRowDto(
     Guid OrganizationId,
@@ -377,7 +416,10 @@ public sealed record ExecutiveWorkshopRowDto(
     ExecutiveFinancialDto Financial,
     ExecutiveActivityDto Activity,
     bool AttentionRequired,
-    IReadOnlyList<string> AttentionFlags);
+    IReadOnlyList<string> AttentionFlags,
+    string Status = "active",
+    DateTimeOffset? RetiredAtUtc = null,
+    bool StatusKnown = true);
 
 public sealed record ExecutiveEventCountersDto(
     int VoluntaryWithdrawals,
