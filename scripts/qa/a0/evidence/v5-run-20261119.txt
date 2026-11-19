@@ -1,6 +1,6 @@
-# A0 v5 · evidencia hermética (sandbox descartable, NO glmdch)
+# A0 v5.2 · evidencia hermética (sandbox descartable, NO glmdch)
 # Linux vm 6.18.44-fc-v653 #1 SMP PREEMPT_DYNAMIC @0 x86_64 x86_64 x86_64 GNU/Linux
-# inicio 2026-11-19T16:50:31Z
+# inicio 2026-11-19T17:45:09Z
 # host mnt ns antes: mnt:[4026531832] mountinfo sha256 c87e400641a1e660
 ## test-a0.sh
 casos=54 fallos=0
@@ -17,7 +17,7 @@ test-a0 exit=0
   PASS: sin patrones prohibidos
   PASS: rc=1, sin residuos, host idéntico
   PASS: exit 9, sin residuos, host idéntico
-  PASS: worker 12613 muerto con suite activa; 0 procesos, 0 dirs en /tmp del host, host idéntico
+  PASS: worker 4672 (starttime 34313, ppid 4661) muerto con suite activa; 0 procesos, 0 dirs en /tmp del host, host idéntico
   PASS: estático
 9) el mount namespace y los montajes del HOST no cambiaron: antes='mnt:[4026531832] c87e400641a1e660  ' después='mnt:[4026531832] c87e400641a1e660  '
   PASS: idénticos
@@ -26,4 +26,5 @@ GUARDA DE NAMESPACE VERIFICADA
 ns-guard exit=0
 # host mnt ns después: mnt:[4026531832] mountinfo sha256 c87e400641a1e660
 # procesos a0 residuales: 0
-# fin 2026-11-19T16:50:44Z
+# residuos /root/a0-guard.*: 0
+# fin 2026-11-19T17:45:21Z
