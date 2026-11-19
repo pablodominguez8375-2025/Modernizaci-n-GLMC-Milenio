@@ -2,10 +2,11 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { readFileSync } from 'node:fs'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import WorkshopRegistryPanel from './WorkshopRegistryPanel'
 import { PmgmApiClient } from './api/pmgmApi'
-import { availableWorkshopActions, workshopRegistryCsv, workshopRequestValid, type WorkshopRegistryItem } from './api/workshopRegistry'
+import { availableWorkshopActions, createWorkshopRegistryApi, WorkshopRegistryDemo, workshopRegistryFor, workshopRegistryCsv, workshopRequestValid, workshopServerError, WORKSHOP_ERROR_MESSAGES, type WorkshopRegistryClient, type WorkshopRegistryItem } from './api/workshopRegistry'
+import { PmgmApiHttpError } from './api/pmgmApi'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -17,10 +18,38 @@ const policy = { reasonMinLength: 10, reasonMaxLength: 500 }
 describe('reglas del registro de Talleres', () => {
   it('ofrece eliminar solo sin datos, dar de baja con datos, reactivar si está de baja y nada si es protegido o no es el Máster', () => {
     expect(availableWorkshopActions(base, true)).toEqual(['delete'])
-    expect(availableWorkshopActions({ ...base, hasData: true }, true)).toEqual(['retire'])
+    expect(availableWorkshopActions({ ...base, hasData: true }, true, true)).toEqual(['retire'])
     expect(availableWorkshopActions({ ...base, status: 'retired', hasData: true }, true)).toEqual(['reactivate'])
     expect(availableWorkshopActions({ ...base, protected: true }, true)).toEqual([])
     expect(availableWorkshopActions(base, false)).toEqual([])
+  })
+  it('oculta «Dar de baja» cuando el servidor informa retireEnabled distinto de true (default-deny), pero conserva eliminar y reactivar', () => {
+    expect(availableWorkshopActions({ ...base, hasData: true }, true, false)).toEqual([])
+    expect(availableWorkshopActions({ ...base, hasData: true }, true)).toEqual([])
+    expect(availableWorkshopActions({ ...base, hasData: true }, true, true)).toEqual(['retire'])
+    expect(availableWorkshopActions(base, true, false)).toEqual(['delete'])
+    expect(availableWorkshopActions({ ...base, status: 'retired', hasData: true }, true, false)).toEqual(['reactivate'])
+  })
+  it('si el servidor omite retireEnabled, el panel no ofrece «Dar de baja» y lo explica; con true sí', async () => {
+    const { api } = await render('demo:systemAdmin')
+    expect(buttons('Dar de baja').length).toBeGreaterThan(0)
+    act(() => root?.unmount()); document.body.innerHTML = ''
+    const legacy = { ...(await workshopRegistryFor(api).registry()), retireEnabled: undefined }
+    const spy = vi.spyOn(WorkshopRegistryDemo.prototype, 'registry').mockReturnValue(legacy)
+    host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host)
+    await act(async () => { root!.render(<WorkshopRegistryPanel api={new PmgmApiClient({ useMocks: true })} />) }); await flush()
+    expect(buttons('Dar de baja')).toHaveLength(0)
+    expect(host.textContent).toContain('Dar de baja aún no está habilitado')
+    spy.mockRestore()
+  })
+  it('traduce los códigos 409 del servidor y deja pasar cualquier otro error', async () => {
+    for (const code of Object.keys(WORKSHOP_ERROR_MESSAGES)) expect((workshopServerError(new PmgmApiHttpError(409, 'La API respondió 409.', code)) as Error).message).toBe(WORKSHOP_ERROR_MESSAGES[code])
+    const other = new PmgmApiHttpError(409, 'La API respondió 409.', 'OTRO')
+    expect(workshopServerError(other)).toBe(other)
+    expect(workshopServerError('x')).toBe('x')
+    expect(workshopServerError(new PmgmApiHttpError(409, 'm', 'constructor'))).toBeInstanceOf(PmgmApiHttpError)
+    const client = { useMocks: false, demoAccessSubject: '', baseUrl: '', request: async () => ({}), postJson: async () => { throw new PmgmApiHttpError(409, 'La API respondió 409.', 'GUARD_INCOMPLETE') } } as unknown as WorkshopRegistryClient
+    await expect(createWorkshopRegistryApi(client).run('a', 'retire', { reason: 'motivo valido', confirmation: '1' })).rejects.toThrow(WORKSHOP_ERROR_MESSAGES.GUARD_INCOMPLETE)
   })
   it('exige motivo de 10 a 500 caracteres y escribir el número del Taller para eliminar o dar de baja', () => {
     expect(workshopRequestValid('delete', base, { reason: 'Creado por error', confirmation: '230' }, policy)).toBe(true)

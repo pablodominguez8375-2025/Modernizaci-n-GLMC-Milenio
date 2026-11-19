@@ -25,7 +25,8 @@ export interface WorkshopRegistryItem {
   hasData: boolean
   protected: boolean
 }
-export interface WorkshopRegistry { items: WorkshopRegistryItem[]; canManage: boolean; reasonMinLength: number; reasonMaxLength: number }
+/** `retireEnabled`: el servidor activa «Dar de baja» solo tras cerrar el corte de la guardia de BD (T1). DEFAULT-DENY: solo `true` la habilita; si falta (servidor antiguo) o es false, la UI no la ofrece. La demo lo declara explícitamente. */
+export interface WorkshopRegistry { items: WorkshopRegistryItem[]; canManage: boolean; reasonMinLength: number; reasonMaxLength: number; retireEnabled?: boolean }
 export interface WorkshopRegistryRequest { reason: string; confirmation?: string }
 export interface WorkshopRegistryResult { id: string; action: WorkshopRegistryAction; completed: boolean }
 
@@ -37,10 +38,29 @@ export const workshopLabel = (item: Pick<WorkshopRegistryItem, 'name' | 'number'
 export const workshopConfirmationText = (item: Pick<WorkshopRegistryItem, 'number' | 'shortCode'>) => item.number ?? item.shortCode
 
 /** Acciones que la UI ofrece; el servidor vuelve a validar todo. */
-export function availableWorkshopActions(item: WorkshopRegistryItem, canManage: boolean): WorkshopRegistryAction[] {
+export function availableWorkshopActions(item: WorkshopRegistryItem, canManage: boolean, retireEnabled = false): WorkshopRegistryAction[] {
   if (!canManage || item.protected) return []
   if (item.status === 'retired') return ['reactivate']
-  return item.hasData ? ['retire'] : ['delete']
+  if (item.hasData) return retireEnabled ? ['retire'] : []
+  return ['delete']
+}
+
+/** Mensajes en español para los códigos que devuelve el servidor (`{ code }`) al rechazar una acción. */
+export const WORKSHOP_ERROR_MESSAGES: Record<string, string> = {
+  HasData: 'Este Taller tiene datos asociados: no se puede eliminar, solo dar de baja.',
+  NotActive: 'El Taller ya no está activo. Actualice la lista.',
+  AlreadyRetired: 'El Taller ya está de baja.',
+  NotRetired: 'El Taller ya está activo.',
+  RetireNotEnabled: 'Dar de baja aún no está habilitado en este servidor.',
+  GUARD_INCOMPLETE: 'Dar de baja no está disponible todavía: falta completar la protección de la base de datos. No se hizo ningún cambio.',
+  WORKSHOP_RETIRED: 'El Taller está de baja: no admite cambios hasta reactivarlo.',
+  CONCURRENT_CHANGE_RETRY: 'Otra persona modificó el Taller al mismo tiempo. Actualice la lista y reintente.',
+  UNEXPECTED_DATABASE_ERROR: 'No se pudo completar la acción por un error del servidor. No se hizo ningún cambio.',
+}
+/** Traduce el error de la API al mensaje que ve el Máster; cualquier otro error pasa sin cambios. */
+export function workshopServerError(reason: unknown): unknown {
+  const code = (reason as { code?: unknown } | null)?.code
+  return reason instanceof Error && typeof code === 'string' && Object.prototype.hasOwnProperty.call(WORKSHOP_ERROR_MESSAGES, code) ? new Error(WORKSHOP_ERROR_MESSAGES[code]) : reason
 }
 
 export function workshopActionDescription(action: WorkshopRegistryAction, item: WorkshopRegistryItem): string {
@@ -83,7 +103,7 @@ export class WorkshopRegistryDemo {
     ]
   }
   private authorize() { if (!this.canRead()) throw new Error('Su cuenta no tiene permiso para ver el registro de Talleres.') }
-  registry(): WorkshopRegistry { this.authorize(); return { items: structuredClone(this.items), canManage: this.isMaster(), reasonMinLength: 10, reasonMaxLength: 500 } }
+  registry(): WorkshopRegistry { this.authorize(); return { items: structuredClone(this.items), canManage: this.isMaster(), reasonMinLength: 10, reasonMaxLength: 500, retireEnabled: true } }
   csv(): { blob: Blob; fileName: string } { this.authorize(); return { blob: new Blob([workshopRegistryCsv(this.items)], { type: 'text/csv;charset=utf-8' }), fileName: 'talleres-registrados.csv' } }
   run(id: string, action: WorkshopRegistryAction, request: WorkshopRegistryRequest): WorkshopRegistryResult {
     this.authorize()
@@ -129,7 +149,7 @@ export function createWorkshopRegistryApi(client: WorkshopRegistryClient): Works
   }
   return {
     registry: () => client.request<WorkshopRegistry>('/api/system/workshops'),
-    run: (id, action, request) => client.postJson<WorkshopRegistryResult>(`/api/system/workshops/${encodeURIComponent(id)}/${action}`, request),
+    run: (id, action, request) => client.postJson<WorkshopRegistryResult>(`/api/system/workshops/${encodeURIComponent(id)}/${action}`, request).catch(reason => { throw workshopServerError(reason) }),
     async downloadCsv() {
       const token = await client.getAccessToken?.(); if (!token) throw new Error('Debe ingresar para descargar el registro de Talleres.')
       const response = await fetch(`${client.baseUrl}/api/system/workshops/export.csv`, { credentials: 'omit', redirect: 'error', cache: 'no-store', headers: new Headers({ Authorization: `Bearer ${token}` }) })
