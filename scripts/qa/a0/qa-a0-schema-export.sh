@@ -6,7 +6,7 @@
 #   Borrar:     CLEANUP_DIR=/var/tmp/qa525-a0-schema.XXXXXX ./qa-a0-schema-export.sh
 # RETENCIÓN: MANUAL. No hay borrado automático ni plazo garantizado: el Sponsor debe ejecutar el modo Borrar apenas termine el uso autorizado.
 # Cada exportación lleva un MARCADOR root-only (.qa525-a0-marker) con identidad, fecha y hash; el borrado solo procede si el marcador, el
-# propietario, los modos, el contenido exacto del directorio y el hash del volcado coinciden. Sin `rm -r`. Borrado por descriptores (dirfd) con Python 3 (anti-TOCTOU).
+# propietario, los modos, el contenido exacto del directorio y el hash del volcado coinciden. Sin `rm -r`. Borrado por descriptores (dirfd) con Python 3 (reduce, no elimina, el riesgo TOCTOU; ver residual abajo).
 # EL EXPORT A0b SIGUE NO AUTORIZADO hasta dictamen exact-hash de ChatGPT y autorización literal del Sponsor.
 # Modo de errores: `set -eEu -o pipefail` + `trap ERR`; además cada paso crítico lleva `|| stop` y tiene prueba negativa en tests/test-a0.sh.
 set -eEu -o pipefail
@@ -38,7 +38,8 @@ fi
 # ---------- Modo Borrar ----------
 # TOCTOU: el borrado NO opera por ruta. Python abre el directorio con O_NOFOLLOW|O_DIRECTORY y TODO lo demás (fstat, listdir, apertura de archivos con
 # O_NOFOLLOW, lectura/hash, unlink, rmdir) es relativo a esos descriptores (dirfd). Un cambio de la ruta después de abrir no redirige nada; ante cualquier
-# discrepancia: STOP sin borrar (fail-closed). Amenaza fuera de alcance: otro proceso root modificando el directorio (el directorio es root:root 0700).
+# discrepancia: STOP sin borrar (fail-closed). RESIDUAL DOCUMENTADO (no es protección absoluta): entre la re-verificación de dev/ino y rmdir(nombre, dir_fd=pfd) un atacante ROOT concurrente podría reemplazar el
+# directorio hijo. Mitigaciones: directorio root:root 0700, operaciones relativas a dirfd, rmdir solo elimina directorios VACÍOS y ante discrepancia STOP sin borrar.
 if [ -n "${CLEANUP_DIR:-}" ]; then
   printf '%s' "$CLEANUP_DIR" | grep -Eq '^/var/tmp/qa525-a0-schema\.[A-Za-z0-9]{6}$' || stop "CLEANUP_DIR no es un directorio de esta exportación"
   PYCODE="$(cat <<'PY'

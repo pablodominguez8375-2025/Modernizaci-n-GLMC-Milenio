@@ -2,32 +2,54 @@
 # Pruebas HERMÉTICAS de A0 v3 (no tocan ningún host real): sudo/docker/hostname/id simulados, BD local `a0test`. Debe correr como root con PostgreSQL local en /tmp.
 # Uso: bash test-a0.sh
 set -u
-# v4: la suite SOLO corre dentro de un namespace efímero propio (mount+net+pid) con /tmp y /var/tmp en tmpfs privados. Todo (cluster PostgreSQL privado,
-# sockets, exportaciones, mocks) vive ahí y desaparece al terminar: no se toca el PostgreSQL del host, ni su pg_hba.conf, ni /var/tmp del host,
-# y no existe NINGÚN borrado por glob. Requiere root (unshare) y binarios de PostgreSQL 16; el usuario del SO `postgres` ejecuta solo el cluster privado.
-if [ "${A0_TEST_NS:-}" != "1" ]; then
+# v5: ARRANQUE y TRABAJADOR separados. El arranque (sin argumentos o --ns-selfcheck) SIEMPRE crea un namespace nuevo y NUNCA lee variables de entorno del llamador
+# (A0_TEST_NS ya no existe). El trabajador (--a0-worker / --a0-worker-selfcheck) valida de forma inequívoca que está en un namespace mount+pid+net recién creado
+# ANTES de montar nada y, si no, se niega (exit 9) sin efectuar ningún montaje. Evidencia en tests/ns-guard-test.sh (el ns del host no cambia).
+# Requiere root y PostgreSQL 16; el cluster privado vive en tmpfs privados que desaparecen con el namespace.
+MODE="${1:-bootstrap}"
+case "$MODE" in bootstrap|--ns-selfcheck|--a0-worker|--a0-worker-selfcheck) ;; *) echo "uso: bash test-a0.sh [--ns-selfcheck]"; exit 9;; esac
+nsid() { readlink "/proc/self/ns/$1" 2>/dev/null; }
+if [ "$MODE" = "bootstrap" ] || [ "$MODE" = "--ns-selfcheck" ]; then
   [ "$(id -u)" = "0" ] || { echo "la suite requiere root para crear el namespace efímero"; exit 9; }
-  exec unshare --mount --net --pid --fork --mount-proc --propagation private env A0_TEST_NS=1 bash "$0" "$@"
+  W=--a0-worker; [ "$MODE" = "--ns-selfcheck" ] && W=--a0-worker-selfcheck
+  # Token por FD 3 (no por entorno ni argv): identificadores de los namespaces del HOST, que el trabajador debe NO compartir.
+  exec 3<<EOF_TOKEN
+mnt=$(nsid mnt)
+net=$(nsid net)
+pid=$(nsid pid)
+EOF_TOKEN
+  exec unshare --mount --net --pid --fork --mount-proc --propagation private bash "$0" "$W"
 fi
-mount -t tmpfs -o mode=1777 tmpfs /tmp && mount -t tmpfs -o mode=1777 tmpfs /var/tmp || { echo "no se pudo montar tmpfs privados"; exit 9; }
+# ---- TRABAJADOR: validación ANTES de cualquier montaje ----
+refuse() { echo "GUARDA: $* (el trabajador no se ejecuta fuera de un namespace efímero recién creado; no se montó nada)" >&2; exit 9; }
+[ "$$" = "1" ] && [ "${PPID:-x}" = "0" ] || refuse "no es PID 1 de un pid namespace nuevo"
+tr '\0' ' ' </proc/1/cmdline 2>/dev/null | grep -qF -- "--a0-worker" || refuse "/proc no corresponde a este pid namespace (sin --mount-proc propio)"
+if grep -q 'shared:' /proc/self/mountinfo; then refuse "hay montajes con propagación compartida (no es un mount namespace privado)"; fi
+{ read -r -u 3 L1 && read -r -u 3 L2 && read -r -u 3 L3; } 2>/dev/null || refuse "falta el token de namespaces del llamador (FD 3)"
+[ "$L1" = "mnt=$(nsid mnt)" ] && refuse "comparte el mount namespace del llamador"
+[ "$L2" = "net=$(nsid net)" ] && refuse "comparte el net namespace del llamador"
+[ "$L3" = "pid=$(nsid pid)" ] && refuse "comparte el pid namespace del llamador"
+printf '%s' "$L1" | grep -Eq '^mnt=mnt:\[[0-9]+\]$' && printf '%s' "$L2" | grep -Eq '^net=net:\[[0-9]+\]$' || refuse "token mal formado"
+if [ "$MODE" = "--a0-worker-selfcheck" ]; then echo "NS_OK worker_mnt=$(nsid mnt) host_$L1"; exit 0; fi
+# Recién ahora (namespace comprobado) se montan los tmpfs privados.
+mount -t tmpfs -o mode=1777 tmpfs /tmp && mount -t tmpfs -o mode=1777 tmpfs /var/tmp || { echo "no se pudieron montar tmpfs privados"; exit 9; }
 : > /var/tmp/.a0-ns-sentinel
-# Guardas: estamos en tmpfs privados y NO vemos nada del host.
 [ "$(stat -f -c %T /var/tmp)" = "tmpfs" ] && [ "$(stat -f -c %T /tmp)" = "tmpfs" ] || { echo "GUARDA: /tmp y /var/tmp deben ser tmpfs privados"; exit 9; }
 [ "$(ls -A /var/tmp)" = ".a0-ns-sentinel" ] || { echo "GUARDA: /var/tmp no está vacío tras el montaje privado"; exit 9; }
 [ ! -e /var/tmp/pgdata ] || { echo "GUARDA: se ve el cluster del host"; exit 9; }
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-PGBIN=/usr/lib/postgresql/16/bin
+PGBIN="${A0_PGBIN:-/usr/lib/postgresql/16/bin}"   # solo selecciona binarios de PostgreSQL (la guarda de namespace NO depende de nada del entorno)
 TESTROOT="$(mktemp -d /tmp/a0-suite.XXXXXX)"; chmod 755 "$TESTROOT"; MOCK="$TESTROOT/mock"; mkdir "$MOCK"; chmod 755 "$MOCK"
 fails=0; total=0
 CREATED=()   # registro EXACTO de rutas creadas por la suite fuera de $TESTROOT (se borran una a una; sin globs)
 PGD="$TESTROOT/pg"; SOCK="$TESTROOT/sock"
+finish() { [ -f "$PGD/postmaster.pid" ] && su postgres -s /bin/bash -c "$PGBIN/pg_ctl -D $PGD -m immediate stop >/dev/null 2>&1"; for p in "${CREATED[@]:-}"; do [ -n "$p" ] && { [ -L "$p" ] || [ -f "$p" ] && rm -f -- "$p"; [ -d "$p" ] && [ ! -L "$p" ] && rmdir -- "$p"; }; done; return 0; }
+trap finish EXIT   # registrado ANTES de initdb: ningún fallo posterior deja el cluster activo
 install -d -o postgres -g postgres -m 700 "$PGD" "$SOCK"
 su postgres -s /bin/bash -c "$PGBIN/initdb -D $PGD -A trust -U postgres >/dev/null" || { echo "initdb falló"; exit 9; }
 su postgres -s /bin/bash -c "$PGBIN/pg_ctl -D $PGD -l $PGD/log -w -o \"-c listen_addresses='' -c unix_socket_directories=$SOCK -c fsync=off\" start >/dev/null" || { echo "no arrancó el cluster privado"; exit 9; }
 export PGHOST="$SOCK"
-finish() { su postgres -s /bin/bash -c "$PGBIN/pg_ctl -D $PGD -m immediate stop >/dev/null 2>&1"; for p in "${CREATED[@]:-}"; do [ -n "$p" ] && [ -e "$p" ] && rm -rf -- "$p"; done; }
-trap finish EXIT
 P() { su postgres -s /bin/bash -c "PGHOST=$SOCK $PGBIN/psql -X -q -v ON_ERROR_STOP=1 $*"; }
 chk() { total=$((total+1)); if [ "$1" = ok ]; then echo "  PASS: $2"; else echo "  FAIL: $2"; fails=$((fails+1)); [ -n "${3:-}" ] && echo "$3" | tail -6; fi; }
 sql() { P -d a0test -c "\"$1\"" >/dev/null; }
