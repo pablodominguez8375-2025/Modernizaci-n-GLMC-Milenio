@@ -35,15 +35,15 @@ def run_worker(store_dir, nonce=NONCE, fault=""):
                           capture_output=True, text=True, timeout=30)
 
 
-class Base(unittest.TestCase):
+class SpendStoreBase(unittest.TestCase):
     def setUp(self):
-        self.base = Path(tempfile.mkdtemp(prefix=".qa525-spend-", dir=ROOT))   # 0700, owned by us, inside the checkout (not sticky /tmp)
+        self.base = Path(tempfile.mkdtemp(prefix=".qa525-spend-", dir=os.environ.get("QA525_TEST_BASE", str(ROOT))))   # 0700, owned by us; never sticky /tmp (QA525_TEST_BASE=/root for the root run)
         self.addCleanup(shutil.rmtree, self.base, True)
         self.store_dir = self.base / "store"
         self.store_dir.mkdir(mode=0o700)
 
 
-class G1TrustedRoot(Base):
+class SpendStoreG1TrustedRoot(SpendStoreBase):
     def test_ok(self):
         with S.SpendStore(str(self.store_dir)) as st:
             self.assertEqual(st.spend(NONCE, REL, PLAN), "SPENT")
@@ -100,7 +100,7 @@ class G1TrustedRoot(Base):
         self.assertFalse((self.base / "nope").exists())
 
 
-class G3G4Spend(Base):
+class SpendStoreG3G4Spend(SpendStoreBase):
     def test_eight_processes_one_spend(self):
         procs = [subprocess.Popen([sys.executable, "-I", "-c", WORKER, str(ROOT / "scripts/qa/qa525_spend_store.py"), str(self.store_dir), NONCE, ""],
                                   stdout=subprocess.PIPE, text=True) for _ in range(8)]
@@ -179,7 +179,7 @@ class G3G4Spend(Base):
 
 
 @unittest.skipUnless(HAVE_SSH, "ssh-keygen not available")
-class G2AuthenticatedGo(Base):
+class SpendStoreG2AuthenticatedGo(SpendStoreBase):
     def keygen(self, name):
         key = self.base / name
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", name, "-f", str(key)], check=True)
