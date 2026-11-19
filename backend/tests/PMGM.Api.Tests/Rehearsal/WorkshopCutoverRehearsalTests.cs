@@ -203,6 +203,23 @@ public sealed class WorkshopCutoverRehearsalTests
         }
         await Exec(Connection, "ALTER TABLE core.workshop_status_transitions DISABLE TRIGGER a00_workshop_status_transitions_append_only; DELETE FROM core.workshop_status_transitions; ALTER TABLE core.workshop_status_transitions ENABLE TRIGGER a00_workshop_status_transitions_append_only;", ct);   // limpieza del ensayo (solo en la copia)
 
+        // 6b) REVOKE explícito al rol REAL de la aplicación (descubierto por consulta, no literal): UPDATE/DELETE/TRUNCATE caen por PRIVILEGIO (42501) y el INSERT sigue funcionando.
+        var discoveredRole = await ((Func<Task<string>>)(async () => { await using var c = new NpgsqlConnection(app); await c.OpenAsync(ct); return await Scalar<string>(c, "select current_user", ct); }))();
+        Assert.Equal(appUser, discoveredRole);
+        await Exec(Connection, $"REVOKE UPDATE, DELETE, TRUNCATE ON core.workshop_status_transitions FROM {discoveredRole}", ct);
+        await using (var c = new NpgsqlConnection(app))
+        {
+            await c.OpenAsync(ct);
+            Assert.True(await Scalar<bool>(c, "select has_table_privilege('core.workshop_status_transitions','INSERT')", ct));
+            foreach (var priv in new[] { "UPDATE", "DELETE", "TRUNCATE" }) Assert.False(await Scalar<bool>(c, $"select has_table_privilege('core.workshop_status_transitions','{priv}')", ct));
+            foreach (var sql in new[] { "update core.workshop_status_transitions set \"NextStatus\"='active'", "delete from core.workshop_status_transitions", "truncate core.workshop_status_transitions" })
+            {
+                var e = await Assert.ThrowsAnyAsync<PostgresException>(() => new NpgsqlCommand(sql, c).ExecuteNonQueryAsync(ct));
+                Assert.Equal("42501", e.SqlState);
+            }
+            Log("REVOKE explícito al rol de la app: INSERT=true; UPDATE/DELETE/TRUNCATE=false por has_table_privilege y rechazados con 42501 (privilegio, antes que el trigger)");
+        }
+
         // 7) Concurrencia REAL: 8 transacciones Serializable intentan dar de baja el mismo Taller; exactamente una gana y deja 1 transición.
         var target = await ((Func<Task<Guid>>)(async () => { await using var c = new NpgsqlConnection(Connection); await c.OpenAsync(ct); return await Scalar<Guid>(c, "select \"Id\" from core.organizations where \"Name\"='Taller ensayo 11'", ct); }))();
         var barrier = new Barrier(8);
