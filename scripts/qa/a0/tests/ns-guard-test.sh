@@ -83,27 +83,29 @@ rm -f "$FAKE/mount" "$FAKE/count"
 # --- Casos 12/14/15/16: SIGKILL por PIDFD con identidad re-leída; cleanup solo de procesos propios verificados ---
 # ns_resid NS...: lista (con espacio inicial) los PID que siguen en alguno de esos mount ns
 ns_resid() { local d m w out=""; for d in /proc/[0-9]*; do m="$(readlink "$d/ns/mnt" 2>/dev/null)"; for w in "$@"; do [ -n "$w" ] && [ "$m" = "$w" ] && out="$out ${d#/proc/}"; done; done; printf '%s' "$out"; }
+# pidns_resid NS...: igual que ns_resid pero por PID namespace (los descendientes no pueden salir del pid ns del worker; si el worker muere, el kernel mata todo su pid ns, también los anidados)
+pidns_resid() { local d m w out=""; for d in /proc/[0-9]*; do m="$(readlink "$d/ns/pid" 2>/dev/null)"; for w in "$@"; do [ -n "$w" ] && [ "$m" = "$w" ] && out="$out ${d#/proc/}"; done; done; printf '%s' "$out"; }
 # kill_case ITERS PPID_QUE_SE_EXIGE(real|falso) : SENT/PGUP/WP quedan en variables globales
-kill_case() { local iters="$1" mode="$2" i p ex wmnt=""
+kill_case() { local iters="$1" mode="$2" i p ex wmnt="" wpns=""; wpns=""
   bash "$T" >"$KLOG" 2>&1 &
   BGPID=$!; BGST="$(pst "$BGPID")"; WP=""; ST1=""; PGUP=no; SENT=no
   for i in $(seq 1 "$iters"); do
-    for p in $(pgrep -P "$BGPID"); do [ "$(ppd "$p")" = "$BGPID" ] && grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$p/status" 2>/dev/null && { WP="$p"; ST1="$(pst "$p")"; wmnt="$(readlink "/proc/$p/ns/mnt" 2>/dev/null)"; }; done
+    for p in $(pgrep -P "$BGPID"); do [ "$(ppd "$p")" = "$BGPID" ] && grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$p/status" 2>/dev/null && { WP="$p"; ST1="$(pst "$p")"; wmnt="$(readlink "/proc/$p/ns/mnt" 2>/dev/null)"; wpns="$(readlink "/proc/$p/ns/pid" 2>/dev/null)"; }; done
     [ -n "$wmnt" ] && [ "$wmnt" != "$HM" ] && ns_has_pg "$wmnt" && PGUP=si
     [ -n "$WP" ] && [ "$PGUP" = si ] && break; sleep 0.5
   done
   ex="$BGPID"; [ "$mode" = falso ] && ex=1
   if [ -n "$WP" ] && safe_kill "$WP" "$ST1" "$ex" worker; then SENT=si; else echo "identidad NO validada o worker no seleccionado: no se envía SIGKILL por el camino principal"; fi
   # cleanup: solo procesos PROPIOS; starttime capturado al enumerar y señal por pidfd con identidad completa. Se registran los códigos de retorno y los mount ns a vigilar.
-  RNS=(); [ -n "$wmnt" ] && RNS+=("$wmnt"); KRC=ok; KRES=""
-  for p in $(pgrep -P "$BGPID"); do m="$(readlink "/proc/$p/ns/mnt" 2>/dev/null)"; [ -n "$m" ] && [ "$m" != "$HM" ] && RNS+=("$m")
+  RNS=(); PNS=(); [ -n "$wmnt" ] && RNS+=("$wmnt"); [ -n "$wpns" ] && PNS+=("$wpns"); KRC=ok; KRES=""
+  for p in $(pgrep -P "$BGPID"); do m="$(readlink "/proc/$p/ns/mnt" 2>/dev/null)"; [ -n "$m" ] && [ "$m" != "$HM" ] && RNS+=("$m"); m="$(readlink "/proc/$p/ns/pid" 2>/dev/null)"; [ -n "$m" ] && [ "$m" != "$HP" ] && PNS+=("$m")
     safe_kill "$p" "$(pst "$p")" "$BGPID" worker; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 4 ] || KRC="hijo $p rc=$rc"; done
   safe_kill "$BGPID" "$BGST" "$$" own; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 4 ] || KRC="BGPID rc=$rc"
   # espera ACOTADA (10 s) a que BGPID haya terminado (muerto/zombi) y no quede NINGÚN proceso en los mount ns de la suite; si no, FALLO explícito con la lista
   for i in $(seq 1 20); do
     st="$(awk '{print $3}' "/proc/$BGPID/stat" 2>/dev/null)"; KRES=""
     [ -n "$st" ] && [ "$st" != Z ] && KRES="BGPID=$BGPID($st)"
-    KRES="$KRES$(ns_resid "${RNS[@]}")"
+    KRES="$KRES$(ns_resid "${RNS[@]}")$(pidns_resid "${PNS[@]}")"
     [ -z "$KRES" ] && break; sleep 0.5
   done
   wait "$BGPID" 2>/dev/null; [ -n "$KRES" ] && echo "RESIDUOS tras cleanup: $KRES"; [ "$KRC" != ok ] && echo "cleanup con rc inesperado: $KRC"; return 0; }
@@ -135,6 +137,20 @@ echo "18) la suite ubicada bajo /tmp se rechaza ANTES de crear namespaces (halla
 LD="$(mktemp -d /tmp/a0-loc.XXXXXX)"; cp "$T" "$LD/test-a0.sh"; out="$(bash "$LD/test-a0.sh" 2>&1)"; rc=$?
 rm -f -- "$LD/test-a0.sh"; rmdir -- "$LD"
 [ $rc -eq 9 ] && echo "$out" | grep -q "no puede ubicarse bajo /tmp" && [ "$(suite_procs)" = 0 ] && [ "$(host_state)" = "$BEFORE" ] && chk ok "exit 9 con mensaje claro, sin namespaces ni residuos" || chk bad "rc=$rc" "$out"
+echo "19) cobertura de DESCENDIENTES: un descendiente que crea su propio mount ns y otro que crea un pid ns anidado mueren todos al matar el PID 1 del worker (prueba con árbol de procesos real)"
+bash -c 'exec unshare --mount --net --pid --fork --mount-proc --propagation private bash -c "unshare --mount sleep 200 & unshare --pid --fork --mount-proc sleep 200 & unshare --mount --pid --fork --mount-proc bash -c \"sleep 200 & sleep 200 & wait\" & wait"' &
+TP=$!; sleep 2; W19=""
+for p in $(pgrep -P "$TP"); do grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$p/status" 2>/dev/null && W19="$p"; done
+ok19=1; TREE=""; [ -n "$W19" ] || ok19=0
+walk() { local c; TREE="$TREE $1"; for c in $(pgrep -P "$1"); do walk "$c"; done; }
+[ -n "$W19" ] && walk "$W19"; NT="$(echo $TREE | wc -w)"; [ "$NT" -ge 6 ] || ok19=0
+SL=0; for p in $TREE; do [ "$(cat /proc/$p/comm 2>/dev/null)" = sleep ] && SL=$((SL+1)); done; [ "$SL" -ge 4 ] || ok19=0   # antes de matar: los 'sleep' del árbol deben estar VIVOS (la prueba no puede ser vacía)
+W19ST="$(pst "$W19")"
+if [ -n "$W19" ]; then safe_kill "$W19" "$W19ST" "$TP" worker; RC19=$?; [ $RC19 -eq 0 ] || ok19=0; fi
+wait "$TP" 2>/dev/null; sleep 1
+LEFT=""; for p in $TREE; do [ -e "/proc/$p" ] && [ "$(awk '{print $3}' /proc/$p/stat 2>/dev/null)" != Z ] && LEFT="$LEFT $p"; done
+[ -z "$LEFT" ] || ok19=0
+[ $ok19 -eq 1 ] && chk ok "árbol de $NT procesos con $SL sleep vivos antes de la señal (incluye mount ns y pid ns anidados) muerto tras matar el PID 1 del worker; 0 descendientes vivos" || chk bad "ok19=$ok19 RC19=${RC19:-na} SL=${SL:-na} W19=$W19 NT=$NT LEFT='$LEFT'"
 echo "13) limpieza no alcanza recursos externos: el trap solo recorre CREATED[] (rutas exactas) y no hay rm -r"
 grep -q 'for p in "${CREATED\[@\]:-}"' "$T" && ! grep -nE 'rm -(r|f[a-z]*r)' "$T" | grep -v '^[0-9]*:#' | grep -q . && chk ok "estático" || chk bad "estático"
 AFTER="$(host_state)"
