@@ -360,7 +360,7 @@ class SpendStoreG2AuthenticatedGo(SpendStoreBase):
         good = self.go().decode()
         raw = good[:-1] + ',"v":1}'
         for dup in (raw, good[:-1] + ',"nonce":"' + "d" * 64 + '"}'):
-            with self.subTest(dup=dup[-40:]), self.assertRaises(S.GoRejected):
+            with self.subTest(dup=dup[-40:]), self.assertRaisesRegex(S.GoRejected, "duplicate key"):
                 self.signed_raw(dup.encode())
         self.assertFalse((self.store_dir / ("spent-" + NONCE)).exists())
 
