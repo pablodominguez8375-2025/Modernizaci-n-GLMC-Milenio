@@ -8,6 +8,8 @@ set -u
 # Requiere root y PostgreSQL 16; el cluster privado vive en tmpfs privados que desaparecen con el namespace.
 MODE="${1:-bootstrap}"
 case "$MODE" in bootstrap|--ns-selfcheck|--a0-worker|--a0-worker-selfcheck) ;; *) echo "uso: bash test-a0.sh [--ns-selfcheck]"; exit 9;; esac
+# v5.6: la suite monta tmpfs privados sobre /tmp y /var/tmp dentro de su namespace; si el repositorio estuviera ahí, sus archivos desaparecerían. Se rechaza ANTES de crear nada.
+case "$(readlink -f "$0")" in /tmp/*|/var/tmp/*) echo "GUARDA: la suite no puede ubicarse bajo /tmp ni /var/tmp (se montan tmpfs privados encima); copie el repositorio a otra ruta (p. ej. /root o /opt)" >&2; exit 9;; esac
 nsid() { readlink "/proc/self/ns/$1" 2>/dev/null; }
 if [ "$MODE" = "bootstrap" ] || [ "$MODE" = "--ns-selfcheck" ]; then
   [ "$(id -u)" = "0" ] || { echo "la suite requiere root para crear el namespace efímero"; exit 9; }

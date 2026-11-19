@@ -131,6 +131,10 @@ R1="$(ns_resid "$UMN")"; [ "$R1" = " $UP" ] || ok17=0
 safe_kill "$UP" "$UST" "$$" own; [ $? -eq 0 ] || ok17=0; wait "$UP" 2>/dev/null
 R2="$(ns_resid "$UMN")"; [ -z "$R2" ] || ok17=0
 [ $ok17 -eq 1 ] && chk ok "residuo detectado ($R1) y ausente tras la señal" || chk bad "ok17=$ok17 R1='$R1' R2='$R2'"
+echo "18) la suite ubicada bajo /tmp se rechaza ANTES de crear namespaces (hallazgo de la reproducción desde clon limpio en /tmp)"
+LD="$(mktemp -d /tmp/a0-loc.XXXXXX)"; cp "$T" "$LD/test-a0.sh"; out="$(bash "$LD/test-a0.sh" 2>&1)"; rc=$?
+rm -f -- "$LD/test-a0.sh"; rmdir -- "$LD"
+[ $rc -eq 9 ] && echo "$out" | grep -q "no puede ubicarse bajo /tmp" && [ "$(suite_procs)" = 0 ] && [ "$(host_state)" = "$BEFORE" ] && chk ok "exit 9 con mensaje claro, sin namespaces ni residuos" || chk bad "rc=$rc" "$out"
 echo "13) limpieza no alcanza recursos externos: el trap solo recorre CREATED[] (rutas exactas) y no hay rm -r"
 grep -q 'for p in "${CREATED\[@\]:-}"' "$T" && ! grep -nE 'rm -(r|f[a-z]*r)' "$T" | grep -v '^[0-9]*:#' | grep -q . && chk ok "estático" || chk bad "estático"
 AFTER="$(host_state)"
