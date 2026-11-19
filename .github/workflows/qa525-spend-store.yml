@@ -27,5 +27,5 @@ jobs:
       - name: Foreign-owner test as root (outside the checkout, trusted /root)
         run: |
           set -euo pipefail
-          sudo env QA525_TEST_BASE=/root PYTHONDONTWRITEBYTECODE=1 python3 -I -m unittest -v tests.test_qa525_vnext_spend_store.SpendStoreG1TrustedRoot.test_foreign_owner_rejected 2>&1 | tee /tmp/root.log
+          sudo env QA525_TEST_BASE=/root PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.test_qa525_vnext_spend_store.SpendStoreG1TrustedRoot.test_foreign_owner_rejected 2>&1 | tee /tmp/root.log
           grep -q "ok$" /tmp/root.log && ! grep -q skipped /tmp/root.log
