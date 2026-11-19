@@ -52,6 +52,21 @@ public static class SessionEndpoints
             return Results.Ok(await DynamicTreasuryAccess.ProjectAsync(db, ctx.User, organizationId, access, ct));
         }).WithTags("Sesión institucional").RequireAuthorization();
 
+        // #1035 T2c: consulta histórica PROPIA mínima de los Talleres de baja del usuario (identidad y fecha de baja). Las claims
+        // pmgm_retired_org solo las pone RetiredWorkshopScopeMiddleware; aquí se revalida en BD que el Taller siga de baja.
+        // Solo lectura y solo los Talleres propios: nunca otros Talleres ni registros internos (eso requiere definición del PO).
+        endpoints.MapGet("/api/session/retired-workshops", async (HttpContext ctx, PmgmDbContext db, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "private, no-store";
+            var own = ctx.User.FindAll(RetiredWorkshopScope.RetiredOrg).Select(x => Guid.TryParse(x.Value, out var id) ? id : (Guid?)null)
+                .Where(x => x is not null).Select(x => x!.Value).Distinct().ToList();
+            if (own.Count == 0) return Results.Ok(new { items = Array.Empty<object>() });
+            var items = await db.Organizations.AsNoTracking()
+                .Where(o => own.Contains(o.Id) && o.Type == "workshop" && o.Status == PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryCodes.Retired)
+                .OrderBy(o => o.Name).Select(o => new { id = o.Id, name = o.Name, number = o.Number, retiredAtUtc = o.RetiredAtUtc }).ToListAsync(ct);
+            return Results.Ok(new { items });
+        }).WithTags("Sesión institucional").RequireAuthorization();
+
         return endpoints;
     }
 

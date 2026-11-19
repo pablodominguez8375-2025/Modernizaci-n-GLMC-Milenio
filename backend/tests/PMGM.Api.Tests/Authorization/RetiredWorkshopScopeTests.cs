@@ -9,7 +9,9 @@ public sealed class RetiredWorkshopScopeTests
 {
     private static readonly Guid Retired = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Active = Guid.Parse("22222222-2222-2222-2222-222222222222");
-    private static readonly IReadOnlySet<Guid> RetiredSet = new HashSet<Guid> { Retired };
+    private static readonly Guid Ghost = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly IReadOnlyDictionary<Guid, WorkshopScopeState> RetiredSet = new Dictionary<Guid, WorkshopScopeState>
+    { [Retired] = WorkshopScopeState.Retired, [Active] = WorkshopScopeState.Active };
 
     private static ClaimsPrincipal User(params (string Type, string Value)[] claims)
     {
@@ -29,6 +31,29 @@ public sealed class RetiredWorkshopScopeTests
         Assert.Empty(result.FindAll(InstitutionalClaims.Organization));
         Assert.Empty(result.FindAll(InstitutionalClaims.Scope));
         Assert.True(result.HasClaim(RetiredWorkshopScope.Marker, "true"));
+        Assert.Equal([Retired.ToString()], result.FindAll(RetiredWorkshopScope.RetiredOrg).Select(x => x.Value));   // consulta histórica propia
+    }
+
+    [Fact]
+    public void Unknown_or_unusable_org_guid_never_counts_as_an_active_scope_and_cannot_block_retired_only()
+    {
+        var user = User((InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin),
+            (InstitutionalClaims.Organization, Retired.ToString()), (InstitutionalClaims.Organization, Ghost.ToString()));   // Ghost: no existe en BD
+        var result = RetiredWorkshopScope.Apply(user, RetiredSet);
+        Assert.True(result.HasClaim(RetiredWorkshopScope.Marker, "true"));
+        Assert.Empty(result.FindAll(InstitutionalClaims.Organization)); Assert.Empty(result.FindAll(InstitutionalClaims.Role));
+        var states = new Dictionary<Guid, WorkshopScopeState> { [Retired] = WorkshopScopeState.Retired, [Ghost] = WorkshopScopeState.Unusable };
+        Assert.True(RetiredWorkshopScope.Apply(user, states).HasClaim(RetiredWorkshopScope.Marker, "true"));
+    }
+
+    [Fact]
+    public void Incoming_marker_and_retired_org_claims_are_never_trusted()
+    {
+        var spoof = User((InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin), (InstitutionalClaims.Organization, Active.ToString()),
+            (RetiredWorkshopScope.Marker, "true"), (RetiredWorkshopScope.RetiredOrg, Active.ToString()));
+        var result = RetiredWorkshopScope.Apply(spoof, RetiredSet);
+        Assert.False(result.HasClaim(x => x.Type is RetiredWorkshopScope.Marker or RetiredWorkshopScope.RetiredOrg));
+        Assert.True(result.HasClaim(InstitutionalClaims.Organization, Active.ToString()));   // lo operativo legítimo no se toca
     }
 
     [Fact]
@@ -40,6 +65,9 @@ public sealed class RetiredWorkshopScopeTests
         Assert.Equal([Active.ToString()], result.FindAll(InstitutionalClaims.Organization).Select(x => x.Value));
         Assert.True(result.HasClaim(InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin));
         Assert.False(result.HasClaim(RetiredWorkshopScope.Marker, "true"));
+        // El Taller activo conserva su ámbito; el de baja solo queda como consulta histórica propia (no operativa).
+        Assert.False(result.HasClaim(InstitutionalClaims.Organization, Retired.ToString()));
+        Assert.Equal([Retired.ToString()], result.FindAll(RetiredWorkshopScope.RetiredOrg).Select(x => x.Value));
     }
 
     [Fact]
@@ -70,7 +98,7 @@ public sealed class RetiredWorkshopScopeTests
     {
         var active = User((InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin), (InstitutionalClaims.Organization, Active.ToString()));
         Assert.Same(active, RetiredWorkshopScope.Apply(active, RetiredSet));
-        Assert.Same(active, RetiredWorkshopScope.Apply(active, new HashSet<Guid>()));
+        Assert.Same(active, RetiredWorkshopScope.Apply(active, new Dictionary<Guid, WorkshopScopeState>()));
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
         Assert.Same(anonymous, RetiredWorkshopScope.Apply(anonymous, RetiredSet));
         var noOrg = User((InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin));
