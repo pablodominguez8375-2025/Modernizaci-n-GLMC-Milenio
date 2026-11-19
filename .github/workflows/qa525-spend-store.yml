@@ -1,0 +1,26 @@
+name: QA525 spend store contract
+# Off-host contract tests for scripts/qa/qa525_spend_store.py (trusted root, authenticated GO, crash windows). No secrets, no host.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa525_spend_store.py'
+      - 'tests/test_qa525_vnext_spend_store.py'
+      - '.github/workflows/qa525-spend-store.yml'
+permissions:
+  contents: read
+jobs:
+  spend-store:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Contract tests (non-root runner; ssh-keygen required, no SKIP)
+        run: |
+          set -euo pipefail
+          command -v ssh-keygen
+          python3 -m py_compile scripts/qa/qa525_spend_store.py tests/test_qa525_vnext_spend_store.py
+          python3 -m unittest -v tests.test_qa525_vnext_spend_store 2>&1 | tee /tmp/spend-store.log
+          ! grep -E "skipped|SKIP" /tmp/spend-store.log
