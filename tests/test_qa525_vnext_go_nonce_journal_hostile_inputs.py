@@ -125,6 +125,33 @@ class HostileJournalTests(unittest.TestCase):
         self.assertEqual(outs, ["OK", "NONCE_REPLAY", "NONCE_REPLAY"])
         self.stop("NONCE_REPLAY", self.go)
 
+    def test_ancestor_swapped_for_symlink_after_lstat_cannot_redirect_journal(self):
+        """Race: ancestors pass lstat, then one is replaced by a symlink before os.open(root)."""
+        import unittest.mock as um
+        outer = os.path.join(os.path.realpath(self.base), "outer")
+        os.mkdir(outer, 0o700)
+        root = os.path.join(outer, "j")
+        os.mkdir(root, 0o700)
+        evil = os.path.join(os.path.realpath(self.base), "evil")
+        os.makedirs(os.path.join(evil, "j"), mode=0o700)
+        moved = os.path.join(os.path.realpath(self.base), "moved")
+        real_lstat, state = os.lstat, {"done": False}
+
+        def swap_after_check(path, *a, **k):
+            res = real_lstat(path, *a, **k)
+            if path == root and not state["done"]:  # last ancestor check passed: swap now
+                state["done"] = True
+                os.rename(outer, moved)
+                os.symlink(evil, outer)
+            return res
+
+        with um.patch.object(mod.os, "lstat", swap_after_check):
+            with self.assertRaises(mod.Stop):
+                mod.consume(root, NONCE, BIND, uid=UID, now=10, expires_at=100)
+        self.assertTrue(state["done"])
+        self.assertEqual(os.listdir(os.path.join(evil, "j")), [])  # nothing written via the swap
+        self.assertEqual([f for f in os.listdir(os.path.join(moved, "j"))], [])
+
 
 if __name__ == "__main__":
     unittest.main()
