@@ -6,7 +6,8 @@
 #   Borrar:     CLEANUP_DIR=/var/tmp/qa525-a0-schema.XXXXXX ./qa-a0-schema-export.sh
 # RETENCIÓN: MANUAL. No hay borrado automático ni plazo garantizado: el Sponsor debe ejecutar el modo Borrar apenas termine el uso autorizado.
 # Cada exportación lleva un MARCADOR root-only (.qa525-a0-marker) con identidad, fecha y hash; el borrado solo procede si el marcador, el
-# propietario, los modos, el contenido exacto del directorio y el hash del volcado coinciden. Sin `rm -r`: se borran SOLO los dos archivos por nombre y rmdir.
+# propietario, los modos, el contenido exacto del directorio y el hash del volcado coinciden. Sin `rm -r`. Borrado por descriptores (dirfd) con Python 3 (anti-TOCTOU).
+# EL EXPORT A0b SIGUE NO AUTORIZADO hasta dictamen exact-hash de ChatGPT y autorización literal del Sponsor.
 # Modo de errores: `set -eEu -o pipefail` + `trap ERR`; además cada paso crítico lleva `|| stop` y tiene prueba negativa en tests/test-a0.sh.
 set -eEu -o pipefail
 umask 077
@@ -35,34 +36,72 @@ if [ "${STATUS:-}" = "1" ]; then
 fi
 
 # ---------- Modo Borrar ----------
+# TOCTOU: el borrado NO opera por ruta. Python abre el directorio con O_NOFOLLOW|O_DIRECTORY y TODO lo demás (fstat, listdir, apertura de archivos con
+# O_NOFOLLOW, lectura/hash, unlink, rmdir) es relativo a esos descriptores (dirfd). Un cambio de la ruta después de abrir no redirige nada; ante cualquier
+# discrepancia: STOP sin borrar (fail-closed). Amenaza fuera de alcance: otro proceso root modificando el directorio (el directorio es root:root 0700).
 if [ -n "${CLEANUP_DIR:-}" ]; then
   printf '%s' "$CLEANUP_DIR" | grep -Eq '^/var/tmp/qa525-a0-schema\.[A-Za-z0-9]{6}$' || stop "CLEANUP_DIR no es un directorio de esta exportación"
-  sudo -n env -i PATH="$PATH" D="$CLEANUP_DIR" bash -c '
-    set -eu
-    bad() { echo "STOP: $*" >&2; exit 2; }
-    [ -d "$D" ] || bad "no existe el directorio"
-    [ ! -L "$D" ] || bad "es un enlace simbólico"
-    [ "$(realpath -e -- "$D")" = "$D" ] || bad "la ruta real difiere (posible sustitución)"
-    [ "$(stat -c "%U:%G:%a" "$D")" = "root:root:700" ] || bad "propietario/modo del directorio no es root:root:700"
-    cd -P -- "$D"
-    [ "$(pwd -P)" = "$D" ] || bad "cwd real difiere"
-    [ "$(ls -A | LC_ALL=C sort | tr "\n" " ")" = ".qa525-a0-marker qa-schema-only.sql " ] || bad "el contenido del directorio no es exactamente marcador + volcado"
-    for f in .qa525-a0-marker qa-schema-only.sql; do
-      [ -f "$f" ] && [ ! -L "$f" ] || bad "$f no es un archivo regular"
-      [ "$(stat -c "%U:%G:%a:%h" "$f")" = "root:root:600:1" ] || bad "$f: propietario/modo/enlaces no son root:root:600:1"
-    done
-    grep -qx "schema=qa525-a0-export-v1" .qa525-a0-marker || bad "marcador sin schema esperado"
-    grep -qx "host=glmdch" .qa525-a0-marker || bad "marcador de otro host"
-    grep -qx "dir=$D" .qa525-a0-marker || bad "el marcador pertenece a otro directorio"
-    want="$(sed -n "s/^dump_sha256=//p" .qa525-a0-marker)"
-    printf "%s" "$want" | grep -Eq "^[0-9a-f]{64}$" || bad "marcador sin hash válido"
-    have="$(sha256sum qa-schema-only.sql | cut -d" " -f1)"
-    [ "$want" = "$have" ] || bad "el hash del volcado no coincide con el marcador"
-    rm -f -- qa-schema-only.sql .qa525-a0-marker
-    cd /
-    rmdir -- "$D"
-    [ ! -e "$D" ] || bad "no se pudo verificar el borrado"
-  ' || stop "no se borró $CLEANUP_DIR"
+  PYCODE="$(cat <<'PY'
+import os, sys, stat, hashlib
+D = os.environ["D"]
+def bad(msg):
+    sys.stderr.write("STOP: " + msg + "\n"); sys.exit(2)
+parent, name = os.path.split(D)
+if parent != "/var/tmp" or not name.startswith("qa525-a0-schema."): bad("ruta fuera de lo permitido")
+try:
+    pfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    dfd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=pfd)
+except OSError:
+    bad("el directorio no existe, no es directorio o es un enlace simbólico")
+st = os.fstat(dfd)
+if (st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode)) != (0, 0, 0o700): bad("propietario/modo del directorio no es root:root:700")
+names = sorted(os.listdir(dfd))
+if names != [".qa525-a0-marker", "qa-schema-only.sql"]: bad("el contenido no es exactamente marcador + volcado")
+fds = {}
+for n in names:
+    try: fd = os.open(n, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
+    except OSError: bad(n + ": no se pudo abrir sin seguir enlaces")
+    s = os.fstat(fd)
+    if not stat.S_ISREG(s.st_mode) or (s.st_uid, s.st_gid, stat.S_IMODE(s.st_mode), s.st_nlink) != (0, 0, 0o600, 1): bad(n + ": no es archivo regular root:root:600 con 1 enlace")
+    fds[n] = (fd, s)
+def read_all(fd, limit=1 << 20):
+    out = b""
+    while True:
+        chunk = os.read(fd, 65536)
+        if not chunk: return out
+        out += chunk
+        if len(out) > limit: bad("marcador demasiado grande")
+marker = {}
+for line in read_all(fds[".qa525-a0-marker"][0]).decode("utf-8", "strict").splitlines():
+    if "=" in line:
+        k, v = line.split("=", 1); marker[k] = v
+if marker.get("schema") != "qa525-a0-export-v1": bad("marcador sin schema esperado")
+if marker.get("host") != "glmdch": bad("marcador de otro host")
+if marker.get("dir") != D: bad("el marcador pertenece a otro directorio")
+if marker.get("dump_name") != "qa-schema-only.sql": bad("marcador con nombre de volcado inesperado")
+want = marker.get("dump_sha256", "")
+if len(want) != 64 or any(c not in "0123456789abcdef" for c in want): bad("marcador sin hash válido")
+h = hashlib.sha256(); size = 0
+vfd = fds["qa-schema-only.sql"][0]
+while True:
+    chunk = os.read(vfd, 1 << 20)
+    if not chunk: break
+    h.update(chunk); size += len(chunk)
+if h.hexdigest() != want: bad("el hash del volcado no coincide con el marcador")
+if str(size) != marker.get("dump_bytes"): bad("el tamaño del volcado no coincide con el marcador")
+for n in names: os.unlink(n, dir_fd=dfd)
+for n in names: os.close(fds[n][0])
+cur = os.stat(name, dir_fd=pfd, follow_symlinks=False)
+if (cur.st_dev, cur.st_ino) != (st.st_dev, st.st_ino): bad("el directorio fue reemplazado durante el borrado; no se elimina")
+os.rmdir(name, dir_fd=pfd)
+try:
+    os.stat(name, dir_fd=pfd, follow_symlinks=False); bad("no se pudo verificar el borrado")
+except FileNotFoundError:
+    pass
+print("verificado: directorio borrado")
+PY
+)" || stop "no se pudo preparar el borrado"
+  sudo -n env -i PATH="$PATH" D="$CLEANUP_DIR" python3 -I -c "$PYCODE" || stop "no se borró $CLEANUP_DIR"
   echo "A0_CLEANUP=DONE (verificado: el directorio ya no existe)"; exit 0
 fi
 

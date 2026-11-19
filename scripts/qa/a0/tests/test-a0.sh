@@ -2,15 +2,37 @@
 # Pruebas HERMÉTICAS de A0 v3 (no tocan ningún host real): sudo/docker/hostname/id simulados, BD local `a0test`. Debe correr como root con PostgreSQL local en /tmp.
 # Uso: bash test-a0.sh
 set -u
+# v4: la suite SOLO corre dentro de un namespace efímero propio (mount+net+pid) con /tmp y /var/tmp en tmpfs privados. Todo (cluster PostgreSQL privado,
+# sockets, exportaciones, mocks) vive ahí y desaparece al terminar: no se toca el PostgreSQL del host, ni su pg_hba.conf, ni /var/tmp del host,
+# y no existe NINGÚN borrado por glob. Requiere root (unshare) y binarios de PostgreSQL 16; el usuario del SO `postgres` ejecuta solo el cluster privado.
+if [ "${A0_TEST_NS:-}" != "1" ]; then
+  [ "$(id -u)" = "0" ] || { echo "la suite requiere root para crear el namespace efímero"; exit 9; }
+  exec unshare --mount --net --pid --fork --mount-proc --propagation private env A0_TEST_NS=1 bash "$0" "$@"
+fi
+mount -t tmpfs -o mode=1777 tmpfs /tmp && mount -t tmpfs -o mode=1777 tmpfs /var/tmp || { echo "no se pudo montar tmpfs privados"; exit 9; }
+: > /var/tmp/.a0-ns-sentinel
+# Guardas: estamos en tmpfs privados y NO vemos nada del host.
+[ "$(stat -f -c %T /var/tmp)" = "tmpfs" ] && [ "$(stat -f -c %T /tmp)" = "tmpfs" ] || { echo "GUARDA: /tmp y /var/tmp deben ser tmpfs privados"; exit 9; }
+[ "$(ls -A /var/tmp)" = ".a0-ns-sentinel" ] || { echo "GUARDA: /var/tmp no está vacío tras el montaje privado"; exit 9; }
+[ ! -e /var/tmp/pgdata ] || { echo "GUARDA: se ve el cluster del host"; exit 9; }
+
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PGBIN=/usr/lib/postgresql/16/bin
-MOCK="$(mktemp -d)"; chmod 755 "$MOCK"; fails=0; total=0
-P() { su postgres -c "$PGBIN/psql -h /tmp -X -q -v ON_ERROR_STOP=1 $*"; }
+TESTROOT="$(mktemp -d /tmp/a0-suite.XXXXXX)"; chmod 755 "$TESTROOT"; MOCK="$TESTROOT/mock"; mkdir "$MOCK"; chmod 755 "$MOCK"
+fails=0; total=0
+CREATED=()   # registro EXACTO de rutas creadas por la suite fuera de $TESTROOT (se borran una a una; sin globs)
+PGD="$TESTROOT/pg"; SOCK="$TESTROOT/sock"
+install -d -o postgres -g postgres -m 700 "$PGD" "$SOCK"
+su postgres -s /bin/bash -c "$PGBIN/initdb -D $PGD -A trust -U postgres >/dev/null" || { echo "initdb falló"; exit 9; }
+su postgres -s /bin/bash -c "$PGBIN/pg_ctl -D $PGD -l $PGD/log -w -o \"-c listen_addresses='' -c unix_socket_directories=$SOCK -c fsync=off\" start >/dev/null" || { echo "no arrancó el cluster privado"; exit 9; }
+export PGHOST="$SOCK"
+finish() { su postgres -s /bin/bash -c "$PGBIN/pg_ctl -D $PGD -m immediate stop >/dev/null 2>&1"; for p in "${CREATED[@]:-}"; do [ -n "$p" ] && [ -e "$p" ] && rm -rf -- "$p"; done; }
+trap finish EXIT
+P() { su postgres -s /bin/bash -c "PGHOST=$SOCK $PGBIN/psql -X -q -v ON_ERROR_STOP=1 $*"; }
 chk() { total=$((total+1)); if [ "$1" = ok ]; then echo "  PASS: $2"; else echo "  FAIL: $2"; fails=$((fails+1)); [ -n "${3:-}" ] && echo "$3" | tail -6; fi; }
 sql() { P -d a0test -c "\"$1\"" >/dev/null; }
 
-P -c "'drop database if exists a0test with (force)'" -c "'create database a0test'" >/dev/null
-P -c "'drop role if exists a0app'" -c "'drop role if exists a0owner'" >/dev/null 2>&1
+P -c "'create database a0test'" >/dev/null
 P -c "'create role a0owner'" -c "'create role a0app login'" >/dev/null
 sed -n '/^expected_ids() { cat <<.IDS.$/,/^IDS$/p' "$HERE/qa-a0-diag.sh" | sed '1d;$d' > "$MOCK/ids.txt"
 [ "$(wc -l < "$MOCK/ids.txt")" -eq 100 ] || { echo "no se pudo extraer la lista de ids"; exit 9; }
@@ -19,8 +41,8 @@ sed -n '/^expected_ids() { cat <<.IDS.$/,/^IDS$/p' "$HERE/qa-a0-diag.sh" | sed '
   echo "insert into core.organizations values (gen_random_uuid(),'workshop','T1'),(gen_random_uuid(),'support','S0');"
   echo 'alter table core.organizations owner to a0owner; grant usage on schema core to a0app; grant select,insert,update,delete on core.organizations to a0app;'
   while read -r id; do echo "insert into public.\"__EFMigrationsHistory\" values ('$id','10');"; done < "$MOCK/ids.txt"; } > "$MOCK/seed.sql"
-su postgres -c "$PGBIN/psql -h /tmp -X -q -v ON_ERROR_STOP=1 -d a0test -f $MOCK/seed.sql" >/dev/null || { echo "no se pudo sembrar a0test"; exit 9; }
-su postgres -c "grep -q a0app /var/tmp/pgdata/pg_hba.conf" || { echo 'local all a0app trust' | cat - /var/tmp/pgdata/pg_hba.conf > "$MOCK/hba" && cp "$MOCK/hba" /var/tmp/pgdata/pg_hba.conf && chown postgres: /var/tmp/pgdata/pg_hba.conf && su postgres -c "$PGBIN/pg_ctl -D /var/tmp/pgdata reload" >/dev/null; }
+chmod 644 "$MOCK/seed.sql"
+su postgres -s /bin/bash -c "PGHOST=$SOCK $PGBIN/psql -X -q -v ON_ERROR_STOP=1 -d a0test -f $MOCK/seed.sql" >/dev/null || { echo "no se pudo sembrar a0test"; exit 9; }
 
 # --- stubs controlados por archivos ($MOCK/fail, $MOCK/user, $MOCK/sudofail, $MOCK/count) ---
 printf '#!/bin/sh\n[ -n "${MOCK_HOST:-}" ] && echo "$MOCK_HOST" || echo glmdch\n' > "$MOCK/hostname"
@@ -32,7 +54,7 @@ cat > "$MOCK/sudo" <<'XEOF'
 #!/bin/bash
 [ "$1" = "-n" ] && shift
 [ -e @@M@@/sudofail ] && [ "$1" = "true" ] && exit 1
-if [ "$1" = "env" ] && [ "$2" = "-i" ]; then shift 2; args=(); for a in "$@"; do case "$a" in PATH=*) args+=("PATH=$MOCKPATH");; *) args+=("$a");; esac; done; exec env -i "${args[@]}"; fi
+if [ "$1" = "env" ] && [ "$2" = "-i" ]; then shift 2; args=(); for a in "$@"; do case "$a" in PATH=*) args+=("PATH=$MOCKPATH");; *) args+=("$a");; esac; done; exec env -i A0_PGHOST="$A0_PGHOST" "${args[@]}"; fi
 exec "$@"
 XEOF
 cat > "$MOCK/docker" <<'XEOF'
@@ -45,21 +67,27 @@ case "$1" in
  exec) shift; while [ "$1" != "sh" ] && [ $# -gt 0 ]; do shift; done; shift; shift; cmd="$1"
    if printf '%s' "$cmd" | grep -q pg_dump; then [ "$F" = pgdump ] && { echo "secreto-que-no-debe-salir" >&2; exit 1; }; fi
    if printf '%s' "$cmd" | grep -q psql; then n=$(( $(cat @@M@@/count 2>/dev/null || echo 0) + 1 )); echo $n > @@M@@/count; [ "$F" = "psql:$n" ] && { echo "secreto-que-no-debe-salir" >&2; exit 1; }; fi
-   export POSTGRES_USER=postgres POSTGRES_DB=a0test PGHOST=/tmp; exec sh -c "$cmd";;
+   export POSTGRES_USER=postgres POSTGRES_DB=a0test PGHOST="$A0_PGHOST"; exec sh -c "$cmd";;
 esac
 XEOF
 sed -i "s#@@M@@#$MOCK#g" "$MOCK/id" "$MOCK/sudo" "$MOCK/docker"; chmod +x "$MOCK"/*
-export MOCKPATH="$MOCK:$PGBIN:/usr/sbin:/usr/bin:/sbin:/bin"; export PATH="$MOCKPATH"
+export A0_PGHOST="$SOCK"; export MOCKPATH="$MOCK:$PGBIN:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"; export PATH="$MOCKPATH"
 for f in qa-a0-diag.sh qa-a0-schema-export.sh; do sed 's#^PATH=/usr/sbin:/usr/bin:/sbin:/bin; export PATH$#PATH="$MOCKPATH"; export PATH#' "$HERE/$f" > "$MOCK/$f"; grep -q 'MOCKPATH' "$MOCK/$f" || { echo "no se pudo sustituir PATH en $f"; exit 9; }; done
 DIAG="$MOCK/qa-a0-diag.sh"; EXP="$MOCK/qa-a0-schema-export.sh"
 reset() { rm -f "$MOCK/fail" "$MOCK/sudofail" "$MOCK/user"; echo 0 > "$MOCK/count"; unset MOCK_HOST; }
 run() { echo 0 > "$MOCK/count"; out="$("$@" 2>&1)"; rc=$?; }
-SESS=""; start_session() { su postgres -c "$PGBIN/psql -h /tmp -U a0app -d a0test -X -q -c 'select pg_sleep(300)'" >/dev/null 2>&1 & SESS=$!; sleep 1; }
-stop_session() { [ -n "$SESS" ] && kill "$SESS" 2>/dev/null; su postgres -c "$PGBIN/psql -h /tmp -X -q -d a0test -c \"select pg_terminate_backend(pid) from pg_stat_activity where usename='a0app'\"" >/dev/null 2>&1; SESS=""; sleep 1; }
+SESS=""; start_session() { su postgres -s /bin/bash -c "PGHOST=$SOCK $PGBIN/psql -U a0app -d a0test -X -q -c 'select pg_sleep(300)'" >/dev/null 2>&1 & SESS=$!; sleep 1; }
+stop_session() { [ -n "$SESS" ] && kill "$SESS" 2>/dev/null; P -d a0test -c "\"select pg_terminate_backend(pid) from pg_stat_activity where usename='a0app'\"" >/dev/null 2>&1; SESS=""; sleep 1; }
 no_partial() { ! echo "$1" | grep -q "A0_DIAG=DONE"; }
 nosecret() { ! echo "$1" | grep -q "secreto-que-no-debe-salir"; }
-leftovers() { ls -d /var/tmp/qa525-a0-schema.* 2>/dev/null | wc -l; }
-rm -rf /var/tmp/qa525-a0-schema.*
+leftovers() { find /var/tmp -maxdepth 1 -name "qa525-a0-schema.*" | wc -l; }
+
+echo "== COEXISTENCIA: exportación legítima preexistente (debe quedar intacta durante TODA la suite)"
+reset; CONFIRM_EXPORT=EXPORT_SCHEMA_ONLY run bash "$EXP"
+LEGIT="$(echo "$out" | sed -n 's/^DIRECTORIO=//p')"
+[ $rc -eq 0 ] && [ -d "$LEGIT" ] && chk ok "se creó una exportación legítima preexistente ($LEGIT)" || { chk bad "no se pudo crear la exportación legítima" "$out"; exit 1; }
+snapshot() { find "$LEGIT" -printf '%P|%y|%m|%u:%g|%s|%T@|%i\n' | LC_ALL=C sort; (cd "$LEGIT" && sha256sum .qa525-a0-marker qa-schema-only.sql); stat -c '%i|%U:%g|%a|%Y' "$LEGIT"; }
+SNAP_BEFORE="$(snapshot)"
 
 echo "== DIAGNÓSTICO: caminos felices"; reset; start_session
 run env APP_ROLE=a0app bash "$DIAG"; [ $rc -eq 0 ] && echo "$out" | grep -q "A0_DIAG=DONE" && echo "$out" | grep -q "ROLE_APP=a0app (declarado por el Sponsor; coincide con una sesión de cliente: si)" && echo "$out" | grep -q "BASELINE=OK" && chk ok "DONE con APP_ROLE declarado y sesión coincidente" || chk bad "camino feliz rc=$rc" "$out"
@@ -114,13 +142,13 @@ d="$(echo "$out" | sed -n 's/^DIRECTORIO=//p')"
 [ $rc -eq 0 ] && echo "$out" | grep -q "modo=600 dueno=root" && [ -n "$d" ] && [ "$(stat -c %a "$d/.qa525-a0-marker")" = "600" ] && grep -q "^dump_sha256=" "$d/.qa525-a0-marker" && chk ok "exportación OK: 0600 root, con marcador" || chk bad "export rc=$rc" "$out"
 ! echo "$out" | grep -q "CREATE TABLE" && chk ok "no imprime el contenido del esquema" || chk bad "imprimió contenido"
 echo "$out" | grep -q "retención MANUAL, sin plazo garantizado" && ! echo "$out" | grep -q "24 h" && chk ok "retención declarada MANUAL, sin prometer plazo" || chk bad "texto de retención"
-reset; STATUS=1 run bash "$EXP"; [ $rc -eq 0 ] && echo "$out" | grep -q "$d" && echo "$out" | grep -q "exportaciones_encontradas=1" && chk ok "STATUS lista la exportación" || chk bad "status rc=$rc" "$out"
+reset; STATUS=1 run bash "$EXP"; [ $rc -eq 0 ] && echo "$out" | grep -q "$d" && echo "$out" | grep -q "$LEGIT" && echo "$out" | grep -q "exportaciones_encontradas=2" && chk ok "STATUS lista ambas exportaciones (la legítima y la nueva)" || chk bad "status rc=$rc" "$out"
 
 echo "== BORRADO: identidad y defensas"
 CLEANUP_DIR=/etc run bash "$EXP"; [ $rc -eq 2 ] && chk ok "ruta ajena rechazada" || chk bad "cleanup /etc rc=$rc"
 CLEANUP_DIR="/var/tmp/qa525-a0-schema.ZZZZZZ" run bash "$EXP"; [ $rc -eq 2 ] && chk ok "directorio inexistente: STOP" || chk bad "cleanup inexistente rc=$rc"
 ln -s /tmp /var/tmp/qa525-a0-schema.LnkAbc; CLEANUP_DIR="/var/tmp/qa525-a0-schema.LnkAbc" run bash "$EXP"; [ $rc -eq 2 ] && [ -d /tmp ] && echo "$out" | grep -q "enlace simbólico" && chk ok "enlace simbólico rechazado (no se sigue)" || chk bad "symlink rc=$rc" "$out"; rm -f /var/tmp/qa525-a0-schema.LnkAbc
-mkdir -m 700 /var/tmp/qa525-a0-schema.NoMark; touch /var/tmp/qa525-a0-schema.NoMark/x; CLEANUP_DIR="/var/tmp/qa525-a0-schema.NoMark" run bash "$EXP"; [ $rc -eq 2 ] && [ -e /var/tmp/qa525-a0-schema.NoMark/x ] && chk ok "directorio sin marcador: STOP, no se borra" || chk bad "sin marcador rc=$rc" "$out"; rm -rf /var/tmp/qa525-a0-schema.NoMark
+mkdir -m 700 /var/tmp/qa525-a0-schema.NoMark; touch /var/tmp/qa525-a0-schema.NoMark/x; CLEANUP_DIR="/var/tmp/qa525-a0-schema.NoMark" run bash "$EXP"; [ $rc -eq 2 ] && [ -e /var/tmp/qa525-a0-schema.NoMark/x ] && chk ok "directorio sin marcador: STOP, no se borra" || chk bad "sin marcador rc=$rc" "$out"; rm -f /var/tmp/qa525-a0-schema.NoMark/x; rmdir /var/tmp/qa525-a0-schema.NoMark
 touch "$d/extra"; CLEANUP_DIR="$d" run bash "$EXP"; [ $rc -eq 2 ] && [ -d "$d" ] && chk ok "archivo extra: STOP, no se borra" || chk bad "extra rc=$rc" "$out"; rm -f "$d/extra"
 chmod 644 "$d/qa-schema-only.sql"; CLEANUP_DIR="$d" run bash "$EXP"; [ $rc -eq 2 ] && [ -d "$d" ] && chk ok "modo del volcado alterado: STOP" || chk bad "modo rc=$rc" "$out"; chmod 600 "$d/qa-schema-only.sql"
 echo "-- alterado" >> "$d/qa-schema-only.sql"; CLEANUP_DIR="$d" run bash "$EXP"; [ $rc -eq 2 ] && [ -d "$d" ] && echo "$out" | grep -q "hash del volcado no coincide" && chk ok "volcado alterado: STOP por hash, no se borra" || chk bad "hash rc=$rc" "$out"
@@ -128,6 +156,17 @@ sed -i '/-- alterado/d' "$d/qa-schema-only.sql"
 cp "$d/.qa525-a0-marker" "$MOCK/marker.bak"; sed -i "s#^dir=.*#dir=/var/tmp/qa525-a0-schema.Otro00#" "$d/.qa525-a0-marker"; CLEANUP_DIR="$d" run bash "$EXP"; [ $rc -eq 2 ] && [ -d "$d" ] && echo "$out" | grep -q "pertenece a otro directorio" && chk ok "marcador de otro directorio: STOP" || chk bad "marcador dir rc=$rc" "$out"
 cp "$MOCK/marker.bak" "$d/.qa525-a0-marker"; chmod 600 "$d/.qa525-a0-marker"
 CLEANUP_DIR="$d" run bash "$EXP"; [ $rc -eq 0 ] && [ ! -e "$d" ] && echo "$out" | grep -q "A0_CLEANUP=DONE" && chk ok "borrado verificado de una exportación íntegra" || chk bad "cleanup final rc=$rc" "$out"
-[ "$(leftovers)" = "0" ] && chk ok "sin restos en /var/tmp" || chk bad "restos en /var/tmp"
-stop_session; rm -rf "$MOCK" /var/tmp/qa525-a0-schema.*
+[ "$(leftovers)" = "1" ] && [ -d "$LEGIT" ] && chk ok "solo queda la exportación legítima preexistente" || chk bad "restos inesperados en /var/tmp (esperado: solo la legítima)"
+
+echo "== COEXISTENCIA: intentos de tocar la exportación legítima desde otras rutas"
+ln -s "$LEGIT" /var/tmp/qa525-a0-schema.LnkLeg; CREATED+=(/var/tmp/qa525-a0-schema.LnkLeg)
+CLEANUP_DIR=/var/tmp/qa525-a0-schema.LnkLeg run bash "$EXP"; [ $rc -eq 2 ] && [ -d "$LEGIT" ] && chk ok "symlink que apunta a la legítima: STOP (O_NOFOLLOW), legítima intacta" || chk bad "symlink a legítima rc=$rc" "$out"
+rm -f /var/tmp/qa525-a0-schema.LnkLeg
+CLEANUP_DIR=/var/tmp/qa525-a0-schema.Look01 run bash "$EXP"; [ $rc -eq 2 ] && [ -d "$LEGIT" ] && chk ok "nombre parecido inexistente: STOP, legítima intacta" || chk bad "lookalike rc=$rc" "$out"
+reset; STATUS=1 run bash "$EXP"; [ $rc -eq 0 ] && echo "$out" | grep -q "$LEGIT" && echo "$out" | grep -q "exportaciones_encontradas=1" && chk ok "STATUS ve solo la legítima" || chk bad "status final rc=$rc" "$out"
+SNAP_AFTER="$(snapshot)"
+[ "$SNAP_BEFORE" = "$SNAP_AFTER" ] && chk ok "la exportación legítima NO cambió (archivos, modos, dueños, tamaños, mtimes, inodos y hashes idénticos)" || { chk bad "la exportación legítima cambió"; diff <(echo "$SNAP_BEFORE") <(echo "$SNAP_AFTER") | head; }
+echo "== BORRADO de la legítima, ahora sí, por su ruta exacta"
+reset; CLEANUP_DIR="$LEGIT" run bash "$EXP"; [ $rc -eq 0 ] && [ ! -e "$LEGIT" ] && chk ok "borrado verificado de la legítima (por dirfd)" || chk bad "borrado legítima rc=$rc" "$out"
+stop_session
 echo; echo "casos=$total fallos=$fails"; [ $fails -eq 0 ] && echo "TODAS LAS PRUEBAS A0 PASARON" || { echo "FALLARON: $fails"; exit 1; }
