@@ -98,7 +98,6 @@ public sealed class RetiredWorkshopScopeTests
     {
         var active = User((InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin), (InstitutionalClaims.Organization, Active.ToString()));
         Assert.Same(active, RetiredWorkshopScope.Apply(active, RetiredSet));
-        Assert.Same(active, RetiredWorkshopScope.Apply(active, new Dictionary<Guid, WorkshopScopeState>()));
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
         Assert.Same(anonymous, RetiredWorkshopScope.Apply(anonymous, RetiredSet));
         var noOrg = User((InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin));
@@ -118,5 +117,52 @@ public sealed class RetiredWorkshopScopeTests
         var profile = SessionProfileBuilder.Build(after, access);
         Assert.Equal("retired_workshop", profile.AccessScope);
         Assert.False(profile.Capabilities.CanManageLodgeOperations);
+    }
+
+    [Fact]
+    public void Unverifiable_org_scopes_are_always_dropped_and_leave_no_operational_claims_without_valid_scope_or_order()
+    {
+        // Sin ningún Taller de baja: un pmgm_org inexistente NO se conserva y, sin ámbito válido ni Orden, tampoco cargos ni ámbitos.
+        var ghostOnly = User((InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin), (InstitutionalClaims.Organization, Ghost.ToString()));
+        var result = RetiredWorkshopScope.Apply(ghostOnly, RetiredSet);
+        Assert.Empty(result.FindAll(InstitutionalClaims.Organization)); Assert.Empty(result.FindAll(InstitutionalClaims.Role));
+        Assert.False(result.HasClaim(RetiredWorkshopScope.Marker, "true"));   // no es un Taller de baja: solo no tiene ámbito
+        Assert.Equal("u1", result.FindFirst("sub")!.Value);
+        // Taller activo + GUID fantasma: conserva el activo y descarta el fantasma.
+        var mixed = RetiredWorkshopScope.Apply(User((InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin),
+            (InstitutionalClaims.Organization, Active.ToString()), (InstitutionalClaims.Organization, Ghost.ToString())), RetiredSet);
+        Assert.Equal([Active.ToString()], mixed.FindAll(InstitutionalClaims.Organization).Select(x => x.Value));
+        Assert.True(mixed.HasClaim(InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin));
+        // Orden con org inválida: conserva Orden y cargos, descarta la org.
+        var order = RetiredWorkshopScope.Apply(User((InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin), (InstitutionalClaims.Scope, "order"),
+            (InstitutionalClaims.Organization, Ghost.ToString())), RetiredSet);
+        Assert.True(order.HasClaim(InstitutionalClaims.Scope, "order")); Assert.Empty(order.FindAll(InstitutionalClaims.Organization));
+        // El Máster no pierde sus cargos por una org obsoleta.
+        var master = RetiredWorkshopScope.Apply(User((InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin), (InstitutionalClaims.Organization, Ghost.ToString())), RetiredSet);
+        Assert.True(master.HasClaim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin));
+    }
+
+    [Theory]
+    [InlineData("workshop", "active", WorkshopScopeState.Active)]
+    [InlineData("grand_lodge", "active", WorkshopScopeState.Active)]
+    [InlineData("support", "active", WorkshopScopeState.Active)]
+    [InlineData("workshop", "retired", WorkshopScopeState.Retired)]
+    [InlineData("workshop", "weird", WorkshopScopeState.Unusable)]
+    [InlineData("workshop", null, WorkshopScopeState.Unusable)]
+    [InlineData("other_type", "active", WorkshopScopeState.Unusable)]
+    [InlineData("grand_lodge", "retired", WorkshopScopeState.Unusable)]
+    [InlineData(null, "active", WorkshopScopeState.Unusable)]
+    public void Scope_type_is_validated_positively_not_inferred_as_active(string? type, string? status, WorkshopScopeState expected)
+        => Assert.Equal(expected, RetiredWorkshopScopeMiddleware.Classify(type, status));
+
+    [Fact]
+    public void Platform_role_is_flat_across_workshops_so_retirement_never_grants_but_cannot_attribute_a_role_to_its_origin_workshop()
+    {
+        // Documenta el límite del modelo (claims sin vínculo cargo↔Taller): el cargo se conserva para el Taller activo; el Taller de baja pierde su ámbito.
+        var user = User((InstitutionalClaims.Role, InstitutionalRoles.TallerTesoreria), (InstitutionalClaims.Organization, Retired.ToString()), (InstitutionalClaims.Organization, Active.ToString()));
+        var result = RetiredWorkshopScope.Apply(user, RetiredSet);
+        Assert.True(result.HasClaim(InstitutionalClaims.Role, InstitutionalRoles.TallerTesoreria));
+        Assert.False(new InstitutionalAccessService().CanReadOrganization(result, Retired));   // ya no abre datos del Taller de baja
+        Assert.True(new InstitutionalAccessService().CanReadOrganization(result, Active));
     }
 }

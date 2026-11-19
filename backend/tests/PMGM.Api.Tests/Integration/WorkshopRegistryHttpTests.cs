@@ -243,7 +243,8 @@ public sealed class WorkshopRegistryHttpTests
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
         await db.Database.MigrateAsync(ct);
-        db.Organizations.AddRange(mine, active, other); await db.SaveChangesAsync(ct);
+        var notAllowed = new Organization { Name = $"T2c tipo no permitido {suffix}", Type = "other_org_test", Origin = "qa_seed" };
+        db.Organizations.AddRange(mine, active, other, notAllowed); await db.SaveChangesAsync(ct);
         HttpClient Client(params Guid[] orgs)
         {
             var c = factory.CreateClient(); c.DefaultRequestHeaders.Add("X-Workshop-Actor", "orgs");
@@ -269,6 +270,9 @@ public sealed class WorkshopRegistryHttpTests
 
             // Un GUID inexistente junto al Taller de baja NO cuenta como ámbito activo.
             Assert.Equal("retired_workshop", await AccessScope(Client(mine.Id, Guid.NewGuid())));
+            // Solo un GUID inexistente / solo una org de tipo no permitido ⇒ (el estado inesperado lo impide un CHECK de BD y lo cubre la prueba unitaria de Classify) sin ámbito operativo (no «organization»).
+            Assert.Equal("authenticated", await AccessScope(Client(Guid.NewGuid())));
+            Assert.Equal("authenticated", await AccessScope(Client(notAllowed.Id)));
             // Ámbito mixto: conserva el Taller activo; el de baja queda solo como historia propia.
             var mixed = Client(mine.Id, active.Id);
             Assert.Equal("organization", await AccessScope(mixed));
@@ -284,7 +288,7 @@ public sealed class WorkshopRegistryHttpTests
         }
         finally
         {
-            await db.Organizations.Where(x => x.Id == mine.Id || x.Id == active.Id || x.Id == other.Id).ExecuteDeleteAsync(CancellationToken.None);
+            await db.Organizations.Where(x => x.Id == mine.Id || x.Id == active.Id || x.Id == other.Id || x.Id == notAllowed.Id).ExecuteDeleteAsync(CancellationToken.None);
         }
     }
 }

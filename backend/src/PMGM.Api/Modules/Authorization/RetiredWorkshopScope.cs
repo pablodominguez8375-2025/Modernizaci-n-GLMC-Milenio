@@ -38,23 +38,27 @@ public static class RetiredWorkshopScope
         if (user.Identity?.IsAuthenticated != true) return user;
         var orgClaims = user.Claims.Where(x => x.Type == InstitutionalClaims.Organization).ToList();
         var spoofed = user.Claims.Any(x => x.Type is Marker or RetiredOrg);
-        var states2 = orgClaims.Select(x => (Claim: x, State: StateOf(x.Value, states))).ToList();
-        var retiredIds = states2.Where(x => x.State == WorkshopScopeState.Retired).Select(x => Guid.Parse(x.Claim.Value)).Distinct().ToList();
-        if (retiredIds.Count == 0 && !spoofed) return user;
+        var classified = orgClaims.Select(x => (Claim: x, State: StateOf(x.Value, states))).ToList();
+        var retiredIds = classified.Where(x => x.State == WorkshopScopeState.Retired).Select(x => Guid.Parse(x.Claim.Value)).Distinct().ToList();
+        var unusable = classified.Count(x => x.State == WorkshopScopeState.Unusable);
+        if (retiredIds.Count == 0 && unusable == 0 && !spoofed) return user;
 
-        var activeOrgs = states2.Count(x => x.State == WorkshopScopeState.Active);
+        var activeOrgs = classified.Count(x => x.State == WorkshopScopeState.Active);
         var orderScope = user.Claims.Any(x => x.Type == InstitutionalClaims.Scope && string.Equals(x.Value, "order", StringComparison.OrdinalIgnoreCase));
+        var privileged = user.HasClaim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin) || user.HasClaim(InstitutionalClaims.AccountKind, "superuser");
         var retiredOnly = retiredIds.Count > 0 && activeOrgs == 0 && !orderScope;
+        // Fail-closed: todos sus pmgm_org son inexistentes/no verificables/no permitidos y no tiene Orden: no conserva cargos ni ámbitos operativos.
+        var noValidScope = retiredIds.Count == 0 && orgClaims.Count > 0 && activeOrgs == 0 && !orderScope && !privileged;
+        var stripOperational = retiredOnly || noValidScope;
 
         var identities = user.Identities.Select(identity =>
         {
             var kept = identity.Claims.Where(claim =>
             {
                 if (claim.Type is Marker or RetiredOrg) return false;   // nunca se confía en claims entrantes de este middleware
-                if (retiredIds.Count == 0) return true;                 // solo se quitaron claims falsificadas
-                if (retiredOnly) return !OperationalTypes.Contains(claim.Type);
+                if (stripOperational) return !OperationalTypes.Contains(claim.Type);
                 if (claim.Type != InstitutionalClaims.Organization) return true;
-                return StateOf(claim.Value, states) == WorkshopScopeState.Active;
+                return StateOf(claim.Value, states) == WorkshopScopeState.Active;   // Retired y Unusable siempre se eliminan
             }).ToList();
             return new ClaimsIdentity(kept, identity.AuthenticationType, identity.NameClaimType, identity.RoleClaimType);
         }).ToList();
@@ -67,6 +71,17 @@ public static class RetiredWorkshopScope
 
 public sealed class RetiredWorkshopScopeMiddleware(RequestDelegate next)
 {
+    /// <summary>
+    /// Validación POSITIVA del tipo de ámbito: solo un Taller activo, Gran Logia o el Taller 00 de soporte (activos) son ámbitos válidos;
+    /// un Taller de baja es Retired; cualquier otro tipo o estado inesperado es Unusable (no se infiere Active por descarte).
+    /// </summary>
+    public static WorkshopScopeState Classify(string? type, string? status)
+    {
+        if (status == WorkshopRegistryCodes.Retired) return type == "workshop" ? WorkshopScopeState.Retired : WorkshopScopeState.Unusable;
+        if (status != WorkshopRegistryCodes.Active) return WorkshopScopeState.Unusable;
+        return type is "workshop" or WorkshopRegistryCodes.GrandLodgeType or WorkshopRegistryCodes.SupportType ? WorkshopScopeState.Active : WorkshopScopeState.Unusable;
+    }
+
     public async Task InvokeAsync(HttpContext context)
     {
         var user = context.User;
@@ -81,8 +96,7 @@ public sealed class RetiredWorkshopScopeMiddleware(RequestDelegate next)
                 // SIN caché: estado vigente en cada petición; ante error de BD la petición falla (fail-closed), no se concede acceso.
                 var rows = ids.Count == 0 ? [] : await db.Organizations.AsNoTracking().Where(o => ids.Contains(o.Id))
                     .Select(o => new { o.Id, o.Type, o.Status }).ToListAsync(context.RequestAborted);
-                var states = rows.ToDictionary(o => o.Id, o => o.Status == WorkshopRegistryCodes.Retired ? WorkshopScopeState.Retired
-                    : o.Type == "workshop" && o.Status != WorkshopRegistryCodes.Active ? WorkshopScopeState.Unusable : WorkshopScopeState.Active);
+                var states = rows.ToDictionary(o => o.Id, o => Classify(o.Type, o.Status));
                 context.User = RetiredWorkshopScope.Apply(user, states);
             }
         }
