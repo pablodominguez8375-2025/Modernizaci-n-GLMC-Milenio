@@ -96,16 +96,21 @@ def read_trusted_file(path, max_bytes=65536):
             nxt = os.open(p, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=cur)
             os.close(cur); cur = nxt
             _check_owner_mode(os.fstat(cur), euid, final=False, what=p)
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=cur)
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=cur)   # NONBLOCK: a FIFO must not hang us
     except OSError as exc:
         raise StoreError(f"cannot open trusted file: {exc.strerror}") from None
     finally:
-        os.close(cur)
-    with os.fdopen(fd, "rb") as handle:
-        st = os.fstat(handle.fileno())
+        os.close(cur)   # the directory fd is closed on EVERY path (success, error, exception)
+    try:   # the descriptor is closed on EVERY path below, including a failing os.fdopen (e.g. a directory)
+        st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise StoreError("not a regular file")
         _check_owner_mode(st, euid, final=False, what=name)
+        handle = os.fdopen(fd, "rb")
+    except BaseException:
+        os.close(fd)
+        raise
+    with handle:
         data = handle.read(max_bytes + 1)
     if len(data) > max_bytes:
         raise StoreError("file too large")
@@ -197,12 +202,34 @@ class SpendStore:
         return self.COMPLETE if ok else self.AMBIGUOUS
 
 
+def canonical_go(go):
+    """THE canonical GO encoding: UTF-8 JSON, keys sorted, separators (",", ":"), ASCII-only escapes, no trailing newline."""
+    return json.dumps(go, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("ascii")
+
+
+def _no_duplicate_keys(pairs):
+    seen = {}
+    for key, value in pairs:
+        if key in seen:
+            raise GoRejected(f"GO has a duplicate key: {key!r}")
+        seen[key] = value
+    return seen
+
+
+def _reject_constant(name):
+    raise GoRejected(f"GO contains the non-standard JSON constant {name}")
+
+
 def parse_go(message):
-    """Strict canonical GO: a JSON object with exactly GO_KEYS, validated types; returns the dict or raises GoRejected."""
+    """Strict canonical GO: a JSON object with exactly GO_KEYS, validated types, NO duplicate keys, and bytes that are
+    EXACTLY canonical_go(parsed) (so a signature can only ever cover one representation); returns the dict or raises GoRejected."""
     try:
-        go = json.loads(message)
-    except ValueError:
-        raise GoRejected("GO is not valid JSON") from None
+        text = message.decode("utf-8")
+        go = json.loads(text, object_pairs_hook=_no_duplicate_keys, parse_constant=_reject_constant)
+    except GoRejected:
+        raise
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        raise GoRejected("GO is not valid UTF-8 JSON") from None
     if not isinstance(go, dict) or set(go) != GO_KEYS:
         raise GoRejected("GO keys are not exactly the expected set")
     if go["v"] != 1 or go["purpose"] != PURPOSE:
@@ -211,6 +238,8 @@ def parse_go(message):
         raise GoRejected("GO identifiers are not lowercase sha256")
     if not isinstance(go["not_after"], int) or isinstance(go["not_after"], bool):
         raise GoRejected("GO not_after must be an integer epoch")
+    if canonical_go(go) != message:
+        raise GoRejected("GO is not in the canonical representation")
     return go
 
 

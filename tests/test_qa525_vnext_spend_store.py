@@ -178,6 +178,94 @@ class SpendStoreG3G4Spend(SpendStoreBase):
             self.assertEqual(st.state("f" * 64), "UNSPENT")
 
 
+def _fd_count():
+    return len(os.listdir("/proc/self/fd"))
+
+
+class SpendStoreSpecialFilesAndRaces(SpendStoreBase):
+    def test_special_file_types_for_allowed_signers_rejected(self):
+        d = self.base / "special"
+        d.mkdir(mode=0o700)
+        os.mkfifo(d / "fifo", 0o600)
+        (d / "adir").mkdir(mode=0o700)
+        import socket
+        sock = socket.socket(socket.AF_UNIX)
+        sock.bind(str(d / "sock"))
+        self.addCleanup(sock.close)
+        for name in ("fifo", "adir", "sock", "missing"):
+            with self.subTest(name), self.assertRaises(S.StoreError):
+                S.read_trusted_file(str(d / name))          # the FIFO case must NOT hang (O_NONBLOCK)
+        with self.assertRaises(S.StoreError):
+            S.read_trusted_file("/dev/null")                  # character device
+
+    def test_fd_not_leaked_on_failures(self):
+        d = self.base / "leak"
+        d.mkdir(mode=0o700)
+        os.mkfifo(d / "fifo", 0o600)
+        (d / "wr").write_text("x")
+        os.chmod(d / "wr", 0o666)
+        (d / "ok").write_text("x")
+        os.chmod(d / "ok", 0o600)
+        (d / "link").symlink_to(d / "ok")
+        before = _fd_count()
+        for _ in range(50):
+            for target in ("fifo", "wr", "link", "missing"):
+                with self.assertRaises(S.StoreError):
+                    S.read_trusted_file(str(d / target))
+            for bad in (str(d / "ok"), str(d / "nope"), "relative"):
+                with self.assertRaises(S.StoreError):
+                    S.open_trusted_dir(bad)                  # a file / missing / relative path
+        self.assertEqual(S.read_trusted_file(str(d / "ok")), b"x")
+        self.assertEqual(_fd_count(), before, "file descriptors leaked on failure paths")
+
+    def test_lock_that_is_not_a_regular_file_fails_closed_and_closes_fd(self):
+        os.mkfifo(self.store_dir / ".lock", 0o600)
+        before = _fd_count()
+        with S.SpendStore(str(self.store_dir)) as st:
+            for _ in range(20):
+                with self.assertRaises(S.StoreError):
+                    st.spend(NONCE, REL, PLAN)
+        self.assertEqual(_fd_count(), before)
+        self.assertFalse((self.store_dir / ("spent-" + NONCE)).exists())
+
+    def test_concurrent_path_substitution_never_returns_the_victim(self):
+        import threading
+        d = self.base / "race"
+        d.mkdir(mode=0o700)
+        good, victim, path = d / "good", d / "victim", d / "signers"
+        good.write_text("GOOD")
+        victim.write_text("VICTIM")
+        os.chmod(good, 0o600)
+        os.chmod(victim, 0o600)
+        os.symlink(good, path)
+        stop = threading.Event()
+
+        def swap():
+            toggle = 0
+            while not stop.is_set():
+                tmp = d / "tmp-link"
+                if tmp.is_symlink():
+                    tmp.unlink()
+                os.symlink(victim if toggle else good, tmp)
+                os.replace(tmp, path)
+                toggle ^= 1
+
+        worker = threading.Thread(target=swap)
+        worker.start()
+        seen = set()
+        try:
+            for _ in range(400):
+                try:
+                    seen.add(S.read_trusted_file(str(path)))
+                except S.StoreError:
+                    seen.add(b"REJECTED")
+        finally:
+            stop.set()
+            worker.join()
+        # the final component is a symlink in every state => O_NOFOLLOW rejects it every time; the victim content is never returned
+        self.assertEqual(seen, {b"REJECTED"})
+
+
 @unittest.skipUnless(HAVE_SSH, "ssh-keygen not available")
 class SpendStoreG2AuthenticatedGo(SpendStoreBase):
     def keygen(self, name):
@@ -204,7 +292,7 @@ class SpendStoreG2AuthenticatedGo(SpendStoreBase):
     def go(self, **over):
         body = {"v": 1, "nonce": NONCE, "release_sha": REL, "plan_sha256": PLAN, "purpose": S.PURPOSE, "not_after": int(time.time()) + 600}
         body.update(over)
-        return json.dumps(body, sort_keys=True).encode()
+        return S.canonical_go(body)
 
     def setUp(self):
         super().setUp()
@@ -229,7 +317,7 @@ class SpendStoreG2AuthenticatedGo(SpendStoreBase):
     def test_tampered_message_after_signing(self):
         message = self.go()
         sig = self.sign(self.key, message)
-        self.assertRejected(message=message.replace(b'"v": 1', b'"v": 1 '), sig=sig)
+        self.assertRejected(message=message.replace(b'"v":1', b'"v":1 '), sig=sig)
 
     def test_signature_by_other_key(self):
         other = self.keygen("intruder")
@@ -263,6 +351,41 @@ class SpendStoreG2AuthenticatedGo(SpendStoreBase):
         self.assertRejected(message=self.go(not_after="999999999999"))
         self.assertRejected(message=self.go(nonce="A" * 64))
         self.assertRejected(message=b"not json at all")
+
+    def signed_raw(self, raw):
+        """A VALIDLY SIGNED message that is not canonical must still be refused (signature covers bytes, canonical form is a separate rule)."""
+        return self.attempt(message=raw, sig=self.sign(self.key, raw))
+
+    def test_duplicate_keys_rejected_even_if_signed(self):
+        good = self.go().decode()
+        raw = good[:-1] + ',"v":1}'
+        for dup in (raw, good[:-1] + ',"nonce":"' + "d" * 64 + '"}'):
+            with self.subTest(dup=dup[-40:]), self.assertRaises(S.GoRejected):
+                self.signed_raw(dup.encode())
+        self.assertFalse((self.store_dir / ("spent-" + NONCE)).exists())
+
+    def test_non_canonical_representations_rejected_even_if_signed(self):
+        body = json.loads(self.go())
+        variants = {
+            "spaces": json.dumps(body, sort_keys=True).encode(),
+            "unsorted": json.dumps(dict(reversed(list(body.items()))), separators=(",", ":")).encode(),
+            "trailing_newline": self.go() + b"\n",
+            "leading_space": b" " + self.go(),
+            "unicode_escape": self.go().replace(b'"v"', b'"\\u0076"'),
+            "bom": b"\xef\xbb\xbf" + self.go(),
+            "nan": self.go().replace(b'"v":1', b'"v":NaN'),
+            "invalid_utf8": self.go() + b"\xff",
+            "float_epoch": self.go().replace(str(body["not_after"]).encode(), (str(body["not_after"]) + ".0").encode()),
+        }
+        for name, raw in variants.items():
+            with self.subTest(name), self.assertRaises(S.GoRejected):
+                self.signed_raw(raw)
+        self.assertFalse((self.store_dir / ("spent-" + NONCE)).exists())
+
+    def test_canonical_roundtrip_is_exact(self):
+        body = json.loads(self.go())
+        self.assertEqual(S.canonical_go(body), self.go())
+        self.assertEqual(S.parse_go(self.go()), body)
 
     def test_allowed_signers_must_be_trusted(self):
         self.assertRejected(signers=self.signers(self.key, mode=0o666))
