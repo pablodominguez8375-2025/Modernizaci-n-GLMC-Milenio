@@ -134,7 +134,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
         });
         await lodgeDb.SaveChangesAsync(cancellationToken);
 
-        var service = new ExecutiveReportingService(db, lodgeDb);
+        var service = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
         var report = await service.BuildAsync(
             new DateOnly(2026, 9, 9),
             new DateOnly(2026, 1, 1),
@@ -174,7 +174,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
         db.FinancialRegularitySnapshots.Add(new FinancialRegularitySnapshot { Organization = workshop, MemberId = null, Scope = "organization", Status = "delinquent", AsOfDate = new DateOnly(2026, 9, 1) });
         await db.SaveChangesAsync(ct);
 
-        var service = new ExecutiveReportingService(db, lodgeDb);
+        var service = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
         var asOf = new DateOnly(2026, 9, 9); var from = new DateOnly(2026, 1, 1);
         var before = await service.BuildAsync(asOf, from, ct);
         Assert.Equal("active", Assert.Single(before.Workshops, x => x.OrganizationId == workshop.Id).Status);
@@ -208,6 +208,48 @@ public sealed class ExecutiveReportingPostgreSqlTests
     }
 
     [Fact]
+    public async Task Unknown_history_is_a_separate_set_and_never_counts_as_active_or_operational()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+        await using var lodgeDb = new LodgeManagementDbContext(new DbContextOptionsBuilder<LodgeManagementDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.MigrateAsync(ct); await lodgeDb.Database.MigrateAsync(ct);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var workshop = new Organization { Name = $"Taller Desconocido {suffix}", Number = $"7{suffix[..2]}", Type = "workshop" };
+        var person = new Person { FirstNames = "Hermano", LastNames = $"Desconocido {suffix}" };
+        var member = new Member { Person = person, InstitutionalNumber = $"QU-{suffix}" };
+        db.AddRange(workshop, person, member);
+        db.Memberships.Add(new Membership { Member = member, Organization = workshop, MembershipType = "regular", StartDate = new DateOnly(2020, 1, 1), Status = MembershipCodes.MembershipStatus.Active });
+        await db.SaveChangesAsync(ct);
+        try
+        {
+            var certified = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+            var uncertified = new ExecutiveReportingService(db, lodgeDb);
+            var past = new DateOnly(2026, 9, 9);
+            var withBaseline = await certified.BuildAsync(past, new DateOnly(2026, 1, 1), ct);
+            var withoutBaseline = await uncertified.BuildAsync(past, new DateOnly(2026, 1, 1), ct);
+            // Con baseline el Taller es activo conocido; sin baseline (corte pasado) es «unknown»: no suma activos, afiliaciones ni retirados.
+            Assert.Equal("active", Assert.Single(withBaseline.Workshops, x => x.OrganizationId == workshop.Id).Status);
+            var row = Assert.Single(withoutBaseline.Workshops, x => x.OrganizationId == workshop.Id);
+            Assert.Equal("unknown", row.Status); Assert.False(row.StatusKnown); Assert.Empty(row.AttentionFlags); Assert.False(row.AttentionRequired);
+            Assert.Equal(withBaseline.Overview.Workshops - withBaseline.Workshops.Count(x => x.Status == "active"), withoutBaseline.Overview.Workshops - withoutBaseline.Workshops.Count(x => x.Status == "active"));
+            Assert.Equal(withoutBaseline.Workshops.Count(x => x.Status == "unknown"), withoutBaseline.Overview.UnknownStatusWorkshops);
+            Assert.Equal(withoutBaseline.Workshops.Count(x => x.Status == "retired"), withoutBaseline.Overview.RetiredWorkshops);   // los desconocidos no se suman a retirados conocidos
+            Assert.Equal(withoutBaseline.Workshops.Count(x => x.Status == "active"), withoutBaseline.Overview.Workshops);   // solo activos conocidos son operativos
+            Assert.True(withoutBaseline.Overview.CurrentMembers < withBaseline.Overview.CurrentMembers);                  // las afiliaciones del Taller desconocido no suman
+            // El presente SÍ es conocido sin baseline.
+            var today = await uncertified.BuildAsync(DateOnly.FromDateTime(DateTime.UtcNow), new DateOnly(2026, 1, 1), ct);
+            Assert.Equal("active", Assert.Single(today.Workshops, x => x.OrganizationId == workshop.Id).Status);
+        }
+        finally
+        {
+            await db.Organizations.Where(x => x.Id == workshop.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "active"), CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task Transition_history_reconstructs_cycles_and_is_append_only()
     {
         var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
@@ -232,7 +274,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
         await db.SaveChangesAsync(ct);
         try
         {
-            var service = new ExecutiveReportingService(db, lodgeDb);
+            var service = new ExecutiveReportingService(db, lodgeDb) { StatusBaselineUtc = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero) };
             async Task<string> StatusAt(int m, int d) => Assert.Single((await service.BuildAsync(new DateOnly(2026, m, d), new DateOnly(2026, 1, 1), ct)).Workshops, x => x.OrganizationId == workshop.Id).Status;
             Assert.Equal("active", await StatusAt(2, 28));
             Assert.Equal("retired", await StatusAt(4, 1));
@@ -275,7 +317,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
             // Una transición con fecha NO confiable no participa en series ni inventa fechas.
             db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = "retired", NextStatus = "active", EffectiveAtUtc = D(9, 2), Origin = WorkshopTransitionOrigins.Backfill, DateKnown = false });
             await db.SaveChangesAsync(ct);
-            Assert.Equal("retired", await StatusAt(12, 31));
+            Assert.Equal("unknown", await StatusAt(12, 31));   // intervalo afectado por fila sin fecha confiable: nunca se infiere
 
             // Reversión de transacción: no deja filas.
             var before = await db.WorkshopStatusTransitions.CountAsync(x => x.SubjectRef == workshop.Id, ct);

@@ -57,7 +57,7 @@ export default function ExecutiveReportingPage({ reportingApi }: { reportingApi:
         <Kpi label="Inactivos" value={report.overview.inactiveMembers} detail={`${report.overview.blockingMembers} con estado bloqueante`} tone={report.overview.blockingMembers > 0 ? 'attention' : undefined} />
         <Kpi label="Past Active" value={report.overview.pastActive} detail="según trayectoria de cargos" />
         <Kpi label="Morosos" value={report.overview.financial.delinquentMembersDistinct} detail={`${report.overview.financial.delinquentAffiliations} afiliaciones`} tone={report.overview.financial.delinquentMembersDistinct > 0 ? 'attention' : undefined} />
-        <Kpi label="Talleres con alertas" value={report.overview.workshopsRequiringAttention} detail={`de ${report.overview.workshops}${report.overview.retiredWorkshops ? ` activos · ${report.overview.retiredWorkshops} de baja (historia)` : ''}`} tone={report.overview.workshopsRequiringAttention > 0 ? 'attention' : undefined} />
+        <Kpi label="Talleres con alertas" value={report.overview.workshopsRequiringAttention} detail={`de ${report.overview.workshops}${report.overview.retiredWorkshops ? ` activos · ${report.overview.retiredWorkshops} de baja (historia)` : ''}${report.overview.unknownStatusWorkshops ? ` · ${report.overview.unknownStatusWorkshops} con historia desconocida` : ''}`} tone={report.overview.workshopsRequiringAttention > 0 ? 'attention' : undefined} />
         <Kpi label="Traslados pendientes" value={report.overview.pendingTransfers} detail={`${report.overview.events.transfers} ejecutados en período`} tone={report.overview.pendingTransfers > 0 ? 'attention' : undefined} />
       </section>
 
@@ -100,7 +100,7 @@ function Kpi({ label, value, detail, tone }: { label: string; value: number; det
 
 function WorkshopRow({ item }: { item: ExecutiveWorkshopRow }) {
   return <tr>
-    <td><strong>{item.name}</strong><small>{item.number ? `Nº ${item.number}` : 'Sin número'}</small>{item.status === 'retired' && <small className="reporting-retired">De baja{item.retiredAtUtc ? ` desde ${new Date(item.retiredAtUtc).toLocaleDateString('es-CL')}` : ''} · solo historia</small>}</td>
+    <td><strong>{item.name}</strong><small>{item.number ? `Nº ${item.number}` : 'Sin número'}</small>{item.status === 'unknown' && <small className="reporting-retired">Historia desconocida a esta fecha · no se cuenta como activo</small>}{item.status === 'retired' && <small className="reporting-retired">De baja{item.retiredAtUtc ? ` desde ${new Date(item.retiredAtUtc).toLocaleDateString('es-CL')}` : ''} · solo historia</small>}</td>
     <td><strong>{item.currentMembers}</strong><small>{item.activeMembers} activos</small></td>
     <td><span className={item.blockingMembers > 0 ? 'reporting-status attention' : 'reporting-status good'}>{item.blockingMembers > 0 ? `${item.blockingMembers} bloqueantes` : 'Sin bloqueos'}</span><small>{item.inactiveMembers} inactivos</small></td>
     <td><span>{degreeSummary(item.degreeDistribution)}</span></td>
