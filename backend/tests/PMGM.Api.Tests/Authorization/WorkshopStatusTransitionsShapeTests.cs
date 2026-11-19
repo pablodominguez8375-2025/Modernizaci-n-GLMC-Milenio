@@ -52,7 +52,7 @@ public sealed class WorkshopStatusTransitionsShapeTests
     {
         // Sequence es identidad de BD: en memoria todas valen 0 y OrderBy es estable, así se conserva el orden dado.
         var list = new List<WorkshopStatusTransition> { Tr("active", "retired", T1), Tr("retired", "active", T2), Tr("active", "retired", T3) };
-        WorkshopStatusAsOf At(int m, int d) => WorkshopStatusHistory.Resolve(list, "retired", T3, new DateOnly(2026, m, d));
+        WorkshopStatusAsOf At(int m, int d) => WorkshopStatusHistory.Resolve(list, "retired", T3, new DateOnly(2026, m, d), nowUtc: new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero));
         Assert.False(At(2, 28).Retired);                       // antes de la primera baja
         Assert.True(At(3, 1).Retired);                          // el mismo día de la baja (fin del día)
         Assert.Equal(T1, At(4, 1).RetiredAtUtc);
@@ -107,6 +107,19 @@ public sealed class WorkshopStatusTransitionsShapeTests
         var baseline = new DateTimeOffset(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
         Assert.False(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 2, 1), baseline, now).Known);   // antes de la baseline
         Assert.True(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 5, 1), baseline, now).Known);    // posterior a la baseline
+    }
+
+    [Fact]
+    public void Resolve_never_infers_state_for_future_dates()
+    {
+        var now = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero);
+        var baseline = new DateTimeOffset(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
+        var future = new DateOnly(2026, 12, 25);
+        Assert.False(WorkshopStatusHistory.Resolve([], "active", null, future, nowUtc: now).Known);
+        Assert.False(WorkshopStatusHistory.Resolve([], "active", null, future, baseline, now).Known);   // ni con baseline certificada
+        var list = new List<WorkshopStatusTransition> { Tr("active", "retired", T1) };
+        Assert.False(WorkshopStatusHistory.Resolve(list, "retired", T1, future, baseline, now).Known);
+        Assert.True(WorkshopStatusHistory.Resolve([], "active", null, new DateOnly(2026, 11, 1), nowUtc: now).Known);   // el día de hoy sí
     }
 
     [Fact]

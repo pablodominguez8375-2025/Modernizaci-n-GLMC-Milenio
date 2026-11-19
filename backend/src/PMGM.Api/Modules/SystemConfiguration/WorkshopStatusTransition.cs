@@ -49,6 +49,9 @@ public static class WorkshopStatusHistory
     {
         var cutoff = new DateTimeOffset(asOf.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var now = nowUtc ?? DateTimeOffset.UtcNow;
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
+        // Fechas FUTURAS: nunca se infiere el estado (ni de baja ni activo); se informa la fotografía actual como desconocida.
+        if (asOf > today) return new WorkshopStatusAsOf(currentStatus == WorkshopRegistryCodes.Retired, null, false);
         var unknownFrom = transitions.Where(x => !x.DateKnown).Select(x => (DateTimeOffset?)x.EffectiveAtUtc).Min();
         var affected = unknownFrom is not null && cutoff > unknownFrom.Value;
         var ordered = transitions.Where(x => x.DateKnown).OrderBy(x => x.EffectiveAtUtc).ThenBy(x => x.Sequence).ToList();
@@ -63,7 +66,7 @@ public static class WorkshopStatusHistory
                     ? Result(true, currentRetiredAtUtc, true)
                     : new WorkshopStatusAsOf(true, null, false);
             // Activo hoy y sin transiciones: conocido solo para el presente o después de una baseline certificada.
-            return Result(false, null, cutoff > now || !BeforeBaseline());
+            return Result(false, null, asOf == today || !BeforeBaseline());
         }
         var last = ordered.LastOrDefault(x => x.EffectiveAtUtc < cutoff);
         if (last is null)
