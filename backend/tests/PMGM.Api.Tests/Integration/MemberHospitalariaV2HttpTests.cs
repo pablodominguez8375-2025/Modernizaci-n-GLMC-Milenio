@@ -141,8 +141,16 @@ public sealed class MemberHospitalariaV2HttpTests
         var retired=new Organization {Name="T2b de baja",Type="workshop",CreatedAtUtc=DateTimeOffset.UtcNow,Status="retired",RetiredAtUtc=DateTimeOffset.UtcNow,RetiredReason="prueba T2b"};
         await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
         await db.Database.MigrateAsync(ct); db.Organizations.AddRange(active,retired); await db.SaveChangesAsync(ct);
-        await HospitalariaContributionGenerator.GenerateAsync(db,ct);
-        Assert.True(await db.HospitalariaContributionObligations.AnyAsync(x=>x.OrganizationId==active.Id,ct));
-        Assert.False(await db.HospitalariaContributionObligations.AnyAsync(x=>x.OrganizationId==retired.Id,ct));
+        try
+        {
+            await HospitalariaContributionGenerator.GenerateAsync(db,ct);
+            Assert.True(await db.HospitalariaContributionObligations.AnyAsync(x=>x.OrganizationId==active.Id,ct));
+            Assert.False(await db.HospitalariaContributionObligations.AnyAsync(x=>x.OrganizationId==retired.Id,ct));
+        }
+        finally
+        {
+            // La base de CI es compartida entre pruebas: no dejar un Taller de baja que otras pruebas encuentren.
+            retired.Status="active"; retired.RetiredAtUtc=null; retired.RetiredReason=null; await db.SaveChangesAsync(CancellationToken.None);
+        }
     }
 }

@@ -14,6 +14,8 @@ public static class WorkshopRegistryCodes
 {
     public const string Active = "active";
     public const string Retired = "retired";
+    /// <summary>Solo informes por fecha de corte: historia no conocida (nunca se infiere activo).</summary>
+    public const string Unknown = "unknown";
     public const string GrandLodgeType = "grand_lodge";
     public const string SupportType = "support";
     public const int ReasonMinLength = 10;
