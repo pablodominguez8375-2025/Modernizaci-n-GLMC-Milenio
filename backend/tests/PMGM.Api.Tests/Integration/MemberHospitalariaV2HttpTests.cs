@@ -132,4 +132,17 @@ public sealed class MemberHospitalariaV2HttpTests
         Assert.Equal("reconciled",(await vdb.HospitalariaContributionObligations.SingleAsync(x=>x.Id==id,ct)).Status);
         Assert.False(await vdb.DeathReplenishmentObligations.AnyAsync(x=>x.OrganizationId==org.Id,ct));
     }
+    [Fact]
+    public async Task Retired_workshop_gets_no_contribution_obligations_and_is_not_listed_as_option()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES"); if(string.IsNullOrWhiteSpace(connection))return;
+        var ct=TestContext.Current.CancellationToken; using var factory=new PmgmWebApplicationFactory(connection);
+        var active=new Organization {Name="T2b activo",Type="workshop",CreatedAtUtc=DateTimeOffset.UtcNow};
+        var retired=new Organization {Name="T2b de baja",Type="workshop",CreatedAtUtc=DateTimeOffset.UtcNow,Status="retired",RetiredAtUtc=DateTimeOffset.UtcNow,RetiredReason="prueba T2b"};
+        await using var scope=factory.Services.CreateAsyncScope(); var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        await db.Database.MigrateAsync(ct); db.Organizations.AddRange(active,retired); await db.SaveChangesAsync(ct);
+        await HospitalariaContributionGenerator.GenerateAsync(db,ct);
+        Assert.True(await db.HospitalariaContributionObligations.AnyAsync(x=>x.OrganizationId==active.Id,ct));
+        Assert.False(await db.HospitalariaContributionObligations.AnyAsync(x=>x.OrganizationId==retired.Id,ct));
+    }
 }
