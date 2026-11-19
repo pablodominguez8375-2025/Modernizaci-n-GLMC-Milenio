@@ -1,0 +1,32 @@
+name: a0-repro-offhost
+# Reproducción OFF-HOST de la suite A0 en un runner descartable de GitHub. Solo en esta rama de evidencia; NO se fusiona; sin secretos; no toca glmdch.
+on:
+  push:
+    branches: [claude/qa525-a0-repro-ci-20261119]
+permissions:
+  contents: read
+jobs:
+  repro:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Entorno y hashes
+        run: |
+          set -u
+          git rev-parse HEAD; uname -a; python3 --version; ls /usr/lib/postgresql/ || true
+          echo "host mnt ns antes: $(readlink /proc/self/ns/mnt) mountinfo $(sudo sha256sum /proc/1/mountinfo | cut -c1-16)"
+          cd scripts/qa/a0 && sha256sum -c sha256.txt
+      - name: PostgreSQL 16 si falta
+        run: |
+          [ -x /usr/lib/postgresql/16/bin/initdb ] || { sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null; }
+          ls /usr/lib/postgresql/16/bin/initdb
+      - name: test-a0 (root, fuera de /tmp)
+        run: cd scripts/qa/a0 && sudo bash tests/test-a0.sh 2>&1 | grep -E "casos=|PASARON|FAIL|GUARDA"; exit ${PIPESTATUS[0]}
+      - name: ns-guard-test
+        run: cd scripts/qa/a0 && sudo bash tests/ns-guard-test.sh 2>&1 | grep -E "PASS|FAIL|casos=|VERIFICADA|ABORTA"; exit ${PIPESTATUS[0]}
+      - name: Residuos
+        if: always()
+        run: |
+          echo "residuales: $(pgrep -af 'a0-suite|a0-worker|sleep 200' | grep -v pgrep | wc -l)"
+          echo "host mnt ns despues: $(readlink /proc/self/ns/mnt)"
