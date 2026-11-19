@@ -266,11 +266,13 @@ public static class WorkshopRegistryEndpoints
                     db.Organizations.Remove(organization);
                     break;
                 case WorkshopRegistryActions.Retire:
+                    db.WorkshopStatusTransitions.Add(NewTransition(ctx, id, WorkshopRegistryCodes.Active, WorkshopRegistryCodes.Retired));
                     organization.Status = WorkshopRegistryCodes.Retired;
                     organization.RetiredAtUtc = DateTimeOffset.UtcNow;
                     organization.RetiredReason = reason;
                     break;
                 default:
+                    db.WorkshopStatusTransitions.Add(NewTransition(ctx, id, WorkshopRegistryCodes.Retired, WorkshopRegistryCodes.Active));
                     organization.Status = WorkshopRegistryCodes.Active;
                     organization.RetiredAtUtc = null;
                     organization.RetiredReason = null;
@@ -307,4 +309,11 @@ public static class WorkshopRegistryEndpoints
         }
         return Results.Ok(new { id, action, completed = true });
     }
+
+    /// <summary>Transición del historial append-only (#1044), escrita en la MISMA transacción que la baja o reactivación.</summary>
+    private static WorkshopStatusTransition NewTransition(HttpContext ctx, Guid id, string previous, string next) => new()
+    {
+        SubjectRef = id, PreviousStatus = previous, NextStatus = next, EffectiveAtUtc = DateTimeOffset.UtcNow,
+        ActorSubject = DynamicTreasuryAccess.Subject(ctx.User), ReasonRef = ctx.TraceIdentifier
+    };
 }

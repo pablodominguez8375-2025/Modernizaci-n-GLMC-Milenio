@@ -31,7 +31,13 @@ public sealed class ExecutiveReportingService(
 
         // #1035 T2b-2 (propuesta ChatGPT, pendiente de ratificación del PO): un Taller dado de baja a la fecha de corte
         // conserva su fila histórica (etiquetada «De baja»), pero NO suma en las métricas operativas del Orden.
-        var retiredIds = workshops.Where(x => IsRetiredAsOf(x, asOf)).Select(x => x.Id).ToHashSet();
+        var workshopTransitionIds = workshops.Select(x => x.Id).ToList();
+        var transitionsByWorkshop = (await db.WorkshopStatusTransitions.AsNoTracking()
+                .Where(x => workshopTransitionIds.Contains(x.SubjectRef)).ToListAsync(cancellationToken))
+            .GroupBy(x => x.SubjectRef).ToDictionary(x => x.Key, x => (IReadOnlyList<WorkshopStatusTransition>)x.ToList());
+        var statusAsOf = workshops.ToDictionary(x => x.Id, x => WorkshopStatusHistory.Resolve(
+            transitionsByWorkshop.TryGetValue(x.Id, out var list) ? list : [], x.Status, x.RetiredAtUtc, asOf));
+        var retiredIds = workshops.Where(x => statusAsOf[x.Id].Retired).Select(x => x.Id).ToHashSet();
 
         var workshopIds = workshops.Select(x => x.Id).ToList();
         var affiliations = workshopIds.Count == 0
@@ -263,7 +269,7 @@ public sealed class ExecutiveReportingService(
                 flags.Count > 0,
                 flags,
                 retiredNow ? WorkshopRegistryCodes.Retired : WorkshopRegistryCodes.Active,
-                retiredNow ? workshop.RetiredAtUtc : null));
+                retiredNow ? statusAsOf[workshop.Id].RetiredAtUtc : null));
         }
 
         var globalStatusByMember = operationalMemberIds.ToDictionary(
@@ -349,10 +355,6 @@ public sealed class ExecutiveReportingService(
             or MembershipCodes.InstitutionalStatus.Deceased;
 
     private sealed record WorkshopIdentityRow(Guid Id, string Name, string? Number, string Status, DateTimeOffset? RetiredAtUtc);
-    /// <summary>De baja a la fecha de corte: estado retired y baja efectiva en o antes de esa fecha (sin fecha registrada = de baja).</summary>
-    private static bool IsRetiredAsOf(WorkshopIdentityRow workshop, DateOnly asOf)
-        => workshop.Status == WorkshopRegistryCodes.Retired &&
-           (workshop.RetiredAtUtc is null || DateOnly.FromDateTime(workshop.RetiredAtUtc.Value.UtcDateTime) <= asOf);
     private sealed record AffiliationRow(Guid MemberId, Guid OrganizationId);
     private sealed record StatusRow(Guid MemberId, Guid? OrganizationId, string Status, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
     private sealed record DegreeRow(Guid MemberId, string Degree, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);

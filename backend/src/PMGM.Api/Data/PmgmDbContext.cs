@@ -17,6 +17,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
 {
     public DbSet<Person> People => Set<Person>();
     public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<PMGM.Api.Modules.SystemConfiguration.WorkshopStatusTransition> WorkshopStatusTransitions => Set<PMGM.Api.Modules.SystemConfiguration.WorkshopStatusTransition>();
     public DbSet<Member> Members => Set<Member>();
     public DbSet<MemberPhoto> MemberPhotos => Set<MemberPhoto>();
     public DbSet<SupportViewSession> SupportViewSessions => Set<SupportViewSession>();
@@ -187,6 +188,18 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Address).HasMaxLength(500);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasIndex(x => x.Rut).IsUnique();
+        });
+
+        modelBuilder.Entity<PMGM.Api.Modules.SystemConfiguration.WorkshopStatusTransition>(entity =>
+        {
+            entity.ToTable("workshop_status_transitions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Sequence).ValueGeneratedOnAdd().UseIdentityAlwaysColumn();
+            entity.Property(x => x.PreviousStatus).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.NextStatus).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ActorSubject).HasMaxLength(320);
+            entity.Property(x => x.ReasonRef).HasMaxLength(120);
+            entity.HasIndex(x => new { x.SubjectRef, x.Sequence });
         });
 
         modelBuilder.Entity<Organization>(entity =>

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.ExecutiveReporting;
+using PMGM.Api.Modules.SystemConfiguration;
 using PMGM.Api.Modules.Hospitalaria.Entities;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
@@ -200,6 +201,53 @@ public sealed class ExecutiveReportingPostgreSqlTests
         finally
         {
             // La base de CI es compartida entre pruebas: reactivar para no dejar un Taller de baja a otras pruebas.
+            workshop.Status = "active"; workshop.RetiredAtUtc = null; workshop.RetiredReason = null; await db.SaveChangesAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Transition_history_reconstructs_cycles_and_is_append_only()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+        await using var lodgeDb = new LodgeManagementDbContext(new DbContextOptionsBuilder<LodgeManagementDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.MigrateAsync(ct); await lodgeDb.Database.MigrateAsync(ct);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var workshop = new Organization { Name = $"Taller Ciclos {suffix}", Number = $"6{suffix[..2]}", Type = "workshop" };
+        db.Organizations.Add(workshop); await db.SaveChangesAsync(ct);
+        DateTimeOffset D(int m, int d) => new(2026, m, d, 12, 0, 0, TimeSpan.Zero);
+        // Una transición por SaveChanges: la identidad `Sequence` debe seguir el orden real (en producción cada baja/reactivación es su propia transacción).
+        foreach (var (from, to, at) in new[] { ("active", "retired", D(3, 1)), ("retired", "active", D(6, 1)), ("active", "retired", D(9, 1)) })
+        {
+            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = from, NextStatus = to, EffectiveAtUtc = at });
+            await db.SaveChangesAsync(ct);
+        }
+        // La fila actual refleja la última transición.
+        workshop.Status = "retired"; workshop.RetiredAtUtc = D(9, 1); workshop.RetiredReason = "prueba ciclos";
+        await db.SaveChangesAsync(ct);
+        try
+        {
+            var service = new ExecutiveReportingService(db, lodgeDb);
+            async Task<string> StatusAt(int m, int d) => Assert.Single((await service.BuildAsync(new DateOnly(2026, m, d), new DateOnly(2026, 1, 1), ct)).Workshops, x => x.OrganizationId == workshop.Id).Status;
+            Assert.Equal("active", await StatusAt(2, 28));
+            Assert.Equal("retired", await StatusAt(4, 1));
+            Assert.Equal("active", await StatusAt(7, 1));
+            Assert.Equal("retired", await StatusAt(9, 9));
+
+            // Append-only a nivel de BD (migración manual AppendOnly aplicada por MigrateAsync en la BD de prueba).
+            var first = await db.WorkshopStatusTransitions.AsNoTracking().OrderBy(x => x.Sequence).FirstAsync(x => x.SubjectRef == workshop.Id, ct);
+            var update = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("UPDATE core.workshop_status_transitions SET \"NextStatus\"='active' WHERE \"Id\"={0}", [first.Id], ct));
+            Assert.Contains("PM410", update.ToString());
+            var delete = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("DELETE FROM core.workshop_status_transitions WHERE \"Id\"={0}", [first.Id], ct));
+            Assert.Contains("PM410", delete.ToString());
+            var truncate = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("TRUNCATE core.workshop_status_transitions", ct));
+            Assert.Contains("PM410", truncate.ToString());
+        }
+        finally
+        {
             workshop.Status = "active"; workshop.RetiredAtUtc = null; workshop.RetiredReason = null; await db.SaveChangesAsync(CancellationToken.None);
         }
     }
