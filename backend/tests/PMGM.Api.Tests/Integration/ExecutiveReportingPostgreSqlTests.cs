@@ -179,20 +179,28 @@ public sealed class ExecutiveReportingPostgreSqlTests
         Assert.Equal("active", Assert.Single(before.Workshops, x => x.OrganizationId == workshop.Id).Status);
         Assert.True(Assert.Single(before.Workshops, x => x.OrganizationId == workshop.Id).AttentionRequired);
 
-        workshop.Status = "retired"; workshop.RetiredAtUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero); workshop.RetiredReason = "prueba T2b-2";
-        await db.SaveChangesAsync(ct);
-        var after = await service.BuildAsync(asOf, from, ct);
-        var row = Assert.Single(after.Workshops, x => x.OrganizationId == workshop.Id);
-        Assert.Equal("retired", row.Status); Assert.NotNull(row.RetiredAtUtc);
-        Assert.Equal(1, row.CurrentMembers); Assert.False(row.AttentionRequired); Assert.Empty(row.AttentionFlags);
-        Assert.Equal(before.Overview.Workshops - 1, after.Overview.Workshops);
-        Assert.Equal(before.Overview.CurrentMembers - 1, after.Overview.CurrentMembers);
-        Assert.Equal(before.Overview.Financial.WorkshopsTreasuryDelinquent - 1, after.Overview.Financial.WorkshopsTreasuryDelinquent);
-        Assert.Equal(before.Overview.WorkshopsRequiringAttention - 1, after.Overview.WorkshopsRequiringAttention);
-        Assert.Equal(before.Overview.RetiredWorkshops + 1, after.Overview.RetiredWorkshops);
+        try
+        {
+            workshop.Status = "retired"; workshop.RetiredAtUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero); workshop.RetiredReason = "prueba T2b-2";
+            await db.SaveChangesAsync(ct);
+            var after = await service.BuildAsync(asOf, from, ct);
+            var row = Assert.Single(after.Workshops, x => x.OrganizationId == workshop.Id);
+            Assert.Equal("retired", row.Status); Assert.NotNull(row.RetiredAtUtc);
+            Assert.Equal(1, row.CurrentMembers); Assert.False(row.AttentionRequired); Assert.Empty(row.AttentionFlags);
+            Assert.Equal(before.Overview.Workshops - 1, after.Overview.Workshops);
+            Assert.Equal(before.Overview.CurrentMembers - 1, after.Overview.CurrentMembers);
+            Assert.Equal(before.Overview.Financial.WorkshopsTreasuryDelinquent - 1, after.Overview.Financial.WorkshopsTreasuryDelinquent);
+            Assert.Equal(before.Overview.WorkshopsRequiringAttention - 1, after.Overview.WorkshopsRequiringAttention);
+            Assert.Equal(before.Overview.RetiredWorkshops + 1, after.Overview.RetiredWorkshops);
 
-        // Un corte ANTERIOR a la baja no reescribe la historia: el Taller sigue activo en esa fecha.
-        var earlier = await service.BuildAsync(new DateOnly(2026, 8, 15), from, ct);
-        Assert.Equal("active", Assert.Single(earlier.Workshops, x => x.OrganizationId == workshop.Id).Status);
+            // Un corte ANTERIOR a la baja no reescribe la historia: el Taller sigue activo en esa fecha.
+            var earlier = await service.BuildAsync(new DateOnly(2026, 8, 15), from, ct);
+            Assert.Equal("active", Assert.Single(earlier.Workshops, x => x.OrganizationId == workshop.Id).Status);
+        }
+        finally
+        {
+            // La base de CI es compartida entre pruebas: reactivar para no dejar un Taller de baja a otras pruebas.
+            workshop.Status = "active"; workshop.RetiredAtUtc = null; workshop.RetiredReason = null; await db.SaveChangesAsync(CancellationToken.None);
+        }
     }
 }
