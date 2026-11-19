@@ -67,6 +67,17 @@ public static class SessionEndpoints
             return Results.Ok(new { items });
         }).WithTags("Sesión institucional").RequireAuthorization();
 
+        // Detalle de UN Taller de baja propio: 200 si es suyo (claim del middleware + de baja en BD); 403 si no es suyo; 404 si no existe/ya no es de baja.
+        endpoints.MapGet("/api/session/retired-workshops/{organizationId:guid}", async (Guid organizationId, HttpContext ctx, PmgmDbContext db, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "private, no-store";
+            if (!ctx.User.HasClaim(RetiredWorkshopScope.RetiredOrg, organizationId.ToString())) return Results.Forbid();
+            var item = await db.Organizations.AsNoTracking()
+                .Where(o => o.Id == organizationId && o.Type == "workshop" && o.Status == PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryCodes.Retired)
+                .Select(o => new { id = o.Id, name = o.Name, number = o.Number, retiredAtUtc = o.RetiredAtUtc }).SingleOrDefaultAsync(ct);
+            return item is null ? Results.NotFound() : Results.Ok(item);
+        }).WithTags("Sesión institucional").RequireAuthorization();
+
         return endpoints;
     }
 

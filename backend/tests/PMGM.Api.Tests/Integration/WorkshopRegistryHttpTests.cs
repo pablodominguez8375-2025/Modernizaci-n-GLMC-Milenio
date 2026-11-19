@@ -261,6 +261,9 @@ public sealed class WorkshopRegistryHttpTests
             await db.Organizations.Where(x => x.Id == mine.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "retired").SetProperty(o => o.RetiredAtUtc, DateTimeOffset.UtcNow).SetProperty(o => o.RetiredReason, "prueba T2c"), ct);
             Assert.Equal("retired_workshop", await AccessScope(user));
             Assert.Equal([mine.Id], await History(user));                                     // historia propia sí; el Taller ajeno de baja NO
+            Assert.Equal(HttpStatusCode.OK, (await user.GetAsync($"/api/session/retired-workshops/{mine.Id}", ct)).StatusCode);          // propio: 200
+            Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync($"/api/session/retired-workshops/{other.Id}", ct)).StatusCode);    // ajeno de baja: 403
+            Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync($"/api/session/retired-workshops/{active.Id}", ct)).StatusCode);   // activo ajeno: 403
             Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync("/api/system/workshops", ct)).StatusCode);   // sin ámbito operativo
             Assert.Equal(HttpStatusCode.Forbidden, (await user.PostAsJsonAsync($"/api/system/workshops/{mine.Id}/reactivate", new { reason = "intento de un usuario del Taller", confirmation = "x" }, ct)).StatusCode);
 
