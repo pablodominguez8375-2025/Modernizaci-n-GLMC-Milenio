@@ -206,6 +206,8 @@ app.UseMiddleware<SupportViewAsMiddleware>();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseMiddleware<DynamicScopeExpansionMiddleware>();
 app.UseMiddleware<DynamicRoleConferralMiddleware>();
+// #1035 T2c: va DESPUÉS de las expansiones dinámicas para ver el conjunto final de ámbitos.
+app.UseMiddleware<RetiredWorkshopScopeMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();

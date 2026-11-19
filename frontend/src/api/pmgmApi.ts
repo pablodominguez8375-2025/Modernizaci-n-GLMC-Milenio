@@ -63,7 +63,8 @@ export interface SessionCapabilities {
   /** Solo el perfil Gran Archivero publica y retira publicaciones. */
   canPublishOfficialDocuments?: boolean
 }
-export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
+/** `retired_workshop` (#1035 T2c): todos sus ámbitos de Taller están dados de baja; sin ámbito operativo, solo consulta histórica propia. */
+export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated' | 'retired_workshop'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'
 export interface OrganizationOption { id: string; name: string; number: string | null; type: string }
 export interface TreasuryTerritoryOption extends OrganizationOption { treasuryTerritory: TreasuryTerritory | null; city?:string|null; country?:string|null; orienteCode?:string|null }

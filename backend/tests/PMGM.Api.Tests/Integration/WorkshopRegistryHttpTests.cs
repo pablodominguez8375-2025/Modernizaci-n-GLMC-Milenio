@@ -23,8 +23,8 @@ public sealed class WorkshopRegistryHttpTests
 {
     private static readonly string? Connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
 
-    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection, bool retireEnabled = true)
-        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.UseSetting("WorkshopRegistry:RetireEnabled", retireEnabled ? "true" : "false").ConfigureTestServices(s => s
+    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection, bool retireEnabled = true, bool retiredSessionEnabled = true)
+        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.UseSetting("WorkshopRegistry:RetireEnabled", retireEnabled ? "true" : "false").UseSetting("WorkshopRegistry:RetiredSessionEnabled", retiredSessionEnabled ? "true" : "false").ConfigureTestServices(s => s
             .AddAuthentication(o => { o.DefaultAuthenticateScheme = Auth.Name; o.DefaultChallengeScheme = Auth.Name; o.DefaultForbidScheme = Auth.Name; })
             .AddScheme<AuthenticationSchemeOptions, Auth>(Auth.Name, _ => { })));
 
@@ -221,6 +221,13 @@ public sealed class WorkshopRegistryHttpTests
             var kind = Request.Headers["X-Workshop-Actor"].FirstOrDefault();
             if (kind is null or "anonymous") return Task.FromResult(AuthenticateResult.NoResult());
             var claims = new List<Claim> { new("sub", "workshop-ci-" + kind), new(InstitutionalClaims.Scope, "order") };
+            if (kind == "orgs")
+            {
+                // Usuario de Taller(es): cargo de Taller + pmgm_org por cada GUID de X-Test-Orgs; sin ámbito de Orden.
+                claims = [new("sub", "workshop-ci-orgs"), new(InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin)];
+                foreach (var org in (Request.Headers["X-Test-Orgs"].FirstOrDefault() ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)) claims.Add(new Claim(InstitutionalClaims.Organization, org));
+                return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Name)), Name)));
+            }
             switch (kind)
             {
                 case "master": claims.Add(new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin)); break;
@@ -228,6 +235,76 @@ public sealed class WorkshopRegistryHttpTests
                 default: claims.Add(new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerTesoreria)); break;
             }
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Name)), Name)));
+        }
+    }
+
+    [Fact]
+    public async Task T2c_retired_workshop_user_session_is_verified_against_the_database_on_every_request()
+    {
+        if (string.IsNullOrWhiteSpace(Connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(Connection);
+        var suffix = Guid.NewGuid().ToString("N")[..6];
+        var mine = new Organization { Name = $"T2c propio {suffix}", Type = "workshop", Origin = "qa_seed" };
+        var active = new Organization { Name = $"T2c activo {suffix}", Type = "workshop", Origin = "qa_seed" };
+        var other = new Organization { Name = $"T2c ajeno de baja {suffix}", Type = "workshop", Origin = "qa_seed", Status = "retired", RetiredAtUtc = DateTimeOffset.UtcNow, RetiredReason = "prueba T2c ajeno" };
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        await db.Database.MigrateAsync(ct);
+        var notAllowed = new Organization { Name = $"T2c tipo no permitido {suffix}", Type = "other_org_test", Origin = "qa_seed" };
+        db.Organizations.AddRange(mine, active, other, notAllowed); await db.SaveChangesAsync(ct);
+        HttpClient Client(params Guid[] orgs)
+        {
+            var c = factory.CreateClient(); c.DefaultRequestHeaders.Add("X-Workshop-Actor", "orgs");
+            c.DefaultRequestHeaders.Add("X-Test-Orgs", string.Join(',', orgs)); return c;
+        }
+        async Task<string?> AccessScope(HttpClient c) => (await c.GetFromJsonAsync<JsonElement>("/api/session/me", ct)).GetProperty("accessScope").GetString();
+        async Task<List<Guid>> History(HttpClient c) => (await c.GetFromJsonAsync<JsonElement>("/api/session/retired-workshops", ct)).GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToList();
+        try
+        {
+            var user = Client(mine.Id);
+            Assert.Equal("organization", await AccessScope(user));
+            Assert.Empty(await History(user));
+
+            // Revocación INMEDIATA: sin caché, la baja rige en la petición siguiente.
+            await db.Organizations.Where(x => x.Id == mine.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "retired").SetProperty(o => o.RetiredAtUtc, DateTimeOffset.UtcNow).SetProperty(o => o.RetiredReason, "prueba T2c"), ct);
+            Assert.Equal("retired_workshop", await AccessScope(user));
+            Assert.Equal([mine.Id], await History(user));                                     // historia propia sí; el Taller ajeno de baja NO
+            Assert.Equal(HttpStatusCode.OK, (await user.GetAsync($"/api/session/retired-workshops/{mine.Id}", ct)).StatusCode);          // propio: 200
+            Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync($"/api/session/retired-workshops/{other.Id}", ct)).StatusCode);    // ajeno de baja: 403
+            Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync($"/api/session/retired-workshops/{active.Id}", ct)).StatusCode);   // activo ajeno: 403
+            Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync("/api/system/workshops", ct)).StatusCode);   // sin ámbito operativo
+            Assert.Equal(HttpStatusCode.Forbidden, (await user.PostAsJsonAsync($"/api/system/workshops/{mine.Id}/reactivate", new { reason = "intento de un usuario del Taller", confirmation = "x" }, ct)).StatusCode);
+
+            // Un GUID inexistente junto al Taller de baja NO cuenta como ámbito activo.
+            Assert.Equal("retired_workshop", await AccessScope(Client(mine.Id, Guid.NewGuid())));
+            // Solo un GUID inexistente / solo una org de tipo no permitido ⇒ (el estado inesperado lo impide un CHECK de BD y lo cubre la prueba unitaria de Classify) sin ámbito operativo (no «organization»).
+            Assert.Equal("authenticated", await AccessScope(Client(Guid.NewGuid())));
+            Assert.Equal("authenticated", await AccessScope(Client(notAllowed.Id)));
+            // Ámbito mixto: conserva el Taller activo; el de baja queda solo como historia propia.
+            var mixed = Client(mine.Id, active.Id);
+            Assert.Equal("organization", await AccessScope(mixed));
+            Assert.Equal([mine.Id], await History(mixed));
+            // El Taller ajeno de baja (que no está en sus claims) nunca aparece en su historia.
+            Assert.DoesNotContain(other.Id, await History(mixed));
+
+            // Bandera apagada (default de producción): T2c inerte, la sesión no cambia aunque el Taller esté de baja.
+            using (var off = Factory(Connection, retiredSessionEnabled: false))
+            {
+                await db.Organizations.Where(x => x.Id == mine.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "retired").SetProperty(o => o.RetiredAtUtc, DateTimeOffset.UtcNow).SetProperty(o => o.RetiredReason, "prueba T2c"), ct);
+                var c = off.CreateClient(); c.DefaultRequestHeaders.Add("X-Workshop-Actor", "orgs"); c.DefaultRequestHeaders.Add("X-Test-Orgs", mine.Id.ToString());
+                Assert.Equal("organization", (await c.GetFromJsonAsync<JsonElement>("/api/session/me", ct)).GetProperty("accessScope").GetString());
+                Assert.Empty((await c.GetFromJsonAsync<JsonElement>("/api/session/retired-workshops", ct)).GetProperty("items").EnumerateArray());
+            }
+            // Reactivación: vuelve a regir en la petición siguiente.
+            await db.Organizations.Where(x => x.Id == mine.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "active").SetProperty(o => o.RetiredAtUtc, (DateTimeOffset?)null).SetProperty(o => o.RetiredReason, (string?)null), ct);
+            Assert.Equal("organization", await AccessScope(user));
+            // Sin sesión: 401.
+            Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync("/api/session/retired-workshops", ct)).StatusCode);
+        }
+        finally
+        {
+            await db.Organizations.Where(x => x.Id == mine.Id || x.Id == active.Id || x.Id == other.Id || x.Id == notAllowed.Id).ExecuteDeleteAsync(CancellationToken.None);
         }
     }
 }

@@ -461,6 +461,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         <TextSizeControl className="in-sidebar" />
       </nav>
       <main className="content" id="contenido-principal">
+        {effectiveProfile?.accessScope === 'retired_workshop' && <p className="panel" role="status"><strong>Taller de baja.</strong> Su Taller está dado de baja: puede consultar su historia personal, pero no realizar operaciones. Si cree que es un error, contacte a la Gran Secretaría.</p>}
         {error && <ErrorBanner message={error} />}
         <Suspense fallback={<p className="panel" role="status">Cargando…</p>}>
          {(systemGate === 'checking' || systemGate === 'denied') && <section className="panel" role={systemGate === 'denied' ? 'alert' : 'status'}>

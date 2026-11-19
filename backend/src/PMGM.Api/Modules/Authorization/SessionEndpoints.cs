@@ -52,6 +52,32 @@ public static class SessionEndpoints
             return Results.Ok(await DynamicTreasuryAccess.ProjectAsync(db, ctx.User, organizationId, access, ct));
         }).WithTags("Sesión institucional").RequireAuthorization();
 
+        // #1035 T2c: consulta histórica PROPIA mínima de los Talleres de baja del usuario (identidad y fecha de baja). Las claims
+        // pmgm_retired_org solo las pone RetiredWorkshopScopeMiddleware; aquí se revalida en BD que el Taller siga de baja.
+        // Solo lectura y solo los Talleres propios: nunca otros Talleres ni registros internos (eso requiere definición del PO).
+        endpoints.MapGet("/api/session/retired-workshops", async (HttpContext ctx, PmgmDbContext db, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "private, no-store";
+            var own = ctx.User.FindAll(RetiredWorkshopScope.RetiredOrg).Select(x => Guid.TryParse(x.Value, out var id) ? id : (Guid?)null)
+                .Where(x => x is not null).Select(x => x!.Value).Distinct().ToList();
+            if (own.Count == 0) return Results.Ok(new { items = Array.Empty<object>() });
+            var items = await db.Organizations.AsNoTracking()
+                .Where(o => own.Contains(o.Id) && o.Type == "workshop" && o.Status == PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryCodes.Retired)
+                .OrderBy(o => o.Name).Select(o => new { id = o.Id, name = o.Name, number = o.Number, retiredAtUtc = o.RetiredAtUtc }).ToListAsync(ct);
+            return Results.Ok(new { items });
+        }).WithTags("Sesión institucional").RequireAuthorization();
+
+        // Detalle de UN Taller de baja propio: 200 si es suyo (claim del middleware + de baja en BD); 403 si no es suyo; 404 si no existe/ya no es de baja.
+        endpoints.MapGet("/api/session/retired-workshops/{organizationId:guid}", async (Guid organizationId, HttpContext ctx, PmgmDbContext db, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "private, no-store";
+            if (!ctx.User.HasClaim(RetiredWorkshopScope.RetiredOrg, organizationId.ToString())) return Results.Forbid();
+            var item = await db.Organizations.AsNoTracking()
+                .Where(o => o.Id == organizationId && o.Type == "workshop" && o.Status == PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryCodes.Retired)
+                .Select(o => new { id = o.Id, name = o.Name, number = o.Number, retiredAtUtc = o.RetiredAtUtc }).SingleOrDefaultAsync(ct);
+            return item is null ? Results.NotFound() : Results.Ok(item);
+        }).WithTags("Sesión institucional").RequireAuthorization();
+
         return endpoints;
     }
 
@@ -165,7 +191,10 @@ public static class SessionProfileBuilder
             .Select(x => Guid.TryParse(x.Value, out var id) ? id : (Guid?)null)
             .FirstOrDefault(x => x is not null);
 
-        var accessScope = access.HasOrderScope(user)
+        var retiredOnly = user.HasClaim(RetiredWorkshopScope.Marker, "true");
+        var accessScope = retiredOnly
+            ? "retired_workshop"
+            : access.HasOrderScope(user)
             ? "order"
             : organizationId is not null
                 ? "organization"
