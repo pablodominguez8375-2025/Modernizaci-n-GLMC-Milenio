@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Evidencia de la GUARDA DE NAMESPACE de test-a0.sh (v5). Corre en una VM/sandbox DESCARTABLE como root. Ningún caso monta nada en el namespace del host: los casos 11 y 12 montan SOLO dentro de un namespace propio del worker (efímero);
+# Evidencia de la GUARDA DE NAMESPACE de test-a0.sh (v5). Corre en una VM/sandbox DESCARTABLE como root. Ningún caso monta nada en el namespace del host: los casos 11, 12, 14 y 15 montan SOLO dentro de un namespace privado propio del worker (efímero), nunca en el host;
 # si la guarda fallara y montara en el host, se detecta al comparar el mount namespace y /proc/self/mountinfo del host antes/después.
 # Uso (root): bash scripts/qa/a0/tests/ns-guard-test.sh
 set -u
@@ -51,23 +51,42 @@ EOM
 chmod +x "$FAKE/mount"; rm -f "$FAKE/count"
 out="$(PATH="$FAKE:$PATH" bash "$T" 2>&1)"; rc=$?; [ $rc -eq 9 ] && echo "$out" | grep -q "no se pudieron montar" && ! pgrep -f "a0-suite" >/dev/null && [ "$(host_state)" = "$BEFORE" ] && chk ok "exit 9, sin residuos, host idéntico" || chk bad "rc=$rc" "$out"
 rm -f "$FAKE/mount" "$FAKE/count"
-echo "12) SIGKILL del worker: identidad PID+starttime+ppid+NSpid+namespaces validada ANTES de la señal (sin kill por patrón)"
-bash "$T" >"$KLOG" 2>&1 &
-BGPID=$!
-WP=""; PGUP=no
-for i in $(seq 1 80); do
-  pgrep -f "a0-suite" >/dev/null && PGUP=si
-  for p in $(pgrep -P "$BGPID"); do grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$p/status" 2>/dev/null && WP="$p"; done
-  [ -n "$WP" ] && [ "$PGUP" = si ] && break; sleep 0.5
-done
-if [ -n "$WP" ]; then
-  ST1="$(awk '{print $22}' "/proc/$WP/stat" 2>/dev/null)"; PP1="$(awk '{print $4}' "/proc/$WP/stat" 2>/dev/null)"; MN1="$(readlink "/proc/$WP/ns/mnt")"
-  HOSTMNT="$(readlink /proc/self/ns/mnt)"
-  # re-validación inmediatamente antes de la señal: mismo starttime, hijo directo de nuestro BGPID, PID 1 en su pid ns y mount ns distinto del host
-  if [ -n "$ST1" ] && [ "$PP1" = "$BGPID" ] && [ "$MN1" != "$HOSTMNT" ] && [ "$(awk '{print $22}' "/proc/$WP/stat")" = "$ST1" ] && grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$WP/status"; then kill -9 "$WP"; else echo "identidad del worker NO validada: no se envía señal"; WP=""; fi
-fi
-wait "$BGPID" 2>/dev/null; sleep 1
-if [ -n "$WP" ] && [ "$PGUP" = si ] && ! pgrep -f "a0-suite" >/dev/null && [ "$(host_state)" = "$BEFORE" ] && ! ls -d /tmp/a0-suite.* >/dev/null 2>&1; then chk ok "worker $WP (starttime $ST1, ppid $PP1) muerto con suite activa; 0 procesos, 0 dirs en /tmp del host, host idéntico"; else chk bad "WP=$WP PGUP=$PGUP" "$(tail -3 "$KLOG")"; fi
+# --- Casos 12/14/15: SIGKILL con identidad completa re-leída EN EL MISMO predicado previo a la señal; cleanup solo de procesos propios verificados ---
+HM="$(readlink /proc/self/ns/mnt)"; HN="$(readlink /proc/self/ns/net)"; HP="$(readlink /proc/self/ns/pid)"
+pst() { awk '{print $22}' "/proc/$1/stat" 2>/dev/null; }      # starttime
+ppd() { awk '{print $4}' "/proc/$1/stat" 2>/dev/null; }       # ppid
+# ident PID PPID_ESPERADO STARTTIME_ESPERADO : TODO se vuelve a leer ahora (starttime, ppid, NSpid==1, mnt/net/pid ns distintos del host)
+ident() { local p="$1" ep="$2" es="$3"
+  [ -n "$es" ] && [ "$(pst "$p")" = "$es" ] && [ "$(ppd "$p")" = "$ep" ] && grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$p/status" 2>/dev/null \
+  && [ "$(readlink "/proc/$p/ns/mnt" 2>/dev/null)" != "$HM" ] && [ "$(readlink "/proc/$p/ns/net" 2>/dev/null)" != "$HN" ] && [ "$(readlink "/proc/$p/ns/pid" 2>/dev/null)" != "$HP" ]; }
+# kill_case ITERS PPID_QUE_SE_EXIGE(real|falso) : SENT/PGUP/WP quedan en variables globales
+kill_case() { local iters="$1" mode="$2" i p ex
+  bash "$T" >"$KLOG" 2>&1 &
+  BGPID=$!; BGST="$(pst "$BGPID")"; WP=""; ST1=""; PGUP=no; SENT=no
+  for i in $(seq 1 "$iters"); do
+    pgrep -f "a0-suite" >/dev/null && PGUP=si
+    for p in $(pgrep -P "$BGPID"); do [ "$(ppd "$p")" = "$BGPID" ] && grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$p/status" 2>/dev/null && { WP="$p"; ST1="$(pst "$p")"; }; done
+    [ -n "$WP" ] && [ "$PGUP" = si ] && break; sleep 0.5
+  done
+  ex="$BGPID"; [ "$mode" = falso ] && ex=1
+  if [ -n "$WP" ] && ident "$WP" "$ex" "$ST1"; then kill -9 "$WP"; SENT=si; else echo "identidad NO validada o worker no seleccionado: no se envía SIGKILL por el camino principal"; fi
+  # cleanup: solo procesos PROPIOS con identidad comprobada (hijos directos de BGPID en otro mount ns; o BGPID mismo si sigue siendo nuestro hijo con el mismo starttime)
+  if kill -0 "$BGPID" 2>/dev/null; then
+    for p in $(pgrep -P "$BGPID"); do [ "$(ppd "$p")" = "$BGPID" ] && [ "$(readlink "/proc/$p/ns/mnt" 2>/dev/null)" != "$HM" ] && kill -9 "$p" 2>/dev/null; done
+    sleep 0.5
+    if kill -0 "$BGPID" 2>/dev/null && [ "$(pst "$BGPID")" = "$BGST" ] && [ "$(ppd "$BGPID")" = "$$" ]; then kill -9 "$BGPID" 2>/dev/null; fi
+  fi
+  wait "$BGPID" 2>/dev/null; sleep 1; }
+clean_after() { ! pgrep -f "a0-suite" >/dev/null && [ "$(host_state)" = "$BEFORE" ] && ! ls -d /tmp/a0-suite.* >/dev/null 2>&1; }
+echo "12) SIGKILL del worker: starttime, ppid==BGPID, NSpid==1 y mnt/net/pid ns distintos del host RE-LEÍDOS en el predicado final"
+kill_case 80 real
+if [ "$SENT" = si ] && [ "$PGUP" = si ] && clean_after; then chk ok "worker $WP (starttime $ST1) muerto con suite activa; 0 procesos, 0 dirs en /tmp del host, host idéntico"; else chk bad "SENT=$SENT WP=$WP PGUP=$PGUP" "$(tail -3 "$KLOG")"; fi
+echo "14) fallo INDUCIDO de identidad (se exige un ppid falso): NO se envía SIGKILL por el camino principal; el cleanup termina solo el worker propio verificado; sin huérfanos"
+kill_case 80 falso
+if [ "$SENT" = no ] && [ -n "$WP" ] && clean_after; then chk ok "señal rechazada por identidad; cleanup propio dejó 0 procesos/dirs y host idéntico"; else chk bad "SENT=$SENT WP=$WP" "$(tail -3 "$KLOG")"; fi
+echo "15) TIMEOUT inducido (1 iteración de espera: el worker aún puede no existir): cleanup solo de procesos propios, sin huérfanos"
+kill_case 1 real
+if clean_after; then chk ok "SENT=$SENT; 0 procesos/dirs residuales y host idéntico"; else chk bad "SENT=$SENT" "$(tail -3 "$KLOG")"; fi
 echo "13) limpieza no alcanza recursos externos: el trap solo recorre CREATED[] (rutas exactas) y no hay rm -r"
 grep -q 'for p in "${CREATED\[@\]:-}"' "$T" && ! grep -nE 'rm -(r|f[a-z]*r)' "$T" | grep -v '^[0-9]*:#' | grep -q . && chk ok "estático" || chk bad "estático"
 AFTER="$(host_state)"
