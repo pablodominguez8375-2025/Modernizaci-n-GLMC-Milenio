@@ -19,7 +19,8 @@ out="$(printf 'mnt=mnt:[1]\nnet=net:[2]\npid=pid:[3]\n' | bash -c 'exec 3<&0; ba
 echo "4) pid namespace nuevo SIN mount namespace propio (el caso peligroso) con token falso => se niega"
 out="$(tok | unshare --pid --fork bash -c 'exec 3<&0; exec bash "$0" --a0-worker' "$T" 2>&1)"; rc=$?; [ $rc -eq 9 ] && echo "$out" | grep -q "GUARDA" && chk ok "rechazado (exit 9)" || chk bad "rc=$rc" "$out"
 echo "5) pid+mount namespace pero montajes COMPARTIDOS (sin --propagation private) con --mount-proc => se niega"
-out="$(tok | unshare --pid --fork --mount --propagation shared --mount-proc bash -c 'exec 3<&0; exec bash "$0" --a0-worker' "$T" 2>&1)"; rc=$?; [ $rc -eq 9 ] && echo "$out" | grep -q "GUARDA" && chk ok "rechazado (exit 9)" || chk bad "rc=$rc" "$out"
+# El caso se ejecuta DENTRO de un mount namespace externo privado desechable: aunque el worker (o --mount-proc) propagara montajes, no pueden llegar al host.
+out="$(unshare --mount --propagation private bash -c 'tok() { printf "mnt=%s\nnet=%s\npid=%s\n" "$(readlink /proc/self/ns/mnt)" "$(readlink /proc/self/ns/net)" "$(readlink /proc/self/ns/pid)"; }; tok | unshare --pid --fork --mount --propagation shared --mount-proc bash -c "exec 3<&0; exec bash \"\$0\" --a0-worker" "$1"' _ "$T" 2>&1)"; rc=$?; [ $rc -eq 9 ] && echo "$out" | grep -q "GUARDA" && chk ok "rechazado (exit 9)" || chk bad "rc=$rc" "$out"
 echo "6) el ARRANQUE con A0_TEST_NS=1 en el entorno igual crea un namespace NUEVO (la variable no se consulta)"
 out="$(A0_TEST_NS=1 bash "$T" --ns-selfcheck 2>&1)"; rc=$?; w="$(echo "$out" | sed -n 's/^NS_OK worker_mnt=\(mnt:\[[0-9]*\]\).*/\1/p')"; h="$(readlink /proc/self/ns/mnt)"
 [ $rc -eq 0 ] && [ -n "$w" ] && [ "$w" != "$h" ] && chk ok "mount ns del trabajador ($w) != host ($h)" || chk bad "rc=$rc" "$out"
@@ -27,6 +28,34 @@ echo "7) fallo de initdb (binarios inexistentes): sale 9, sin cluster ni proceso
 out="$(A0_PGBIN=/nonexistent bash "$T" 2>&1)"; rc=$?; [ $rc -eq 9 ] && echo "$out" | grep -q "initdb falló" && ! pgrep -f "a0-suite" >/dev/null && chk ok "exit 9, sin procesos a0-suite" || chk bad "rc=$rc" "$out"
 echo "8) estático: la suite no usa rm -rf, glob de borrado, drop database/role ni toca pg_hba/pgdata del host"
 if ! grep -nE 'rm -rf|drop (database|role)|pg_hba|/var/tmp/pgdata' "$T" | grep -v '^[0-9]*:#' | grep -v 'GUARDA\|\[ ! -e /var/tmp/pgdata \]'; then chk ok "sin patrones prohibidos"; else chk bad "hay patrones prohibidos"; fi
+
+FAKE=/root/a0-guard-fake; rm -rf "$FAKE"; mkdir -p "$FAKE"
+echo "10) fallo de unshare (unshare simulado que falla): el arranque sale != 0 sin worker, sin montajes ni procesos"
+printf '#!/bin/sh\nexit 1\n' > "$FAKE/unshare"; chmod +x "$FAKE/unshare"
+out="$(PATH="$FAKE:$PATH" bash "$T" 2>&1)"; rc=$?; [ $rc -ne 0 ] && ! pgrep -f "a0-suite" >/dev/null && [ "$(host_state)" = "$BEFORE" ] && chk ok "rc=$rc, sin residuos, host idéntico" || chk bad "rc=$rc" "$out"
+rm -f "$FAKE/unshare"
+echo "11) fallo del SEGUNDO mount (mount simulado: 1.º real, 2.º falla): exit 9, sin suite activa, host idéntico"
+cat > "$FAKE/mount" <<'EOM'
+#!/bin/sh
+C=/root/a0-guard-fake/count; n=$(cat "$C" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$C"
+[ "$n" -ge 2 ] && exit 1
+exec /usr/bin/mount "$@"
+EOM
+chmod +x "$FAKE/mount"; rm -f "$FAKE/count"
+out="$(PATH="$FAKE:$PATH" bash "$T" 2>&1)"; rc=$?; [ $rc -eq 9 ] && echo "$out" | grep -q "no se pudieron montar" && ! pgrep -f "a0-suite" >/dev/null && [ "$(host_state)" = "$BEFORE" ] && chk ok "exit 9, sin residuos, host idéntico" || chk bad "rc=$rc" "$out"
+rm -f "$FAKE/mount" "$FAKE/count"
+echo "12) SIGKILL del worker en pleno funcionamiento: namespace y PostgreSQL privado desaparecen; el host no queda con montajes ni procesos"
+bash "$T" >/tmp/a0-guard-kill.out 2>&1 &
+BGPID=$!
+for i in $(seq 1 60); do pgrep -f "a0-suite" >/dev/null && break; sleep 0.5; done
+WP=""; for p in $(pgrep -f 'test-a0.sh --a0-worker'); do grep -Eq '^NSpid:.*[[:space:]]1$' "/proc/$p/status" 2>/dev/null && WP="$p"; done   # el worker = el proceso que es PID 1 en su pid ns (no el unshare padre)
+PGUP=no; pgrep -f "a0-suite" >/dev/null && PGUP=si
+[ -n "$WP" ] && kill -9 "$WP"; wait "$BGPID" 2>/dev/null; sleep 1
+if [ -n "$WP" ] && [ "$PGUP" = si ] && ! pgrep -f "a0-suite" >/dev/null && [ "$(host_state)" = "$BEFORE" ] && ! ls -d /tmp/a0-suite.* >/dev/null 2>&1; then chk ok "worker $WP muerto con suite activa; 0 procesos, 0 dirs en /tmp del host, host idéntico"; else chk bad "WP=$WP PGUP=$PGUP" "$(tail -3 /tmp/a0-guard-kill.out)"; fi
+rm -f /tmp/a0-guard-kill.out
+rm -rf "$FAKE"
+echo "13) limpieza no alcanza recursos externos: el trap solo recorre CREATED[] (rutas exactas) y no hay rm -r"
+grep -q 'for p in "${CREATED\[@\]:-}"' "$T" && ! grep -nE 'rm -(r|f[a-z]*r)' "$T" | grep -v '^[0-9]*:#' | grep -q . && chk ok "estático" || chk bad "estático"
 AFTER="$(host_state)"
 echo "9) el mount namespace y los montajes del HOST no cambiaron: antes='$BEFORE' después='$AFTER'"
 [ "$BEFORE" = "$AFTER" ] && chk ok "idénticos" || chk bad "cambiaron"
