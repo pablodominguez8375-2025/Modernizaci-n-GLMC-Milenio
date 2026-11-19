@@ -1,0 +1,17 @@
+identidad: db=rehearsal_a user=postgres server_addr=unix-socket version=16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)
+esquema base verificado: core.organizations sin Status, sin tabla de transiciones
+datos sintéticos: 20000 Talleres en 87 ms
+respaldo pg_dump: 977530 bytes sha256=9ee72661f60f2920ad8be017cd2c75f99a3bd42c30ce9bb10e6465dc0aee25d8
+migración aplicada: 20261118150000_AddWorkshopRegistryState en 38 ms (lock_timeout=5000 ms)
+migración aplicada: 20261118170000_AddWorkshopRetiredGuard en 31 ms (lock_timeout=5000 ms)
+migración aplicada: 20261119010000_AddWorkshopStatusTransitions en 21 ms (lock_timeout=5000 ms)
+migración aplicada: 20261119010100_AddWorkshopStatusTransitionsAppendOnly en 11 ms (lock_timeout=5000 ms)
+integridad tras ventana: 0 transiciones escritas; 20000 Talleres activos conservados
+instalador de guardia: columnas sin cobertura tras 1ª ejecución=0, tras 2ª=0
+rol no dueño rehearsal_app: EXECUTE install_workshop_retired_guard=False; UPDATE sobre workshop_status_transitions=True (concedido explícitamente por GRANT ... ON ALL TABLES; el REVOKE FROM PUBLIC no lo quita)
+rol app: «update core.workshop_status_transitions set "NextStatus"='active'» rechazado con SQLSTATE PM410
+rol app: «delete from core.workshop_status_transitions» rechazado con SQLSTATE PM410
+rol app: «truncate core.workshop_status_transitions» rechazado con SQLSTATE 42501
+concurrencia (8 transacciones Serializable): lost:40001×7, won×1
+flags apagados: POST retire => HTTP 409
+restauración del respaldo en copia rehearsal_restore_65ae3927: 20000 Talleres, sin Status, sin tabla de transiciones, historial EF en el último previo al delta
