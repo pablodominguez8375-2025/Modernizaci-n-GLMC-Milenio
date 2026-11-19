@@ -44,6 +44,9 @@ export interface ExecutiveWorkshopRow {
   activity: ExecutiveWorkshopActivity
   attentionRequired: boolean
   attentionFlags: string[]
+  /** #1035 T2b-2: «retired» = Taller de baja a la fecha de corte (historia; no suma en métricas operativas). Si falta, es activo. */
+  status?: 'active' | 'retired'
+  retiredAtUtc?: string | null
 }
 
 export interface ExecutiveReport {
@@ -61,6 +64,8 @@ export interface ExecutiveReport {
     financial: ExecutiveOrderFinancial
     pendingTransfers: number
     workshopsRequiringAttention: number
+    /** Talleres de baja a la fecha de corte; no están incluidos en `workshops` ni en las demás métricas operativas. */
+    retiredWorkshops?: number
   }
   workshops: ExecutiveWorkshopRow[]
 }

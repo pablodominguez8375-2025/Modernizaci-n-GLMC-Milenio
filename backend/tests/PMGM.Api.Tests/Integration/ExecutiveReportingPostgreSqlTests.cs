@@ -153,4 +153,46 @@ public sealed class ExecutiveReportingPostgreSqlTests
         Assert.Contains("treasury_delinquent", targetRow.AttentionFlags);
         Assert.Contains("hospitalaria_overdue", targetRow.AttentionFlags);
     }
+
+    [Fact]
+    public async Task Retired_workshop_keeps_historical_row_but_leaves_operational_metrics()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+        await using var lodgeDb = new LodgeManagementDbContext(new DbContextOptionsBuilder<LodgeManagementDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.MigrateAsync(ct); await lodgeDb.Database.MigrateAsync(ct);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var workshop = new Organization { Name = $"Taller Baja {suffix}", Number = $"7{suffix[..2]}", Type = "workshop" };
+        var person = new Person { FirstNames = "Hermano", LastNames = $"De Baja {suffix}" };
+        var member = new Member { Person = person, InstitutionalNumber = $"QB-{suffix}" };
+        db.AddRange(workshop, person, member);
+        db.Memberships.Add(new Membership { Member = member, Organization = workshop, MembershipType = "regular", StartDate = new DateOnly(2020, 1, 1), Status = MembershipCodes.MembershipStatus.Active });
+        db.FinancialRegularitySnapshots.Add(new FinancialRegularitySnapshot { Organization = workshop, MemberId = null, Scope = "organization", Status = "delinquent", AsOfDate = new DateOnly(2026, 9, 1) });
+        await db.SaveChangesAsync(ct);
+
+        var service = new ExecutiveReportingService(db, lodgeDb);
+        var asOf = new DateOnly(2026, 9, 9); var from = new DateOnly(2026, 1, 1);
+        var before = await service.BuildAsync(asOf, from, ct);
+        Assert.Equal("active", Assert.Single(before.Workshops, x => x.OrganizationId == workshop.Id).Status);
+        Assert.True(Assert.Single(before.Workshops, x => x.OrganizationId == workshop.Id).AttentionRequired);
+
+        workshop.Status = "retired"; workshop.RetiredAtUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero); workshop.RetiredReason = "prueba T2b-2";
+        await db.SaveChangesAsync(ct);
+        var after = await service.BuildAsync(asOf, from, ct);
+        var row = Assert.Single(after.Workshops, x => x.OrganizationId == workshop.Id);
+        Assert.Equal("retired", row.Status); Assert.NotNull(row.RetiredAtUtc);
+        Assert.Equal(1, row.CurrentMembers); Assert.False(row.AttentionRequired); Assert.Empty(row.AttentionFlags);
+        Assert.Equal(before.Overview.Workshops - 1, after.Overview.Workshops);
+        Assert.Equal(before.Overview.CurrentMembers - 1, after.Overview.CurrentMembers);
+        Assert.Equal(before.Overview.Financial.WorkshopsTreasuryDelinquent - 1, after.Overview.Financial.WorkshopsTreasuryDelinquent);
+        Assert.Equal(before.Overview.WorkshopsRequiringAttention - 1, after.Overview.WorkshopsRequiringAttention);
+        Assert.Equal(before.Overview.RetiredWorkshops + 1, after.Overview.RetiredWorkshops);
+
+        // Un corte ANTERIOR a la baja no reescribe la historia: el Taller sigue activo en esa fecha.
+        var earlier = await service.BuildAsync(new DateOnly(2026, 8, 15), from, ct);
+        Assert.Equal("active", Assert.Single(earlier.Workshops, x => x.OrganizationId == workshop.Id).Status);
+    }
 }
