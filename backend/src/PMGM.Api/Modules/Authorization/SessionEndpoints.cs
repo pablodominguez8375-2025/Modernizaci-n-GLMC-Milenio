@@ -165,7 +165,10 @@ public static class SessionProfileBuilder
             .Select(x => Guid.TryParse(x.Value, out var id) ? id : (Guid?)null)
             .FirstOrDefault(x => x is not null);
 
-        var accessScope = access.HasOrderScope(user)
+        var retiredOnly = user.HasClaim(RetiredWorkshopScope.Marker, "true");
+        var accessScope = retiredOnly
+            ? "retired_workshop"
+            : access.HasOrderScope(user)
             ? "order"
             : organizationId is not null
                 ? "organization"
