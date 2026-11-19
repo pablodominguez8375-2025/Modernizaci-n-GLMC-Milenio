@@ -1,0 +1,2 @@
+2c9dc9c55edfdd1250bdb89df41b2472cf7f03a20556b131850e9cde6615a844  qa-a0-diag.sh
+8f3a472d80dc1b3dc1b99e88e1a9b8efa6caa14b87a0a957fc74fb2238e874fe  qa-a0-schema-export.sh
