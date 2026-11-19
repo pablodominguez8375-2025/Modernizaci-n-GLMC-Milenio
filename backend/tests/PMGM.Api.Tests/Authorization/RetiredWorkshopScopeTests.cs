@@ -165,4 +165,16 @@ public sealed class RetiredWorkshopScopeTests
         Assert.False(new InstitutionalAccessService().CanReadOrganization(result, Retired));   // ya no abre datos del Taller de baja
         Assert.True(new InstitutionalAccessService().CanReadOrganization(result, Active));
     }
+
+    [Fact]
+    public void Remove_forged_claims_only_drops_the_middleware_claims_and_keeps_everything_else()
+    {
+        var user = User((InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin), (InstitutionalClaims.Organization, Active.ToString()),
+            (RetiredWorkshopScope.Marker, "true"), (RetiredWorkshopScope.RetiredOrg, Retired.ToString()));
+        var result = RetiredWorkshopScope.RemoveForgedClaims(user);
+        Assert.False(result.HasClaim(x => x.Type is RetiredWorkshopScope.Marker or RetiredWorkshopScope.RetiredOrg));
+        Assert.True(result.HasClaim(InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin));
+        Assert.True(result.HasClaim(InstitutionalClaims.Organization, Active.ToString()));
+        Assert.True(result.Identity!.IsAuthenticated);
+    }
 }

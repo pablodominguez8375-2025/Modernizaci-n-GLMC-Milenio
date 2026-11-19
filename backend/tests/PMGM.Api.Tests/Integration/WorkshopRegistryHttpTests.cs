@@ -23,8 +23,8 @@ public sealed class WorkshopRegistryHttpTests
 {
     private static readonly string? Connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
 
-    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection, bool retireEnabled = true)
-        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.UseSetting("WorkshopRegistry:RetireEnabled", retireEnabled ? "true" : "false").ConfigureTestServices(s => s
+    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection, bool retireEnabled = true, bool retiredSessionEnabled = true)
+        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.UseSetting("WorkshopRegistry:RetireEnabled", retireEnabled ? "true" : "false").UseSetting("WorkshopRegistry:RetiredSessionEnabled", retiredSessionEnabled ? "true" : "false").ConfigureTestServices(s => s
             .AddAuthentication(o => { o.DefaultAuthenticateScheme = Auth.Name; o.DefaultChallengeScheme = Auth.Name; o.DefaultForbidScheme = Auth.Name; })
             .AddScheme<AuthenticationSchemeOptions, Auth>(Auth.Name, _ => { })));
 
@@ -280,6 +280,14 @@ public sealed class WorkshopRegistryHttpTests
             // El Taller ajeno de baja (que no está en sus claims) nunca aparece en su historia.
             Assert.DoesNotContain(other.Id, await History(mixed));
 
+            // Bandera apagada (default de producción): T2c inerte, la sesión no cambia aunque el Taller esté de baja.
+            using (var off = Factory(Connection, retiredSessionEnabled: false))
+            {
+                await db.Organizations.Where(x => x.Id == mine.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "retired").SetProperty(o => o.RetiredAtUtc, DateTimeOffset.UtcNow).SetProperty(o => o.RetiredReason, "prueba T2c"), ct);
+                var c = off.CreateClient(); c.DefaultRequestHeaders.Add("X-Workshop-Actor", "orgs"); c.DefaultRequestHeaders.Add("X-Test-Orgs", mine.Id.ToString());
+                Assert.Equal("organization", (await c.GetFromJsonAsync<JsonElement>("/api/session/me", ct)).GetProperty("accessScope").GetString());
+                Assert.Empty((await c.GetFromJsonAsync<JsonElement>("/api/session/retired-workshops", ct)).GetProperty("items").EnumerateArray());
+            }
             // Reactivación: vuelve a regir en la petición siguiente.
             await db.Organizations.Where(x => x.Id == mine.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "active").SetProperty(o => o.RetiredAtUtc, (DateTimeOffset?)null).SetProperty(o => o.RetiredReason, (string?)null), ct);
             Assert.Equal("organization", await AccessScope(user));

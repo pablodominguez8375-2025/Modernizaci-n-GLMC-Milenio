@@ -33,6 +33,10 @@ public static class RetiredWorkshopScope
     private static WorkshopScopeState StateOf(string value, IReadOnlyDictionary<Guid, WorkshopScopeState> states)
         => Guid.TryParse(value, out var id) && states.TryGetValue(id, out var state) ? state : WorkshopScopeState.Unusable;
 
+    public static ClaimsPrincipal RemoveForgedClaims(ClaimsPrincipal user)
+        => new(user.Identities.Select(identity => new ClaimsIdentity(identity.Claims.Where(c => c.Type is not (Marker or RetiredOrg)).ToList(),
+            identity.AuthenticationType, identity.NameClaimType, identity.RoleClaimType)).ToList());
+
     public static ClaimsPrincipal Apply(ClaimsPrincipal user, IReadOnlyDictionary<Guid, WorkshopScopeState> states)
     {
         if (user.Identity?.IsAuthenticated != true) return user;
@@ -69,8 +73,11 @@ public static class RetiredWorkshopScope
     }
 }
 
-public sealed class RetiredWorkshopScopeMiddleware(RequestDelegate next)
+public sealed class RetiredWorkshopScopeMiddleware(RequestDelegate next, IConfiguration configuration)
 {
+    /// <summary>Bandera de activación de T2c (default false = inerte, igual que RetireEnabled): se activa junto con la baja, en la fase 2 del corte.</summary>
+    public const string EnabledKey = "WorkshopRegistry:RetiredSessionEnabled";
+
     /// <summary>
     /// Validación POSITIVA del tipo de ámbito: solo un Taller activo, Gran Logia o el Taller 00 de soporte (activos) son ámbitos válidos;
     /// un Taller de baja es Retired; cualquier otro tipo o estado inesperado es Unusable (no se infiere Active por descarte).
@@ -85,7 +92,12 @@ public sealed class RetiredWorkshopScopeMiddleware(RequestDelegate next)
     public async Task InvokeAsync(HttpContext context)
     {
         var user = context.User;
-        if (user.Identity?.IsAuthenticated == true)
+        if (user.Identity?.IsAuthenticated == true && !configuration.GetValue<bool>(EnabledKey))
+        {
+            // Inerte: no consulta BD ni cambia ámbitos; solo descarta claims de este middleware que vengan en el token (anti-spoof).
+            if (user.Claims.Any(x => x.Type is RetiredWorkshopScope.Marker or RetiredWorkshopScope.RetiredOrg)) context.User = RetiredWorkshopScope.RemoveForgedClaims(user);
+        }
+        else if (user.Identity?.IsAuthenticated == true)
         {
             var ids = user.Claims.Where(x => x.Type == InstitutionalClaims.Organization)
                 .Select(x => Guid.TryParse(x.Value, out var id) ? id : (Guid?)null).Where(x => x is not null).Select(x => x!.Value).Distinct().ToList();
