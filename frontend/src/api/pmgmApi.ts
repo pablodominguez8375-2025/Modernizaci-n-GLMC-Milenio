@@ -331,7 +331,7 @@ export interface AddTreasuryPaymentRequest { paymentMethod: 'transfer' | 'deposi
 export type AccessTokenProvider = () => Promise<string | null>
 export interface PmgmApiClientOptions { baseUrl?: string; getAccessToken?: AccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
-export class PmgmApiHttpError extends Error { constructor(readonly status: number, message: string) { super(message); this.name = 'PmgmApiHttpError' } }
+export class PmgmApiHttpError extends Error { constructor(readonly status: number, message: string, readonly code?: string) { super(message); this.name = 'PmgmApiHttpError' } }
 
 const mockCandidates: CandidatePublication[] = [
   { displayName: 'Persona Demostrativa Uno', workshopName: 'Taller Demostrativo Nº 1', workshopNumber: '1', publishedFromUtc: '2026-08-25T15:00:00Z', publishedUntilUtc: null, requiredDays: 20, elapsedDays: 13, complianceDateUtc: '2026-09-14T15:00:00Z', ruleCode: 'initiation.publication.minimum_days', status: 'published' },
@@ -1571,10 +1571,10 @@ export class PmgmApiClient {
     const response = await fetch(`${this.baseUrl}${path}`, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', headers })
     if (!response.ok) {
       if (response.status === 401) await this.onUnauthorized?.()
-      let message = ''
-      try { const body = await response.clone().json() as { message?: string }; message = typeof body.message === 'string' ? body.message : '' } catch { /* respuesta sin JSON */ }
+      let message = ''; let code: string | undefined
+      try { const body = await response.clone().json() as { message?: string; code?: string }; message = typeof body.message === 'string' ? body.message : ''; code = typeof body.code === 'string' && body.code.length <= 64 ? body.code : undefined } catch { /* respuesta sin JSON */ }
       if (response.status === 403) message = 'Su cuenta no tiene permiso para realizar esta operación.'
-      throw new PmgmApiHttpError(response.status, message || `La API respondió ${response.status} ${response.statusText}.`)
+      throw new PmgmApiHttpError(response.status, message || `La API respondió ${response.status} ${response.statusText}.`, code)
     }
     return response.json() as Promise<T>
   }
