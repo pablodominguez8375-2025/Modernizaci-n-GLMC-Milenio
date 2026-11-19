@@ -10,8 +10,8 @@ namespace PMGM.Api.Tests.Authorization;
 /// <summary>#1044: forma de las dos migraciones del historial de bajas y resolución del estado a una fecha de corte.</summary>
 public sealed class WorkshopStatusTransitionsShapeTests
 {
-    public const string UpSha256 = "4efcfa8977a7bdb41954fba33caf153dc3463df184c471382ebfefbc53cfc8ea";
-    public const string DownSha256 = "da2131f8f74e1c98a4a00124afcbe5b8124bd0e4d02eea1d673d261b937f1dbf";
+    public const string UpSha256 = "43420213cd6bc5890c37781408297f87ac12af0a3c873b683c83acd2e5d2fc18";
+    public const string DownSha256 = "04064ea0315b9237ea34e128a88e25cd6267e3c65f81d17d053cd3c27dfe291b";
     private static string Sha(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
     [Fact]
@@ -39,6 +39,7 @@ public sealed class WorkshopStatusTransitionsShapeTests
         var sql = WorkshopStatusTransitionsSql.Up.ToLowerInvariant();
         foreach (var forbidden in new[] { "insert into", "update core.", "delete from", "drop table", "alter table", "set_config", "current_setting" }) Assert.DoesNotContain(forbidden, sql);
         Assert.Contains("errcode = 'pm410'", sql); Assert.Contains("before truncate", sql);
+        Assert.Contains("pm411", sql); Assert.Contains("pm412", sql); Assert.Contains("pm413", sql); Assert.Contains("before insert", sql); Assert.Contains("revoke update, delete, truncate", sql);
     }
 
     private static readonly DateTimeOffset T1 = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
@@ -66,16 +67,31 @@ public sealed class WorkshopStatusTransitionsShapeTests
         var none = new List<WorkshopStatusTransition>();
         Assert.False(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 9, 9)).Retired);
         Assert.True(WorkshopStatusHistory.Resolve(none, "retired", T3, new DateOnly(2026, 9, 9)).Retired);
-        Assert.False(WorkshopStatusHistory.Resolve(none, "retired", T3, new DateOnly(2026, 8, 15)).Retired);   // antes de la baja registrada
+        // Fail-closed: antes de la baja registrada, sin historial, no se afirma «activo»: la historia es desconocida.
+        var before = WorkshopStatusHistory.Resolve(none, "retired", T3, new DateOnly(2026, 8, 15));
+        Assert.False(before.Known); Assert.True(before.Retired);
         var unknown = WorkshopStatusHistory.Resolve(none, "retired", null, new DateOnly(2020, 1, 1));
-        Assert.True(unknown.Retired); Assert.Null(unknown.RetiredAtUtc);                                          // fecha desconocida: de baja, sin fecha
+        Assert.False(unknown.Known); Assert.True(unknown.Retired); Assert.Null(unknown.RetiredAtUtc);             // fecha desconocida: de baja, sin fecha
     }
 
     [Fact]
     public void Resolve_first_transition_from_retired_means_it_started_retired()
     {
         var list = new List<WorkshopStatusTransition> { Tr("retired", "active", T2) };
-        Assert.True(WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 4, 1)).Retired);
+        var early = WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 4, 1));
+        Assert.True(early.Retired); Assert.False(early.Known);   // antes del baseline: solo se sabe que estaba de baja, no desde cuándo
         Assert.False(WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 7, 1)).Retired);
+    }
+
+    [Fact]
+    public void Resolve_ignores_rows_with_unknown_dates_and_orders_by_effective_date_then_sequence()
+    {
+        var list = new List<WorkshopStatusTransition>
+        {
+            Tr("retired", "active", T3), Tr("active", "retired", T1),
+            new() { SubjectRef = Guid.NewGuid(), PreviousStatus = "retired", NextStatus = "active", EffectiveAtUtc = T2, DateKnown = false }
+        };
+        Assert.True(WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 7, 1)).Retired);   // la fila sin fecha confiable no reactiva
+        Assert.False(WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 10, 1)).Retired);
     }
 }

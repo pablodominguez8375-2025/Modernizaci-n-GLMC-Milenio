@@ -32,10 +32,16 @@ public sealed class AddWorkshopStatusTransitions : Migration
                 NextStatus = t.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                 EffectiveAtUtc = t.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                 ActorSubject = t.Column<string>(type: "character varying(320)", maxLength: 320, nullable: true),
-                ReasonRef = t.Column<string>(type: "character varying(120)", maxLength: 120, nullable: true)
+                ReasonRef = t.Column<string>(type: "character varying(120)", maxLength: 120, nullable: true),
+                Origin = t.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "runtime"),
+                DateKnown = t.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                RecordedAtUtc = t.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()")
             },
             constraints: t => t.PrimaryKey("PK_workshop_status_transitions", x => x.Id));
-        migrationBuilder.CreateIndex("IX_workshop_status_transitions_SubjectRef_Sequence", schema: "core", table: "workshop_status_transitions", columns: new[] { "SubjectRef", "Sequence" });
+        migrationBuilder.CreateIndex("IX_workshop_status_transitions_SubjectRef_EffectiveAtUtc_Sequence", schema: "core", table: "workshop_status_transitions", columns: new[] { "SubjectRef", "EffectiveAtUtc", "Sequence" });
+        migrationBuilder.AddCheckConstraint(
+            name: "CK_workshop_status_transitions_Origin", schema: "core", table: "workshop_status_transitions",
+            sql: "\"Origin\" IN ('runtime', 'backfill') AND (\"Origin\" <> 'runtime' OR (\"ActorSubject\" IS NOT NULL AND \"ReasonRef\" IS NOT NULL AND \"DateKnown\"))");
         migrationBuilder.AddCheckConstraint(
             name: "CK_workshop_status_transitions_Status", schema: "core", table: "workshop_status_transitions",
             sql: "\"PreviousStatus\" IN ('active', 'retired') AND \"NextStatus\" IN ('active', 'retired') AND \"PreviousStatus\" <> \"NextStatus\"");
@@ -44,6 +50,7 @@ public sealed class AddWorkshopStatusTransitions : Migration
     protected override void Down(MigrationBuilder migrationBuilder)
     {
         // Rollback conservador: el historial de bajas no se destruye; solo se retira la restricción agregada.
+        migrationBuilder.DropCheckConstraint(name: "CK_workshop_status_transitions_Origin", schema: "core", table: "workshop_status_transitions");
         migrationBuilder.DropCheckConstraint(name: "CK_workshop_status_transitions_Status", schema: "core", table: "workshop_status_transitions");
     }
 }

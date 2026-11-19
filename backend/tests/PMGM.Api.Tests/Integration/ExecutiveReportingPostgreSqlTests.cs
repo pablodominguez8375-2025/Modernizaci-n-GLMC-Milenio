@@ -183,6 +183,8 @@ public sealed class ExecutiveReportingPostgreSqlTests
         try
         {
             workshop.Status = "retired"; workshop.RetiredAtUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero); workshop.RetiredReason = "prueba T2b-2";
+            // Baseline autorizado (backfill): sin historial previo la fecha de corte anterior sería «desconocida» (fail-closed).
+            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = "active", NextStatus = "retired", EffectiveAtUtc = workshop.RetiredAtUtc.Value, Origin = WorkshopTransitionOrigins.Backfill });
             await db.SaveChangesAsync(ct);
             var after = await service.BuildAsync(asOf, from, ct);
             var row = Assert.Single(after.Workshops, x => x.OrganizationId == workshop.Id);
@@ -222,7 +224,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
         // Una transición por SaveChanges: la identidad `Sequence` debe seguir el orden real (en producción cada baja/reactivación es su propia transacción).
         foreach (var (from, to, at) in new[] { ("active", "retired", D(3, 1)), ("retired", "active", D(6, 1)), ("active", "retired", D(9, 1)) })
         {
-            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = from, NextStatus = to, EffectiveAtUtc = at });
+            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = from, NextStatus = to, EffectiveAtUtc = at, Origin = WorkshopTransitionOrigins.Backfill });
             await db.SaveChangesAsync(ct);
         }
         // La fila actual refleja la última transición.
@@ -245,10 +247,44 @@ public sealed class ExecutiveReportingPostgreSqlTests
             Assert.Contains("PM410", delete.ToString());
             var truncate = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("TRUNCATE core.workshop_status_transitions", ct));
             Assert.Contains("PM410", truncate.ToString());
+
+            // Integridad de INSERT (trigger): sujeto inexistente / no Taller, cadena rota, fecha retroactiva, actor obligatorio.
+            async Task<string> Insert(Guid subject, string from, string to, DateTimeOffset at, string origin = "runtime", string? actor = "sub", string? reason = "trace")
+            {
+                var e = await Assert.ThrowsAnyAsync<Exception>(async () =>
+                {
+                    await using var other = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options);
+                    other.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = subject, PreviousStatus = from, NextStatus = to, EffectiveAtUtc = at, Origin = origin, ActorSubject = actor, ReasonRef = reason });
+                    await other.SaveChangesAsync(ct);
+                });
+                return e.ToString();
+            }
+            Assert.Contains("PM411", await Insert(Guid.NewGuid(), "active", "retired", DateTimeOffset.UtcNow));
+            var support = new Organization { Name = $"Gran Logia {suffix}", Type = "grand_lodge" };
+            db.Organizations.Add(support); await db.SaveChangesAsync(ct);
+            Assert.Contains("PM411", await Insert(support.Id, "active", "retired", DateTimeOffset.UtcNow));
+            Assert.Contains("PM412", await Insert(workshop.Id, "active", "retired", DateTimeOffset.UtcNow));          // la última quedó en retired
+            Assert.Contains("PM413", await Insert(workshop.Id, "retired", "active", D(1, 1)));                          // retroactiva en línea
+            Assert.Contains("23514", await Insert(workshop.Id, "retired", "active", DateTimeOffset.UtcNow, actor: null)); // actor obligatorio en runtime
+
+            // Una transición con fecha NO confiable no participa en series ni inventa fechas.
+            db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = "retired", NextStatus = "active", EffectiveAtUtc = D(9, 2), Origin = WorkshopTransitionOrigins.Backfill, DateKnown = false });
+            await db.SaveChangesAsync(ct);
+            Assert.Equal("retired", await StatusAt(12, 31));
+
+            // Reversión de transacción: no deja filas.
+            var before = await db.WorkshopStatusTransitions.CountAsync(x => x.SubjectRef == workshop.Id, ct);
+            await using (var tx = await db.Database.BeginTransactionAsync(ct))
+            {
+                db.WorkshopStatusTransitions.Add(new WorkshopStatusTransition { SubjectRef = workshop.Id, PreviousStatus = "active", NextStatus = "retired", EffectiveAtUtc = DateTimeOffset.UtcNow, ActorSubject = "sub", ReasonRef = "trace" });
+                await db.SaveChangesAsync(ct); await tx.RollbackAsync(ct);
+            }
+            db.ChangeTracker.Clear();
+            Assert.Equal(before, await db.WorkshopStatusTransitions.CountAsync(x => x.SubjectRef == workshop.Id, ct));
         }
         finally
         {
-            workshop.Status = "active"; workshop.RetiredAtUtc = null; workshop.RetiredReason = null; await db.SaveChangesAsync(CancellationToken.None);
+            await db.Organizations.Where(x => x.Id == workshop.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "active").SetProperty(o => o.RetiredAtUtc, (DateTimeOffset?)null).SetProperty(o => o.RetiredReason, (string?)null), CancellationToken.None);
         }
     }
 }
