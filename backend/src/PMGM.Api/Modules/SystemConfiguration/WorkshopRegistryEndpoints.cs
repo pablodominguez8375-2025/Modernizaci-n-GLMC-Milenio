@@ -107,6 +107,41 @@ public static class WorkshopRegistryEndpoints
         }
     }
 
+    private const string TransitionTriggersSql = """
+        SELECT g.tgname
+        FROM pg_trigger g
+        JOIN pg_class c ON c.oid = g.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'core' AND c.relname = 'workshop_status_transitions' AND NOT g.tgisinternal AND g.tgenabled = 'O'
+        """;
+
+    private static readonly string[] RequiredTransitionTriggers =
+    [
+        "a00_workshop_status_transitions_append_only", "a00_workshop_status_transitions_no_truncate", "a00_workshop_status_transitions_validate_insert"
+    ];
+
+    /// <summary>Readback de los triggers del historial de transiciones (#1044): los tres deben existir y estar habilitados.</summary>
+    public static async Task<bool> TransitionTriggersInstalledAsync(PmgmDbContext db, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var opened = connection.State != ConnectionState.Open;
+        if (opened) await connection.OpenAsync(ct);
+        try
+        {
+            var found = new HashSet<string>(StringComparer.Ordinal);
+            await using var command = connection.CreateCommand();
+            command.CommandText = TransitionTriggersSql;
+            if (db.Database.CurrentTransaction is { } tx) command.Transaction = tx.GetDbTransaction();
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) found.Add(reader.GetString(0));
+            return RequiredTransitionTriggers.All(found.Contains);
+        }
+        finally
+        {
+            if (opened) await connection.CloseAsync();
+        }
+    }
+
     /// <summary>Ids de organización que tienen algún registro asociado. Solo lectura.</summary>
     public static async Task<HashSet<Guid>> OrganizationsWithDataAsync(PmgmDbContext db, CancellationToken ct)
     {
@@ -248,9 +283,12 @@ public static class WorkshopRegistryEndpoints
             };
         }
 
-        if (action == WorkshopRegistryActions.Retire && (await GuardCoverageMissingAsync(db, ct)).Count > 0)
+        // #1044: sin los triggers del historial (append-only + integridad de INSERT) no se escribe ninguna transición: fail-closed,
+        // tanto para la baja como para la reactivación (readback del catálogo de BD en cada operación).
+        if ((action == WorkshopRegistryActions.Retire && (await GuardCoverageMissingAsync(db, ct)).Count > 0)
+            || ((action == WorkshopRegistryActions.Retire || action == WorkshopRegistryActions.Reactivate) && !await TransitionTriggersInstalledAsync(db, ct)))
         {
-            audit.Add(ctx, "system.workshops.retire_rejected", "Organization", id.ToString(), id, AuditResults.Rejected,
+            audit.Add(ctx, "system.workshops." + action + "_rejected", "Organization", id.ToString(), id, AuditResults.Rejected,
                 new { action, code = "GUARD_INCOMPLETE" });
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);

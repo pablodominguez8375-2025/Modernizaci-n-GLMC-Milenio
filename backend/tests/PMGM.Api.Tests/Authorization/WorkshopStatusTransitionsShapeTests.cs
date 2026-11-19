@@ -65,7 +65,7 @@ public sealed class WorkshopStatusTransitionsShapeTests
     public void Resolve_without_history_uses_current_snapshot_and_never_invents_dates()
     {
         var none = new List<WorkshopStatusTransition>();
-        Assert.False(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 9, 9)).Retired);
+        Assert.False(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 9, 9)).Retired);   // (pasado sin baseline = desconocido, nunca retired inventado)
         Assert.True(WorkshopStatusHistory.Resolve(none, "retired", T3, new DateOnly(2026, 9, 9)).Retired);
         // Fail-closed: antes de la baja registrada, sin historial, no se afirma «activo»: la historia es desconocida.
         var before = WorkshopStatusHistory.Resolve(none, "retired", T3, new DateOnly(2026, 8, 15));
@@ -92,6 +92,35 @@ public sealed class WorkshopStatusTransitionsShapeTests
             new() { SubjectRef = Guid.NewGuid(), PreviousStatus = "retired", NextStatus = "active", EffectiveAtUtc = T2, DateKnown = false }
         };
         Assert.True(WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 7, 1)).Retired);   // la fila sin fecha confiable no reactiva
-        Assert.False(WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 10, 1)).Retired);
+        var afterUnknown = WorkshopStatusHistory.Resolve(list, "active", null, new DateOnly(2026, 10, 1));
+        Assert.False(afterUnknown.Retired); Assert.False(afterUnknown.Known);   // intervalo afectado por fila sin fecha ⇒ desconocido
+    }
+
+    [Fact]
+    public void Resolve_active_without_transitions_is_unknown_before_a_certified_baseline_and_known_for_the_present()
+    {
+        var none = new List<WorkshopStatusTransition>();
+        var now = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.Zero);
+        Assert.True(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 11, 1), nowUtc: now).Known);   // presente
+        var past = WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 5, 1), nowUtc: now);            // sin baseline
+        Assert.False(past.Known); Assert.False(past.Retired);
+        var baseline = new DateTimeOffset(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
+        Assert.False(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 2, 1), baseline, now).Known);   // antes de la baseline
+        Assert.True(WorkshopStatusHistory.Resolve(none, "active", null, new DateOnly(2026, 5, 1), baseline, now).Known);    // posterior a la baseline
+    }
+
+    [Fact]
+    public void Resolve_before_first_active_to_retired_transition_is_unknown_without_certified_baseline()
+    {
+        var list = new List<WorkshopStatusTransition> { Tr("active", "retired", T2) };
+        var sinBaseline = WorkshopStatusHistory.Resolve(list, "retired", T2, new DateOnly(2026, 4, 1));
+        Assert.False(sinBaseline.Retired); Assert.False(sinBaseline.Known);
+        Assert.True(WorkshopStatusHistory.Resolve(list, "retired", T2, new DateOnly(2026, 4, 1), T1).Known);
+    }
+
+    [Fact]
+    public void Transition_recorded_at_is_assigned_by_the_database_not_the_application_clock()
+    {
+        Assert.Equal(default, new WorkshopStatusTransition { PreviousStatus = "active", NextStatus = "retired" }.RecordedAtUtc);
     }
 }

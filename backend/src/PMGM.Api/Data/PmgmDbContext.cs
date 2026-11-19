@@ -200,6 +200,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.ActorSubject).HasMaxLength(320);
             entity.Property(x => x.ReasonRef).HasMaxLength(120);
             entity.Property(x => x.Origin).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).HasDefaultValueSql("now()").ValueGeneratedOnAdd();
             entity.HasIndex(x => new { x.SubjectRef, x.EffectiveAtUtc, x.Sequence });
         });
 

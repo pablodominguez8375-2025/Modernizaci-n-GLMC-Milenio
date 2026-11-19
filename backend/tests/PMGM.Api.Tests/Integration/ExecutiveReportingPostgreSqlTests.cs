@@ -248,6 +248,11 @@ public sealed class ExecutiveReportingPostgreSqlTests
             var truncate = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync("TRUNCATE core.workshop_status_transitions", ct));
             Assert.Contains("PM410", truncate.ToString());
 
+            // Readback fail-closed: la API solo escribe transiciones si los tres triggers existen y están habilitados.
+            Assert.True(await PMGM.Api.Modules.SystemConfiguration.WorkshopRegistryEndpoints.TransitionTriggersInstalledAsync(db, ct));
+            // RecordedAtUtc lo asigna la BD (now()), no el reloj de la aplicación.
+            Assert.All(await db.WorkshopStatusTransitions.AsNoTracking().Where(x => x.SubjectRef == workshop.Id).ToListAsync(ct), x => Assert.True(x.RecordedAtUtc > new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero)));
+
             // Integridad de INSERT (trigger): sujeto inexistente / no Taller, cadena rota, fecha retroactiva, actor obligatorio.
             async Task<string> Insert(Guid subject, string from, string to, DateTimeOffset at, string origin = "runtime", string? actor = "sub", string? reason = "trace")
             {
@@ -260,7 +265,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
                 return e.ToString();
             }
             Assert.Contains("PM411", await Insert(Guid.NewGuid(), "active", "retired", DateTimeOffset.UtcNow));
-            var support = new Organization { Name = $"Gran Logia {suffix}", Type = "grand_lodge" };
+            var support = new Organization { Name = $"Otra organización {suffix}", Type = "other_org_test" };
             db.Organizations.Add(support); await db.SaveChangesAsync(ct);
             Assert.Contains("PM411", await Insert(support.Id, "active", "retired", DateTimeOffset.UtcNow));
             Assert.Contains("PM412", await Insert(workshop.Id, "active", "retired", DateTimeOffset.UtcNow));          // la última quedó en retired
@@ -284,6 +289,7 @@ public sealed class ExecutiveReportingPostgreSqlTests
         }
         finally
         {
+            await db.Organizations.Where(x => x.Type == "other_org_test" && x.Name.EndsWith(suffix)).ExecuteDeleteAsync(CancellationToken.None);
             await db.Organizations.Where(x => x.Id == workshop.Id).ExecuteUpdateAsync(x => x.SetProperty(o => o.Status, "active").SetProperty(o => o.RetiredAtUtc, (DateTimeOffset?)null).SetProperty(o => o.RetiredReason, (string?)null), CancellationToken.None);
         }
     }

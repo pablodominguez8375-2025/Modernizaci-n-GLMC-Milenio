@@ -23,7 +23,7 @@ public sealed class WorkshopStatusTransition
     /// <summary>Falso = la fecha efectiva no es confiable: la fila NO participa en series por fecha de corte.</summary>
     public bool DateKnown { get; init; } = true;
     /// <summary>Instante en que la BD registró la fila (reloj del servidor de BD).</summary>
-    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset RecordedAtUtc { get; private set; }
 }
 
 public static class WorkshopTransitionOrigins
@@ -39,28 +39,40 @@ public readonly record struct WorkshopStatusAsOf(bool Retired, DateTimeOffset? R
 public static class WorkshopStatusHistory
 {
     /// <summary>
-    /// Estado a fin del día de corte. Con transiciones: la última con efecto ≤ ese instante; sin ninguna aún, el estado previo a la
-    /// primera. Sin historial (Talleres dados de baja antes de existir la tabla): se usa la fotografía actual (baja con su fecha
-    /// si la tiene; sin fecha = de baja), sin inventar intervalos.
+    /// Estado a fin del día de corte, FAIL-CLOSED: <c>Known=false</c> significa historia desconocida, nunca «activo». Es desconocida si
+    /// (a) el corte es anterior al inicio certificado de captura (<paramref name="baselineUtc"/>; sin baseline certificada solo el
+    /// presente es conocido) y no hay transiciones que lo cubran, o (b) existen filas con fecha no confiable (<c>DateKnown=false</c>)
+    /// desde cuya fecha el intervalo queda afectado. Esas filas no participan en series ni se les inventa fecha.
     /// </summary>
-    public static WorkshopStatusAsOf Resolve(IReadOnlyList<WorkshopStatusTransition> transitions, string currentStatus, DateTimeOffset? currentRetiredAtUtc, DateOnly asOf)
+    public static WorkshopStatusAsOf Resolve(IReadOnlyList<WorkshopStatusTransition> transitions, string currentStatus, DateTimeOffset? currentRetiredAtUtc, DateOnly asOf,
+        DateTimeOffset? baselineUtc = null, DateTimeOffset? nowUtc = null)
     {
         var cutoff = new DateTimeOffset(asOf.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        // Las filas con fecha no confiable no participan en series y no se les inventa fecha.
+        var now = nowUtc ?? DateTimeOffset.UtcNow;
+        var unknownFrom = transitions.Where(x => !x.DateKnown).Select(x => (DateTimeOffset?)x.EffectiveAtUtc).Min();
+        var affected = unknownFrom is not null && cutoff > unknownFrom.Value;
         var ordered = transitions.Where(x => x.DateKnown).OrderBy(x => x.EffectiveAtUtc).ThenBy(x => x.Sequence).ToList();
+        bool BeforeBaseline() => baselineUtc is null || cutoff <= baselineUtc.Value;
+        WorkshopStatusAsOf Result(bool retired, DateTimeOffset? at, bool known) => new(retired, retired ? at : null, known && !affected);
+
         if (ordered.Count == 0)
         {
-            if (currentStatus != WorkshopRegistryCodes.Retired) return new WorkshopStatusAsOf(false, null);
-            // De baja hoy y sin historial: solo se afirma si la fecha de baja actual es anterior al corte; si no, o sin fecha,
-            // la historia previa es desconocida (pudo estar de baja antes de existir el registro): fail-closed.
-            return currentRetiredAtUtc is not null && currentRetiredAtUtc.Value < cutoff
-                ? new WorkshopStatusAsOf(true, currentRetiredAtUtc)
-                : new WorkshopStatusAsOf(true, null, Known: false);
+            if (currentStatus == WorkshopRegistryCodes.Retired)
+                // De baja hoy y sin historial: solo se afirma con fecha de baja actual anterior al corte; si no, historia desconocida.
+                return currentRetiredAtUtc is not null && currentRetiredAtUtc.Value < cutoff
+                    ? Result(true, currentRetiredAtUtc, true)
+                    : new WorkshopStatusAsOf(true, null, false);
+            // Activo hoy y sin transiciones: conocido solo para el presente o después de una baseline certificada.
+            return Result(false, null, cutoff > now || !BeforeBaseline());
         }
         var last = ordered.LastOrDefault(x => x.EffectiveAtUtc < cutoff);
-        // Antes de la primera transición solo se conoce el estado previo a ella (baseline), no lo anterior a ese registro.
-        if (last is null) return new WorkshopStatusAsOf(ordered[0].PreviousStatus == WorkshopRegistryCodes.Retired, null, Known: ordered[0].PreviousStatus != WorkshopRegistryCodes.Retired);
+        if (last is null)
+        {
+            var startedRetired = ordered[0].PreviousStatus == WorkshopRegistryCodes.Retired;
+            // Antes de la primera transición solo se conoce el estado previo a ella si hay baseline certificada que lo respalde.
+            return startedRetired ? new WorkshopStatusAsOf(true, null, false) : Result(false, null, !BeforeBaseline());
+        }
         var isRetired = last.NextStatus == WorkshopRegistryCodes.Retired;
-        return new WorkshopStatusAsOf(isRetired, isRetired ? last.EffectiveAtUtc : null);
+        return Result(isRetired, last.EffectiveAtUtc, true);
     }
 }

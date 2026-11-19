@@ -16,6 +16,9 @@ public sealed class ExecutiveReportingService(
     PmgmDbContext db,
     LodgeManagementDbContext lodgeDb) : IExecutiveReportingService
 {
+    /// <summary>Inicio certificado de la captura de transiciones; null = sin baseline certificada (solo el presente es «conocido»).</summary>
+    public DateTimeOffset? StatusBaselineUtc { get; init; }
+
     public async Task<ExecutiveReportDto> BuildAsync(
         DateOnly asOf,
         DateOnly from,
@@ -36,7 +39,7 @@ public sealed class ExecutiveReportingService(
                 .Where(x => workshopTransitionIds.Contains(x.SubjectRef)).ToListAsync(cancellationToken))
             .GroupBy(x => x.SubjectRef).ToDictionary(x => x.Key, x => (IReadOnlyList<WorkshopStatusTransition>)x.ToList());
         var statusAsOf = workshops.ToDictionary(x => x.Id, x => WorkshopStatusHistory.Resolve(
-            transitionsByWorkshop.TryGetValue(x.Id, out var list) ? list : [], x.Status, x.RetiredAtUtc, asOf));
+            transitionsByWorkshop.TryGetValue(x.Id, out var list) ? list : [], x.Status, x.RetiredAtUtc, asOf, StatusBaselineUtc));
         var retiredIds = workshops.Where(x => statusAsOf[x.Id].Retired).Select(x => x.Id).ToHashSet();
 
         var workshopIds = workshops.Select(x => x.Id).ToList();
@@ -269,7 +272,8 @@ public sealed class ExecutiveReportingService(
                 flags.Count > 0,
                 flags,
                 retiredNow ? WorkshopRegistryCodes.Retired : WorkshopRegistryCodes.Active,
-                retiredNow ? statusAsOf[workshop.Id].RetiredAtUtc : null));
+                retiredNow ? statusAsOf[workshop.Id].RetiredAtUtc : null,
+                statusAsOf[workshop.Id].Known));
         }
 
         var globalStatusByMember = operationalMemberIds.ToDictionary(
@@ -402,7 +406,8 @@ public sealed record ExecutiveWorkshopRowDto(
     bool AttentionRequired,
     IReadOnlyList<string> AttentionFlags,
     string Status = "active",
-    DateTimeOffset? RetiredAtUtc = null);
+    DateTimeOffset? RetiredAtUtc = null,
+    bool StatusKnown = true);
 
 public sealed record ExecutiveEventCountersDto(
     int VoluntaryWithdrawals,
