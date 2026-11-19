@@ -81,6 +81,8 @@ chmod +x "$FAKE/mount"; rm -f "$FAKE/count"
 out="$(PATH="$FAKE:$PATH" bash "$T" 2>&1)"; rc=$?; [ $rc -eq 9 ] && echo "$out" | grep -q "no se pudieron montar" && [ "$(suite_procs)" = 0 ] && [ "$(host_state)" = "$BEFORE" ] && chk ok "exit 9, sin residuos, host idéntico" || chk bad "rc=$rc" "$out"
 rm -f "$FAKE/mount" "$FAKE/count"
 # --- Casos 12/14/15/16: SIGKILL por PIDFD con identidad re-leída; cleanup solo de procesos propios verificados ---
+# ns_resid NS...: lista (con espacio inicial) los PID que siguen en alguno de esos mount ns
+ns_resid() { local d m w out=""; for d in /proc/[0-9]*; do m="$(readlink "$d/ns/mnt" 2>/dev/null)"; for w in "$@"; do [ -n "$w" ] && [ "$m" = "$w" ] && out="$out ${d#/proc/}"; done; done; printf '%s' "$out"; }
 # kill_case ITERS PPID_QUE_SE_EXIGE(real|falso) : SENT/PGUP/WP quedan en variables globales
 kill_case() { local iters="$1" mode="$2" i p ex wmnt=""
   bash "$T" >"$KLOG" 2>&1 &
@@ -92,12 +94,20 @@ kill_case() { local iters="$1" mode="$2" i p ex wmnt=""
   done
   ex="$BGPID"; [ "$mode" = falso ] && ex=1
   if [ -n "$WP" ] && safe_kill "$WP" "$ST1" "$ex" worker; then SENT=si; else echo "identidad NO validada o worker no seleccionado: no se envía SIGKILL por el camino principal"; fi
-  # cleanup: solo procesos PROPIOS; starttime capturado al enumerar y señal por pidfd con identidad completa (worker) o starttime+ppid (BGPID, hijo nuestro)
-  for p in $(pgrep -P "$BGPID"); do safe_kill "$p" "$(pst "$p")" "$BGPID" worker; done
-  sleep 0.5
-  safe_kill "$BGPID" "$BGST" "$$" own
-  wait "$BGPID" 2>/dev/null; sleep 1; }
-clean_after() { [ "$(suite_procs)" = 0 ] && [ "$(host_state)" = "$BEFORE" ] && ! ls -d /tmp/a0-suite.* >/dev/null 2>&1; }
+  # cleanup: solo procesos PROPIOS; starttime capturado al enumerar y señal por pidfd con identidad completa. Se registran los códigos de retorno y los mount ns a vigilar.
+  RNS=(); [ -n "$wmnt" ] && RNS+=("$wmnt"); KRC=ok; KRES=""
+  for p in $(pgrep -P "$BGPID"); do m="$(readlink "/proc/$p/ns/mnt" 2>/dev/null)"; [ -n "$m" ] && [ "$m" != "$HM" ] && RNS+=("$m")
+    safe_kill "$p" "$(pst "$p")" "$BGPID" worker; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 4 ] || KRC="hijo $p rc=$rc"; done
+  safe_kill "$BGPID" "$BGST" "$$" own; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 4 ] || KRC="BGPID rc=$rc"
+  # espera ACOTADA (10 s) a que BGPID haya terminado (muerto/zombi) y no quede NINGÚN proceso en los mount ns de la suite; si no, FALLO explícito con la lista
+  for i in $(seq 1 20); do
+    st="$(awk '{print $3}' "/proc/$BGPID/stat" 2>/dev/null)"; KRES=""
+    [ -n "$st" ] && [ "$st" != Z ] && KRES="BGPID=$BGPID($st)"
+    KRES="$KRES$(ns_resid "${RNS[@]}")"
+    [ -z "$KRES" ] && break; sleep 0.5
+  done
+  wait "$BGPID" 2>/dev/null; [ -n "$KRES" ] && echo "RESIDUOS tras cleanup: $KRES"; [ "$KRC" != ok ] && echo "cleanup con rc inesperado: $KRC"; return 0; }
+clean_after() { [ -z "$KRES" ] && [ "$KRC" = ok ] && [ "$(suite_procs)" = 0 ] && [ "$(host_state)" = "$BEFORE" ] && ! ls -d /tmp/a0-suite.* >/dev/null 2>&1; }
 echo "12) SIGKILL del worker: starttime, ppid==BGPID, NSpid==1 y mnt/net/pid ns distintos del host RE-LEÍDOS en el predicado final"
 kill_case 80 real
 if [ "$SENT" = si ] && [ "$PGUP" = si ] && clean_after; then chk ok "worker $WP (starttime $ST1) muerto con suite activa; 0 procesos, 0 dirs en /tmp del host, host idéntico"; else chk bad "SENT=$SENT WP=$WP PGUP=$PGUP" "$(tail -3 "$KLOG")"; fi
@@ -115,6 +125,12 @@ safe_kill "$SP" "$SPST" "$$" worker; [ $? -eq 3 ] || ok16=0; kill -0 "$SP" 2>/de
 safe_kill "$SP" "$SPST" "$$" own; [ $? -eq 0 ] || ok16=0; wait "$SP" 2>/dev/null; kill -0 "$SP" 2>/dev/null && ok16=0   # identidad correcta
 safe_kill "$SP" "$SPST" "$$" own; rc16=$?; [ $rc16 -ne 0 ] || ok16=0                                      # ya muerto/reaped: nunca señala
 [ $ok16 -eq 1 ] && chk ok "rechazos 3/3, vivo tras cada rechazo, muerte con identidad correcta, sin señal a PID muerto (rc=$rc16)" || chk bad "ok16=$ok16 rc16=$rc16"
+echo "17) detección de residuos: un proceso en un mount ns vigilado se REPORTA (fallo explícito) y desaparece solo tras la señal verificada"
+unshare --mount sleep 120 & UP=$!; sleep 0.5; UMN="$(readlink "/proc/$UP/ns/mnt")"; UST="$(pst "$UP")"; ok17=1
+R1="$(ns_resid "$UMN")"; [ "$R1" = " $UP" ] || ok17=0
+safe_kill "$UP" "$UST" "$$" own; [ $? -eq 0 ] || ok17=0; wait "$UP" 2>/dev/null
+R2="$(ns_resid "$UMN")"; [ -z "$R2" ] || ok17=0
+[ $ok17 -eq 1 ] && chk ok "residuo detectado ($R1) y ausente tras la señal" || chk bad "ok17=$ok17 R1='$R1' R2='$R2'"
 echo "13) limpieza no alcanza recursos externos: el trap solo recorre CREATED[] (rutas exactas) y no hay rm -r"
 grep -q 'for p in "${CREATED\[@\]:-}"' "$T" && ! grep -nE 'rm -(r|f[a-z]*r)' "$T" | grep -v '^[0-9]*:#' | grep -q . && chk ok "estático" || chk bad "estático"
 AFTER="$(host_state)"
