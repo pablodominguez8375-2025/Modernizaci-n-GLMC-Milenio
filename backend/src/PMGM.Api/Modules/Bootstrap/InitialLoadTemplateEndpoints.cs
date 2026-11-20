@@ -53,7 +53,7 @@ public static class InitialLoadTemplateEndpoints
         return endpoints;
     }
 
-    private static IResult GetContract(HttpContext context, IInstitutionalAccessService access)
+    private static IResult GetContract(HttpContext context, IInstitutionalAccessService access, IConfiguration configuration)
     {
         context.Response.Headers.CacheControl = "private, no-store";
         if (!access.IsPlatformSuperAdmin(context.User))
@@ -61,7 +61,7 @@ public static class InitialLoadTemplateEndpoints
 
         return Results.Ok(new
         {
-            status = "PREVIEW_ONLY",
+            status = PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyEndpoint.IsEnabled(configuration) ? "APPLY_AVAILABLE" : "PREVIEW_ONLY",
             revision = "INITIAL-LOAD-CSV-v1",
             files = Sheets.Select(s => new { name = s.Name, columns = s.Columns }),
             requiresLegalApprovalBeforeRealData = false,
@@ -69,7 +69,7 @@ public static class InitialLoadTemplateEndpoints
             acceptsUploadedData = true,
             createsAccounts = false,
             assignsProfiles = false,
-            supportsApply = false,
+            supportsApply = PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyEndpoint.IsEnabled(configuration),
             requiresOperationalGoForRealData = true,
             canonicalWorkshopCodeMappingVerified = false,
             previewDoesNotAuthorizeImport = true
