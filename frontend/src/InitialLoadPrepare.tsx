@@ -163,7 +163,12 @@ export default function InitialLoadPrepare({ bootstrapApi }: { bootstrapApi: Boo
       <button type="button" className="action-trigger primary" disabled={busy !== null || !readiness.canApply} title={readiness.canApply ? undefined : readiness.reason}
         onClick={() => void run('apply', async () => {
           const result = await applyInitialLoad(bootstrapApi, normalizeAll(texts), preview?.receipt ?? '')
-          setApplyResult(result); setReadBack(await initialLoadReadBack(bootstrapApi))
+          // The import has already succeeded at this point. A failed read-back must not
+          // imply rollback or tell the operator that nothing was saved.
+          setApplyResult(result)
+          setReadBack(null)
+          try { setReadBack(await initialLoadReadBack(bootstrapApi)) }
+          catch { setOpError('La carga fue aceptada por el servidor, pero no fue posible verificar los conteos. Use «Ver lo cargado» para consultar nuevamente; no repita la importación sin comprobar el estado.') }
         })}>{busy === 'apply' ? 'Aplicando…' : 'Aplicar la carga'}</button>
       <button type="button" className="action-trigger secondary" disabled={busy !== null || !windowOpen} onClick={() => void run('read', async () => { setReadBack(await initialLoadReadBack(bootstrapApi)) })}>Ver lo cargado</button>
     </div>
