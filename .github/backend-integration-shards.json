@@ -87,6 +87,7 @@
       "MemberSelfServicePostgreSqlTests",
       "MemberOwnCeremonyReceiptPostgreSqlTests",
       "PrivacyRequestReadAuditPostgreSqlTests",
+      "PrivacyRetentionClosurePostgreSqlTests",
       "PrivacyContactEmailHttpTests",
       "SystemMailGoogleHttpTests",
       "PrivacyContactMemberAccessHttpTests",
