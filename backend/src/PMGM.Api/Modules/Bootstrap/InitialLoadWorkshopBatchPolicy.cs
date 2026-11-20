@@ -12,6 +12,56 @@ public static class InitialLoadWorkshopBatchPolicy
         bool Valid, string Code, int NewRows, int ExactSkips,
         int BlockedRows, bool CanApply = false, int WritesPerformed = 0);
 
+    /// <summary>
+    /// Candidate no-migration plan using persisted (Number, OrienteCode).
+    /// workshopCode is local to the CSV and MUST NOT be matched to DB Code.
+    /// This is an offline policy, not an Apply operation.
+    /// </summary>
+    public static Result InspectCompositeIdentity(
+        IReadOnlyList<InitialLoadWorkshopMatchPolicy.Incoming>? incoming,
+        IReadOnlyList<InitialLoadWorkshopMatchPolicy.Existing>? existing)
+    {
+        static Result Deny(string code, int blocked) =>
+            new(false, code, 0, 0, blocked);
+
+        if (incoming is null || existing is null)
+            return Deny("SNAPSHOT_UNAVAILABLE", 0);
+        if (incoming.Count == 0)
+            return Deny("BATCH_EMPTY", 0);
+        if (incoming.Any(x => x is null ||
+            string.IsNullOrWhiteSpace(x.Code) ||
+            string.IsNullOrWhiteSpace(x.Number) ||
+            string.IsNullOrWhiteSpace(x.OrienteCode)) ||
+            incoming.GroupBy(x => x.Code, StringComparer.Ordinal)
+                .Any(g => g.Count() > 1) ||
+            incoming.GroupBy(x => InitialLoadWorkshopCompositeKeyPolicy.CollisionFingerprint(x.Number, x.OrienteCode))
+                .Any(g => g.Count() > 1))
+            return Deny("BATCH_KEYS_INVALID_OR_DUPLICATE", incoming.Count);
+
+        if (existing.Any(x => x is null ||
+            string.IsNullOrWhiteSpace(x.Number) ||
+            string.IsNullOrWhiteSpace(x.OrienteCode)) ||
+            existing.GroupBy(x => InitialLoadWorkshopCompositeKeyPolicy.CollisionFingerprint(x.Number, x.OrienteCode))
+                .Any(g => g.Count() > 1))
+            return Deny("SNAPSHOT_KEYS_AMBIGUOUS", existing.Count);
+
+        var added = 0;
+        var skipped = 0;
+        var blocked = 0;
+        foreach (var row in incoming)
+        {
+            switch (InitialLoadWorkshopCompositeKeyPolicy.Inspect(row, existing))
+            {
+                case InitialLoadExistingRecordPolicy.Match.Absent: added++; break;
+                case InitialLoadExistingRecordPolicy.Match.Exact: skipped++; break;
+                default: blocked++; break;
+            }
+        }
+        return blocked > 0
+            ? Deny("BATCH_NATURAL_KEY_CONFLICT", blocked)
+            : new Result(true, "BATCH_PLAN_VALID", added, skipped, 0);
+    }
+
     public static Result Inspect(
         IReadOnlyList<InitialLoadWorkshopMatchPolicy.Incoming>? incoming,
         IReadOnlyList<InitialLoadWorkshopMatchPolicy.Existing>? existing)
