@@ -18,7 +18,8 @@ internal static class InitialLoadWorkshopSnapshotReader
         int OrganizationRows, int WorkshopTypeRows,
         int MissingNumbers, int DuplicateNumbers,
         bool CanonicalCodeMappingVerified = false,
-        bool CanApply = false, int WritesPerformed = 0);
+        bool CanApply = false, int WritesPerformed = 0,
+        int MissingOrienteCodes = 0, int DuplicateCompositeKeys = 0);
 
     internal static async Task<IReadOnlyList<Workshop>> ReadAsync(
         BootstrapDbContext db, CancellationToken cancellationToken)
@@ -62,6 +63,13 @@ internal static class InitialLoadWorkshopSnapshotReader
             rows.Count,
             rows.Count(x => string.Equals(x.Type, "workshop", StringComparison.OrdinalIgnoreCase)),
             rows.Count(x => string.IsNullOrWhiteSpace(x.Number)),
-            numbered.Count(x => x.Count() > 1));
+            numbered.Count(x => x.Count() > 1),
+            MissingOrienteCodes: rows.Count(x => x.Type == "workshop" &&
+                string.IsNullOrWhiteSpace(x.OrienteCode)),
+            DuplicateCompositeKeys: rows.Where(x => x.Type == "workshop" &&
+                !string.IsNullOrWhiteSpace(x.Number) &&
+                !string.IsNullOrWhiteSpace(x.OrienteCode))
+                .GroupBy(x => (x.Number, x.OrienteCode))
+                .Count(g => g.Count() > 1));
     }
 }
