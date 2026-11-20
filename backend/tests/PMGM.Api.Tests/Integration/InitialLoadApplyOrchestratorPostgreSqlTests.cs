@@ -226,7 +226,8 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
             Assert.Equal("OFFICES_INVALID", (await RunAsync(iso.Connection, Fp(), w, m, ct, offices: [invalid])).Code);
         Assert.Equal(baseline, await CountsAsync(iso.Connection, ct));
 
-        // Happy path, then identical replay of the office rows in a new batch = exact skip.
+        // Happy path, then the same rows under a NEW fingerprint (distinct batch) = exact entity skip,
+        // NOT an idempotent replay (that is covered by Same_fingerprint_replay_*).
         var ok = await RunAsync(iso.Connection, Fp(), w, m, ct, offices: [O()]);
         Assert.True(ok.Applied, ok.Code);
         Assert.Equal(1, ok.OfficesCreated);
@@ -242,6 +243,61 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
         Assert.Equal(counts, await CountsAsync(iso.Connection, ct));
         await using var check = Core(iso.Connection);
         Assert.Equal(1, await check.OfficeAssignments.CountAsync(ct));
+    }
+
+    [Fact]
+    public async Task Same_fingerprint_replay_of_a_full_batch_is_already_applied_with_zero_writes()
+    {
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await PrepareAsync(iso.Connection, ct);
+        var fp = Fp();
+        var w = new[] { W("L1", "9801", "SYA") };
+        var m = new[] { M("P1", "11.111.111-1") };
+        var o = new[] { O() };
+
+        var first = await RunAsync(iso.Connection, fp, w, m, ct, offices: o);
+        Assert.True(first.Applied, first.Code);
+        var afterFirst = await CountsAsync(iso.Connection, ct);
+
+        var replay = await RunAsync(iso.Connection, fp, w, m, ct, offices: o);
+        Assert.False(replay.Applied);
+        Assert.True(replay.AlreadyApplied);
+        Assert.Equal("ALREADY_APPLIED", replay.Code);
+        Assert.Equal(afterFirst, await CountsAsync(iso.Connection, ct));
+        await using var db = Boot(iso.Connection);
+        Assert.Equal(1, await db.InitialLoadBatchLedgers.CountAsync(x => x.Fingerprint == fp, ct));
+    }
+
+    [Fact]
+    public async Task Distinct_fingerprint_with_identical_content_skips_entities_without_mutating_them()
+    {
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await PrepareAsync(iso.Connection, ct);
+        var w = new[] { W("L1", "9802", "SYA") };
+        var m = new[] { M("P1", "11.111.111-1") };
+        var o = new[] { O() };
+        Assert.True((await RunAsync(iso.Connection, Fp(), w, m, ct, offices: o)).Applied);
+
+        List<Guid> ids;
+        await using (var core = Core(iso.Connection))
+            ids = await core.OfficeAssignments.Select(x => x.Id).ToListAsync(ct);
+
+        var second = await RunAsync(iso.Connection, Fp(), w, m, ct, offices: o);
+        Assert.True(second.Applied, second.Code);
+        Assert.Equal((0, 0, 1, 0, 1), (second.WorkshopsCreated, second.MembersCreated, second.MemberExactSkips,
+            second.OfficesCreated, second.OfficeExactSkips));
+
+        await using var core2 = Core(iso.Connection);
+        Assert.Equal(1, await core2.People.CountAsync(ct));
+        Assert.Equal(1, await core2.Members.CountAsync(ct));
+        Assert.Equal(1, await core2.Memberships.CountAsync(ct));
+        Assert.Equal(ids, await core2.OfficeAssignments.Select(x => x.Id).ToListAsync(ct));
+        await using var db = Boot(iso.Connection);
+        Assert.Equal(2, await db.InitialLoadBatchLedgers.CountAsync(ct));
     }
 
     [Fact]
