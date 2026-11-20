@@ -33,6 +33,24 @@ public sealed class InitialLoadWorkshopBatchPolicyTests
         Assert.Equal(1, result.BlockedRows);
     }
 
+    [Theory]
+    [InlineData("", "Workshop", "Santiago", "CL")]
+    [InlineData("23", "", "Santiago", "CL")]
+    [InlineData("23", "Workshop", "", "CL")]
+    [InlineData("23", "Workshop", "Santiago", "")]
+    public void Incomplete_persisted_identity_blocks_entire_batch(
+        string number, string name, string city, string country)
+    {
+        var incomplete = new InitialLoadWorkshopMatchPolicy.Existing(
+            "LEGACY", number, name, "SCL", city, country);
+        var result = InitialLoadWorkshopBatchPolicy.Inspect([In("NEW")], [incomplete]);
+        Assert.False(result.Valid);
+        Assert.Equal("SNAPSHOT_KEYS_AMBIGUOUS", result.Code);
+        Assert.Equal(0, result.NewRows);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+    }
+
     [Fact]
     public void Duplicate_incoming_or_persisted_keys_fail_closed()
     {
