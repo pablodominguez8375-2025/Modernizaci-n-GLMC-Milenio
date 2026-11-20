@@ -86,7 +86,7 @@ public sealed class InitialLoadApplyEndpointPostgreSqlTests
     {
         await using var db = Boot(cs);
         var outcome = await InitialLoadApplyEndpoint.ApplyVerifiedAsync(
-            actor, corr, body, Secret, db, now ?? DateTimeOffset.UtcNow, ct);
+            actor, corr, body, Secret, db, new InitialLoadApplyOrchestrator(db), now ?? DateTimeOffset.UtcNow, ct);
         return (outcome.Status, JsonSerializer.Serialize(outcome.Payload));
     }
 

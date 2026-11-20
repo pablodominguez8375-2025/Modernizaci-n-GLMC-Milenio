@@ -35,6 +35,7 @@ public static class InitialLoadApplyEndpoint
         HttpContext context,
         IInstitutionalAccessService access,
         BootstrapDbContext db,
+        InitialLoadApplyOrchestrator orchestrator,
         IConfiguration configuration,
         CancellationToken cancellationToken)
     {
@@ -77,7 +78,7 @@ public static class InitialLoadApplyEndpoint
         }
 
         var outcome = await ApplyVerifiedAsync(
-            actor[0], context.TraceIdentifier, body.ToArray(), secret, db, DateTimeOffset.UtcNow, cancellationToken);
+            actor[0], context.TraceIdentifier, body.ToArray(), secret, db, orchestrator, DateTimeOffset.UtcNow, cancellationToken);
         return Results.Json(outcome.Payload, statusCode: outcome.Status);
     }
 
@@ -89,7 +90,7 @@ public static class InitialLoadApplyEndpoint
     /// </summary>
     public static async Task<Outcome> ApplyVerifiedAsync(
         string actor, string correlationId, byte[] body, byte[] secret,
-        BootstrapDbContext db, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+        BootstrapDbContext db, InitialLoadApplyOrchestrator orchestrator, DateTimeOffset nowUtc, CancellationToken cancellationToken)
     {
         Request? request;
         try
@@ -112,7 +113,7 @@ public static class InitialLoadApplyEndpoint
             return new Outcome(422, new { code = "BATCH_NOT_APPLICABLE", blockers = applicability.Blockers.Take(100) });
         var plan = InitialLoadPlanAdapter.Build(sheets).Plan!;
 
-        var result = await new InitialLoadApplyOrchestrator(db).ApplyAsync(
+        var result = await orchestrator.ApplyAsync(
             true, verification.BatchFingerprint, plan.Workshops, plan.Members, plan.Offices,
             actor, correlationId, cancellationToken);
 

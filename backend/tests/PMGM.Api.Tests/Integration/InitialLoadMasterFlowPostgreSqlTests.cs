@@ -117,7 +117,7 @@ public sealed class InitialLoadMasterFlowPostgreSqlTests
         Task<(int, JsonElement)> Close(ClaimsPrincipal? p) => SendAsync(
             ctx => InitialLoadAdminEndpoints.CloseAsync(ctx, access, db, cfg, ct), new { reason = "Cierre de la carga inicial sintética" }, p);
         Task<(int, JsonElement)> Apply(object body, ClaimsPrincipal? p, IConfiguration? c = null) => SendAsync(
-            ctx => InitialLoadApplyEndpoint.ApplyAsync(ctx, access, db, c ?? cfg, ct), body, p);
+            ctx => InitialLoadApplyEndpoint.ApplyAsync(ctx, access, db, new InitialLoadApplyOrchestrator(db), c ?? cfg, ct), body, p);
         Task<(int, JsonElement)> Result(ClaimsPrincipal? p) => SendAsync(
             ctx => InitialLoadAdminEndpoints.ResultAsync(ctx, access, db, core, cfg, ct), null, p);
 
