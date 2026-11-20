@@ -40,6 +40,9 @@ const applyErrors: Record<string, string> = {
 }
 export function describeApplyCode(code: string): string { return applyErrors[code] ?? 'La carga no se aplicó y no se guardó nada.' }
 
+/** Resultado NO confirmado (5xx, 503, respuesta perdida, red): el servidor pudo haber confirmado la carga. Nunca afirma que no se guardó. */
+export const INDETERMINATE_MESSAGE = 'No fue posible confirmar el resultado de la operación: el servidor puede haberla completado. Revise el estado con «Ver lo cargado» antes de repetirla; no la repita a ciegas.'
+
 export function describeApplyHttpError(status: number, code?: string): string {
   if (code && applyErrors[code]) return applyErrors[code]
   switch (status) {
@@ -50,8 +53,8 @@ export function describeApplyHttpError(status: number, code?: string): string {
     case 409: return 'La ventana de carga no lo permite en este momento.'
     case 413: return 'El envío es demasiado grande.'
     case 422: return 'El servidor rechazó la operación. No se guardó nada.'
-    case 503: return 'No fue posible confirmar el estado o la configuración del servidor. No se guardó nada.'
-    default: return `El servidor respondió ${status}. No se guardó nada.`
+    // 503 y cualquier otro estado: pudo fallar antes o DESPUÉS de confirmar la transacción; no se afirma rechazo.
+    default: return INDETERMINATE_MESSAGE
   }
 }
 

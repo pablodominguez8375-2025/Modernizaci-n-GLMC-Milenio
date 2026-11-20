@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyThenVerify, applyReadiness, blockerRows, checkReason, describeApplyHttpError, describeApplyResult, describeBlocker, describeReadBack } from './initialLoadApply'
+import { INDETERMINATE_MESSAGE, applyThenVerify, applyReadiness, blockerRows, checkReason, describeApplyHttpError, describeApplyResult, describeBlocker, describeReadBack } from './initialLoadApply'
 import type { InitialLoadPreviewResult } from './initialLoadPreview'
 
 const preview = (over: Partial<InitialLoadPreviewResult> = {}): InitialLoadPreviewResult => ({
@@ -41,13 +41,36 @@ describe('texts', () => {
     expect(describeApplyHttpError(403)).toMatch(/Máster/)
     expect(describeApplyHttpError(409, 'WINDOW_NOT_OPEN')).toMatch(/Ábrala/)
     expect(describeApplyHttpError(422, 'RECEIPT_EXPIRED')).toMatch(/venció/)
-    expect(describeApplyHttpError(500)).toMatch(/No se guardó nada/)
+    expect(describeApplyHttpError(422)).toMatch(/No se guardó nada/)
   })
   it('describes blockers without echoing data and read-back counts', () => {
     expect(describeBlocker('MEMBER_BATCH_LIMIT_30')).toMatch(/30/)
     expect(describeBlocker('UNKNOWN')).toMatch(/impide/)
     expect(blockerRows([{ sheet: 'Hermanos.csv', row: 4, field: 'rows', code: 'STATUS_NOT_APPLICABLE' }])[0].where).toBe('Hermanos.csv, fila 4')
     expect(describeReadBack({ windowStatus: 'open', workshops: 1, members: 2, memberships: 2, officeAssignments: 1, batches: [] })).toEqual(['Talleres cargados: 1', 'Hermanos: 2', 'Membresías: 2', 'Cargos: 1'])
+  })
+})
+
+describe('resultado indeterminado y vigencia del recibo', () => {
+  it('503, 5xx y estados desconocidos nunca afirman que no se guardó nada', () => {
+    for (const status of [500, 502, 503, 504, 418]) {
+      const text = describeApplyHttpError(status)
+      expect(text).not.toMatch(/No se guardó nada/)
+      expect(text).toMatch(/Ver lo cargado/)
+    }
+    expect(describeApplyHttpError(503, 'WINDOW_STATUS_UNAVAILABLE')).toBe(INDETERMINATE_MESSAGE)
+  })
+  it('rechazos confirmados siguen diciendo que no se guardó nada', () => {
+    expect(describeApplyHttpError(422, 'MEMBERS_INVALID')).toMatch(/No se guardó nada/)
+    expect(describeApplyHttpError(409, 'CONCURRENT_OR_CONFLICTING_BATCH')).toMatch(/No se guardó nada/)
+  })
+  it('exige vigencia del recibo parseable y futura (fail closed)', () => {
+    expect(applyReadiness(preview({ receiptExpiresAtUtc: null }), 'open', now).canApply).toBe(false)
+    expect(applyReadiness(preview({ receiptExpiresAtUtc: undefined }), 'open', now).canApply).toBe(false)
+    expect(applyReadiness(preview({ receiptExpiresAtUtc: 'no-es-fecha' }), 'open', now).canApply).toBe(false)
+    expect(applyReadiness(preview({ receiptExpiresAtUtc: '2026-11-20T11:59:00Z' }), 'open', now).canApply).toBe(false)
+    expect(applyReadiness(preview({ receiptExpiresAtUtc: '2026-11-20T12:00:00Z' }), 'open', now).canApply).toBe(false)
+    expect(applyReadiness(preview({ receiptExpiresAtUtc: '2026-11-20T12:10:00Z' }), 'open', now).canApply).toBe(true)
   })
 })
 

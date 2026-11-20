@@ -5,7 +5,7 @@ import { describeInitialLoadFiles } from './initialLoadFiles'
 import { describeFieldEs, describeFindingEs, gradeOptions, initialLoadColumns, initialLoadFilePurpose, normalizeAll, officeOptions, spanishTemplate, statusOptions } from './initialLoadSpanish'
 import { INITIAL_LOAD_FILE_NAMES, checkChosenFile, checkTexts, describeField, describeFinding, describePreview } from './initialLoadPreview'
 import type { InitialLoadFileName, InitialLoadPreviewResult } from './initialLoadPreview'
-import { InitialLoadOperationError, READ_BACK_FAILED_MESSAGE, applyInitialLoad, applyThenVerify, applyReadiness, blockerRows, checkReason, closeInitialLoad, describeApplyHttpError, initialLoadReadBack, openInitialLoad, describeApplyResult, describeReadBack } from './initialLoadApply'
+import { InitialLoadOperationError, INDETERMINATE_MESSAGE, READ_BACK_FAILED_MESSAGE, applyInitialLoad, applyThenVerify, applyReadiness, blockerRows, checkReason, closeInitialLoad, describeApplyHttpError, initialLoadReadBack, openInitialLoad, describeApplyResult, describeReadBack } from './initialLoadApply'
 import type { InitialLoadApplyResult, InitialLoadReadBack } from './initialLoadApply'
 
 /** #694/#750 — «Preparar la carga»: plantillas CSV y revisión (solo lectura) de los tres archivos. No guarda ni importa datos. */
@@ -80,7 +80,7 @@ export default function InitialLoadPrepare({ bootstrapApi }: { bootstrapApi: Boo
   async function refreshStatus() { try { setStatus(await bootstrapApi.initialLoadStatus()) } catch { /* se conserva el último estado conocido */ } }
   async function run(label: string, action: () => Promise<void>) {
     setBusy(label); setOpError(null)
-    try { await action() } catch (e) { setOpError(e instanceof InitialLoadOperationError ? describeApplyHttpError(e.status, e.code) : e instanceof Error ? e.message : 'No fue posible completar la operación. No se guardó nada.') }
+    try { await action() } catch (e) { setOpError(e instanceof InitialLoadOperationError ? describeApplyHttpError(e.status, e.code) : INDETERMINATE_MESSAGE) }
     finally { setBusy(null); await refreshStatus() }
   }
   const reasonProblem = checkReason(reason)
