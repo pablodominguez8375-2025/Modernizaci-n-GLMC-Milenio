@@ -5,7 +5,7 @@ import { describeInitialLoadFiles } from './initialLoadFiles'
 import { describeFieldEs, describeFindingEs, gradeOptions, initialLoadColumns, initialLoadFilePurpose, normalizeAll, officeOptions, spanishTemplate, statusOptions } from './initialLoadSpanish'
 import { INITIAL_LOAD_FILE_NAMES, checkChosenFile, checkTexts, describeField, describeFinding, describePreview } from './initialLoadPreview'
 import type { InitialLoadFileName, InitialLoadPreviewResult } from './initialLoadPreview'
-import { InitialLoadOperationError, applyInitialLoad, applyReadiness, blockerRows, checkReason, closeInitialLoad, describeApplyHttpError, initialLoadReadBack, openInitialLoad, describeApplyResult, describeReadBack } from './initialLoadApply'
+import { InitialLoadOperationError, READ_BACK_FAILED_MESSAGE, applyInitialLoad, applyThenVerify, applyReadiness, blockerRows, checkReason, closeInitialLoad, describeApplyHttpError, initialLoadReadBack, openInitialLoad, describeApplyResult, describeReadBack } from './initialLoadApply'
 import type { InitialLoadApplyResult, InitialLoadReadBack } from './initialLoadApply'
 
 /** #694/#750 — «Preparar la carga»: plantillas CSV y revisión (solo lectura) de los tres archivos. No guarda ni importa datos. */
@@ -162,13 +162,9 @@ export default function InitialLoadPrepare({ bootstrapApi }: { bootstrapApi: Boo
         title={reasonProblem ?? undefined} onClick={() => void run('open', async () => { await openInitialLoad(bootstrapApi, reason.trim()) })}>{busy === 'open' ? 'Abriendo…' : 'Abrir la carga'}</button>
       <button type="button" className="action-trigger primary" disabled={busy !== null || !readiness.canApply} title={readiness.canApply ? undefined : readiness.reason}
         onClick={() => void run('apply', async () => {
-          const result = await applyInitialLoad(bootstrapApi, normalizeAll(texts), preview?.receipt ?? '')
-          // The import has already succeeded at this point. A failed read-back must not
-          // imply rollback or tell the operator that nothing was saved.
-          setApplyResult(result)
-          setReadBack(null)
-          try { setReadBack(await initialLoadReadBack(bootstrapApi)) }
-          catch { setOpError('La carga fue aceptada por el servidor, pero no fue posible verificar los conteos. Use «Ver lo cargado» para consultar nuevamente; no repita la importación sin comprobar el estado.') }
+          const outcome = await applyThenVerify(() => applyInitialLoad(bootstrapApi, normalizeAll(texts), preview?.receipt ?? ''), () => initialLoadReadBack(bootstrapApi))
+          setApplyResult(outcome.result); setReadBack(outcome.readBack)
+          if (outcome.readBackFailed) setOpError(READ_BACK_FAILED_MESSAGE)
         })}>{busy === 'apply' ? 'Aplicando…' : 'Aplicar la carga'}</button>
       <button type="button" className="action-trigger secondary" disabled={busy !== null || !windowOpen} onClick={() => void run('read', async () => { setReadBack(await initialLoadReadBack(bootstrapApi)) })}>Ver lo cargado</button>
     </div>

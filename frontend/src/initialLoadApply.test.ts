@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyReadiness, blockerRows, checkReason, describeApplyHttpError, describeApplyResult, describeBlocker, describeReadBack } from './initialLoadApply'
+import { applyThenVerify, applyReadiness, blockerRows, checkReason, describeApplyHttpError, describeApplyResult, describeBlocker, describeReadBack } from './initialLoadApply'
 import type { InitialLoadPreviewResult } from './initialLoadPreview'
 
 const preview = (over: Partial<InitialLoadPreviewResult> = {}): InitialLoadPreviewResult => ({
@@ -48,5 +48,23 @@ describe('texts', () => {
     expect(describeBlocker('UNKNOWN')).toMatch(/impide/)
     expect(blockerRows([{ sheet: 'Hermanos.csv', row: 4, field: 'rows', code: 'STATUS_NOT_APPLICABLE' }])[0].where).toBe('Hermanos.csv, fila 4')
     expect(describeReadBack({ windowStatus: 'open', workshops: 1, members: 2, memberships: 2, officeAssignments: 1, batches: [] })).toEqual(['Talleres cargados: 1', 'Hermanos: 2', 'Membresías: 2', 'Cargos: 1'])
+  })
+})
+
+describe('applyThenVerify', () => {
+  const counts = { workshopsCreated: 1, membersCreated: 1, memberExactSkips: 0, officesCreated: 1, officeExactSkips: 0 }
+  const ok = { applied: true, alreadyApplied: false, code: 'OK', counts }
+  it('keeps the apply result when the read-back fails (503) and never reports a rollback', async () => {
+    const outcome = await applyThenVerify(async () => ok, async () => { throw new Error('503') })
+    expect(outcome.result.applied).toBe(true)
+    expect(outcome.readBack).toBeNull()
+    expect(outcome.readBackFailed).toBe(true)
+  })
+  it('returns both when everything works and propagates a failed apply untouched', async () => {
+    const rb = { windowStatus: 'open', workshops: 1, members: 1, memberships: 1, officeAssignments: 1, batches: [] }
+    expect(await applyThenVerify(async () => ok, async () => rb)).toEqual({ result: ok, readBack: rb, readBackFailed: false })
+    let read = 0
+    await expect(applyThenVerify(async () => { throw new Error('422') }, async () => { read++; return rb })).rejects.toThrow('422')
+    expect(read).toBe(0)
   })
 })

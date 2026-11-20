@@ -117,3 +117,12 @@ export const applyInitialLoad = (api: BootstrapApiClient, files: Record<string, 
 export const openInitialLoad = (api: BootstrapApiClient, reason: string) => call<InitialLoadWindowTransition>(api, 'window/open', 'POST', { reason })
 export const closeInitialLoad = (api: BootstrapApiClient, reason: string) => call<InitialLoadWindowTransition>(api, 'window/close', 'POST', { reason })
 export const initialLoadReadBack = (api: BootstrapApiClient) => call<InitialLoadReadBack>(api, 'result', 'GET')
+
+export const READ_BACK_FAILED_MESSAGE = 'La carga fue aceptada por el servidor, pero no fue posible verificar los conteos. Use «Ver lo cargado» para consultar nuevamente; no repita la importación sin comprobar el estado.'
+
+/** Tras un Apply aceptado, un fallo de la relectura NUNCA se presenta como «no se guardó nada»: se conserva el resultado y se avisa aparte. */
+export async function applyThenVerify(apply: () => Promise<InitialLoadApplyResult>, readBack: () => Promise<InitialLoadReadBack>):
+  Promise<{ result: InitialLoadApplyResult; readBack: InitialLoadReadBack | null; readBackFailed: boolean }> {
+  const result = await apply()
+  try { return { result, readBack: await readBack(), readBackFailed: false } } catch { return { result, readBack: null, readBackFailed: true } }
+}
