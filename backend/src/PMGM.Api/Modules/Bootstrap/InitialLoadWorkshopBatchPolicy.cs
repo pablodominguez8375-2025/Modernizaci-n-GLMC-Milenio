@@ -34,14 +34,14 @@ public static class InitialLoadWorkshopBatchPolicy
             string.IsNullOrWhiteSpace(x.OrienteCode)) ||
             incoming.GroupBy(x => x.Code, StringComparer.Ordinal)
                 .Any(g => g.Count() > 1) ||
-            incoming.GroupBy(x => (x.Number, x.OrienteCode))
+            incoming.GroupBy(x => InitialLoadWorkshopCompositeKeyPolicy.CollisionFingerprint(x.Number, x.OrienteCode))
                 .Any(g => g.Count() > 1))
             return Deny("BATCH_KEYS_INVALID_OR_DUPLICATE", incoming.Count);
 
         if (existing.Any(x => x is null ||
             string.IsNullOrWhiteSpace(x.Number) ||
             string.IsNullOrWhiteSpace(x.OrienteCode)) ||
-            existing.GroupBy(x => (x.Number, x.OrienteCode))
+            existing.GroupBy(x => InitialLoadWorkshopCompositeKeyPolicy.CollisionFingerprint(x.Number, x.OrienteCode))
                 .Any(g => g.Count() > 1))
             return Deny("SNAPSHOT_KEYS_AMBIGUOUS", existing.Count);
 
