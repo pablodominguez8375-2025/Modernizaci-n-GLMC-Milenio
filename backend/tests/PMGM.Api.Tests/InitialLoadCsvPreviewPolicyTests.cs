@@ -117,6 +117,37 @@ public sealed class InitialLoadCsvPreviewPolicyTests
         Assert.DoesNotContain("Private RUT Documents", JsonSerializer.Serialize(result));
     }
 
+    [Fact]
+    public void Duplicate_office_mandate_in_csv_is_rejected_without_personal_values()
+    {
+        var files = Synthetic();
+        files["CargosVigentes.csv"] +=
+            "\n" + "persona1,taller23,worshipful_master,2026-01-01";
+        var result = InitialLoadCsvPreviewPolicy.Inspect(files);
+
+        Assert.False(result.Valid);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+        Assert.Contains(result.Findings, x => x.Sheet == "CargosVigentes.csv" &&
+            x.Row == 3 && x.Field == "officeCode" && x.Code == "DUPLICATE");
+        AssertNoPersonalValues(result);
+    }
+
+    [Theory]
+    [InlineData("taller23,23,Taller\"incorrecto,STGO,Santiago,Chile\\r\\n")]
+    [InlineData("taller23,23,\"Taller\"incorrecto,STGO,Santiago,Chile\\r\\n")]
+    public void Invalid_csv_quoting_is_rejected_by_shape_gate(string invalidRow)
+    {
+        var files = Synthetic();
+        files["Talleres.csv"] = string.Join(",", InitialLoadTemplateEndpoints.Sheets[0].Columns)
+            + "\r\n" + invalidRow.Replace("\\r", "\r").Replace("\\n", "\n");
+        var result = InitialLoadCsvPreviewPolicy.Inspect(files);
+        Assert.False(result.Valid);
+        Assert.False(result.CanApply);
+        Assert.Contains(result.Findings, x => x.Code == "INVALID_QUOTING");
+        AssertNoPersonalValues(result);
+    }
+
     private static void AssertNoPersonalValues(InitialLoadCsvPreviewPolicy.Result result)
     {
         var serialized = JsonSerializer.Serialize(result);
