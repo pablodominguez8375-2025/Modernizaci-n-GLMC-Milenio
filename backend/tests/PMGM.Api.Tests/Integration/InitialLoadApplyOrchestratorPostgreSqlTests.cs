@@ -245,6 +245,30 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
     }
 
     [Fact]
+    public async Task Three_parallel_identical_full_batches_apply_exactly_once()
+    {
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await PrepareAsync(iso.Connection, ct);
+        var fp = Fp();
+        var w = new[] { W("L1", "9701", "SYA"), W("L2", "9702", "SYB") };
+        var m = new[] { M("P1", "11.111.111-1"), M("P2", "22.222.222-2", "L2", "Luis", "Soto") };
+        var o = new[] { O(), O("P2", "L2") };
+
+        var results = await Task.WhenAll(
+            RunAsync(iso.Connection, fp, w, m, ct, offices: o),
+            RunAsync(iso.Connection, fp, w, m, ct, offices: o),
+            RunAsync(iso.Connection, fp, w, m, ct, offices: o));
+        Assert.Equal(1, results.Count(r => r.Applied));
+        Assert.All(results.Where(r => !r.Applied), r =>
+            Assert.Contains(r.Code, new[] { "ALREADY_APPLIED", "CONCURRENT_OR_CONFLICTING_BATCH" }));
+        Assert.Equal((2, 2, 2, 2, 1, 2), await CountsAsync(iso.Connection, ct));
+        await using var core = Core(iso.Connection);
+        Assert.Equal(2, await core.OfficeAssignments.CountAsync(ct));
+    }
+
+    [Fact]
     public async Task Disabled_flag_and_arbitrary_fingerprint_deny_without_writes()
     {
         if (string.IsNullOrWhiteSpace(Conn)) return;
