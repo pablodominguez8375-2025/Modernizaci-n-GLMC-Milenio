@@ -193,17 +193,18 @@ public static class InitialLoadPreflightPolicy
             ValidateShape(officeFile, i, row, officeSchema);
             var reference = Read(row, "personRef");
             var shop = Read(row, "workshopCode");
-            if (Code(officeFile, i, row, "personRef") && !persons.ContainsKey(reference))
+            var validPersonRef = Code(officeFile, i, row, "personRef");
+            var validWorkshopCode = Code(officeFile, i, row, "workshopCode");
+            if (validPersonRef && !persons.ContainsKey(reference))
                 Add(officeFile, i + 2, "personRef", "UNKNOWN_PERSON");
-            if (Code(officeFile, i, row, "workshopCode") && !workshops.Contains(shop))
+            if (validWorkshopCode && !workshops.Contains(shop))
                 Add(officeFile, i + 2, "workshopCode", "UNKNOWN_WORKSHOP");
             if (persons.TryGetValue(reference, out var memberShop) &&
                 !string.Equals(shop, memberShop, StringComparison.Ordinal))
                 Add(officeFile, i + 2, "workshopCode", "PERSON_WORKSHOP_MISMATCH");
             var officeCode = Read(row, "officeCode");
             var startDate = Read(row, "startDate");
-            if (Code(officeFile, i, row, "personRef") &&
-                Code(officeFile, i, row, "workshopCode") &&
+            if (validPersonRef && validWorkshopCode &&
                 !string.IsNullOrWhiteSpace(officeCode) &&
                 !string.IsNullOrWhiteSpace(startDate) &&
                 !officeMandates.Add((reference, shop, officeCode, startDate)))
