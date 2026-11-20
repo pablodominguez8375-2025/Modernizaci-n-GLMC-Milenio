@@ -26,12 +26,15 @@ public static class InitialLoadAdminEndpoints
         public Task<InitialLoadTransitionEvidence?> ReadVerifiedAsync(
             InitialLoadAdmissionPolicy.Operation operation, CancellationToken cancellationToken)
         {
+            // The institutional authorization is external to the software. What the SERVER can attest is only that the
+            // operator configured a well-formed reference (64 lowercase hex) to it; it does not verify its content.
+            // Without that reference the transition fails closed (SERVER_EVIDENCE_UNAVAILABLE); nothing else is claimed.
             var digest = configuration["InitialLoad:ExternalApprovalDigest"];
+            var referenceConfigured = digest?.Length == 64 && digest.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+            if (!referenceConfigured) return Task.FromResult<InitialLoadTransitionEvidence?>(null);
             var opening = operation == InitialLoadAdmissionPolicy.Operation.RequestOpen;
-            if (opening && (digest?.Length != 64 || !digest.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f')))
-                return Task.FromResult<InitialLoadTransitionEvidence?>(null);
             var evidence = new InitialLoadAdmissionPolicy.Evidence(
-                MasterAccountVerifiedByServer: true, LegalApprovalVerifiedByServer: true,
+                MasterAccountVerifiedByServer: true, LegalApprovalVerifiedByServer: referenceConfigured,
                 AuditSinkVerifiedByServer: true, AuditReason: reason);
             return Task.FromResult<InitialLoadTransitionEvidence?>(
                 new InitialLoadTransitionEvidence(evidence, opening ? digest : null));
@@ -59,8 +62,16 @@ public static class InitialLoadAdminEndpoints
         try
         {
             using var reader = new StreamReader(context.Request.Body);
-            var text = await reader.ReadToEndAsync(ct);
-            if (text.Length > 4096) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            var buffer = new char[4097];
+            var read = 0;
+            while (read < buffer.Length)
+            {
+                var n = await reader.ReadAsync(buffer.AsMemory(read), ct);
+                if (n == 0) break;
+                read += n;
+            }
+            if (read > 4096) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            var text = new string(buffer, 0, read);
             reason = JsonSerializer.Deserialize<ReasonRequest>(text,
                 new JsonSerializerOptions { MaxDepth = 4, PropertyNameCaseInsensitive = true })?.Reason;
         }

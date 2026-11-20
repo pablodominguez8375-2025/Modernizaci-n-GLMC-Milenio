@@ -49,7 +49,7 @@ public sealed class InitialLoadMasterFlowPostgreSqlTests
         new Claim(InstitutionalClaims.Scope, "order")
     ], "test-validated-bearer"));
 
-    private static IConfiguration Config(bool enabled = true) => new ConfigurationBuilder().AddInMemoryCollection(
+    private static IConfiguration Config(bool enabled = true, string? digest = null) => new ConfigurationBuilder().AddInMemoryCollection(
         new Dictionary<string, string?>
         {
             ["Authentication:Authority"] = Issuer,
@@ -57,7 +57,7 @@ public sealed class InitialLoadMasterFlowPostgreSqlTests
             ["InitialLoad:MasterIssuer"] = Issuer,
             ["InitialLoad:ApplyEnabled"] = enabled ? "true" : "false",
             ["InitialLoad:ReceiptSecret"] = Secret,
-            ["InitialLoad:ExternalApprovalDigest"] = new string('c', 64)
+            ["InitialLoad:ExternalApprovalDigest"] = digest ?? new string('c', 64)
         }).Build();
 
     private static async Task<(int Status, JsonElement Body)> SendAsync(
@@ -141,6 +141,14 @@ public sealed class InitialLoadMasterFlowPostgreSqlTests
         var noReason = await Open(null, Master());
         Assert.Equal(422, noReason.Item1);
         Assert.Equal("AUTHORIZATION_REQUIRED", noReason.Item2.GetProperty("code").GetString());
+        // Invalid/absent external-approval reference: fail closed, nothing claimed or written.
+        foreach (var bad in new[] { "", "xyz", new string('C', 64), new string('c', 63) })
+        {
+            var denied = await Open("Apertura de la carga inicial sintética", Master(), Config(digest: bad));
+            Assert.Equal(503, denied.Item1);
+        }
+        Assert.Equal(413, (await Open(new string('x', 5000), Master())).Item1);
+        Assert.Equal("not_opened", (await Result(Master())).Item2.GetProperty("windowStatus").GetString());
         var opened = await Open("Apertura de la carga inicial sintética", Master());
         Assert.Equal(200, opened.Item1);
         Assert.Equal("open", opened.Item2.GetProperty("status").GetString());
