@@ -6,15 +6,15 @@ namespace PMGM.Api.Modules.Bootstrap;
 /// persistence model. Never infer that Organization.Number is workshopCode.
 /// Values are kept internal and are never included in public diagnostics.
 /// </summary>
-internal static class InitialLoadWorkshopMatchPolicy
+public static class InitialLoadWorkshopMatchPolicy
 {
-    internal sealed record Existing(string Code, string Number, string Name,
+    public sealed record Existing(string Code, string Number, string Name,
         string OrienteCode, string City, string Country);
 
-    internal sealed record Incoming(string Code, string Number, string Name,
+    public sealed record Incoming(string Code, string Number, string Name,
         string OrienteCode, string City, string Country);
 
-    internal static InitialLoadExistingRecordPolicy.Match Inspect(
+    public static InitialLoadExistingRecordPolicy.Match Inspect(
         Incoming? incoming, IReadOnlyList<Existing>? snapshot)
     {
         if (incoming is null || snapshot is null ||
