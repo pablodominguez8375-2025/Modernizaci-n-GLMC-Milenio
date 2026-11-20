@@ -1,6 +1,5 @@
 import type { InitialLoadPreviewResult } from '../initialLoadPreview'
 import { describePreviewHttpError } from '../initialLoadPreview'
-import type { InitialLoadApplyResult, InitialLoadReadBack, InitialLoadWindowTransition } from '../initialLoadApply'
 export interface BootstrapInstitution { name: string }
 export interface BootstrapWorkshop { name: string; number: string }
 export interface InstitutionalBootstrapRequest {
@@ -33,9 +32,6 @@ export interface BootstrapApplyResponse {
 }
 
 export type BootstrapTokenProvider = () => Promise<string | null>
-/** Error de una operación Máster de la carga inicial; el texto en español lo arma la pantalla (initialLoadApply). */
-export class InitialLoadOperationError extends Error { constructor(readonly status: number, readonly code?: string) { super(`initial-load ${status}`) } }
-
 interface BootstrapApiOptions { baseUrl?: string; getAccessToken?: BootstrapTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
 const mockCatalog: BootstrapCatalogResponse = {
@@ -69,9 +65,10 @@ const mockInitialLoadContract: InitialLoadContract = {
 }
 
 export class BootstrapApiClient {
-  private readonly baseUrl: string
-  private readonly getAccessToken?: BootstrapTokenProvider
-  private readonly onUnauthorized?: () => Promise<void>
+  /** Públicos de solo lectura: initialLoadApply.ts (carga diferida) arma las operaciones del Máster sin engordar la entrada pública. */
+  readonly baseUrl: string
+  readonly getAccessToken?: BootstrapTokenProvider
+  readonly onUnauthorized?: () => Promise<void>
   readonly useMocks: boolean
   private mockAppliedHash: string | null = null
 
@@ -130,28 +127,6 @@ export class BootstrapApiClient {
     }
     return response.json() as Promise<InitialLoadPreviewResult>
   }
-
-  /** #694 — llamada Máster a las operaciones de carga. La demo no guarda nada. */
-  private async masterCall<T>(path: string, method: 'GET' | 'POST', body?: unknown): Promise<T> {
-    if (this.useMocks) throw new Error('En la demostración no se guarda nada: esta operación solo existe en el servidor real.')
-    const token = await this.getAccessToken?.()
-    if (!token) throw new Error('Debe ingresar como Superadmin para esta operación.')
-    const response = await fetch(`${this.baseUrl}/api/platform/bootstrap/initial-load/${path}`, {
-      method, headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      body: body === undefined ? undefined : JSON.stringify(body), credentials: 'omit', cache: 'no-store', redirect: 'error',
-    })
-    if (!response.ok) {
-      if (response.status === 401) await this.onUnauthorized?.()
-      let code: string | undefined
-      try { code = ((await response.json()) as { code?: string }).code } catch { /* sin cuerpo */ }
-      throw new InitialLoadOperationError(response.status, code)
-    }
-    return response.json() as Promise<T>
-  }
-  applyInitialLoad(files: Record<string, string>, receipt: string): Promise<InitialLoadApplyResult> { return this.masterCall('apply', 'POST', { files, receipt }) }
-  openInitialLoad(reason: string): Promise<InitialLoadWindowTransition> { return this.masterCall('window/open', 'POST', { reason }) }
-  closeInitialLoad(reason: string): Promise<InitialLoadWindowTransition> { return this.masterCall('window/close', 'POST', { reason }) }
-  initialLoadReadBack(): Promise<InitialLoadReadBack> { return this.masterCall('result', 'GET') }
 
   /** Descarga el ZIP con las 3 plantillas CSV vacías (solo encabezados). */
   async downloadInitialLoadTemplate(): Promise<{ blob: Blob; fileName: string }> {

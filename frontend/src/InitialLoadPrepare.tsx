@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { InitialLoadOperationError } from './api/bootstrapApi'
 import type { BootstrapApiClient, InitialLoadContract, InitialLoadStatus } from './api/bootstrapApi'
 import { describeInitialLoadStatus, initialLoadStatusErrorMessage } from './initialLoadStatus'
 import { describeInitialLoadFiles } from './initialLoadFiles'
 import { describeFieldEs, describeFindingEs, gradeOptions, initialLoadColumns, initialLoadFilePurpose, normalizeAll, officeOptions, spanishTemplate, statusOptions } from './initialLoadSpanish'
 import { INITIAL_LOAD_FILE_NAMES, checkChosenFile, checkTexts, describeField, describeFinding, describePreview } from './initialLoadPreview'
 import type { InitialLoadFileName, InitialLoadPreviewResult } from './initialLoadPreview'
-import { applyReadiness, blockerRows, checkReason, describeApplyHttpError, describeApplyResult, describeReadBack } from './initialLoadApply'
+import { InitialLoadOperationError, applyInitialLoad, applyReadiness, blockerRows, checkReason, closeInitialLoad, describeApplyHttpError, initialLoadReadBack, openInitialLoad, describeApplyResult, describeReadBack } from './initialLoadApply'
 import type { InitialLoadApplyResult, InitialLoadReadBack } from './initialLoadApply'
 
 /** #694/#750 — «Preparar la carga»: plantillas CSV y revisión (solo lectura) de los tres archivos. No guarda ni importa datos. */
@@ -160,13 +159,13 @@ export default function InitialLoadPrepare({ bootstrapApi }: { bootstrapApi: Boo
     </label>
     <div className="button-row">
       <button type="button" className="action-trigger secondary" disabled={busy !== null || status?.status !== 'not_opened' || reasonProblem !== null}
-        title={reasonProblem ?? undefined} onClick={() => void run('open', async () => { await bootstrapApi.openInitialLoad(reason.trim()) })}>{busy === 'open' ? 'Abriendo…' : 'Abrir la carga'}</button>
+        title={reasonProblem ?? undefined} onClick={() => void run('open', async () => { await openInitialLoad(bootstrapApi, reason.trim()) })}>{busy === 'open' ? 'Abriendo…' : 'Abrir la carga'}</button>
       <button type="button" className="action-trigger primary" disabled={busy !== null || !readiness.canApply} title={readiness.canApply ? undefined : readiness.reason}
         onClick={() => void run('apply', async () => {
-          const result = await bootstrapApi.applyInitialLoad(normalizeAll(texts), preview?.receipt ?? '')
-          setApplyResult(result); setReadBack(await bootstrapApi.initialLoadReadBack())
+          const result = await applyInitialLoad(bootstrapApi, normalizeAll(texts), preview?.receipt ?? '')
+          setApplyResult(result); setReadBack(await initialLoadReadBack(bootstrapApi))
         })}>{busy === 'apply' ? 'Aplicando…' : 'Aplicar la carga'}</button>
-      <button type="button" className="action-trigger secondary" disabled={busy !== null || !windowOpen} onClick={() => void run('read', async () => { setReadBack(await bootstrapApi.initialLoadReadBack()) })}>Ver lo cargado</button>
+      <button type="button" className="action-trigger secondary" disabled={busy !== null || !windowOpen} onClick={() => void run('read', async () => { setReadBack(await initialLoadReadBack(bootstrapApi)) })}>Ver lo cargado</button>
     </div>
     {!readiness.canApply && <p className="initial-load-hint">{readiness.reason}</p>}
     {opError && <div className="error-banner" role="alert"><strong>No se pudo completar.</strong><span>{opError}</span></div>}
@@ -177,7 +176,7 @@ export default function InitialLoadPrepare({ bootstrapApi }: { bootstrapApi: Boo
       <span>Al cerrar, no se pueden cargar más archivos y no se puede reabrir. Aplique antes todas las cargas necesarias.</span>
       <label><input type="checkbox" checked={confirmClose} onChange={e => setConfirmClose(e.target.checked)} /> Entiendo que cerrar es definitivo</label>
       <button type="button" className="action-trigger secondary" disabled={busy !== null || !windowOpen || !confirmClose || reasonProblem !== null}
-        onClick={() => void run('close', async () => { await bootstrapApi.closeInitialLoad(reason.trim()); setConfirmClose(false) })}>{busy === 'close' ? 'Cerrando…' : 'Cerrar la carga'}</button>
+        onClick={() => void run('close', async () => { await closeInitialLoad(bootstrapApi, reason.trim()); setConfirmClose(false) })}>{busy === 'close' ? 'Cerrando…' : 'Cerrar la carga'}</button>
     </div>
   </section>
 }

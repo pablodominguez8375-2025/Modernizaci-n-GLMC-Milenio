@@ -1,4 +1,5 @@
 /** #694 — Aplicar / abrir / cerrar la carga inicial y relectura. Solo el Máster; el servidor decide todo. Nunca se reproduce el contenido de las celdas. */
+import type { BootstrapApiClient } from './api/bootstrapApi'
 import type { InitialLoadFinding, InitialLoadPreviewResult } from './initialLoadPreview'
 
 export const MIN_REASON = 10
@@ -42,8 +43,9 @@ export function describeApplyCode(code: string): string { return applyErrors[cod
 export function describeApplyHttpError(status: number, code?: string): string {
   if (code && applyErrors[code]) return applyErrors[code]
   switch (status) {
-    case 401: return 'Su sesión venció. Ingrese de nuevo.'
+    case 401: return 'Su sesión venció o no ha ingresado. Ingrese de nuevo.'
     case 403: return 'Solo el Máster registrado en el servidor puede hacer esta operación.'
+    case 501: return 'En la demostración no se guarda nada: esta operación solo existe en el servidor real.'
     case 404: return 'Esta función no está habilitada en este servidor.'
     case 409: return 'La ventana de carga no lo permite en este momento.'
     case 413: return 'El envío es demasiado grande.'
@@ -92,3 +94,26 @@ export function describeReadBack(r: InitialLoadReadBack): string[] {
 export function blockerRows(blockers: InitialLoadFinding[] | undefined): { where: string; text: string }[] {
   return (blockers ?? []).map(b => ({ where: b.row > 0 ? `${b.sheet}, fila ${b.row}` : b.sheet, text: describeBlocker(b.code) }))
 }
+
+/** Error de una operación Máster; el texto en español sale de describeApplyHttpError. */
+export class InitialLoadOperationError extends Error { constructor(readonly status: number, readonly code?: string) { super(`initial-load ${status}`) } }
+
+async function call<T>(api: BootstrapApiClient, path: string, method: 'GET' | 'POST', body?: unknown): Promise<T> {
+  const token = api.useMocks ? undefined : await api.getAccessToken?.()
+  if (!token) throw new InitialLoadOperationError(api.useMocks ? 501 : 401)
+  const response = await fetch(`${api.baseUrl}/api/platform/bootstrap/initial-load/${path}`, {
+    method, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'omit', cache: 'no-store', redirect: 'error',
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+  })
+  if (response.status === 401) await api.onUnauthorized?.()
+  if (!response.ok) {
+    let code: string | undefined
+    try { code = ((await response.json()) as { code?: string }).code } catch { /* sin cuerpo */ }
+    throw new InitialLoadOperationError(response.status, code)
+  }
+  return response.json() as Promise<T>
+}
+export const applyInitialLoad = (api: BootstrapApiClient, files: Record<string, string>, receipt: string) => call<InitialLoadApplyResult>(api, 'apply', 'POST', { files, receipt })
+export const openInitialLoad = (api: BootstrapApiClient, reason: string) => call<InitialLoadWindowTransition>(api, 'window/open', 'POST', { reason })
+export const closeInitialLoad = (api: BootstrapApiClient, reason: string) => call<InitialLoadWindowTransition>(api, 'window/close', 'POST', { reason })
+export const initialLoadReadBack = (api: BootstrapApiClient) => call<InitialLoadReadBack>(api, 'result', 'GET')
