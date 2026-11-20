@@ -29,5 +29,5 @@ public static class InitialLoadExistingRecordPolicy
     /// and there are no contradictory/ambiguous keys. A safe plan is not GO.
     /// </summary>
     public static bool CanPresentPlan(IEnumerable<Match>? matches) =>
-        matches is not null && matches.All(m => !Inspect(m).BlocksBatch);
+        matches is not null && matches.Any() && matches.All(m => !Inspect(m).BlocksBatch);
 }
