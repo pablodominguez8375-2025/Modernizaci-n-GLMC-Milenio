@@ -101,6 +101,27 @@ public sealed class InitialLoadWorkshopCompositeKeyPolicyTests
             InitialLoadWorkshopCompositeKeyPolicy.Inspect(incoming, [Db()]));
     }
 
+    [Theory]
+    [InlineData(" 23", "SCL")]
+    [InlineData("023", "SCL")]
+    [InlineData("23", "scl")]
+    public void Format_only_collision_is_ambiguous_not_absent(string number, string oriente)
+    {
+        Assert.Equal(InitialLoadExistingRecordPolicy.Match.Ambiguous,
+            InitialLoadWorkshopCompositeKeyPolicy.Inspect(
+                In(), [Db(number: number, oriente: oriente)]));
+    }
+
+    [Fact]
+    public void Format_equivalent_persisted_keys_block_batch()
+    {
+        var result = InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(
+            [In()], [Db("A"), Db("B", number: "023", oriente: "scl")]);
+        Assert.Equal("SNAPSHOT_KEYS_AMBIGUOUS", result.Code);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+    }
+
     [Fact]
     public void Missing_snapshot_never_authorizes_new_record()
     {
