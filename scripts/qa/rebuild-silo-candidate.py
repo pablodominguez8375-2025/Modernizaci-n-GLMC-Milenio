@@ -135,7 +135,12 @@ def server_patch_evidence(image, output, source):
 # The go1.27.4 rebuild produces a NEW hash that must be read from CI evidence
 # and reviewed independently before being pinned (second commit). Until then
 # the VEX binding fails closed with 'rebuilt server binary review pending'.
-SERVER_BINARY = None
+# Candidate hash observed in GitHub Actions run 44660952266 (job 136038770720,
+# source f316733d, go1.27.4, golang digest 70bd7dde...): trivy found only the
+# VEX-covered CVE-2026-39414, IAM/recovery PASS. Pinned for a SECOND CI run that
+# must reproduce the same hash; independent review (ChatGPT) still required.
+# This SHA binding NEVER represents a signed release or host GO by itself.
+SERVER_BINARY = 'ff5046dab96d87a742ed5b90512b49f865cabe437271e61e45ba59d6451bf2ad'
 VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
 SERVER_VERSION = 'v0.0.0-20261027000322-dd905b29f45d'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@' + SERVER_VERSION
