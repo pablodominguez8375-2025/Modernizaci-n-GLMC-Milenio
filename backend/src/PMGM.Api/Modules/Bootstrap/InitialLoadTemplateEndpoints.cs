@@ -55,7 +55,10 @@ public static class InitialLoadTemplateEndpoints
             acceptsUploadedData = true,
             createsAccounts = false,
             assignsProfiles = false,
-            supportsApply = false
+            supportsApply = false,
+            requiresOperationalGoForRealData = true,
+            canonicalWorkshopCodeMappingVerified = false,
+            previewDoesNotAuthorizeImport = true
         });
     }
 
