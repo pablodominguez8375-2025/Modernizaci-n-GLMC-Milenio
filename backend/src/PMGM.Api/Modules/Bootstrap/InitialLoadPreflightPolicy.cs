@@ -149,6 +149,11 @@ public static class InitialLoadPreflightPolicy
                 !InstitutionalStatuses.Contains(Read(row, "institutionalStatus")))
                 Add(personFile, i + 2, "institutionalStatus", "INVALID_STATUS");
 
+            // Explicit, never inferred: only "regular" until the institution confirms a catalogue.
+            if (Required(personFile, i, row, "membershipType") &&
+                !string.Equals(Read(row, "membershipType"), "regular", StringComparison.Ordinal))
+                Add(personFile, i + 2, "membershipType", "INVALID_MEMBERSHIP_TYPE");
+
             var grade = Read(row, "grade");
             if (!new[] { "1", "2", "3" }.Contains(grade, StringComparer.Ordinal))
                 Add(personFile, i + 2, "grade", "INVALID_GRADE");
@@ -211,6 +216,9 @@ public static class InitialLoadPreflightPolicy
                 Add(officeFile, i + 2, "officeCode", "DUPLICATE");
             if (!officeCodes.Contains(officeCode))
                 Add(officeFile, i + 2, "officeCode", "UNKNOWN_OFFICE");
+            // Explicit period; never derived from startDate.
+            if (Required(officeFile, i, row, "period") && Read(row, "period").Length > 80)
+                Add(officeFile, i + 2, "period", "PERIOD_NOT_EXPLICIT");
             if (!DateOnly.TryParseExact(Read(row, "startDate"), "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
                 Add(officeFile, i + 2, "startDate", "INVALID_DATE");

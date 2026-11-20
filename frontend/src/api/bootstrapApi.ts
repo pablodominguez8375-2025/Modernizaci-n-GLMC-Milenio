@@ -58,8 +58,8 @@ const mockInitialLoadContract: InitialLoadContract = {
   status: 'TEMPLATE_ONLY', revision: 'INITIAL-LOAD-CSV-v1',
   files: [
     { name: 'Talleres.csv', columns: ['workshopCode', 'number', 'name', 'orienteCode', 'city', 'country'] },
-    { name: 'Hermanos.csv', columns: ['personRef', 'identityType', 'identityNumber', 'firstNames', 'lastNames', 'email', 'workshopCode', 'grade', 'institutionalStatus'] },
-    { name: 'CargosVigentes.csv', columns: ['personRef', 'workshopCode', 'officeCode', 'startDate'] },
+    { name: 'Hermanos.csv', columns: ['personRef', 'identityType', 'identityNumber', 'firstNames', 'lastNames', 'email', 'workshopCode', 'grade', 'institutionalStatus', 'membershipType'] },
+    { name: 'CargosVigentes.csv', columns: ['personRef', 'workshopCode', 'officeCode', 'startDate', 'period'] },
   ],
   requiresLegalApprovalBeforeRealData: true, acceptsUploadedData: false, createsAccounts: false, assignsProfiles: false, supportsApply: false,
 }

@@ -4,8 +4,8 @@ import { INITIAL_LOAD_FILE_NAMES, MAX_CHARACTERS_PER_FILE, checkChosenFile, chec
 
 const good = {
   'Talleres.csv': 'workshopCode,number,name,orienteCode,city,country\nT1,1,Taller Ficticio,O1,Ciudad,CL',
-  'Hermanos.csv': 'personRef,identityType,identityNumber,firstNames,lastNames,email,workshopCode,grade,institutionalStatus\nP1,rut,1-9,Ana,Ficticia,a@ejemplo.cl,T1,3,active',
-  'CargosVigentes.csv': 'personRef,workshopCode,officeCode,startDate\nP1,T1,office-1,2026-01-01',
+  'Hermanos.csv': 'personRef,identityType,identityNumber,firstNames,lastNames,email,workshopCode,grade,institutionalStatus,membershipType\nP1,rut,1-9,Ana,Ficticia,a@ejemplo.cl,T1,3,active,regular',
+  'CargosVigentes.csv': 'personRef,workshopCode,officeCode,startDate,period\nP1,T1,office-1,2026-01-01,2026',
 }
 
 describe('Carga inicial · revisión de los tres CSV (#750)', () => {

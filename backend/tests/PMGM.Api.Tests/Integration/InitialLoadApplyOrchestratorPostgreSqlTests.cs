@@ -245,6 +245,31 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
     }
 
     [Fact]
+    public async Task Three_canonical_csv_sheets_flow_through_adapter_into_the_orchestrator()
+    {
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await PrepareAsync(iso.Connection, ct);
+
+        var plan = InitialLoadPlanAdapter.Build(InitialLoadPlanAdapterTests.Sheets()).Plan!;
+        var result = await RunAsync(iso.Connection, Fp(), plan.Workshops, plan.Members, ct, offices: plan.Offices);
+        Assert.True(result.Applied, result.Code);
+        Assert.Equal((1, 1, 1, 1, 1, 2), await CountsAsync(iso.Connection, ct));
+
+        await using var core = Core(iso.Connection);
+        var office = await core.OfficeAssignments.SingleAsync(ct);
+        Assert.Equal("worshipful_master", office.OfficeType);
+        Assert.Equal("2026", office.Period);
+        Assert.Equal(new DateOnly(2026, 3, 1), office.StartDate);
+        var member = await core.Members.SingleAsync(ct);
+        Assert.Equal("master", member.CurrentDegree);
+        var membership = await core.Memberships.SingleAsync(ct);
+        Assert.Equal("regular", membership.MembershipType);
+        Assert.Equal("active", membership.Status);
+    }
+
+    [Fact]
     public async Task Three_parallel_identical_full_batches_apply_exactly_once()
     {
         if (string.IsNullOrWhiteSpace(Conn)) return;

@@ -24,12 +24,12 @@ public sealed class InitialLoadPreflightPolicyTests
             ["Hermanos.csv"] =
             [
                 Row("Hermanos.csv", "hermano1", "rut", "12.345.678-5", "Ejemplo",
-                    "Sintético", "qa@example.invalid", "taller23", "3", "active")
+                    "Sintético", "qa@example.invalid", "taller23", "3", "active", "regular")
             ],
             ["CargosVigentes.csv"] =
             [
                 Row("CargosVigentes.csv", "hermano1", "taller23", "worshipful_master",
-                    "2026-01-01")
+                    "2026-01-01", "2026")
             ]
         };
     }
@@ -225,5 +225,40 @@ public sealed class InitialLoadPreflightPolicyTests
         Assert.Single(result.Findings);
         Assert.Equal("INVALID_ROW_COUNT", result.Findings[0].Code);
         Assert.False(result.CanApply);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("honorary")]
+    public void Membership_type_must_be_explicit_regular(string value)
+    {
+        var sheets = Example();
+        Set(sheets, "Hermanos.csv", "membershipType", value);
+        var result = InitialLoadPreflightPolicy.Inspect(sheets);
+        Assert.False(result.Valid);
+        Assert.Contains(result.Findings, x => x.Field == "membershipType");
+    }
+
+    [Fact]
+    public void Period_must_be_explicit_and_is_never_inferred_from_start_date()
+    {
+        var sheets = Example();
+        Set(sheets, "CargosVigentes.csv", "period", "");
+        var result = InitialLoadPreflightPolicy.Inspect(sheets);
+        Assert.False(result.Valid);
+        Assert.Contains(result.Findings, x => x.Field == "period" && x.Code == "REQUIRED");
+
+        Set(sheets, "CargosVigentes.csv", "period", new string('x', 81));
+        Assert.Contains(InitialLoadPreflightPolicy.Inspect(sheets).Findings,
+            x => x.Field == "period" && x.Code == "PERIOD_NOT_EXPLICIT");
+    }
+
+    [Fact]
+    public void Old_contract_without_the_new_columns_is_rejected()
+    {
+        var sheets = Example();
+        ((Dictionary<string, string>)sheets["Hermanos.csv"][0]).Remove("membershipType");
+        ((Dictionary<string, string>)sheets["CargosVigentes.csv"][0]).Remove("period");
+        Assert.False(InitialLoadPreflightPolicy.Inspect(sheets).Valid);
     }
 }

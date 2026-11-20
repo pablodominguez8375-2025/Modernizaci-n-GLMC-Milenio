@@ -17,10 +17,10 @@ public sealed class InitialLoadTemplateTests
         Assert.Equal(new[]
             {
                 "personRef", "identityType", "identityNumber", "firstNames", "lastNames",
-                "email", "workshopCode", "grade", "institutionalStatus"
+                "email", "workshopCode", "grade", "institutionalStatus", "membershipType"
             },
             InitialLoadTemplateEndpoints.Sheets[1].Columns);
-        Assert.Equal(new[] { "personRef", "workshopCode", "officeCode", "startDate" },
+        Assert.Equal(new[] { "personRef", "workshopCode", "officeCode", "startDate", "period" },
             InitialLoadTemplateEndpoints.Sheets[2].Columns);
         Assert.DoesNotContain(InitialLoadTemplateEndpoints.Sheets,
             sheet => sheet.Columns.Any(column => column.StartsWith("password", StringComparison.OrdinalIgnoreCase)));

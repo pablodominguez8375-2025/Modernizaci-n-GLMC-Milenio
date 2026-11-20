@@ -23,12 +23,14 @@ export const initialLoadColumns: Record<InitialLoadFileName, InitialLoadColumn[]
     { key: 'workshopCode', label: 'Código del Taller', required: true, help: 'El mismo código que puso en el archivo de Talleres.', example: 'T23' },
     { key: 'grade', label: 'Grado', required: true, help: 'Escriba «Aprendiz», «Compañero» o «Maestro» (también sirve 1, 2 o 3).', example: 'Maestro' },
     { key: 'institutionalStatus', label: 'Estado institucional', required: true, help: 'Uno de: Activo, Inactivo, Ex activo, Retiro voluntario, Retiro forzoso, Reincorporado, Fallecido, Traslado de Taller.', example: 'Activo' },
+    { key: 'membershipType', label: 'Tipo de membresía', required: true, help: 'Escriba «Regular». No se asume: debe venir escrito en cada fila.', example: 'Regular' },
   ],
   'CargosVigentes.csv': [
     { key: 'personRef', label: 'Referencia del hermano', required: true, help: 'La misma referencia del hermano que puso en el archivo de Hermanos.', example: 'H0001' },
     { key: 'workshopCode', label: 'Código del Taller', required: true, help: 'El Taller donde ejerce el cargo; debe ser el mismo Taller de ese hermano.', example: 'T23' },
     { key: 'officeCode', label: 'Cargo', required: true, help: 'Nombre del cargo, tal como aparece en la lista de cargos de esta guía.', example: 'Venerable Maestro' },
     { key: 'startDate', label: 'Fecha de inicio', required: true, help: 'Desde cuándo ejerce el cargo, como día-mes-año.', example: '15-03-2026' },
+    { key: 'period', label: 'Período', required: true, help: 'Período del cargo, escrito explícitamente (por ejemplo 2026 o 2026-2027). No se calcula a partir de la fecha de inicio.', example: '2026' },
   ],
 }
 
@@ -67,6 +69,7 @@ const officeMap = lookup(officeOptions, {
   'guarda templo externo': 'outer_guard', retejador: 'outer_guard', secretario: 'secretary', secretaria: 'secretary', tesorero: 'treasurer', tesorera: 'treasurer',
   oradora: 'orator', hospitalario: 'hospitalaria', 'venerable maestra': 'worshipful_master', 'primer vigilante': 'first_warden', 'segundo vigilante': 'second_warden',
 })
+const membershipMap = lookup([{ code: 'regular', label: 'Regular' }])
 const identityMap = lookup([{ code: 'rut', label: 'RUT' }, { code: 'passport', label: 'Pasaporte' }])
 
 /* ---------------------------------------------------------------- CSV */
@@ -127,6 +130,7 @@ export function normalizeInitialLoadCsv(name: InitialLoadFileName, text: string)
       case 'identityType': return pick(identityMap)
       case 'grade': return pick(gradeMap)
       case 'institutionalStatus': return pick(statusMap)
+      case 'membershipType': return pick(membershipMap)
       case 'officeCode': return pick(officeMap)
       case 'startDate': return dateToIso(v)
       default: return v
@@ -159,6 +163,8 @@ const spanishFindingTexts: Record<string, string> = {
   INVALID_EMAIL: 'El correo no es válido',
   INVALID_IDENTITY_TYPE: 'Tipo de documento no reconocido: escriba RUT o Pasaporte',
   INVALID_IDENTITY: 'El RUT o pasaporte no es válido',
+  INVALID_MEMBERSHIP_TYPE: 'Tipo de membresía no reconocido: escriba Regular',
+  PERIOD_NOT_EXPLICIT: 'El período debe venir escrito explícitamente (máximo 80 caracteres)',
   INVALID_DATE: 'La fecha no es válida: use día-mes-año, por ejemplo 15-03-2026',
   INVALID_COLUMNS: 'La fila no tiene las columnas de la plantilla',
   INVALID_ROW_COUNT: 'El archivo tiene más filas que el máximo (2 000)',
@@ -167,6 +173,7 @@ const spanishFieldLabels: Record<string, string> = {
   workshopCode: 'Código del Taller', number: 'Número', name: 'Nombre del Taller', orienteCode: 'Código del Oriente', city: 'Ciudad', country: 'País',
   personRef: 'Referencia del hermano', identityType: 'Tipo de documento', identityNumber: 'Número de documento', firstNames: 'Nombres', lastNames: 'Apellidos',
   email: 'Correo electrónico', grade: 'Grado', institutionalStatus: 'Estado institucional', officeCode: 'Cargo', startDate: 'Fecha de inicio',
+  membershipType: 'Tipo de membresía', period: 'Período',
 }
 
 export const describeFindingEs = (code: string) => spanishFindingTexts[code]

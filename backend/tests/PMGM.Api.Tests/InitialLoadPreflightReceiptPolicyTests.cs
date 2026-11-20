@@ -32,8 +32,8 @@ public sealed class InitialLoadPreflightReceiptPolicyTests
             StringComparer.Ordinal);
         files["Talleres.csv"] += "qa23,23,Logia de prueba,STGO,Santiago,Chile\r\n";
         files["Hermanos.csv"] +=
-            "p1,passport,FAKE1234,Test,Member,test@example.invalid,qa23,3,active\r\n";
-        files["CargosVigentes.csv"] += "p1,qa23,worshipful_master,2026-01-01\r\n";
+            "p1,passport,FAKE1234,Test,Member,test@example.invalid,qa23,3,active,regular\r\n";
+        files["CargosVigentes.csv"] += "p1,qa23,worshipful_master,2026-01-01,2026\r\n";
         return files;
     }
 

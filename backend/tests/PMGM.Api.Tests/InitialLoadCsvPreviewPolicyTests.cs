@@ -14,9 +14,9 @@ public sealed class InitialLoadCsvPreviewPolicyTests
         files["Talleres.csv"] +=
             "taller23,23,\"Taller \"\"Sintético\"\"\",STGO,Santiago,Chile\r\n";
         files["Hermanos.csv"] +=
-            "persona1,rut,12.345.678-5,\"Nombre, Sintético\",Prueba,qa@example.invalid,taller23,3,active\n";
+            "persona1,rut,12.345.678-5,\"Nombre, Sintético\",Prueba,qa@example.invalid,taller23,3,active,regular\n";
         files["CargosVigentes.csv"] +=
-            "persona1,taller23,worshipful_master,2026-01-01";
+            "persona1,taller23,worshipful_master,2026-01-01,2026";
         return files;
     }
 
@@ -82,7 +82,7 @@ public sealed class InitialLoadCsvPreviewPolicyTests
     {
         var files = Synthetic();
         const string duplicate =
-            "persona2,rut,12.345.678-5,Otra,Persona,other@example.invalid,taller23,2,active\n";
+            "persona2,rut,12.345.678-5,Otra,Persona,other@example.invalid,taller23,2,active,regular\n";
         files["Hermanos.csv"] += duplicate;
         var result = InitialLoadCsvPreviewPolicy.Inspect(files);
 
@@ -122,7 +122,7 @@ public sealed class InitialLoadCsvPreviewPolicyTests
     {
         var files = Synthetic();
         files["CargosVigentes.csv"] +=
-            "\n" + "persona1,taller23,worshipful_master,2026-01-01";
+            "\n" + "persona1,taller23,worshipful_master,2026-01-01,2026";
         var result = InitialLoadCsvPreviewPolicy.Inspect(files);
 
         Assert.False(result.Valid);

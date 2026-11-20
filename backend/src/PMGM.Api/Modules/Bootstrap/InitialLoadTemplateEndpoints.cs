@@ -19,8 +19,8 @@ public static class InitialLoadTemplateEndpoints
         new("Talleres.csv", ["workshopCode", "number", "name", "orienteCode", "city", "country"]),
         new("Hermanos.csv",
             ["personRef", "identityType", "identityNumber", "firstNames", "lastNames",
-             "email", "workshopCode", "grade", "institutionalStatus"]),
-        new("CargosVigentes.csv", ["personRef", "workshopCode", "officeCode", "startDate"])
+             "email", "workshopCode", "grade", "institutionalStatus", "membershipType"]),
+        new("CargosVigentes.csv", ["personRef", "workshopCode", "officeCode", "startDate", "period"])
     ];
 
     public static IEndpointRouteBuilder MapInitialLoadTemplateEndpoints(
