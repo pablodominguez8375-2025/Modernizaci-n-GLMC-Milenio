@@ -116,7 +116,7 @@ public static class InitialLoadCsvPreviewEndpoints
             valid,
             structuralValidationPassed = valid,
             databaseReconciliationPerformed = false, // CSV-only preview; no Organization lookup.
-            canApply = false, // No transactional import endpoint yet.
+            canApply = receipt is not null && window.Status == InitialLoadWindow.Open, // Eligible batch, live receipt and open window; server still revalidates.
             writesPerformed = 0,
             status = valid ? "PREVIEW_VALID" : "PREVIEW_REQUIRES_CORRECTION",
             dataRowCounts = result.DataRowCounts,
