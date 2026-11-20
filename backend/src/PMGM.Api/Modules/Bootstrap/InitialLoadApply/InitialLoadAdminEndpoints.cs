@@ -59,8 +59,18 @@ public static class InitialLoadAdminEndpoints
         try
         {
             using var reader = new StreamReader(context.Request.Body);
-            var text = await reader.ReadToEndAsync(ct);
-            if (text.Length > 4096) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            // Bound allocation while reading: ReadToEndAsync would buffer an arbitrarily large body
+            // before the size check, allowing a request to exhaust memory.
+            var buffer = new char[4097];
+            var used = 0;
+            while (used < buffer.Length)
+            {
+                var count = await reader.ReadAsync(buffer.AsMemory(used), ct);
+                if (count == 0) break;
+                used += count;
+            }
+            if (used > 4096) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            var text = new string(buffer, 0, used);
             reason = JsonSerializer.Deserialize<ReasonRequest>(text,
                 new JsonSerializerOptions { MaxDepth = 4, PropertyNameCaseInsensitive = true })?.Reason;
         }
