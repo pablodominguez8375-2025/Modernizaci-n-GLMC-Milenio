@@ -58,6 +58,7 @@ public static class InitialLoadCsvPreviewPolicy
         var fields = new List<string>(columns.Length);
         var current = new StringBuilder();
         var quoted = false;
+        var afterClosingQuote = false;
         var rowNumber = 0;
         var complete = true;
         var atStart = csv.Length > 0 && csv[0] == '\uFEFF' ? 1 : 0;
@@ -92,21 +93,38 @@ public static class InitialLoadCsvPreviewPolicy
                         current.Append('"');
                         i++;
                     }
-                    else quoted = false;
+                    else
+                    {
+                        quoted = false;
+                        afterClosingQuote = true;
+                    }
                 }
                 else current.Append(c);
                 continue;
             }
 
-            if (c == '"' && current.Length == 0)
+            // RFC-style CSV: a quote may only open an empty field, and
+            // a closing quote must be followed by a delimiter or line end.
+            if (c == '"')
             {
+                if (current.Length != 0 || afterClosingQuote)
+                {
+                    complete = false;
+                    break;
+                }
                 quoted = true;
                 continue;
+            }
+            if (afterClosingQuote && c is not (',' or '\r' or '\n'))
+            {
+                complete = false;
+                break;
             }
             if (c == ',')
             {
                 fields.Add(current.ToString());
                 current.Clear();
+                afterClosingQuote = false;
                 continue;
             }
             if (c is '\r' or '\n')
@@ -115,6 +133,7 @@ public static class InitialLoadCsvPreviewPolicy
                     i++;
                 fields.Add(current.ToString());
                 current.Clear();
+                afterClosingQuote = false;
                 if (!FinishRow())
                 {
                     complete = false;
