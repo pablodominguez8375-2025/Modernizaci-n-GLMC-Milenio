@@ -184,6 +184,92 @@ public sealed class InitialLoadMasterFlowPostgreSqlTests
         Assert.Equal(1, await core.People.CountAsync(ct));
     }
 
+    /// <summary>The same flow through the REAL ASP.NET pipeline (routing, DI, authorization filters), with the test authentication scheme emitting a JWT-shaped Master.</summary>
+    [Fact]
+    public async Task Http_pipeline_master_flow_and_non_master_and_flag_off()
+    {
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await using (var core0 = new PmgmDbContext(new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(iso.Connection).Options))
+            await core0.Database.MigrateAsync(ct);
+        await using (var boot = new BootstrapDbContext(new DbContextOptionsBuilder<BootstrapDbContext>().UseNpgsql(iso.Connection).Options))
+        {
+            await boot.Database.MigrateAsync(ct);
+            boot.OfficeDefinitions.Add(new PMGM.Api.Modules.Bootstrap.Entities.OfficeDefinition
+            {
+                Code = "worshipful_master", Name = "Venerable Maestro (sintético)", Category = "administrative",
+                OrganizationType = BootstrapCodes.WorkshopType, IsPrimary = true, IsActive = true, SortOrder = 10
+            });
+            await boot.SaveChangesAsync(ct);
+        }
+
+        System.Net.Http.HttpClient Client(Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> f, bool master, string subject = MasterSub)
+        {
+            var c = f.CreateClient();
+            if (master) { c.DefaultRequestHeaders.Add("X-Test-Master-Subject", subject); c.DefaultRequestHeaders.Add("X-Test-Master-Issuer", Issuer); }
+            return c;
+        }
+        static System.Net.Http.StringContent Json(object o) => new(JsonSerializer.Serialize(o), Encoding.UTF8, "application/json");
+        async Task<(int, JsonElement)> Do(System.Net.Http.HttpClient c, string method, string path, object? body = null)
+        {
+            using var request = new System.Net.Http.HttpRequestMessage(new System.Net.Http.HttpMethod(method), "/api/platform/bootstrap/initial-load/" + path);
+            if (body is not null) request.Content = Json(body);
+            using var response = await c.SendAsync(request, ct);
+            var text = await response.Content.ReadAsStringAsync(ct);
+            return ((int)response.StatusCode, text.Length > 0 && text[0] is '{' ? JsonDocument.Parse(text).RootElement.Clone() : default);
+        }
+        var files = Csv();
+        void Settings(Microsoft.AspNetCore.Hosting.IWebHostBuilder b, bool enabled)
+        {
+            b.UseSetting("ConnectionStrings:MainDatabase", iso.Connection);
+            b.UseSetting("Authentication:Authority", Issuer);
+            b.UseSetting("InitialLoad:MasterSubject", MasterSub);
+            b.UseSetting("InitialLoad:MasterIssuer", Issuer);
+            b.UseSetting("InitialLoad:ApplyEnabled", enabled ? "true" : "false");
+            b.UseSetting("InitialLoad:ReceiptSecret", Secret);
+            b.UseSetting("InitialLoad:ExternalApprovalDigest", new string('c', 64));
+            // The endpoints authenticate the "Bearer" scheme explicitly; in CI that scheme's handler is the test authenticator
+            // (the same practice as every other HTTP workflow test), so the Master principal reaches the real handlers.
+            b.ConfigureServices(services => services.Configure<Microsoft.AspNetCore.Authentication.AuthenticationOptions>(o =>
+            {
+                var bearer = o.Schemes.Single(x => x.Name == JwtBearerDefaults.AuthenticationScheme);
+                bearer.HandlerType = typeof(LodgeManagementTestAuthenticationHandler);
+            }));
+        }
+
+        // Flag off: every new route is 404 even for the Master.
+        using (var off = new LodgeManagementWebApplicationFactory(iso.Connection).WithWebHostBuilder(b => Settings(b, false)))
+        using (var c = Client(off, true))
+        {
+            Assert.Equal(404, (await Do(c, "POST", "apply", new { files, receipt = "x" })).Item1);
+            Assert.Equal(404, (await Do(c, "POST", "window/open", new { reason = "Apertura de la carga inicial" })).Item1);
+            Assert.Equal(404, (await Do(c, "GET", "result")).Item1);
+        }
+
+        using var on = new LodgeManagementWebApplicationFactory(iso.Connection).WithWebHostBuilder(b => Settings(b, true));
+        using var anon = Client(on, false);
+        using var other = Client(on, true, "another-subject");
+        using var master = Client(on, true);
+        // Non-Master (plain admin or another subject) never passes.
+        Assert.Equal(403, (await Do(anon, "POST", "window/open", new { reason = "Apertura de la carga inicial" })).Item1);
+        Assert.Equal(403, (await Do(other, "POST", "window/open", new { reason = "Apertura de la carga inicial" })).Item1);
+        Assert.Equal(403, (await Do(other, "GET", "result")).Item1);
+
+        var pv = await Do(master, "POST", "preview", files);
+        Assert.Equal(200, pv.Item1);
+        var receipt = pv.Item2.GetProperty("receipt").GetString()!;
+        Assert.Equal(409, (await Do(master, "POST", "apply", new { files, receipt })).Item1);
+        Assert.Equal(200, (await Do(master, "POST", "window/open", new { reason = "Apertura de la carga inicial" })).Item1);
+        Assert.Equal(200, (await Do(master, "POST", "apply", new { files, receipt })).Item1);
+        var rb = await Do(master, "GET", "result");
+        Assert.Equal(200, rb.Item1);
+        Assert.Equal(1, rb.Item2.GetProperty("members").GetInt32());
+        Assert.Equal(1, rb.Item2.GetProperty("officeAssignments").GetInt32());
+        Assert.Equal(200, (await Do(master, "POST", "window/close", new { reason = "Cierre de la carga inicial" })).Item1);
+        Assert.Equal(409, (await Do(master, "POST", "apply", new { files, receipt })).Item1);
+    }
+
     private sealed class IsolatedDb : IAsyncDisposable
     {
         private readonly string _admin;

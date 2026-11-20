@@ -15,7 +15,7 @@ namespace PMGM.Api.Modules.Bootstrap.InitialLoadApply;
 /// Identity is (Number, OrienteCode) via the composite policy; the CSV workshopCode is
 /// local to the batch and is never persisted or matched against the database.
 /// Never logs or returns submitted values: only redacted counts and stable codes.
-/// Real-data use additionally requires legal sign-off and a separate GO.
+/// Institutional authorization for real data is external to the software; using real data in an environment still needs the phase GO.
 /// </summary>
 public sealed class InitialLoadWorkshopApplyService(BootstrapDbContext db)
 {

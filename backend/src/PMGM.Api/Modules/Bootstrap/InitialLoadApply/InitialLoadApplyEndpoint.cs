@@ -12,7 +12,7 @@ namespace PMGM.Api.Modules.Bootstrap.InitialLoadApply;
 /// ALWAYS recomputed here from the received CSV bytes with a server-held HMAC secret and bound to a
 /// still-valid preflight receipt; nothing the client sends is trusted as a fingerprint. Actor and
 /// correlation come from the authenticated principal / request, never from the CSV or body.
-/// Responses carry codes and counts only. Real data still requires legal sign-off and a separate GO.
+/// Responses carry codes and counts only. The institution's authorization to process real data is EXTERNAL to the software (no per-import legal gate here); loading real data in an environment still needs the phase GO.
 /// </summary>
 public static class InitialLoadApplyEndpoint
 {
