@@ -46,6 +46,9 @@ def export_source(source, expected, destination):
     return digest
 
 
+FETCH_STAGES = ('token', 'index', 'manifest', 'config', 'attestation', 'attestation_blob', 'license')
+
+
 def failure_details(error):
     # Record useful, bounded diagnostics without URLs, headers or exception text.
     details = {'type': type(error).__name__}
@@ -53,6 +56,18 @@ def failure_details(error):
         details['exit'] = error.returncode
     if isinstance(error, urllib.error.HTTPError):
         details['http_status'] = error.code
+    stage = getattr(error, 'pmgm_stage', None)
+    if stage in FETCH_STAGES:
+        # Only for fetches labelled by verify-silo-supply.fetch: closed enum, never a URL.
+        details['fetch_stage'] = stage
+        if isinstance(error, urllib.error.HTTPError):
+            # Separates non-transient 4xx from 429/5xx before any retry policy is considered.
+            details['failure_class'] = ('rate_limited' if error.code == 429 else 'server_error' if error.code >= 500
+                                        else 'client_error' if error.code >= 400 else 'other_http')
+            if isinstance(getattr(error, 'pmgm_redirected', None), bool):
+                details['redirected'] = error.pmgm_redirected
+        else:
+            details['failure_class'] = 'timeout' if isinstance(error, TimeoutError) else 'network'
     return details
 
 
@@ -304,7 +319,7 @@ def main():
         supplier = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(supplier)
         report['vendor_registry'] = supplier.registry_evidence()
-        license_bytes = supplier.fetch('https://raw.githubusercontent.com/pgsty/silo/' + SERVER_SOURCE + '/LICENSE')
+        license_bytes = supplier.fetch('https://raw.githubusercontent.com/pgsty/silo/' + SERVER_SOURCE + '/LICENSE', stage='license')
         license_sha = hashlib.sha256(license_bytes).hexdigest()
         if license_sha != '0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0':
             raise ValueError('vendor license mismatch')
