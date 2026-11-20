@@ -24,7 +24,9 @@ public static class InitialLoadWorkshopBatchPolicy
 
         // Do not permit a corrupt or noncanonical mapping to make a row look
         // absent. Empty or duplicate DB keys are always an ambiguous snapshot.
-        if (existing.Any(x => string.IsNullOrWhiteSpace(x.Code)) ||
+        if (existing.Any(x => x is null || string.IsNullOrWhiteSpace(x.Code) ||
+            string.IsNullOrWhiteSpace(x.Number) || string.IsNullOrWhiteSpace(x.Name) ||
+            string.IsNullOrWhiteSpace(x.City) || string.IsNullOrWhiteSpace(x.Country)) ||
             existing.GroupBy(x => x.Code, StringComparer.Ordinal)
                 .Any(g => g.Count() > 1))
             return Deny("SNAPSHOT_KEYS_AMBIGUOUS", existing.Count);
