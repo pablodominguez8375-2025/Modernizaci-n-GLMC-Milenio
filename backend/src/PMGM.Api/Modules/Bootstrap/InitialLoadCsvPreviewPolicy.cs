@@ -46,6 +46,23 @@ public static class InitialLoadCsvPreviewPolicy
     }
 
     /// <summary>
+    /// Parses the three sheets into canonical rows. Returns null unless the bounded shape policy
+    /// accepts every file. Cells stay in memory only; callers must never log or echo them.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>? TryParseSheets(
+        IReadOnlyDictionary<string, string>? csvFiles)
+    {
+        if (csvFiles is null || !InitialLoadCsvShapePolicy.Inspect(csvFiles).Valid) return null;
+        var rows = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal);
+        foreach (var definition in InitialLoadTemplateEndpoints.Sheets)
+        {
+            if (!TryReadValidatedRows(csvFiles[definition.Name], definition.Columns, out var parsed)) return null;
+            rows.Add(definition.Name, parsed);
+        }
+        return rows;
+    }
+
+    /// <summary>
     /// Consumes only CSV already accepted by the bounded shape policy. Cells
     /// exist temporarily in this method and cannot escape in result/errors.
     /// Multiline quoted values are not supported by the shape contract.

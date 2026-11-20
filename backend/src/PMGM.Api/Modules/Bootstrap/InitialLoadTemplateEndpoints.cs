@@ -36,6 +36,11 @@ public static class InitialLoadTemplateEndpoints
                 InitialLoadCsvPreviewEndpoints.PreviewAsync)
             .RequireAuthorization()
             .WithTags("Bootstrap institucional — Carga inicial");
+        // Disabled by default (404 unless InitialLoad:ApplyEnabled == "true"); see InitialLoadApplyEndpoint.
+        endpoints.MapPost("/api/platform/bootstrap/initial-load/apply",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyEndpoint.ApplyAsync)
+            .RequireAuthorization()
+            .WithTags("Bootstrap institucional — Carga inicial");
         return endpoints;
     }
 

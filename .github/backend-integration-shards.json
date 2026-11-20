@@ -65,6 +65,7 @@
       "InitialLoadBatchLedgerPostgreSqlTests",
       "InitialLoadWorkshopApplyPostgreSqlTests",
       "InitialLoadApplyOrchestratorPostgreSqlTests",
+      "InitialLoadApplyEndpointPostgreSqlTests",
       "WorkshopRegistryHttpTests"
     ],
     "b": [
