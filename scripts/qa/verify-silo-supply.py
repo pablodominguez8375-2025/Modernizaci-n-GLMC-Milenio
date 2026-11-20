@@ -28,7 +28,6 @@ def fetch(url, headers=None, maximum=32 * 1024 * 1024, stage=None):
     try:
         with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=60) as response:
             value = response.read(maximum + 1)
-            final_url = response.geturl()
     except urllib.error.URLError as error:
         if stage in FETCH_STAGES:
             error.pmgm_stage = stage
