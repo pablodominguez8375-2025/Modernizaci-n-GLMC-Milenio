@@ -97,6 +97,8 @@ public static class InitialLoadCsvPreviewEndpoints
         return Results.Ok(new
         {
             valid,
+            structuralValidationPassed = valid,
+            databaseReconciliationPerformed = false, // CSV-only preview; no Organization lookup.
             canApply = false, // No transactional import endpoint yet.
             writesPerformed = 0,
             status = valid ? "PREVIEW_VALID" : "PREVIEW_REQUIRES_CORRECTION",

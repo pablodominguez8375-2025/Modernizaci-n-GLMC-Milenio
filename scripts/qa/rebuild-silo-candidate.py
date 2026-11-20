@@ -46,6 +46,9 @@ def export_source(source, expected, destination):
     return digest
 
 
+FETCH_STAGES = ('token', 'index', 'manifest', 'config', 'attestation', 'attestation_blob', 'license')
+
+
 def failure_details(error):
     # Record useful, bounded diagnostics without URLs, headers or exception text.
     details = {'type': type(error).__name__}
@@ -53,6 +56,18 @@ def failure_details(error):
         details['exit'] = error.returncode
     if isinstance(error, urllib.error.HTTPError):
         details['http_status'] = error.code
+    stage = getattr(error, 'pmgm_stage', None)
+    if stage in FETCH_STAGES:
+        # Only for fetches labelled by verify-silo-supply.fetch: closed enum, never a URL.
+        details['fetch_stage'] = stage
+        if isinstance(error, urllib.error.HTTPError):
+            # Separates non-transient 4xx from 429/5xx before any retry policy is considered.
+            details['failure_class'] = ('rate_limited' if error.code == 429 else 'server_error' if error.code >= 500
+                                        else 'client_error' if error.code >= 400 else 'other_http')
+            if isinstance(getattr(error, 'pmgm_redirected', None), bool):
+                details['redirected'] = error.pmgm_redirected
+        else:
+            details['failure_class'] = 'timeout' if isinstance(error, TimeoutError) else 'network'
     return details
 
 
@@ -106,7 +121,7 @@ def server_patch_evidence(image, output, source):
                 'fix_commit': SERVER_FIX, 'fix_ancestry_verified': True,
                 'source_files': files, 'server_binary_sha256': hashes[1],
                 'vendor_server_binary_sha256': hashes[0],
-                'server_build_toolchain': 'go1.27.3',
+                'server_build_toolchain': 'go1.27.4',
                 'server_source_rebuilt': True,
                 'candidate_image_id': image, 'server_binary_preserved': False,
                 'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
@@ -130,7 +145,17 @@ def server_patch_evidence(image, output, source):
 # restricted to pinned source/fix ancestry, parser blobs and binary-linked VEX.
 # IAM/recovery/S3 select regression PASS in ephemeral runner only.
 # This SHA binding NEVER represents a signed release or host GO by itself.
-SERVER_BINARY = '89a4b84b84cb293dbf75702af2bbbb23df87b05ae79803bc6b9df9adf59878eb'
+# CVE-2026-97054 (Go stdlib 1.27.3 -> 1.27.4): the Go 1.27.3 binary pin
+# 89a4b84b84cb293dbf75702af2bbbb23df87b05ae79803bc6b9df9adf59878eb is retired.
+# The go1.27.4 rebuild produces a NEW hash that must be read from CI evidence
+# and reviewed independently before being pinned (second commit). Until then
+# the VEX binding fails closed with 'rebuilt server binary review pending'.
+# Candidate hash observed in GitHub Actions run 44660952266 (job 136038770720,
+# source f316733d, go1.27.4, golang digest 70bd7dde...): trivy found only the
+# VEX-covered CVE-2026-39414, IAM/recovery PASS. Pinned for a SECOND CI run that
+# must reproduce the same hash; independent review (ChatGPT) still required.
+# This SHA binding NEVER represents a signed release or host GO by itself.
+SERVER_BINARY = 'ff5046dab96d87a742ed5b90512b49f865cabe437271e61e45ba59d6451bf2ad'
 VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
 SERVER_VERSION = 'v0.0.0-20261027000322-dd905b29f45d'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@' + SERVER_VERSION
@@ -146,7 +171,7 @@ def fixed_component_vex(evidence, image):
                 'server_binary_sha256': SERVER_BINARY, 'candidate_image_id': image,
                 'server_binary_preserved': False,
                 'vendor_server_binary_sha256': VENDOR_SERVER_BINARY,
-                'server_build_toolchain': 'go1.27.3', 'server_source_rebuilt': True,
+                'server_build_toolchain': 'go1.27.4', 'server_source_rebuilt': True,
                 'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED'}
     if re.fullmatch(r'sha256:[0-9a-f]{64}', image) is None:
         raise ValueError('invalid VEX image binding')
@@ -251,7 +276,7 @@ def verify_go_inventory(inventory):
         raise ValueError('server go-jose version missing or incorrect in scan')
     for target in ('usr/bin/silo', 'usr/bin/mcli'):
         rows = [r for r in results if r.get('Target') == target]
-        if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
+        if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.4'
                 for p in rows[0].get('Packages', [])):
             raise ValueError('Go toolchain missing or incorrect in scan')
         # Authoritative built-package inventory, not a source-text declaration.
@@ -294,7 +319,7 @@ def main():
         supplier = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(supplier)
         report['vendor_registry'] = supplier.registry_evidence()
-        license_bytes = supplier.fetch('https://raw.githubusercontent.com/pgsty/silo/' + SERVER_SOURCE + '/LICENSE')
+        license_bytes = supplier.fetch('https://raw.githubusercontent.com/pgsty/silo/' + SERVER_SOURCE + '/LICENSE', stage='license')
         license_sha = hashlib.sha256(license_bytes).hexdigest()
         if license_sha != '0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0':
             raise ValueError('vendor license mismatch')

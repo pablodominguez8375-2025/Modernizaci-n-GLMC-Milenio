@@ -26,12 +26,12 @@ class SiloRebuildContractTests(unittest.TestCase):
         import copy
         inventory = {'Results': [
             {'Target': 'usr/bin/silo', 'Packages': [
-                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'stdlib', 'Version': 'v1.27.4'},
                 {'Name': 'github.com/minio/minio', 'Version': rebuild.SERVER_PURL.rsplit('@', 1)[1]},
                 {'Name': 'github.com/go-jose/go-jose/v4', 'Version': rebuild.SERVER_GO_JOSE_VERSION},
                 {'Name': 'golang.org/x/net', 'Version': rebuild.XNET_SECURITY_FLOOR}]},
             {'Target': 'usr/bin/mcli', 'Packages': [
-                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'stdlib', 'Version': 'v1.27.4'},
                 {'Name': 'golang.org/x/net', 'Version': rebuild.XNET_SECURITY_FLOOR}]},
         ]}
         rebuild.verify_go_inventory(inventory)
@@ -45,12 +45,12 @@ class SiloRebuildContractTests(unittest.TestCase):
         import copy
         inventory = {'Results': [
             {'Target': 'usr/bin/silo', 'Packages': [
-                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'stdlib', 'Version': 'v1.27.4'},
                 {'Name': 'github.com/minio/minio', 'Version': rebuild.SERVER_VERSION},
                 {'Name': 'github.com/go-jose/go-jose/v4', 'Version': rebuild.SERVER_GO_JOSE_VERSION},
                 {'Name': 'golang.org/x/net', 'Version': 'v0.62.0'}]},
             {'Target': 'usr/bin/mcli', 'Packages': [
-                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'stdlib', 'Version': 'v1.27.4'},
                 {'Name': 'golang.org/x/net', 'Version': 'v0.62.0'}]},
         ]}
         rebuild.verify_go_inventory(inventory)
@@ -247,7 +247,7 @@ class SiloRebuildContractTests(unittest.TestCase):
                     'server_binary_sha256': rebuild.SERVER_BINARY, 'candidate_image_id': image,
                     'server_binary_preserved': False,
               'vendor_server_binary_sha256': rebuild.VENDOR_SERVER_BINARY,
-              'server_build_toolchain': 'go1.27.3', 'server_source_rebuilt': True,
+              'server_build_toolchain': 'go1.27.4', 'server_source_rebuilt': True,
                     'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
                     'source_files': {k: {'git_blob': v} for k, v in rebuild.SERVER_BLOBS.items()}}
         vex = rebuild.fixed_component_vex(evidence, image)
@@ -270,7 +270,7 @@ class SiloRebuildContractTests(unittest.TestCase):
         script = (ROOT / 'scripts/qa/rebuild-silo-candidate.py').read_text()
         self.assertIn('go build -mod=readonly', dockerfile)
         self.assertIn('GOTOOLCHAIN=local', dockerfile)
-        self.assertIn('go1.27.3', dockerfile)
+        self.assertIn('go1.27.4', dockerfile)
         self.assertIn('COPY --from=silo-build /out/silo', dockerfile)
         self.assertIn(rebuild.SERVER_SOURCE, dockerfile)
         self.assertIn(rebuild.SERVER_VERSION, dockerfile)

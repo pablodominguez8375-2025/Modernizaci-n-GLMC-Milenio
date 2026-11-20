@@ -20,9 +20,25 @@ ACCEPT = ', '.join(['application/vnd.oci.image.index.v1+json', 'application/vnd.
                     'application/vnd.docker.distribution.manifest.list.v2+json', 'application/vnd.docker.distribution.manifest.v2+json'])
 
 
-def fetch(url, headers=None, maximum=32 * 1024 * 1024):
-    with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=60) as response:
-        value = response.read(maximum + 1)
+FETCH_STAGES = ('token', 'index', 'manifest', 'config', 'attestation', 'attestation_blob', 'license')
+
+
+def fetch(url, headers=None, maximum=32 * 1024 * 1024, stage=None):
+    # `stage` only labels failures (closed allowlist); it never changes behaviour.
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=60) as response:
+            value = response.read(maximum + 1)
+    except urllib.error.URLError as error:
+        if stage in FETCH_STAGES:
+            error.pmgm_stage = stage
+            if isinstance(error, urllib.error.HTTPError):
+                # Boolean only: lets reviewers test the redirect hypothesis without exposing any URL.
+                error.pmgm_redirected = error.geturl() != url
+        raise
+    except TimeoutError as error:
+        if stage in FETCH_STAGES:
+            error.pmgm_stage = stage
+        raise
     if len(value) > maximum:
         raise ValueError('oversized response')
     return value
@@ -33,23 +49,23 @@ def digest(value):
 
 
 def registry_evidence():
-    token = json.loads(fetch('https://auth.docker.io/token?service=registry.docker.io&scope=repository:pgsty/silo:pull'))['token']
+    token = json.loads(fetch('https://auth.docker.io/token?service=registry.docker.io&scope=repository:pgsty/silo:pull', stage='token'))['token']
     headers = {'Authorization': 'Bearer ' + token, 'Accept': ACCEPT}
     base = 'https://registry-1.docker.io/v2/pgsty/silo/'
-    def get(kind, sha):
-        raw = fetch(base + kind + '/' + sha, headers)
+    def get(kind, sha, stage):
+        raw = fetch(base + kind + '/' + sha, headers, stage=stage)
         if digest(raw) != sha:
             raise ValueError('digest mismatch')
         return json.loads(raw)
     index_sha = IMAGE.split('@', 1)[1]
-    index = get('manifests', index_sha)
+    index = get('manifests', index_sha, 'index')
     candidates = [m for m in index['manifests'] if m.get('platform', {}).get('os') == 'linux'
                   and m.get('platform', {}).get('architecture') == 'amd64']
     if len(candidates) != 1:
         raise ValueError('ambiguous platform')
     child_sha = candidates[0]['digest']
-    child = get('manifests', child_sha)
-    config = get('blobs', child['config']['digest'])
+    child = get('manifests', child_sha, 'manifest')
+    config = get('blobs', child['config']['digest'], 'config')
     if config.get('architecture') != 'amd64' or config.get('os') != 'linux':
         raise ValueError('config platform mismatch')
     predicates = []
@@ -57,10 +73,10 @@ def registry_evidence():
         annotations = descriptor.get('annotations', {})
         if annotations.get('vnd.docker.reference.digest') != child_sha:
             continue
-        attestation = get('manifests', descriptor['digest'])
+        attestation = get('manifests', descriptor['digest'], 'attestation')
         for layer in attestation.get('layers', []):
             if layer.get('mediaType') == 'application/vnd.in-toto+json':
-                statement = get('blobs', layer['digest'])
+                statement = get('blobs', layer['digest'], 'attestation_blob')
                 subjects = statement.get('subject', [])
                 bound = any(s.get('digest', {}).get('sha256') == child_sha.split(':')[1] for s in subjects)
                 if not bound:
