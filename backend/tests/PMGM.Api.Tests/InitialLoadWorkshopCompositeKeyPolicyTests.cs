@@ -84,6 +84,23 @@ public sealed class InitialLoadWorkshopCompositeKeyPolicyTests
             InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity([], []).Code);
     }
 
+    [Theory]
+    [InlineData("Name")]
+    [InlineData("City")]
+    [InlineData("Country")]
+    public void Incomplete_incoming_attributes_cannot_be_classified_as_absent(string field)
+    {
+        var incoming = In(number: "24");
+        incoming = field switch
+        {
+            "Name" => incoming with { Name = "" },
+            "City" => incoming with { City = "" },
+            _ => incoming with { Country = "" }
+        };
+        Assert.Equal(InitialLoadExistingRecordPolicy.Match.Unresolved,
+            InitialLoadWorkshopCompositeKeyPolicy.Inspect(incoming, [Db()]));
+    }
+
     [Fact]
     public void Missing_snapshot_never_authorizes_new_record()
     {
