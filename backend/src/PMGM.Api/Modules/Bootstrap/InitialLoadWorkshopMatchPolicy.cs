@@ -23,7 +23,9 @@ public static class InitialLoadWorkshopMatchPolicy
 
         // An incomplete canonical snapshot cannot establish absence safely.
         // Do not interpret a missing persisted code as permission to create.
-        if (snapshot.Any(x => x is null || string.IsNullOrWhiteSpace(x.Code)))
+        if (snapshot.Any(x => x is null || string.IsNullOrWhiteSpace(x.Code) ||
+            string.IsNullOrWhiteSpace(x.Number) || string.IsNullOrWhiteSpace(x.Name) ||
+            string.IsNullOrWhiteSpace(x.City) || string.IsNullOrWhiteSpace(x.Country)))
             return InitialLoadExistingRecordPolicy.Match.Unresolved;
 
         var matches = snapshot.Where(x =>
