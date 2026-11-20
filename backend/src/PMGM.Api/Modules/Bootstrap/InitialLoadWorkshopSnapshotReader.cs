@@ -32,6 +32,21 @@ internal static class InitialLoadWorkshopSnapshotReader
     }
 
     /// <summary>
+    /// Conservative workshop candidate projection. A candidate is not an
+    /// identity match: Number is deliberately NOT mapped to workshopCode.
+    /// Reconciliation remains blocked until a canonical source is approved.
+    /// </summary>
+    internal static async Task<IReadOnlyList<Workshop>> ReadWorkshopCandidatesAsync(
+        BootstrapDbContext db, CancellationToken cancellationToken)
+    {
+        return await db.Organizations.AsNoTracking()
+            .Where(x => x.Type == "workshop")
+            .Select(x => new Workshop(x.Id, x.Name, x.Number, x.Type,
+                x.OrienteCode, x.City, x.Country))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Database-backed inventory for an internal preflight. These counts are
     /// diagnostic only: neither Type nor Number establishes the canonical
     /// workshopCode mapping. No personal data, identifiers or names escape.
