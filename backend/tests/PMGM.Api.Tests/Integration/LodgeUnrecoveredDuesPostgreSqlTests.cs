@@ -24,6 +24,8 @@ public sealed class LodgeUnrecoveredDuesPostgreSqlTests
         var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connection)) return;
         var ct = TestContext.Current.CancellationToken;
+        // The server requires RecognitionDate == Today() (America/Santiago): never capture it just before midnight.
+        await SantiagoMidnightGuard.WaitIfNearMidnightAsync(cancellationToken: ct);
         using var factory = new PmgmWebApplicationFactory(connection);
         using var client = factory.CreateClient();
         var today = GrandTreasuryTariff.Today();
