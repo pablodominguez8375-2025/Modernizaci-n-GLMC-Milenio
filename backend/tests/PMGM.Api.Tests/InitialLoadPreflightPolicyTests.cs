@@ -166,6 +166,39 @@ public sealed class InitialLoadPreflightPolicyTests
     }
 
     [Fact]
+    public void Duplicate_office_mandate_is_blocked_without_exposing_values()
+    {
+        var sheets = Example();
+        sheets["CargosVigentes.csv"] =
+        [
+            sheets["CargosVigentes.csv"][0],
+            new Dictionary<string, string>(sheets["CargosVigentes.csv"][0])
+        ];
+        var result = InitialLoadPreflightPolicy.Inspect(sheets);
+        Assert.False(result.Valid);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+        Assert.Contains(result.Findings, x => x.Sheet == "CargosVigentes.csv" &&
+            x.Row == 3 && x.Field == "officeCode" && x.Code == "DUPLICATE");
+        Assert.DoesNotContain("hermano1", System.Text.Json.JsonSerializer.Serialize(result));
+        Assert.DoesNotContain("taller23", System.Text.Json.JsonSerializer.Serialize(result));
+    }
+
+    [Fact]
+    public void Different_office_start_dates_are_distinct_mandates()
+    {
+        var sheets = Example();
+        var second = new Dictionary<string, string>(sheets["CargosVigentes.csv"][0])
+        {
+            ["startDate"] = "2027-01-01"
+        };
+        sheets["CargosVigentes.csv"] = [sheets["CargosVigentes.csv"][0], second];
+        var result = InitialLoadPreflightPolicy.Inspect(sheets);
+        Assert.True(result.Valid, string.Join(", ", result.Findings.Select(x => x.Code)));
+        Assert.False(result.CanApply);
+    }
+
+    [Fact]
     public void Rejects_unknown_columns_and_unknown_files_without_echoing_names()
     {
         var sheets = Example();
