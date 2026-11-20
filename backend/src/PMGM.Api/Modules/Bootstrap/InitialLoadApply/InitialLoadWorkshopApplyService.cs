@@ -38,7 +38,8 @@ public sealed class InitialLoadWorkshopApplyService(BootstrapDbContext db)
         IReadOnlyList<InitialLoadWorkshopMatchPolicy.Incoming>? incoming,
         string actorSubject,
         string correlationId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<CancellationToken, Task<string?>>? additionalStages = null)
     {
         if (!applyEnabled) return Result.Denied("APPLY_DISABLED");
         if (string.IsNullOrWhiteSpace(actorSubject) || string.IsNullOrWhiteSpace(correlationId))
@@ -61,7 +62,7 @@ public sealed class InitialLoadWorkshopApplyService(BootstrapDbContext db)
         try
         {
             var result = await ExecuteAsync(
-                verifiedBatchFingerprint!, incoming, actorSubject, correlationId, cancellationToken);
+                verifiedBatchFingerprint!, incoming, actorSubject, correlationId, additionalStages, cancellationToken);
             if (result.Applied)
             {
                 if (ownsTransaction) await transaction.CommitAsync(cancellationToken);
@@ -95,7 +96,8 @@ public sealed class InitialLoadWorkshopApplyService(BootstrapDbContext db)
     private async Task<Result> ExecuteAsync(
         string fingerprint,
         IReadOnlyList<InitialLoadWorkshopMatchPolicy.Incoming> incoming,
-        string actorSubject, string correlationId, CancellationToken ct)
+        string actorSubject, string correlationId,
+        Func<CancellationToken, Task<string?>>? additionalStages, CancellationToken ct)
     {
         await db.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '10s'", ct);
         await db.Database.ExecuteSqlRawAsync("SET LOCAL statement_timeout = '60s'", ct);
@@ -153,6 +155,14 @@ public sealed class InitialLoadWorkshopApplyService(BootstrapDbContext db)
                 OrienteCode = row.OrienteCode, City = row.City, Country = row.Country,
                 Status = "active", Origin = OriginInitialLoad
             });
+        }
+        // Later entity stages (Hermanos, Cargos) run INSIDE this same transaction, BEFORE the
+        // ledger can become applied. A non-null code denies and rolls back everything.
+        if (additionalStages is not null)
+        {
+            await db.SaveChangesAsync(ct); // workshops must be visible to later stages in this tx
+            var stageCode = await additionalStages(ct);
+            if (stageCode is not null) return Result.Denied(stageCode);
         }
         db.AuditEvents.Add(Audit(appliedId, now, ApplyAction, "applied", actorSubject, correlationId,
             $$"""{"workshops":{{toCreate.Length}},"exact":{{plan.ExactSkips}}}"""));
