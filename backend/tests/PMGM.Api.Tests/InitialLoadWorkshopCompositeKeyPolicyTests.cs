@@ -123,6 +123,30 @@ public sealed class InitialLoadWorkshopCompositeKeyPolicyTests
     }
 
     [Fact]
+    public void Format_equivalent_incoming_keys_block_batch_before_any_plan()
+    {
+        var result = InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(
+            [In("CSV1"), In("CSV2", "023", "scl")], []);
+        Assert.False(result.Valid);
+        Assert.Equal("BATCH_KEYS_INVALID_OR_DUPLICATE", result.Code);
+        Assert.Equal(0, result.NewRows);
+        Assert.Equal(0, result.ExactSkips);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+    }
+
+    [Fact]
+    public void Same_number_in_distinct_orientes_remains_distinct_in_batch()
+    {
+        var result = InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(
+            [In("CSV1", "23", "SCL"), In("CSV2", "23", "VAL")], []);
+        Assert.True(result.Valid);
+        Assert.Equal(2, result.NewRows);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+    }
+
+    [Fact]
     public void Missing_snapshot_never_authorizes_new_record()
     {
         Assert.Equal(InitialLoadExistingRecordPolicy.Match.Unresolved,
