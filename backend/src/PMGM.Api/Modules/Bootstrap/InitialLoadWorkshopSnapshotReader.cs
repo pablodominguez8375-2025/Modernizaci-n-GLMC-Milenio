@@ -48,6 +48,28 @@ internal static class InitialLoadWorkshopSnapshotReader
     }
 
     /// <summary>
+    /// Read-only composite identity plan over a real PostgreSQL workshop snapshot.
+    /// The persisted organization has NO CSV workshopCode: use an empty local
+    /// placeholder, never map Number to Code. Only redacted counts leave this method.
+    /// This is internal-only and never authorizes Apply.
+    /// </summary>
+    internal static async Task<InitialLoadWorkshopBatchPolicy.Result> InspectCompositePlanAsync(
+        BootstrapDbContext db,
+        IReadOnlyList<InitialLoadWorkshopMatchPolicy.Incoming>? incoming,
+        CancellationToken cancellationToken)
+    {
+        if (incoming is null)
+            return InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(null, null);
+
+        var workshops = await ReadWorkshopCandidatesAsync(db, cancellationToken);
+        var existing = workshops.Select(x => new InitialLoadWorkshopMatchPolicy.Existing(
+            "", x.Number ?? "", x.Name, x.OrienteCode ?? "",
+            x.City ?? "", x.Country ?? "")).ToArray();
+
+        return InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(incoming, existing);
+    }
+
+    /// <summary>
     /// Database-backed inventory for an internal preflight. These counts are
     /// diagnostic only: neither Type nor Number establishes the canonical
     /// workshopCode mapping. No personal data, identifiers or names escape.
