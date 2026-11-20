@@ -8,6 +8,16 @@ namespace PMGM.Api.Modules.Bootstrap;
 /// </summary>
 public static class InitialLoadWorkshopCompositeKeyPolicy
 {
+    // Conservative collision fingerprint, NOT an approved canonical identity.
+    // Format-only similarities block an unsafe Absent decision until reviewed.
+    internal static (string Number, string Oriente) CollisionFingerprint(
+        string number, string oriente)
+    {
+        var digits = number.Trim().TrimStart('0');
+        return (digits.Length == 0 ? "0" : digits,
+            oriente.Trim().ToUpperInvariant());
+    }
+
     public static InitialLoadExistingRecordPolicy.Match Inspect(
         InitialLoadWorkshopMatchPolicy.Incoming? incoming,
         IReadOnlyList<InitialLoadWorkshopMatchPolicy.Existing>? snapshot)
@@ -27,7 +37,7 @@ public static class InitialLoadWorkshopCompositeKeyPolicy
             string.IsNullOrWhiteSpace(x.OrienteCode)))
             return InitialLoadExistingRecordPolicy.Match.Unresolved;
 
-        var duplicates = snapshot.GroupBy(x => (x.Number, x.OrienteCode))
+        var duplicates = snapshot.GroupBy(x => CollisionFingerprint(x.Number, x.OrienteCode))
             .Any(g => g.Count() > 1);
         if (duplicates)
             return InitialLoadExistingRecordPolicy.Match.Ambiguous;
@@ -38,7 +48,12 @@ public static class InitialLoadWorkshopCompositeKeyPolicy
             .Take(2).ToArray();
 
         if (found.Length == 0)
+        {
+            var incomingFingerprint = CollisionFingerprint(incoming.Number, incoming.OrienteCode);
+            if (snapshot.Any(x => CollisionFingerprint(x.Number, x.OrienteCode) == incomingFingerprint))
+                return InitialLoadExistingRecordPolicy.Match.Ambiguous;
             return InitialLoadExistingRecordPolicy.Match.Absent;
+        }
         if (found.Length > 1)
             return InitialLoadExistingRecordPolicy.Match.Ambiguous;
 
