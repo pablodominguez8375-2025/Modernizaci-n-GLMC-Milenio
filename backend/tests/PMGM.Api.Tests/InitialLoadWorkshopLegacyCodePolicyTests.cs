@@ -4,12 +4,13 @@ using Xunit;
 namespace PMGM.Api.Tests;
 
 /// <summary>
-/// Caracterización de la identidad de Talleres del plan de Carga inicial (#694 / #1049).
-/// Diseño candidato (ADR 2026-11-20): workshopCode es solo clave local del lote CSV;
-/// la identidad en BD es (Number, OrienteCode) y Number solo NO es clave segura.
-/// Estas pruebas fijan lo que la política hace HOY; no autorizan Apply ni datos reales.
+/// LEGACY, NO OPERATIVA. Caracteriza la política histórica por Code (Match/Batch.Inspect).
+/// NO es contrato de importación: la identidad candidata vigente es (Number, OrienteCode)
+/// con workshopCode solo como referencia local del CSV (ver ADR 2026-11-20 y
+/// InitialLoadWorkshopCompositeKeyPolicy). Se conserva para evitar regresiones accidentales
+/// y para dejar explícito que el planificador NO debe volver a esta ruta. No autoriza Apply.
 /// </summary>
-public sealed class InitialLoadWorkshopIdentityTests
+public sealed class InitialLoadWorkshopLegacyCodePolicyTests
 {
     private static InitialLoadWorkshopMatchPolicy.Incoming In(
         string code, string number = "23", string oriente = "SCL") =>
