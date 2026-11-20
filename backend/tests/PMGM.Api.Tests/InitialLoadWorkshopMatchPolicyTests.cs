@@ -41,6 +41,20 @@ public sealed class InitialLoadWorkshopMatchPolicyTests
             InitialLoadWorkshopMatchPolicy.Inspect(Input(), [Existing(), Existing("")]));
     }
 
+    [Theory]
+    [InlineData("", "Workshop", "Santiago", "CL")]
+    [InlineData("23", "", "Santiago", "CL")]
+    [InlineData("23", "Workshop", "", "CL")]
+    [InlineData("23", "Workshop", "Santiago", "")]
+    public void Incomplete_existing_identity_fields_block_reconciliation(
+        string number, string name, string city, string country)
+    {
+        var incomplete = new InitialLoadWorkshopMatchPolicy.Existing(
+            "OTHER", number, name, "SCL", city, country);
+        Assert.Equal(InitialLoadExistingRecordPolicy.Match.Unresolved,
+            InitialLoadWorkshopMatchPolicy.Inspect(Input(), [incomplete]));
+    }
+
     [Fact]
     public void Workshop_number_is_never_used_as_workshop_code()
     {
