@@ -110,6 +110,7 @@ builder.Services.AddInstitutionalRequestRateLimiting(builder.Configuration);
 builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
 builder.Services.AddScoped<IInstitutionalMemberContextResolver, InstitutionalMemberContextResolver>();
 builder.Services.AddScoped<IInstitutionalBootstrapService, InstitutionalBootstrapService>();
+builder.Services.AddScoped<PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyOrchestrator>();
 builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>();
 builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
 builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();

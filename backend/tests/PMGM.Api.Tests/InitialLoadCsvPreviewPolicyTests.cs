@@ -14,9 +14,9 @@ public sealed class InitialLoadCsvPreviewPolicyTests
         files["Talleres.csv"] +=
             "taller23,23,\"Taller \"\"Sintético\"\"\",STGO,Santiago,Chile\r\n";
         files["Hermanos.csv"] +=
-            "persona1,rut,12.345.678-5,\"Nombre, Sintético\",Prueba,qa@example.invalid,taller23,3,active\n";
+            "persona1,rut,12.345.678-5,\"Nombre, Sintético\",Prueba,qa@example.invalid,taller23,3,active,regular\n";
         files["CargosVigentes.csv"] +=
-            "persona1,taller23,worshipful_master,2026-01-01";
+            "persona1,taller23,worshipful_master,2026-01-01,2026";
         return files;
     }
 
@@ -82,7 +82,7 @@ public sealed class InitialLoadCsvPreviewPolicyTests
     {
         var files = Synthetic();
         const string duplicate =
-            "persona2,rut,12.345.678-5,Otra,Persona,other@example.invalid,taller23,2,active\n";
+            "persona2,rut,12.345.678-5,Otra,Persona,other@example.invalid,taller23,2,active,regular\n";
         files["Hermanos.csv"] += duplicate;
         var result = InitialLoadCsvPreviewPolicy.Inspect(files);
 
@@ -115,6 +115,37 @@ public sealed class InitialLoadCsvPreviewPolicyTests
         Assert.False(result.CanApply);
         Assert.Contains(result.Findings, x => x.Code == "INVALID_SHEETS");
         Assert.DoesNotContain("Private RUT Documents", JsonSerializer.Serialize(result));
+    }
+
+    [Fact]
+    public void Duplicate_office_mandate_in_csv_is_rejected_without_personal_values()
+    {
+        var files = Synthetic();
+        files["CargosVigentes.csv"] +=
+            "\n" + "persona1,taller23,worshipful_master,2026-01-01,2026";
+        var result = InitialLoadCsvPreviewPolicy.Inspect(files);
+
+        Assert.False(result.Valid);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+        Assert.Contains(result.Findings, x => x.Sheet == "CargosVigentes.csv" &&
+            x.Row == 3 && x.Field == "officeCode" && x.Code == "DUPLICATE");
+        AssertNoPersonalValues(result);
+    }
+
+    [Theory]
+    [InlineData("taller23,23,Taller\"incorrecto,STGO,Santiago,Chile\\r\\n")]
+    [InlineData("taller23,23,\"Taller\"incorrecto,STGO,Santiago,Chile\\r\\n")]
+    public void Invalid_csv_quoting_is_rejected_by_shape_gate(string invalidRow)
+    {
+        var files = Synthetic();
+        files["Talleres.csv"] = string.Join(",", InitialLoadTemplateEndpoints.Sheets[0].Columns)
+            + "\r\n" + invalidRow.Replace("\\r", "\r").Replace("\\n", "\n");
+        var result = InitialLoadCsvPreviewPolicy.Inspect(files);
+        Assert.False(result.Valid);
+        Assert.False(result.CanApply);
+        Assert.Contains(result.Findings, x => x.Code == "INVALID_QUOTING");
+        AssertNoPersonalValues(result);
     }
 
     private static void AssertNoPersonalValues(InitialLoadCsvPreviewPolicy.Result result)

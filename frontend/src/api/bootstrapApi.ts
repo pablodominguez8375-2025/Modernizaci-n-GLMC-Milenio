@@ -58,16 +58,17 @@ const mockInitialLoadContract: InitialLoadContract = {
   status: 'TEMPLATE_ONLY', revision: 'INITIAL-LOAD-CSV-v1',
   files: [
     { name: 'Talleres.csv', columns: ['workshopCode', 'number', 'name', 'orienteCode', 'city', 'country'] },
-    { name: 'Hermanos.csv', columns: ['personRef', 'identityType', 'identityNumber', 'firstNames', 'lastNames', 'email', 'workshopCode', 'grade', 'institutionalStatus'] },
-    { name: 'CargosVigentes.csv', columns: ['personRef', 'workshopCode', 'officeCode', 'startDate'] },
+    { name: 'Hermanos.csv', columns: ['personRef', 'identityType', 'identityNumber', 'firstNames', 'lastNames', 'email', 'workshopCode', 'grade', 'institutionalStatus', 'membershipType'] },
+    { name: 'CargosVigentes.csv', columns: ['personRef', 'workshopCode', 'officeCode', 'startDate', 'period'] },
   ],
   requiresLegalApprovalBeforeRealData: true, acceptsUploadedData: false, createsAccounts: false, assignsProfiles: false, supportsApply: false,
 }
 
 export class BootstrapApiClient {
-  private readonly baseUrl: string
-  private readonly getAccessToken?: BootstrapTokenProvider
-  private readonly onUnauthorized?: () => Promise<void>
+  /** Públicos de solo lectura: initialLoadApply.ts (carga diferida) arma las operaciones del Máster sin engordar la entrada pública. */
+  readonly baseUrl: string
+  readonly getAccessToken?: BootstrapTokenProvider
+  readonly onUnauthorized?: () => Promise<void>
   readonly useMocks: boolean
   private mockAppliedHash: string | null = null
 

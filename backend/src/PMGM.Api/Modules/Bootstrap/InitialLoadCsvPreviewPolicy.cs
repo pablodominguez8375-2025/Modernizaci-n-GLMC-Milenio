@@ -46,6 +46,23 @@ public static class InitialLoadCsvPreviewPolicy
     }
 
     /// <summary>
+    /// Parses the three sheets into canonical rows. Returns null unless the bounded shape policy
+    /// accepts every file. Cells stay in memory only; callers must never log or echo them.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>? TryParseSheets(
+        IReadOnlyDictionary<string, string>? csvFiles)
+    {
+        if (csvFiles is null || !InitialLoadCsvShapePolicy.Inspect(csvFiles).Valid) return null;
+        var rows = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal);
+        foreach (var definition in InitialLoadTemplateEndpoints.Sheets)
+        {
+            if (!TryReadValidatedRows(csvFiles[definition.Name], definition.Columns, out var parsed)) return null;
+            rows.Add(definition.Name, parsed);
+        }
+        return rows;
+    }
+
+    /// <summary>
     /// Consumes only CSV already accepted by the bounded shape policy. Cells
     /// exist temporarily in this method and cannot escape in result/errors.
     /// Multiline quoted values are not supported by the shape contract.
@@ -58,6 +75,7 @@ public static class InitialLoadCsvPreviewPolicy
         var fields = new List<string>(columns.Length);
         var current = new StringBuilder();
         var quoted = false;
+        var afterClosingQuote = false;
         var rowNumber = 0;
         var complete = true;
         var atStart = csv.Length > 0 && csv[0] == '\uFEFF' ? 1 : 0;
@@ -92,21 +110,38 @@ public static class InitialLoadCsvPreviewPolicy
                         current.Append('"');
                         i++;
                     }
-                    else quoted = false;
+                    else
+                    {
+                        quoted = false;
+                        afterClosingQuote = true;
+                    }
                 }
                 else current.Append(c);
                 continue;
             }
 
-            if (c == '"' && current.Length == 0)
+            // RFC-style CSV: a quote may only open an empty field, and
+            // a closing quote must be followed by a delimiter or line end.
+            if (c == '"')
             {
+                if (current.Length != 0 || afterClosingQuote)
+                {
+                    complete = false;
+                    break;
+                }
                 quoted = true;
                 continue;
+            }
+            if (afterClosingQuote && c is not (',' or '\r' or '\n'))
+            {
+                complete = false;
+                break;
             }
             if (c == ',')
             {
                 fields.Add(current.ToString());
                 current.Clear();
+                afterClosingQuote = false;
                 continue;
             }
             if (c is '\r' or '\n')
@@ -115,6 +150,7 @@ public static class InitialLoadCsvPreviewPolicy
                     i++;
                 fields.Add(current.ToString());
                 current.Clear();
+                afterClosingQuote = false;
                 if (!FinishRow())
                 {
                     complete = false;

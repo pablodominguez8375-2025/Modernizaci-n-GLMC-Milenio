@@ -20,9 +20,9 @@ public sealed class InitialLoadCsvPreviewHttpTests
         var sensitive = new Dictionary<string, string>
         {
             ["Talleres.csv"] = "workshopCode,number,name,orienteCode,city,country\r\n",
-            ["Hermanos.csv"] = "personRef,identityType,identityNumber,firstNames,lastNames,email,workshopCode,grade,institutionalStatus\r\n" +
-                "a,rut,12.345.678-5,PRIVATE_FIRST,PRIVATE_LAST,secret@example.invalid,a,3,active\r\n",
-            ["CargosVigentes.csv"] = "personRef,workshopCode,officeCode,startDate\r\n"
+            ["Hermanos.csv"] = "personRef,identityType,identityNumber,firstNames,lastNames,email,workshopCode,grade,institutionalStatus,membershipType\r\n" +
+                "a,rut,12.345.678-5,PRIVATE_FIRST,PRIVATE_LAST,secret@example.invalid,a,3,active,regular\r\n",
+            ["CargosVigentes.csv"] = "personRef,workshopCode,officeCode,startDate,period\r\n"
         };
 
         using var response = await client.PostAsJsonAsync(

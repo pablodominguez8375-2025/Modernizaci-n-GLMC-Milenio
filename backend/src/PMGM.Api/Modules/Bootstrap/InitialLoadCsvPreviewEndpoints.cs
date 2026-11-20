@@ -94,10 +94,29 @@ public static class InitialLoadCsvPreviewEndpoints
             }
         }
 
+        // Same eligibility rule as the apply endpoint: a readable preview can still be NOT applicable.
+        var sheets = valid ? InitialLoadCsvPreviewPolicy.TryParseSheets(files) : null;
+        var applicability = InitialLoadApply.InitialLoadApplicabilityPolicy.Inspect(sheets);
+        string? receipt = null;
+        DateTimeOffset? receiptExpires = null;
+        if (valid && applicability.Applicable && InitialLoadApply.InitialLoadApplyEndpoint.IsEnabled(configuration))
+        {
+            var issued = InitialLoadPreflightReceiptPolicy.Issue(
+                files, InitialLoadApply.InitialLoadApplyEndpoint.ReceiptSecret(configuration), DateTimeOffset.UtcNow);
+            receipt = issued?.Token;
+            receiptExpires = issued?.ExpiresAtUtc;
+        }
+
         return Results.Ok(new
         {
+            applicable = valid && applicability.Applicable,
+            applyBlockers = valid ? applicability.Blockers.Take(100).ToArray() : [],
+            receipt,
+            receiptExpiresAtUtc = receiptExpires,
             valid,
-            canApply = false, // No transactional import endpoint yet.
+            structuralValidationPassed = valid,
+            databaseReconciliationPerformed = false, // CSV-only preview; no Organization lookup.
+            canApply = receipt is not null && window.Status == InitialLoadWindow.Open, // Eligible batch, live receipt and open window; server still revalidates.
             writesPerformed = 0,
             status = valid ? "PREVIEW_VALID" : "PREVIEW_REQUIRES_CORRECTION",
             dataRowCounts = result.DataRowCounts,

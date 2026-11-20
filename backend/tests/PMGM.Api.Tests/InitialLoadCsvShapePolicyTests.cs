@@ -30,9 +30,9 @@ public sealed class InitialLoadCsvShapePolicyTests
         files["Talleres.csv"] = "\uFEFF" + files["Talleres.csv"] +
             "t23,23,\"Taller \"\"Prueba\"\"\", STGO,Santiago,Chile\r\n";
         files["Hermanos.csv"] +=
-            "h1,rut,12.345.678-5,\"Camila, Sintética\",Prueba,qa@example.invalid,t23,3,active\n";
+            "h1,rut,12.345.678-5,\"Camila, Sintética\",Prueba,qa@example.invalid,t23,3,active,regular\n";
         files["CargosVigentes.csv"] +=
-            "h1,t23,worshipful_master,2026-01-01";
+            "h1,t23,worshipful_master,2026-01-01,2026";
         var scan = InitialLoadCsvShapePolicy.Inspect(files);
         Assert.True(scan.Valid, string.Join(";", scan.Findings.Select(x => x.Code)));
         Assert.All(scan.DataRowCounts.Values, count => Assert.Equal(1, count));

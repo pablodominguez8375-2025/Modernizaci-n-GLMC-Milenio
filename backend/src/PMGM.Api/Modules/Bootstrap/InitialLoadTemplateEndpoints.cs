@@ -19,8 +19,8 @@ public static class InitialLoadTemplateEndpoints
         new("Talleres.csv", ["workshopCode", "number", "name", "orienteCode", "city", "country"]),
         new("Hermanos.csv",
             ["personRef", "identityType", "identityNumber", "firstNames", "lastNames",
-             "email", "workshopCode", "grade", "institutionalStatus"]),
-        new("CargosVigentes.csv", ["personRef", "workshopCode", "officeCode", "startDate"])
+             "email", "workshopCode", "grade", "institutionalStatus", "membershipType"]),
+        new("CargosVigentes.csv", ["personRef", "workshopCode", "officeCode", "startDate", "period"])
     ];
 
     public static IEndpointRouteBuilder MapInitialLoadTemplateEndpoints(
@@ -36,10 +36,24 @@ public static class InitialLoadTemplateEndpoints
                 InitialLoadCsvPreviewEndpoints.PreviewAsync)
             .RequireAuthorization()
             .WithTags("Bootstrap institucional — Carga inicial");
+        // Disabled by default (404 unless InitialLoad:ApplyEnabled == "true"); see InitialLoadApplyEndpoint.
+        endpoints.MapPost("/api/platform/bootstrap/initial-load/apply",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyEndpoint.ApplyAsync)
+            .RequireAuthorization()
+            .WithTags("Bootstrap institucional — Carga inicial");
+        endpoints.MapPost("/api/platform/bootstrap/initial-load/window/open",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadAdminEndpoints.OpenAsync)
+            .RequireAuthorization().WithTags("Bootstrap institucional — Carga inicial");
+        endpoints.MapPost("/api/platform/bootstrap/initial-load/window/close",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadAdminEndpoints.CloseAsync)
+            .RequireAuthorization().WithTags("Bootstrap institucional — Carga inicial");
+        endpoints.MapGet("/api/platform/bootstrap/initial-load/result",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadAdminEndpoints.ResultAsync)
+            .RequireAuthorization().WithTags("Bootstrap institucional — Carga inicial");
         return endpoints;
     }
 
-    private static IResult GetContract(HttpContext context, IInstitutionalAccessService access)
+    private static IResult GetContract(HttpContext context, IInstitutionalAccessService access, IConfiguration configuration)
     {
         context.Response.Headers.CacheControl = "private, no-store";
         if (!access.IsPlatformSuperAdmin(context.User))
@@ -47,7 +61,7 @@ public static class InitialLoadTemplateEndpoints
 
         return Results.Ok(new
         {
-            status = "PREVIEW_ONLY",
+            status = PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyEndpoint.IsEnabled(configuration) ? "APPLY_AVAILABLE" : "PREVIEW_ONLY",
             revision = "INITIAL-LOAD-CSV-v1",
             files = Sheets.Select(s => new { name = s.Name, columns = s.Columns }),
             requiresLegalApprovalBeforeRealData = false,
@@ -55,7 +69,10 @@ public static class InitialLoadTemplateEndpoints
             acceptsUploadedData = true,
             createsAccounts = false,
             assignsProfiles = false,
-            supportsApply = false
+            supportsApply = PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyEndpoint.IsEnabled(configuration),
+            requiresOperationalGoForRealData = true,
+            canonicalWorkshopCodeMappingVerified = false,
+            previewDoesNotAuthorizeImport = true
         });
     }
 

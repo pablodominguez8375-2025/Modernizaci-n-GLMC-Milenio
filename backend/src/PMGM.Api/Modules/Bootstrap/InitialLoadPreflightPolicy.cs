@@ -149,6 +149,11 @@ public static class InitialLoadPreflightPolicy
                 !InstitutionalStatuses.Contains(Read(row, "institutionalStatus")))
                 Add(personFile, i + 2, "institutionalStatus", "INVALID_STATUS");
 
+            // Explicit, never inferred: only "regular" until the institution confirms a catalogue.
+            if (Required(personFile, i, row, "membershipType") &&
+                !string.Equals(Read(row, "membershipType"), "regular", StringComparison.Ordinal))
+                Add(personFile, i + 2, "membershipType", "INVALID_MEMBERSHIP_TYPE");
+
             var grade = Read(row, "grade");
             if (!new[] { "1", "2", "3" }.Contains(grade, StringComparer.Ordinal))
                 Add(personFile, i + 2, "grade", "INVALID_GRADE");
@@ -180,6 +185,11 @@ public static class InitialLoadPreflightPolicy
                 Add(personFile, i + 2, "identityNumber", "DUPLICATE");
         }
 
+        // Detect duplicate office mandates inside the submitted CSV. The key
+        // includes startDate so a later mandate is not conflated with an older one.
+        // This remains a fail-closed preview; deduplication against persisted
+        // records belongs to the future transactional plan/apply workflow.
+        var officeMandates = new HashSet<(string Person, string Workshop, string Office, string StartDate)>();
         var os = sheets[officeFile];
         for (var i = 0; i < os.Count; i++)
         {
@@ -188,15 +198,27 @@ public static class InitialLoadPreflightPolicy
             ValidateShape(officeFile, i, row, officeSchema);
             var reference = Read(row, "personRef");
             var shop = Read(row, "workshopCode");
-            if (Code(officeFile, i, row, "personRef") && !persons.ContainsKey(reference))
+            var validPersonRef = Code(officeFile, i, row, "personRef");
+            var validWorkshopCode = Code(officeFile, i, row, "workshopCode");
+            if (validPersonRef && !persons.ContainsKey(reference))
                 Add(officeFile, i + 2, "personRef", "UNKNOWN_PERSON");
-            if (Code(officeFile, i, row, "workshopCode") && !workshops.Contains(shop))
+            if (validWorkshopCode && !workshops.Contains(shop))
                 Add(officeFile, i + 2, "workshopCode", "UNKNOWN_WORKSHOP");
             if (persons.TryGetValue(reference, out var memberShop) &&
                 !string.Equals(shop, memberShop, StringComparison.Ordinal))
                 Add(officeFile, i + 2, "workshopCode", "PERSON_WORKSHOP_MISMATCH");
-            if (!officeCodes.Contains(Read(row, "officeCode")))
+            var officeCode = Read(row, "officeCode");
+            var startDate = Read(row, "startDate");
+            if (validPersonRef && validWorkshopCode &&
+                !string.IsNullOrWhiteSpace(officeCode) &&
+                !string.IsNullOrWhiteSpace(startDate) &&
+                !officeMandates.Add((reference, shop, officeCode, startDate)))
+                Add(officeFile, i + 2, "officeCode", "DUPLICATE");
+            if (!officeCodes.Contains(officeCode))
                 Add(officeFile, i + 2, "officeCode", "UNKNOWN_OFFICE");
+            // Explicit period; never derived from startDate.
+            if (Required(officeFile, i, row, "period") && Read(row, "period").Length > 80)
+                Add(officeFile, i + 2, "period", "PERIOD_NOT_EXPLICIT");
             if (!DateOnly.TryParseExact(Read(row, "startDate"), "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
                 Add(officeFile, i + 2, "startDate", "INVALID_DATE");

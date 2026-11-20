@@ -396,6 +396,21 @@ internal sealed class LodgeManagementTestAuthenticationHandler(
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        // #694: a validated-JWT-shaped Master principal (issuer + mapped subject only, no raw "sub"), opt-in per request.
+        var master = Request.Headers["X-Test-Master-Subject"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(master))
+        {
+            var masterIdentity = new ClaimsIdentity(new[]
+            {
+                new Claim("iss", Request.Headers["X-Test-Master-Issuer"].FirstOrDefault() ?? string.Empty),
+                new Claim(ClaimTypes.NameIdentifier, master),
+                new Claim("preferred_username", "admin"),
+                new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin),
+                new Claim(InstitutionalClaims.Scope, "order")
+            }, SchemeName);
+            return Task.FromResult(AuthenticateResult.Success(
+                new AuthenticationTicket(new ClaimsPrincipal(masterIdentity), SchemeName)));
+        }
         var claims = new[]
         {
             new Claim("sub", "ci-lodge-admin"),
