@@ -1,7 +1,7 @@
 # Experimental QA-only rebuild. No registry push or deployment until all gates pass.
 # Retain the authenticated vendor rootfs, rebuilding both pinned Go programs.
 FROM docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62 AS vendor
-FROM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS go-build
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS go-build
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 # CVE-2026-78661: upgrade isolated Go build copies only, preserving the
 # reviewed Git source commits and authenticated vendor rootfs. New Go binaries
@@ -10,7 +10,7 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 FROM go-build AS mcli-build
 WORKDIR /source
 COPY --from=mcli_source . .
-RUN test "$(go env GOVERSION)" = go1.27.3 && \
+RUN test "$(go env GOVERSION)" = go1.27.4 && \
     test "$(go env GOSUMDB)" = sum.golang.org && \
     go get golang.org/x/net@v0.62.0 && \
     go mod verify && \
@@ -24,7 +24,7 @@ COPY --from=silo_source . .
 # Source is exported from the verified Git object, without checkout extras.
 # Retain ELF symbols and stamp the exact source pseudo-version: Trivy can then
 # identify the main module with -trimpath instead of silently scanning (devel).
-RUN test "$(go env GOVERSION)" = go1.27.3 && \
+RUN test "$(go env GOVERSION)" = go1.27.4 && \
     test "$(go env GOSUMDB)" = sum.golang.org && \
     go get golang.org/x/net@v0.62.0 && \
     go mod verify && \
