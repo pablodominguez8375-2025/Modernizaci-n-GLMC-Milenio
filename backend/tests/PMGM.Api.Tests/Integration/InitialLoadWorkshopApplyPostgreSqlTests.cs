@@ -64,7 +64,8 @@ public sealed class InitialLoadWorkshopApplyPostgreSqlTests
     {
         if (string.IsNullOrWhiteSpace(Conn)) return;
         var ct = TestContext.Current.CancellationToken;
-        await using var db = await OpenDbAsync(Conn!, ct);
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await using var db = await OpenDbAsync(iso.Connection, ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var service = new InitialLoadWorkshopApplyService(db);
         var batch = new[] { W("L1", "9001") };
@@ -85,7 +86,8 @@ public sealed class InitialLoadWorkshopApplyPostgreSqlTests
     {
         if (string.IsNullOrWhiteSpace(Conn)) return;
         var ct = TestContext.Current.CancellationToken;
-        await using var db = await OpenDbAsync(Conn!, ct);
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await using var db = await OpenDbAsync(iso.Connection, ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await OpenWindowAsync(db, ct);
 
@@ -134,7 +136,8 @@ public sealed class InitialLoadWorkshopApplyPostgreSqlTests
     {
         if (string.IsNullOrWhiteSpace(Conn)) return;
         var ct = TestContext.Current.CancellationToken;
-        await using var db = await OpenDbAsync(Conn!, ct);
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await using var db = await OpenDbAsync(iso.Connection, ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await OpenWindowAsync(db, ct);
         var service = new InitialLoadWorkshopApplyService(db);
@@ -159,7 +162,8 @@ public sealed class InitialLoadWorkshopApplyPostgreSqlTests
     {
         if (string.IsNullOrWhiteSpace(Conn)) return;
         var ct = TestContext.Current.CancellationToken;
-        await using var db = await OpenDbAsync(Conn!, ct);
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await using var db = await OpenDbAsync(iso.Connection, ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await OpenWindowAsync(db, ct);
         var service = new InitialLoadWorkshopApplyService(db);
@@ -183,16 +187,8 @@ public sealed class InitialLoadWorkshopApplyPostgreSqlTests
     {
         if (string.IsNullOrWhiteSpace(Conn)) return;
         var ct = TestContext.Current.CancellationToken;
-        var admin = new NpgsqlConnectionStringBuilder(Conn!);
-        var tempName = "pmgm_apply_" + Guid.NewGuid().ToString("N")[..12];
-        await using (var conn = new NpgsqlConnection(admin.ConnectionString))
-        {
-            await conn.OpenAsync(ct);
-            await using var create = new NpgsqlCommand($"CREATE DATABASE \"{tempName}\"", conn);
-            await create.ExecuteNonQueryAsync(ct);
-        }
-        var connection = new NpgsqlConnectionStringBuilder(Conn!) { Database = tempName }.ConnectionString;
-        try
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        var connection = iso.Connection;
         {
             await using (var seed = await OpenDbAsync(connection, ct)) await OpenWindowAsync(seed, ct);
 
@@ -216,12 +212,61 @@ public sealed class InitialLoadWorkshopApplyPostgreSqlTests
             Assert.Equal(2, await CountInitialLoadOrgsAsync(check, ct));
             Assert.Equal(1, await check.InitialLoadBatchLedgers.CountAsync(x => x.Fingerprint == fingerprint, ct));
         }
-        finally
+    }
+
+    [Fact]
+    public async Task An_existing_workshop_without_oriente_code_blocks_the_whole_import_and_writes_nothing()
+    {
+        // Characterisation of the fail-closed snapshot rule (see #694 comment): a legacy
+        // workshop row lacking OrienteCode makes the composite snapshot AMBIGUOUS.
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await using var db = await OpenDbAsync(iso.Connection, ct);
+        await OpenWindowAsync(db, ct);
+        db.Organizations.Add(new PMGM.Api.Modules.Core.Entities.Organization
+        {
+            Name = "Taller preexistente sintético", Number = "9400", Type = "workshop", Origin = "other"
+        });
+        await db.SaveChangesAsync(ct);
+
+        var result = await new InitialLoadWorkshopApplyService(db)
+            .ApplyAsync(true, Fingerprint(), [W("L1", "9401", "SYG")], "synthetic", "c-8", ct);
+        Assert.False(result.Applied);
+        Assert.Equal("SNAPSHOT_KEYS_AMBIGUOUS", result.Code);
+        Assert.Equal(0, await CountInitialLoadOrgsAsync(db, ct));
+        Assert.Equal(0, await db.InitialLoadBatchLedgers.CountAsync(ct));
+    }
+
+    /// <summary>Throw-away database so committed state never leaks into other tests.</summary>
+    private sealed class IsolatedDb : IAsyncDisposable
+    {
+        private readonly string _admin;
+        private readonly string _name;
+        public string Connection { get; }
+
+        private IsolatedDb(string admin, string name, string connection)
+        { _admin = admin; _name = name; Connection = connection; }
+
+        public static async Task<IsolatedDb> CreateAsync(string adminConnection, CancellationToken ct)
+        {
+            var name = "pmgm_apply_" + Guid.NewGuid().ToString("N")[..12];
+            await using (var conn = new NpgsqlConnection(adminConnection))
+            {
+                await conn.OpenAsync(ct);
+                await using var create = new NpgsqlCommand($"CREATE DATABASE \"{name}\"", conn);
+                await create.ExecuteNonQueryAsync(ct);
+            }
+            var cs = new NpgsqlConnectionStringBuilder(adminConnection) { Database = name }.ConnectionString;
+            return new IsolatedDb(adminConnection, name, cs);
+        }
+
+        public async ValueTask DisposeAsync()
         {
             NpgsqlConnection.ClearAllPools();
-            await using var conn = new NpgsqlConnection(admin.ConnectionString);
+            await using var conn = new NpgsqlConnection(_admin);
             await conn.OpenAsync(CancellationToken.None);
-            await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{tempName}\" WITH (FORCE)", conn);
+            await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{_name}\" WITH (FORCE)", conn);
             await drop.ExecuteNonQueryAsync(CancellationToken.None);
         }
     }
