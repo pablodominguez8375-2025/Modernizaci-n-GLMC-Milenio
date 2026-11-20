@@ -14,6 +14,12 @@ internal static class InitialLoadWorkshopSnapshotReader
         Guid Id, string Name, string? Number, string Type,
         string? OrienteCode, string? City, string? Country);
 
+    internal sealed record Inventory(
+        int OrganizationRows, int WorkshopTypeRows,
+        int MissingNumbers, int DuplicateNumbers,
+        bool CanonicalCodeMappingVerified = false,
+        bool CanApply = false, int WritesPerformed = 0);
+
     internal static async Task<IReadOnlyList<Workshop>> ReadAsync(
         BootstrapDbContext db, CancellationToken cancellationToken)
     {
@@ -23,5 +29,24 @@ internal static class InitialLoadWorkshopSnapshotReader
             .Select(x => new Workshop(x.Id, x.Name, x.Number, x.Type,
                 x.OrienteCode, x.City, x.Country))
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Database-backed inventory for an internal preflight. These counts are
+    /// diagnostic only: neither Type nor Number establishes the canonical
+    /// workshopCode mapping. No personal data, identifiers or names escape.
+    /// </summary>
+    internal static async Task<Inventory> InspectInventoryAsync(
+        BootstrapDbContext db, CancellationToken cancellationToken)
+    {
+        var rows = await ReadAsync(db, cancellationToken);
+        var numbered = rows.Where(x => !string.IsNullOrWhiteSpace(x.Number))
+            .GroupBy(x => x.Number!, StringComparer.Ordinal)
+            .ToArray();
+        return new Inventory(
+            rows.Count,
+            rows.Count(x => string.Equals(x.Type, "workshop", StringComparison.OrdinalIgnoreCase)),
+            rows.Count(x => string.IsNullOrWhiteSpace(x.Number)),
+            numbered.Count(x => x.Count() > 1));
     }
 }
