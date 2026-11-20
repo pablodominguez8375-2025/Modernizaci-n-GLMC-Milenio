@@ -33,6 +33,15 @@ public sealed class InitialLoadWorkshopMatchPolicyTests
     }
 
     [Fact]
+    public void Incomplete_canonical_snapshot_cannot_be_treated_as_absent()
+    {
+        Assert.Equal(InitialLoadExistingRecordPolicy.Match.Unresolved,
+            InitialLoadWorkshopMatchPolicy.Inspect(Input("NEW"), [Existing("")]));
+        Assert.Equal(InitialLoadExistingRecordPolicy.Match.Unresolved,
+            InitialLoadWorkshopMatchPolicy.Inspect(Input(), [Existing(), Existing("")]));
+    }
+
+    [Fact]
     public void Workshop_number_is_never_used_as_workshop_code()
     {
         Assert.Equal(InitialLoadExistingRecordPolicy.Match.Absent,
