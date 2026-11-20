@@ -63,6 +63,7 @@
       "QaSyntheticPlanContractTests",
       "InitialLoadWindowAtomicPostgreSqlTests",
       "InitialLoadBatchLedgerPostgreSqlTests",
+      "InitialLoadWorkshopApplyPostgreSqlTests",
       "WorkshopRegistryHttpTests"
     ],
     "b": [
