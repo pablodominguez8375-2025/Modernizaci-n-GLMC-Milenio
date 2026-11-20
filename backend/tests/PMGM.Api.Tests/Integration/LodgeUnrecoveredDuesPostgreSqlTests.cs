@@ -21,6 +21,27 @@ public sealed class LodgeUnrecoveredDuesPostgreSqlTests
     [InlineData("USD")]
     public async Task Formal_nonpayment_loss_preserves_cash_dues_partial_payments_and_history(string currency)
     {
+        // The API intentionally validates the Chilean business date at request time.
+        // A test seeded just before midnight must rerun its entire isolated scenario
+        // if the date changes; do not weaken the production date validation.
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var startedOn = GrandTreasuryTariff.Today();
+            try
+            {
+                await VerifyLossScenarioAsync(currency);
+                return;
+            }
+            catch (Exception) when (attempt == 0 && GrandTreasuryTariff.Today() != startedOn)
+            {
+                // All assertions are executed again against new synthetic rows.
+                // A second failure propagates rather than hiding a real regression.
+            }
+        }
+    }
+
+    private static async Task VerifyLossScenarioAsync(string currency)
+    {
         var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connection)) return;
         var ct = TestContext.Current.CancellationToken;
