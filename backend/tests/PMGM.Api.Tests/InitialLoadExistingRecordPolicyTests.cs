@@ -33,6 +33,7 @@ public sealed class InitialLoadExistingRecordPolicyTests
             [InitialLoadExistingRecordPolicy.Match.Exact,
              InitialLoadExistingRecordPolicy.Match.Contradictory]));
         Assert.False(InitialLoadExistingRecordPolicy.CanPresentPlan(null));
+        Assert.False(InitialLoadExistingRecordPolicy.CanPresentPlan([]));
         var unknown = InitialLoadExistingRecordPolicy.Inspect(
             (InitialLoadExistingRecordPolicy.Match)999);
         Assert.True(unknown.BlocksBatch);
