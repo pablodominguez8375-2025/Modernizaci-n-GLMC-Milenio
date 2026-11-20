@@ -53,6 +53,38 @@ public sealed class InitialLoadWorkshopCompositeKeyPolicyTests
     }
 
     [Fact]
+    public void Composite_batch_skips_existing_even_if_csv_local_code_differs()
+    {
+        var result = InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(
+            [In("CSV1"), In("CSV2", "24", "SCL")], [Db("LEGACY")]);
+        Assert.True(result.Valid);
+        Assert.Equal(1, result.ExactSkips);
+        Assert.Equal(1, result.NewRows);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+    }
+
+    [Fact]
+    public void Composite_batch_rejects_duplicate_database_identity_under_different_codes()
+    {
+        var result = InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(
+            [In()], [Db("OLD1"), Db("OLD2")]);
+        Assert.False(result.Valid);
+        Assert.Equal("SNAPSHOT_KEYS_AMBIGUOUS", result.Code);
+        Assert.Equal(0, result.NewRows);
+    }
+
+    [Fact]
+    public void Composite_batch_rejects_duplicate_incoming_identity_and_empty_batch()
+    {
+        Assert.Equal("BATCH_KEYS_INVALID_OR_DUPLICATE",
+            InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity(
+                [In("A"), In("B")], []).Code);
+        Assert.Equal("BATCH_EMPTY",
+            InitialLoadWorkshopBatchPolicy.InspectCompositeIdentity([], []).Code);
+    }
+
+    [Fact]
     public void Missing_snapshot_never_authorizes_new_record()
     {
         Assert.Equal(InitialLoadExistingRecordPolicy.Match.Unresolved,
