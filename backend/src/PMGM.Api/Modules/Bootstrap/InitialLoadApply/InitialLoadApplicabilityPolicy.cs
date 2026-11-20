@@ -28,7 +28,27 @@ public static class InitialLoadApplicabilityPolicy
             if (V(workshops[i], "orienteCode").Length == 0)
                 blockers.Add(new Finding("Talleres.csv", i + 2, "orienteCode", "ORIENTE_REQUIRED_FOR_APPLY"));
 
+        // Sponsor #694: one workshop per import, with at most 30 members per batch.
+        // This is NOT a cap on the total number of members registered in a workshop.
+        if (workshops.Count != 1)
+            blockers.Add(new Finding("Talleres.csv", 0, "workshopCode", "ONE_WORKSHOP_PER_BATCH_REQUIRED"));
+
         var members = sheets["Hermanos.csv"];
+        if (members.Count > 30)
+            blockers.Add(new Finding("Hermanos.csv", 0, "rows", "MEMBER_BATCH_LIMIT_30"));
+
+        if (workshops.Count == 1)
+        {
+            var workshopCode = V(workshops[0], "workshopCode");
+            for (var i = 0; i < members.Count; i++)
+                if (!string.Equals(V(members[i], "workshopCode"), workshopCode, StringComparison.Ordinal))
+                    blockers.Add(new Finding("Hermanos.csv", i + 2, "workshopCode", "CROSS_WORKSHOP_BATCH"));
+
+            var offices = sheets["CargosVigentes.csv"];
+            for (var i = 0; i < offices.Count; i++)
+                if (!string.Equals(V(offices[i], "workshopCode"), workshopCode, StringComparison.Ordinal))
+                    blockers.Add(new Finding("CargosVigentes.csv", i + 2, "workshopCode", "CROSS_WORKSHOP_BATCH"));
+        }
         for (var i = 0; i < members.Count; i++)
         {
             if (!InitialLoadMemberRowPolicy.AdmissibleInstitutionalStatuses.Contains(V(members[i], "institutionalStatus")))
