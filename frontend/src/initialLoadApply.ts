@@ -70,7 +70,8 @@ export function applyReadiness(preview: InitialLoadPreviewResult | null, windowS
   if (!preview.applicable || !preview.receipt) {
     return { canApply: false, reason: preview.valid ? 'Los archivos no cumplen las condiciones para cargarse (o la función no está habilitada).' : 'Corrija los problemas de la revisión.' }
   }
-  if (preview.receiptExpiresAtUtc && Date.parse(preview.receiptExpiresAtUtc) <= nowMs) return { canApply: false, reason: 'La revisión venció. Vuelva a revisar los archivos.' }
+  const expiresAt = preview.receiptExpiresAtUtc ? Date.parse(preview.receiptExpiresAtUtc) : NaN
+  if (!Number.isFinite(expiresAt) || expiresAt <= nowMs) return { canApply: false, reason: 'La revisión no tiene una vigencia verificable o ya venció. Vuelva a revisar los archivos.' }
   if (windowStatus !== 'open') return { canApply: false, reason: 'La ventana de carga debe estar abierta.' }
   return { canApply: true, reason: '' }
 }
