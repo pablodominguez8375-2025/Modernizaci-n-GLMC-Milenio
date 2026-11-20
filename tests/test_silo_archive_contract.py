@@ -37,7 +37,7 @@ def fixture(directory):
               'server_binary_sha256': rebuild.SERVER_BINARY, 'candidate_image_id': image,
               'server_binary_preserved': False,
               'vendor_server_binary_sha256': rebuild.VENDOR_SERVER_BINARY,
-              'server_build_toolchain': 'go1.27.3', 'server_source_rebuilt': True,
+              'server_build_toolchain': 'go1.27.4', 'server_source_rebuilt': True,
               'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
               'source_files': {k: {'git_blob': v} for k, v in rebuild.SERVER_BLOBS.items()}}
     objects = {'server-cve-triage.json': triage,

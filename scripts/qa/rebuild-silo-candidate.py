@@ -106,7 +106,7 @@ def server_patch_evidence(image, output, source):
                 'fix_commit': SERVER_FIX, 'fix_ancestry_verified': True,
                 'source_files': files, 'server_binary_sha256': hashes[1],
                 'vendor_server_binary_sha256': hashes[0],
-                'server_build_toolchain': 'go1.27.3',
+                'server_build_toolchain': 'go1.27.4',
                 'server_source_rebuilt': True,
                 'candidate_image_id': image, 'server_binary_preserved': False,
                 'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
@@ -130,7 +130,12 @@ def server_patch_evidence(image, output, source):
 # restricted to pinned source/fix ancestry, parser blobs and binary-linked VEX.
 # IAM/recovery/S3 select regression PASS in ephemeral runner only.
 # This SHA binding NEVER represents a signed release or host GO by itself.
-SERVER_BINARY = '89a4b84b84cb293dbf75702af2bbbb23df87b05ae79803bc6b9df9adf59878eb'
+# CVE-2026-97054 (Go stdlib 1.27.3 -> 1.27.4): the Go 1.27.3 binary pin
+# 89a4b84b84cb293dbf75702af2bbbb23df87b05ae79803bc6b9df9adf59878eb is retired.
+# The go1.27.4 rebuild produces a NEW hash that must be read from CI evidence
+# and reviewed independently before being pinned (second commit). Until then
+# the VEX binding fails closed with 'rebuilt server binary review pending'.
+SERVER_BINARY = None
 VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
 SERVER_VERSION = 'v0.0.0-20261027000322-dd905b29f45d'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@' + SERVER_VERSION
@@ -146,7 +151,7 @@ def fixed_component_vex(evidence, image):
                 'server_binary_sha256': SERVER_BINARY, 'candidate_image_id': image,
                 'server_binary_preserved': False,
                 'vendor_server_binary_sha256': VENDOR_SERVER_BINARY,
-                'server_build_toolchain': 'go1.27.3', 'server_source_rebuilt': True,
+                'server_build_toolchain': 'go1.27.4', 'server_source_rebuilt': True,
                 'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED'}
     if re.fullmatch(r'sha256:[0-9a-f]{64}', image) is None:
         raise ValueError('invalid VEX image binding')
@@ -251,7 +256,7 @@ def verify_go_inventory(inventory):
         raise ValueError('server go-jose version missing or incorrect in scan')
     for target in ('usr/bin/silo', 'usr/bin/mcli'):
         rows = [r for r in results if r.get('Target') == target]
-        if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
+        if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.4'
                 for p in rows[0].get('Packages', [])):
             raise ValueError('Go toolchain missing or incorrect in scan')
         # Authoritative built-package inventory, not a source-text declaration.
