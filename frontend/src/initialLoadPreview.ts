@@ -12,6 +12,8 @@ export interface InitialLoadPreviewResult {
   status: 'PREVIEW_VALID' | 'PREVIEW_REQUIRES_CORRECTION' | string
   dataRowCounts: Record<string, number>
   findings: InitialLoadFinding[]
+  /** #694: el servidor dice si el lote se puede cargar; el recibo solo existe si la función está habilitada y el lote es aplicable. */
+  applicable?: boolean; applyBlockers?: InitialLoadFinding[]; receipt?: string | null; receiptExpiresAtUtc?: string | null
 }
 
 const findingTexts: Record<string, string> = {
