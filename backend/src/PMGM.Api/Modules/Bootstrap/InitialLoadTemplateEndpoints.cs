@@ -41,6 +41,15 @@ public static class InitialLoadTemplateEndpoints
                 PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadApplyEndpoint.ApplyAsync)
             .RequireAuthorization()
             .WithTags("Bootstrap institucional — Carga inicial");
+        endpoints.MapPost("/api/platform/bootstrap/initial-load/window/open",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadAdminEndpoints.OpenAsync)
+            .RequireAuthorization().WithTags("Bootstrap institucional — Carga inicial");
+        endpoints.MapPost("/api/platform/bootstrap/initial-load/window/close",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadAdminEndpoints.CloseAsync)
+            .RequireAuthorization().WithTags("Bootstrap institucional — Carga inicial");
+        endpoints.MapGet("/api/platform/bootstrap/initial-load/result",
+                PMGM.Api.Modules.Bootstrap.InitialLoadApply.InitialLoadAdminEndpoints.ResultAsync)
+            .RequireAuthorization().WithTags("Bootstrap institucional — Carga inicial");
         return endpoints;
     }
 
