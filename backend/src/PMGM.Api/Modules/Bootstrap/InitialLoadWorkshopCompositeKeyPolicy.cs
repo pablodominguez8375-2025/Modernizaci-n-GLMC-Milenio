@@ -15,7 +15,10 @@ public static class InitialLoadWorkshopCompositeKeyPolicy
         if (incoming is null || snapshot is null ||
             string.IsNullOrWhiteSpace(incoming.Code) ||
             string.IsNullOrWhiteSpace(incoming.Number) ||
-            string.IsNullOrWhiteSpace(incoming.OrienteCode))
+            string.IsNullOrWhiteSpace(incoming.OrienteCode) ||
+            string.IsNullOrWhiteSpace(incoming.Name) ||
+            string.IsNullOrWhiteSpace(incoming.City) ||
+            string.IsNullOrWhiteSpace(incoming.Country))
             return InitialLoadExistingRecordPolicy.Match.Unresolved;
 
         // Unknown or incomplete persisted keys can conceal a collision.
