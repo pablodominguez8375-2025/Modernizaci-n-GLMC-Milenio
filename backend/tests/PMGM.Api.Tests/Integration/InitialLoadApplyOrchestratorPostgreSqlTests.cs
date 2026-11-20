@@ -26,7 +26,7 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
     private static InitialLoadMemberRowPolicy.Row M(
         string p, string rut, string workshop = "L1", string first = "Ana", string last = "Pérez",
         string grade = "master", string status = "active") =>
-        new(p, "RUT", rut, first, last, "x@example.org", workshop, grade, status);
+        new(p, "RUT", rut, first, last, "x@example.org", workshop, grade, status, "regular");
 
     private static BootstrapDbContext Boot(string cs) =>
         new(new DbContextOptionsBuilder<BootstrapDbContext>().UseNpgsql(cs).Options);
@@ -46,6 +46,15 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
             EntityId = "1", Result = "applied", CorrelationId = "synthetic-" + id.ToString("N")
         });
         await db.SaveChangesAsync(ct);
+        if (!await db.OfficeDefinitions.AnyAsync(x => x.Code == "worshipful_master", ct))
+        {
+            db.OfficeDefinitions.Add(new PMGM.Api.Modules.Bootstrap.Entities.OfficeDefinition
+            {
+                Code = "worshipful_master", Name = "Venerable Maestro (sintético)", Category = "administrative",
+                OrganizationType = BootstrapCodes.WorkshopType, IsPrimary = true, IsActive = true, SortOrder = 10
+            });
+            await db.SaveChangesAsync(ct);
+        }
         var at = DateTimeOffset.UtcNow;
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE core.initial_load_windows
@@ -72,10 +81,12 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
 
     private static async Task<InitialLoadApplyOrchestrator.Result> RunAsync(
         string cs, string fp, IReadOnlyList<InitialLoadWorkshopMatchPolicy.Incoming> w,
-        IReadOnlyList<InitialLoadMemberRowPolicy.Row> m, CancellationToken ct, bool enabled = true)
+        IReadOnlyList<InitialLoadMemberRowPolicy.Row> m, CancellationToken ct, bool enabled = true,
+        IReadOnlyList<InitialLoadOfficeRowPolicy.Row>? offices = null)
     {
         await using var db = Boot(cs);
-        return await new InitialLoadApplyOrchestrator(db).ApplyAsync(enabled, fp, w, m, "synthetic-master", "c-" + fp[..6], ct);
+        return await new InitialLoadApplyOrchestrator(db).ApplyAsync(
+            enabled, fp, w, m, offices ?? [], "synthetic-master", "c-" + fp[..6], ct);
     }
 
     [Fact]
@@ -176,6 +187,61 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
             Assert.Equal("MEMBERS_INVALID", r.Code);
         }
         Assert.Equal(baseline, await CountsAsync(iso.Connection, ct));
+    }
+
+    private static InitialLoadOfficeRowPolicy.Row O(
+        string p = "P1", string w = "L1", string code = "worshipful_master", string date = "2026-03-01", string period = "2026") =>
+        new(p, w, code, date, period);
+
+    [Fact]
+    public async Task Applies_offices_and_a_late_failure_in_cargos_rolls_back_all_three_entities_ledger_and_audit()
+    {
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await PrepareAsync(iso.Connection, ct);
+        var w = new[] { W("L1", "9601", "SYA") };
+        var m = new[] { M("P1", "11.111.111-1") };
+
+        // Late failure: valid workshops + members, but officeCode is not an exact active definition.
+        var baseline = await CountsAsync(iso.Connection, ct);
+        var bad = await RunAsync(iso.Connection, Fp(), w, m, ct, offices: [O(code: "no_such_office")]);
+        Assert.False(bad.Applied);
+        Assert.Equal("OFFICE_CODE_NOT_EXACT", bad.Code);
+        Assert.Equal(baseline, await CountsAsync(iso.Connection, ct));
+        await using (var core = Core(iso.Connection))
+            Assert.Equal(0, await core.OfficeAssignments.CountAsync(ct));
+
+        // Other unmappable shapes also deny with zero writes.
+        foreach (var (rows, code) in new (InitialLoadOfficeRowPolicy.Row[], string)[]
+        {
+            ([O(p: "P-NOPE")], "OFFICE_PERSON_UNKNOWN"),
+            ([O(w: "L2")], "OFFICE_MEMBER_WORKSHOP_MISMATCH"),
+        })
+        {
+            var r = await RunAsync(iso.Connection, Fp(), w, m, ct, offices: rows);
+            Assert.Equal(code, r.Code);
+        }
+        foreach (var invalid in new[] { O(period: ""), O(date: "01-03-2026"), O(date: "2026-13-40") })
+            Assert.Equal("OFFICES_INVALID", (await RunAsync(iso.Connection, Fp(), w, m, ct, offices: [invalid])).Code);
+        Assert.Equal(baseline, await CountsAsync(iso.Connection, ct));
+
+        // Happy path, then identical replay of the office rows in a new batch = exact skip.
+        var ok = await RunAsync(iso.Connection, Fp(), w, m, ct, offices: [O()]);
+        Assert.True(ok.Applied, ok.Code);
+        Assert.Equal(1, ok.OfficesCreated);
+        var again = await RunAsync(iso.Connection, Fp(), w, m, ct, offices: [O()]);
+        Assert.True(again.Applied, again.Code);
+        Assert.Equal(0, again.OfficesCreated);
+        Assert.Equal(1, again.OfficeExactSkips);
+
+        // Same member/office/period with a different start date is a conflict: nothing else changes.
+        var counts = await CountsAsync(iso.Connection, ct);
+        var conflict = await RunAsync(iso.Connection, Fp(), w, m, ct, offices: [O(date: "2026-04-01")]);
+        Assert.Equal("OFFICE_CONFLICT_EXISTING_ASSIGNMENT", conflict.Code);
+        Assert.Equal(counts, await CountsAsync(iso.Connection, ct));
+        await using var check = Core(iso.Connection);
+        Assert.Equal(1, await check.OfficeAssignments.CountAsync(ct));
     }
 
     [Fact]

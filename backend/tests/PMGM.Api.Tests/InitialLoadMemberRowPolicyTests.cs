@@ -6,7 +6,7 @@ namespace PMGM.Api.Tests;
 public sealed class InitialLoadMemberRowPolicyTests
 {
     private static InitialLoadMemberRowPolicy.Row Ok(string p = "P1", string rut = "11.111.111-1") =>
-        new(p, "RUT", rut, "Ana", "Pérez", "ana@example.org", "T1", "master", "active");
+        new(p, "RUT", rut, "Ana", "Pérez", "ana@example.org", "T1", "master", "active", "regular");
 
     [Fact]
     public void Valid_row_is_normalized_and_accepted()
@@ -65,6 +65,16 @@ public sealed class InitialLoadMemberRowPolicyTests
     {
         var r = InitialLoadMemberRowPolicy.Inspect([Ok() with { IdentityNumber = "SECRETO-99" }]);
         Assert.DoesNotContain(r.Findings, f => f.Code.Contains("SECRETO") || f.Column.Contains("SECRETO"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("honorary")]
+    public void Membership_type_is_never_inferred(string type)
+    {
+        var r = InitialLoadMemberRowPolicy.Inspect([Ok() with { MembershipType = type }]);
+        Assert.False(r.Valid);
+        Assert.Contains(r.Findings, f => f.Code == "MEMBERSHIP_TYPE_NOT_EXPLICIT");
     }
 
     [Fact]

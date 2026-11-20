@@ -15,17 +15,22 @@ public static class InitialLoadMemberRowPolicy
     public static readonly IReadOnlySet<string> CanonicalGrades =
         new HashSet<string>(StringComparer.Ordinal) { "apprentice", "fellowcraft", "master" };
 
+    // The institution has NOT authorised inferring a membership type: the contract must carry
+    // it explicitly and only "regular" is admitted today. Missing/other → row error.
+    public static readonly IReadOnlySet<string> AdmissibleMembershipTypes =
+        new HashSet<string>(StringComparer.Ordinal) { "regular" };
+
     public static readonly IReadOnlySet<string> AdmissibleInstitutionalStatuses =
         new HashSet<string>(StringComparer.Ordinal) { "active" };
 
     public sealed record Row(
         string PersonRef, string IdentityType, string IdentityNumber,
         string FirstNames, string LastNames, string? Email,
-        string WorkshopCode, string Grade, string InstitutionalStatus);
+        string WorkshopCode, string Grade, string InstitutionalStatus, string MembershipType);
 
     public sealed record Validated(
         string PersonRef, string Rut, string FirstNames, string LastNames, string? Email,
-        string WorkshopCode, string Grade);
+        string WorkshopCode, string Grade, string MembershipType);
 
     public sealed record Finding(int Row, string Column, string Code);
 
@@ -76,10 +81,13 @@ public static class InitialLoadMemberRowPolicy
             if (r.InstitutionalStatus is null || !AdmissibleInstitutionalStatuses.Contains(r.InstitutionalStatus))
                 findings.Add(new Finding(n, "institutionalStatus", "STATUS_NOT_ADMISSIBLE"));
 
+            if (r.MembershipType is null || !AdmissibleMembershipTypes.Contains(r.MembershipType))
+                findings.Add(new Finding(n, "membershipType", "MEMBERSHIP_TYPE_NOT_EXPLICIT"));
+
             if (findings.Count == before && rut is not null)
                 valid.Add(new Validated(r.PersonRef.Trim(), rut, r.FirstNames.Trim(), r.LastNames.Trim(),
                     string.IsNullOrWhiteSpace(r.Email) ? null : r.Email.Trim(),
-                    r.WorkshopCode.Trim(), r.Grade!));
+                    r.WorkshopCode.Trim(), r.Grade!, r.MembershipType!));
         }
 
         return new Result(findings.Count == 0, findings.Count == 0 ? valid : [], findings);

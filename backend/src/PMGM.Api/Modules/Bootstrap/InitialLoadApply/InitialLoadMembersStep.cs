@@ -14,7 +14,6 @@ namespace PMGM.Api.Modules.Bootstrap.InitialLoadApply;
 /// </summary>
 public static class InitialLoadMembersStep
 {
-    public const string MembershipTypeRegular = "regular";
     public const string StatusActive = "active";
     public const string Evidence = "initial_load";
 
@@ -44,7 +43,7 @@ public static class InitialLoadMembersStep
                 core.Members.Add(m);
                 core.Memberships.Add(new PMGM.Api.Modules.Membership.Entities.Membership
                 {
-                    Member = m, OrganizationId = orgId, MembershipType = MembershipTypeRegular,
+                    Member = m, OrganizationId = orgId, MembershipType = row.MembershipType,
                     Status = StatusActive, EvidenceReference = Evidence
                 });
                 created++;
