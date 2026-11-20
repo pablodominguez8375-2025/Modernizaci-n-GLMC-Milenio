@@ -180,6 +180,11 @@ public static class InitialLoadPreflightPolicy
                 Add(personFile, i + 2, "identityNumber", "DUPLICATE");
         }
 
+        // Detect duplicate office mandates inside the submitted CSV. The key
+        // includes startDate so a later mandate is not conflated with an older one.
+        // This remains a fail-closed preview; deduplication against persisted
+        // records belongs to the future transactional plan/apply workflow.
+        var officeMandates = new HashSet<(string Person, string Workshop, string Office, string StartDate)>();
         var os = sheets[officeFile];
         for (var i = 0; i < os.Count; i++)
         {
@@ -195,7 +200,15 @@ public static class InitialLoadPreflightPolicy
             if (persons.TryGetValue(reference, out var memberShop) &&
                 !string.Equals(shop, memberShop, StringComparison.Ordinal))
                 Add(officeFile, i + 2, "workshopCode", "PERSON_WORKSHOP_MISMATCH");
-            if (!officeCodes.Contains(Read(row, "officeCode")))
+            var officeCode = Read(row, "officeCode");
+            var startDate = Read(row, "startDate");
+            if (Code(officeFile, i, row, "personRef") &&
+                Code(officeFile, i, row, "workshopCode") &&
+                !string.IsNullOrWhiteSpace(officeCode) &&
+                !string.IsNullOrWhiteSpace(startDate) &&
+                !officeMandates.Add((reference, shop, officeCode, startDate)))
+                Add(officeFile, i + 2, "officeCode", "DUPLICATE");
+            if (!officeCodes.Contains(officeCode))
                 Add(officeFile, i + 2, "officeCode", "UNKNOWN_OFFICE");
             if (!DateOnly.TryParseExact(Read(row, "startDate"), "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
