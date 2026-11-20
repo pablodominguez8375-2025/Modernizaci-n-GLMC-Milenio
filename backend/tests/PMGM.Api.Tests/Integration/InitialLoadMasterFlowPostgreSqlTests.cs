@@ -245,6 +245,14 @@ public sealed class InitialLoadMasterFlowPostgreSqlTests
             Assert.Equal(404, (await Do(c, "POST", "apply", new { files, receipt = "x" })).Item1);
             Assert.Equal(404, (await Do(c, "POST", "window/open", new { reason = "Apertura de la carga inicial" })).Item1);
             Assert.Equal(404, (await Do(c, "GET", "result")).Item1);
+            // Contract and preview tell the truth with the flag off: no apply, no receipt, canApply=false.
+            var contractOff = await Do(c, "GET", "contract");
+            Assert.False(contractOff.Item2.GetProperty("supportsApply").GetBoolean());
+            Assert.Equal("PREVIEW_ONLY", contractOff.Item2.GetProperty("status").GetString());
+            var previewOff = await Do(c, "POST", "preview", files);
+            Assert.Equal(200, previewOff.Item1);
+            Assert.False(previewOff.Item2.GetProperty("canApply").GetBoolean());
+            Assert.Equal(System.Text.Json.JsonValueKind.Null, previewOff.Item2.GetProperty("receipt").ValueKind);
         }
 
         using var on = new LodgeManagementWebApplicationFactory(iso.Connection).WithWebHostBuilder(b => Settings(b, true));
@@ -256,11 +264,24 @@ public sealed class InitialLoadMasterFlowPostgreSqlTests
         Assert.Equal(403, (await Do(other, "POST", "window/open", new { reason = "Apertura de la carga inicial" })).Item1);
         Assert.Equal(403, (await Do(other, "GET", "result")).Item1);
 
+        var contractOn = await Do(master, "GET", "contract");
+        Assert.True(contractOn.Item2.GetProperty("supportsApply").GetBoolean());
+        Assert.Equal("APPLY_AVAILABLE", contractOn.Item2.GetProperty("status").GetString());
         var pv = await Do(master, "POST", "preview", files);
         Assert.Equal(200, pv.Item1);
+        // Window not open yet: the batch is applicable and has a receipt, but canApply stays false.
+        Assert.True(pv.Item2.GetProperty("applicable").GetBoolean());
+        Assert.False(pv.Item2.GetProperty("canApply").GetBoolean());
         var receipt = pv.Item2.GetProperty("receipt").GetString()!;
         Assert.Equal(409, (await Do(master, "POST", "apply", new { files, receipt })).Item1);
         Assert.Equal(200, (await Do(master, "POST", "window/open", new { reason = "Apertura de la carga inicial" })).Item1);
+        var pvOpen = await Do(master, "POST", "preview", files);
+        Assert.True(pvOpen.Item2.GetProperty("canApply").GetBoolean());
+        // A non-applicable batch never gets canApply even with the window open.
+        var bad = Csv(); bad["Hermanos.csv"] = bad["Hermanos.csv"].Replace(",active,", ",inactive,");
+        var pvBad = await Do(master, "POST", "preview", bad);
+        Assert.False(pvBad.Item2.GetProperty("canApply").GetBoolean());
+        Assert.False(pvBad.Item2.GetProperty("applicable").GetBoolean());
         Assert.Equal(200, (await Do(master, "POST", "apply", new { files, receipt })).Item1);
         var rb = await Do(master, "GET", "result");
         Assert.Equal(200, rb.Item1);
