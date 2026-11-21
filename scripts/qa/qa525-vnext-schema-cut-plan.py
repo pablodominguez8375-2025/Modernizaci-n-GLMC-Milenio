@@ -9,9 +9,9 @@ import hashlib
 import json
 import re
 
-SOURCE = re.compile(r"[0-9a-f]{40}\\Z")
-SHA = re.compile(r"sha256:[0-9a-f]{64}\\Z")
-MIGRATION = re.compile(r"20[0-9]{12}_[A-Za-z0-9_]+\\Z")
+SOURCE = re.compile(r"[0-9a-f]{40}\Z")
+SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
+MIGRATION = re.compile(r"20[0-9]{12}_[A-Za-z0-9_]+\Z")
 REQUIRED = (
     "20261118150000_AddWorkshopRegistryState",
     "20261118170000_AddWorkshopRetiredGuard",
@@ -63,7 +63,7 @@ def check_plan(raw, pins):
         raise Stop("SCHEMA_PLAN_JSON_INVALID") from None
     if (type(plan) is not dict or set(plan) != FIELDS
             or raw != (json.dumps(plan, sort_keys=True, separators=(",", ":"),
-                                  ensure_ascii=True) + "\\n").encode("ascii")
+                                  ensure_ascii=True) + "\n").encode("ascii")
             or plan["schema"] != "qa525-schema-cut-plan-v1"
             or plan["host"] != "glmdch" or plan["environment"] != "QA_SYNTHETIC"):
         raise Stop("SCHEMA_PLAN_SHAPE_INVALID")
@@ -77,7 +77,7 @@ def check_plan(raw, pins):
             or PREVIOUS not in history or any(mid in history for mid in REQUIRED)
             or type(pending) is not list or pending != list(REQUIRED)):
         raise Stop("SCHEMA_PLAN_HISTORY_INVALID")
-    observed = _digest("".join(mid + "\\n" for mid in history).encode("ascii"))
+    observed = _digest("".join(mid + "\n" for mid in history).encode("ascii"))
     if observed != pins["baseline_history_sha256"]:
         raise Stop("SCHEMA_PLAN_HISTORY_PIN_MISMATCH")
     return {
