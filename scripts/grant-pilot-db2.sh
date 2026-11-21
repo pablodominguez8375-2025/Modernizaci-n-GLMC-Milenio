@@ -9,6 +9,15 @@ BEGIN;
 -- Evita warnings de GRANT ignorados en objetos heredados de otro dueño.
 DO $owner$
 BEGIN
+  -- pg_database_owner is only safe when this database is actually owned
+  -- by the restricted migrator. Otherwise public can hide a different owner.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_database
+    WHERE datname = current_database()
+      AND datdba = 'pmgm_migrator'::regrole
+  ) THEN
+    RAISE EXCEPTION 'QA525_DB_GRANTS_OWNER_MISMATCH';
+  END IF;
   IF EXISTS (
     SELECT 1 FROM pg_namespace n
     WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
