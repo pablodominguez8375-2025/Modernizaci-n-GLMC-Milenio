@@ -98,7 +98,8 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
 
             # public is owned by pg_database_owner; a different database
             # owner would make grants on that schema silently incomplete.
-            sql("pmgm_app", "ALTER DATABASE pmgm OWNER TO pmgm_app;")
+            sql("pmgm_app", "ALTER DATABASE pmgm OWNER TO pmgm_app;"
+                "GRANT CONNECT ON DATABASE pmgm TO pmgm_migrator;")
             refused_db_owner = run([
                 "docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
                 name, "bash", "/scripts/grant-pilot-db2.sh",
