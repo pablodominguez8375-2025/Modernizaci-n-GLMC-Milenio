@@ -1,10 +1,12 @@
 """Focused tests for the QA525 read-only evidence reader."""
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 
@@ -62,6 +64,58 @@ class EvidenceReaderTests(unittest.TestCase):
         p.chmod(0o644)
         with self.assertRaises(MODULE.Stop):
             MODULE.read_private('prepared.json')
+
+    def run_main(self, prepared=None, journal=None):
+        sha = 'a' * 40
+        prepared = prepared or {'source_sha': sha, 'source_asset_sha256':
+                                'sha256:' + 'b' * 64, 'status': 'APPLIED'}
+        journal = journal or {'source_sha': sha, 'status': 'APPLIED'}
+        self.write('prepared.json', json.dumps(prepared).encode())
+        self.write('dual-' + sha + '.json', json.dumps(journal).encode())
+        original_lstat = Path.lstat
+
+        def trusted_directory(path):
+            st = list(original_lstat(path))
+            if path in (self.state, self.state.parent, self.state.parent.parent):
+                st[0] = (st[0] & ~0o777) | 0o700
+                st[4] = 0
+            return os.stat_result(st)
+
+        with patch.object(MODULE.os, 'geteuid', return_value=0), \
+             patch.object(MODULE.socket, 'gethostname', return_value='glmdch'), \
+             patch.object(Path, 'lstat', trusted_directory), \
+             redirect_stdout(io.StringIO()) as output:
+            MODULE.main()
+        return json.loads(output.getvalue())
+
+    def test_main_reports_prepared_journal_and_pending_markers(self):
+        image = 'sha256:' + 'c' * 64
+        self.write('prepared-successor-archive-pending.json', b'{}')
+        self.write('dual-' + 'a' * 40 + '.json.next', b'{}')
+        report = self.run_main(
+            prepared={'source_sha': 'a' * 40, 'source_asset_sha256': 'sha256:' + 'b' * 64,
+                      'status': 'APPLIED', 'api_image_id': image,
+                      'baseline': {'api': {'image_id': image}}},
+            journal={'source_sha': 'a' * 40, 'status': 'APPLIED',
+                     'new_images': {'api': image}})
+        self.assertEqual(report['pending_artifact_count'], 2)
+        self.assertEqual(report['prepared_new_images']['api'], image)
+        self.assertEqual(report['journal_new_images']['api'], image)
+        self.assertIsNone(report['journal_new_images']['web'])
+        self.assertNotIn('nonce', json.dumps(report))
+
+    def test_main_rejects_mismatched_journal(self):
+        with self.assertRaises(MODULE.Stop):
+            self.run_main(journal={'source_sha': 'b' * 40, 'status': 'APPLIED'})
+
+    def test_main_rejects_unbounded_status(self):
+        with self.assertRaises(MODULE.Stop):
+            self.run_main(journal={'source_sha': 'a' * 40, 'status': 'X' * 100})
+
+    def test_main_rejects_untrusted_host(self):
+        with patch.object(MODULE.os, 'geteuid', return_value=1000):
+            with self.assertRaises(MODULE.Stop):
+                MODULE.main()
 
 
 if __name__ == '__main__':
