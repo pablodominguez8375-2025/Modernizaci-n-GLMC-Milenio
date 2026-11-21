@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Se ejecuta una sola vez en el contenedor efímero db-grants, tras finalizar las migraciones.
 set -euo pipefail
-: "${PGPASSWORD:?Se exige credencial bootstrap solo para el job grants}"
-psql -h postgres -U pmgm_app -d pmgm -X -v ON_ERROR_STOP=1 <<'SQL'
+: "${PGPASSWORD:?Se exige credencial de pmgm_migrator para el job grants}"
+# El job usa el dueño acotado de los objetos EF; no usa pmgm_app superusuario.
+psql -h postgres -U pmgm_migrator -d pmgm -X -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
 DO $grant$
 DECLARE schema_name text;
