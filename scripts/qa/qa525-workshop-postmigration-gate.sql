@@ -93,6 +93,32 @@ BEGIN
     RAISE EXCEPTION 'QA525_WORKSHOP_TRANSITIONS_TRIGGERS_INVALID';
   END IF;
 
+  -- The retired-workshop guard is installed by inventory, not by a fixed table list.
+  -- Recompute the same catalog predicate so a newly added reference cannot escape it.
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid = organizations
+    AND t.tgname = 'a00_workshop_retired_guard' AND t.tgtype = 31
+    AND t.tgenabled = 'O' AND NOT t.tgisinternal
+    AND t.tgfoid = to_regprocedure('core.workshop_retired_guard()'))
+    OR EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'core' AND c.relkind = 'r'
+      AND c.relname <> 'audit_events' AND c.relname NOT LIKE '\_\_EFMigrations%'
+      AND EXISTS (SELECT 1 FROM pg_attribute a
+        WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+          AND a.atttypid = 'uuid'::regtype
+          AND NOT (c.relname = 'organizations' AND a.attname = 'Id')
+          AND (a.attname ~* '(organi[sz]ation|workshop|lodge|taller)id$'
+            OR EXISTS (SELECT 1 FROM pg_constraint k WHERE k.contype = 'f'
+              AND k.conrelid = c.oid AND k.confrelid = organizations
+              AND a.attnum = ANY(k.conkey))))
+      AND NOT EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid = c.oid
+        AND t.tgname = 'a00_workshop_retired_guard' AND t.tgtype = 31
+        AND t.tgenabled = 'O' AND NOT t.tgisinternal
+        AND t.tgfoid = to_regprocedure('core.workshop_retired_guard()'))
+  ) THEN
+    RAISE EXCEPTION 'QA525_WORKSHOP_RETIRED_GUARD_INCOMPLETE';
+  END IF;
+
   IF NOT (
     has_table_privilege('pmgm_runtime', transitions, 'SELECT')
     AND has_table_privilege('pmgm_runtime', transitions, 'INSERT')
