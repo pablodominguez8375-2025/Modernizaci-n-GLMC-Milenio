@@ -114,7 +114,7 @@ class QaDb2RealMigrationsTests(unittest.TestCase):
                 'SELECT count(*) FROM public."__EFMigrationsHistory";'
             ).stdout.strip()), 20)
 
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["admin"],
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["migrator"],
                  db, "bash", "/scripts/grant-pilot-db2.sh"], timeout=90)
             # Historial EF migrator-only: no SELECT ni DML para runtime/reportes.
             # Comprobar tanto ACL como intentos SQL con identidades auténticas.
@@ -243,7 +243,7 @@ class QaDb2RealMigrationsTests(unittest.TestCase):
                  "-d", "pmgm_keycloak", "--clean", "--if-exists", "--no-owner",
                  "--no-privileges", "--exit-on-error",
                  "--role=pmgm_keycloak", kc_backup_path], timeout=120)
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["admin"],
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["migrator"],
                  db, "bash", "/scripts/grant-pilot-db2.sh"], timeout=45)
             restored_owner = psql("pmgm_app", pw["admin"],
                  "SELECT pg_get_userbyid(relowner) FROM pg_class "
