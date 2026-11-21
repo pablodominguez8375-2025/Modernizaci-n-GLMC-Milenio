@@ -77,7 +77,7 @@ def check_plan(raw, pins):
             or PREVIOUS not in history or any(mid in history for mid in REQUIRED)
             or type(pending) is not list or pending != list(REQUIRED)):
         raise Stop("SCHEMA_PLAN_HISTORY_INVALID")
-    observed = _digest("".join(mid + "\n" for mid in history).encode("ascii"))
+    observed = _digest("\n".join(history).encode("ascii"))
     if observed != pins["baseline_history_sha256"]:
         raise Stop("SCHEMA_PLAN_HISTORY_PIN_MISMATCH")
     return {
