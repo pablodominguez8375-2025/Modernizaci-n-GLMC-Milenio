@@ -54,18 +54,19 @@ def read_private(name):
         os.close(fd)
 
 
-def image(value):
+def image(value, field):
     if value is None:
         return None
-    require(type(value) is str and DIGEST.fullmatch(value), 'IMAGE_ID_INVALID')
+    require(type(value) is str and DIGEST.fullmatch(value), 'IMAGE_ID_INVALID_' + field)
     return value
 
 
-def image_map(value):
+def image_map(value, field):
     if value is None:
         return {'api': None, 'web': None}
     require(type(value) is dict, 'IMAGE_MAP_INVALID')
-    return {name: image(value.get(name)) for name in ('api', 'web')}
+    return {name: image(value.get(name), field + '_' + name.upper())
+            for name in ('api', 'web')}
 
 
 def baseline_images(value):
@@ -76,8 +77,17 @@ def baseline_images(value):
     for name in ('api', 'web'):
         item = value.get(name)
         require(item is None or type(item) is dict, 'BASELINE_SERVICE_INVALID')
-        images[name] = image(item.get('image_id') if item else None)
+        images[name] = image(item.get('image_id') if item else None,
+                             'BASELINE_' + name.upper())
     return images
+
+
+def safe_keys(obj):
+    keys = sorted(obj)
+    require(len(keys) <= 160 and all(type(key) is str and
+            re.fullmatch(r'[A-Za-z0-9_]{1,80}', key) for key in keys),
+            'KEY_NAMES_UNSAFE_OR_EXCESSIVE')
+    return keys
 
 
 def main():
@@ -113,13 +123,15 @@ def main():
     print(json.dumps({
         'diagnostic': 'QA525_PREPARED_JOURNAL_READ_ONLY',
         'prepared': {'source_sha': source, 'status': prepared['status'],
-                     'asset_sha256': asset, 'file_sha256': prepared_hash},
-        'journal': {'status': journal['status'], 'file_sha256': journal_hash},
-        'prepared_new_images': {'api': image(prepared.get('api_image_id')),
-                                'web': image(prepared.get('web_image_id'))},
+                     'asset_sha256': asset, 'file_sha256': prepared_hash,
+                     'key_names': safe_keys(prepared)},
+        'journal': {'status': journal['status'], 'file_sha256': journal_hash,
+                    'key_names': safe_keys(journal)},
+        'prepared_new_images': {'api': image(prepared.get('api_image_id'), 'PREPARED_API'),
+                                'web': image(prepared.get('web_image_id'), 'PREPARED_WEB')},
         'prepared_baseline_images': baseline_images(prepared.get('baseline')),
-        'journal_old_images': image_map(journal.get('old_images')),
-        'journal_new_images': image_map(journal.get('new_images')),
+        'journal_old_images': image_map(journal.get('old_images'), 'OLD'),
+        'journal_new_images': image_map(journal.get('new_images'), 'NEW'),
         'other_journal_count': len(other_journals),
         'pending_artifact_count': len(pending),
         'pending_artifact_names': pending[:40],
