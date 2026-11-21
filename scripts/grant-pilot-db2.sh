@@ -28,20 +28,23 @@ $grant$;
 -- El runtime NO posee el objeto y jamás modifica ni deshabilita triggers de auditoría.
 REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON core.audit_events FROM pmgm_runtime;
 GRANT SELECT, INSERT ON core.audit_events TO pmgm_runtime;
--- Las transiciones de Taller son append-only. El GRANT global anterior devuelve
--- UPDATE/DELETE al runtime en cada reejecución de db-grants: retirarlos aquí.
--- Si la tabla aún no existe, el job falla y revierte esta transacción.
-REVOKE UPDATE, DELETE, TRUNCATE ON core.workshop_status_transitions FROM pmgm_runtime;
+-- El job también se usa antes de esta migración: la tabla puede no existir aún.
+-- Una vez creada, cada reejecución revoca el GRANT global y comprueba
+-- privilegios efectivos, incluidos los heredados. La migración del corte
+-- verifica por separado que la tabla exista antes de habilitar escritura.
 DO $verify_workshop$
 BEGIN
-  IF NOT (
-    has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'SELECT')
-    AND has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'INSERT')
-    AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'UPDATE')
-    AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'DELETE')
-    AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'TRUNCATE')
-  ) THEN
-    RAISE EXCEPTION 'QA525_WORKSHOP_TRANSITIONS_RUNTIME_PRIVILEGES_INVALID';
+  IF to_regclass('core.workshop_status_transitions') IS NOT NULL THEN
+    EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON core.workshop_status_transitions FROM pmgm_runtime';
+    IF NOT (
+      has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'SELECT')
+      AND has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'INSERT')
+      AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'UPDATE')
+      AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'DELETE')
+      AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'TRUNCATE')
+    ) THEN
+      RAISE EXCEPTION 'QA525_WORKSHOP_TRANSITIONS_RUNTIME_PRIVILEGES_INVALID';
+    END IF;
   END IF;
 END;
 $verify_workshop$;
