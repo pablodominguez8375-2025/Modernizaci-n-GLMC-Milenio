@@ -16,6 +16,7 @@ import sys
 STATE = Path('/opt/centenario/qa525-signed-prepare')
 SHA = re.compile(r'[a-f0-9]{40}\Z')
 DIGEST = re.compile(r'sha256:[a-f0-9]{64}\Z')
+STATUS = re.compile(r'[A-Z_]{1,64}\Z')
 LIMIT = 2_000_000
 
 
@@ -53,6 +54,32 @@ def read_private(name):
         os.close(fd)
 
 
+def image(value):
+    if value is None:
+        return None
+    require(type(value) is str and DIGEST.fullmatch(value), 'IMAGE_ID_INVALID')
+    return value
+
+
+def image_map(value):
+    if value is None:
+        return {'api': None, 'web': None}
+    require(type(value) is dict, 'IMAGE_MAP_INVALID')
+    return {name: image(value.get(name)) for name in ('api', 'web')}
+
+
+def baseline_images(value):
+    if value is None:
+        return {'api': None, 'web': None}
+    require(type(value) is dict, 'BASELINE_INVALID')
+    images = {}
+    for name in ('api', 'web'):
+        item = value.get(name)
+        require(item is None or type(item) is dict, 'BASELINE_SERVICE_INVALID')
+        images[name] = image(item.get('image_id') if item else None)
+    return images
+
+
 def main():
     require(os.geteuid() == 0 and socket.gethostname() == 'glmdch', 'WRONG_HOST_OR_UID')
     for folder in (STATE, STATE.parent, STATE.parent.parent):
@@ -68,22 +95,32 @@ def main():
     journal_name = 'dual-' + source + '.json'
     journal, journal_hash = read_private(journal_name)
     require(journal.get('source_sha') == source, 'JOURNAL_SOURCE_MISMATCH')
-    require(type(prepared.get('status')) is str and type(journal.get('status')) is str,
+    require(type(prepared.get('status')) is str and STATUS.fullmatch(prepared['status'])
+            and type(journal.get('status')) is str and STATUS.fullmatch(journal['status']),
             'STATUS_INVALID')
     names = [p.name for p in STATE.iterdir()]
     other_journals = sorted(n for n in names if re.fullmatch(r'dual-[a-f0-9]{40}\.json', n)
                             and n != journal_name)
+    pending = sorted(n for n in names if n in (
+        'expired-prepared-archive-pending.json',
+        'pending-dual-reconciliation.json',
+        'prepared-successor-archive-pending.json',
+    ) or n.startswith('reconcile-') or n.endswith('.next'))
     # A status field alone does not prove that an update completed successfully.
     print(json.dumps({
         'diagnostic': 'QA525_PREPARED_JOURNAL_READ_ONLY',
         'prepared': {'source_sha': source, 'status': prepared['status'],
                      'asset_sha256': asset, 'file_sha256': prepared_hash},
         'journal': {'status': journal['status'], 'file_sha256': journal_hash},
+        'prepared_new_images': {'api': image(prepared.get('api_image_id')),
+                                'web': image(prepared.get('web_image_id'))},
+        'prepared_baseline_images': baseline_images(prepared.get('baseline')),
+        'journal_old_images': image_map(journal.get('old_images')),
+        'journal_new_images': image_map(journal.get('new_images')),
         'other_journal_count': len(other_journals),
-        'journal_next_present': any(n.startswith('dual-') and n.endswith('.json.next')
-                                    for n in names),
-        'archive_marker_present': 'expired-prepared-archive-pending.json' in names,
-        'reconciliation_marker_present': 'pending-dual-reconciliation.json' in names,
+        'pending_artifact_count': len(pending),
+        'pending_artifact_names': pending[:40],
+        'pending_artifact_names_truncated': len(pending) > 40,
         'may_apply': False,
     }, sort_keys=True))
 
