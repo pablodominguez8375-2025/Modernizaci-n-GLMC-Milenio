@@ -5,6 +5,24 @@ set -euo pipefail
 # El job usa el dueño acotado de los objetos EF; no usa pmgm_app superusuario.
 psql -h postgres -U pmgm_migrator -d pmgm -X -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
+-- El rol limitado solo puede conceder permisos sobre objetos que posee.
+-- Evita warnings de GRANT ignorados en objetos heredados de otro dueño.
+DO $owner$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_namespace n
+    WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
+      AND n.nspowner NOT IN ('pmgm_migrator'::regrole, 'pg_database_owner'::regrole)
+  ) OR EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
+      AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+      AND c.relowner <> 'pmgm_migrator'::regrole
+  ) THEN
+    RAISE EXCEPTION 'QA525_DB_GRANTS_OWNER_MISMATCH';
+  END IF;
+END;
+$owner$;
 DO $grant$
 DECLARE schema_name text;
 BEGIN
