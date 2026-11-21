@@ -28,6 +28,23 @@ $grant$;
 -- El runtime NO posee el objeto y jamás modifica ni deshabilita triggers de auditoría.
 REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON core.audit_events FROM pmgm_runtime;
 GRANT SELECT, INSERT ON core.audit_events TO pmgm_runtime;
+-- Las transiciones de Taller son append-only. El GRANT global anterior devuelve
+-- UPDATE/DELETE al runtime en cada reejecución de db-grants: retirarlos aquí.
+-- Si la tabla aún no existe, el job falla y revierte esta transacción.
+REVOKE UPDATE, DELETE, TRUNCATE ON core.workshop_status_transitions FROM pmgm_runtime;
+DO $verify_workshop$
+BEGIN
+  IF NOT (
+    has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'SELECT')
+    AND has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'INSERT')
+    AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'UPDATE')
+    AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'DELETE')
+    AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'TRUNCATE')
+  ) THEN
+    RAISE EXCEPTION 'QA525_WORKSHOP_TRANSITIONS_RUNTIME_PRIVILEGES_INVALID';
+  END IF;
+END;
+$verify_workshop$;
 -- El historial de EF Core controla qué migraciones se aplican. El runtime
 -- jamás debe consultarlo o alterarlo, incluso si recibe DML por esquema.
 -- El migrador mantiene ownership y permisos para nuevas migraciones.
