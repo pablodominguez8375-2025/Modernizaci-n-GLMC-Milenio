@@ -146,7 +146,7 @@ class PilotDb2IsolationTests(unittest.TestCase):
             psql("pmgm_migrator", migrator_pw,
                  'CREATE TABLE public."__EFMigrationsHistory" '
                  '("MigrationId" text PRIMARY KEY, "ProductVersion" text NOT NULL);')
-            cmd(["docker", "exec", "-e", "PGPASSWORD=" + admin_pw,
+            cmd(["docker", "exec", "-e", "PGPASSWORD=" + migrator_pw,
                  name, "bash", "/scripts/grant-pilot-db2.sh"])
 
             status = psql("pmgm_app", admin_pw,
