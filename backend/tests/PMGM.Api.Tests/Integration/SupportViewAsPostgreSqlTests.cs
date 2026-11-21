@@ -450,6 +450,19 @@ public sealed class SupportViewAsPostgreSqlTests
                 expected.Take(99).Append("other").ToArray(), required);                      // Previous absent
     }
 
+    [Theory]
+    [InlineData("pmgm_app")]
+    [InlineData("pmgm_runtime")]
+    [InlineData("postgres")]
+    [InlineData("")]
+    public async Task Workshops104_migrator_refuses_any_ddl_user_other_than_pmgm_migrator(string user)
+    {
+        var cs = $"Host=postgres;Port=5432;Database=pmgm;Username={user};Password=x";
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            PMGM.Qa.Workshops104MigrationRunner.RunAsync(cs, [], TestContext.Current.CancellationToken));
+        Assert.Equal("WORKSHOPS104_DDL_CONNECTION_REQUIRED", ex.Message);
+    }
+
     private static Task<HttpResponseMessage> StartProfile(HttpClient c, string key, CancellationToken ct)
         => c.PostAsJsonAsync("/api/system/support/view-as", new { profileKey = key }, ct);
     private static Task<HttpResponseMessage> Start(HttpClient c, string target, string reason, CancellationToken ct)

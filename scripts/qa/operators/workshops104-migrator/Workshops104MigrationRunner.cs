@@ -41,7 +41,8 @@ public static class Workshops104MigrationRunner
     public static async Task RunAsync(string connection, string[] expected, CancellationToken ct)
     {
         var builder = new NpgsqlConnectionStringBuilder(connection);
-        if (builder.Database != "pmgm" || string.IsNullOrWhiteSpace(builder.Username)
+        // Only the schema owner may run DDL: a superuser (pmgm_app) or runtime role must never be used here.
+        if (builder.Database != "pmgm" || builder.Username != "pmgm_migrator"
             || builder.Host != "postgres" || builder.Port != 5432)
             throw new InvalidOperationException("WORKSHOPS104_DDL_CONNECTION_REQUIRED");
         builder.ApplicationName = "qa525-workshops104-reviewed";
