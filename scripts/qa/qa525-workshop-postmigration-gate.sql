@@ -24,6 +24,9 @@ BEGIN
   IF missing_count <> 0 THEN
     RAISE EXCEPTION 'QA525_WORKSHOP_MIGRATIONS_INCOMPLETE';
   END IF;
+  IF (SELECT count(*) FROM public."__EFMigrationsHistory") <> 104 THEN
+    RAISE EXCEPTION 'QA525_WORKSHOP_MIGRATION_COUNT_INVALID';
+  END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_class WHERE oid = transitions AND relkind = 'r'
     AND pg_get_userbyid(relowner) = 'pmgm_migrator') THEN
