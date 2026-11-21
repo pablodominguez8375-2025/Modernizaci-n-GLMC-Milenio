@@ -1,6 +1,7 @@
 -- QA525: read-only post-migration gate for workshop registry and transition history.
 -- Run only after the pinned migrator and db-grants have succeeded, while API/WEB
 -- remain stopped. This is evidence, not a migration or permission grant.
+\set ON_ERROR_STOP on
 BEGIN READ ONLY;
 DO $qa525$
 DECLARE
