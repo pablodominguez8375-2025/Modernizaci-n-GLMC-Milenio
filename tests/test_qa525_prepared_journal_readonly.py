@@ -104,7 +104,15 @@ class EvidenceReaderTests(unittest.TestCase):
         self.assertEqual(report['prepared_new_images']['api'], image)
         self.assertEqual(report['journal_new_images']['api'], image)
         self.assertIsNone(report['journal_new_images']['web'])
+        self.assertIn('api_image_id', report['prepared']['key_names'])
+        self.assertIn('new_images', report['journal']['key_names'])
         self.assertNotIn('nonce', json.dumps(report))
+
+    def test_main_identifies_bad_image_field(self):
+        with self.assertRaisesRegex(MODULE.Stop, 'IMAGE_ID_INVALID_PREPARED_API'):
+            self.run_main(prepared={'source_sha': 'a' * 40,
+                                    'source_asset_sha256': 'sha256:' + 'b' * 64,
+                                    'status': 'APPLIED', 'api_image_id': 'short'})
 
     def test_main_rejects_mismatched_journal(self):
         with self.assertRaises(MODULE.Stop):
