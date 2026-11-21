@@ -1,6 +1,8 @@
 -- QA525: read-only post-migration gate for workshop registry and transition history.
 -- Run only after the pinned migrator and db-grants have succeeded, while API/WEB
 -- remain stopped. This is evidence, not a migration or permission grant.
+-- Function bodies are bound by the signed migrator/pre-gate; this catalog check
+-- verifies trigger wiring and enabled state, not the PL/pgSQL source bytes.
 \set ON_ERROR_STOP on
 BEGIN READ ONLY;
 DO $qa525$
@@ -73,7 +75,8 @@ BEGIN
   ) OR NOT EXISTS (
     SELECT 1 FROM pg_class idx JOIN pg_index i ON i.indexrelid = idx.oid
     WHERE i.indrelid = transitions
-      AND idx.relname = 'IX_workshop_status_transitions_SubjectRef_EffectiveAtUtc_Sequence'
+      -- PostgreSQL stores only the first 63 bytes of this EF index name.
+      AND idx.relname = 'IX_workshop_status_transitions_SubjectRef_EffectiveAtUtc_Sequen'
       AND i.indisvalid AND i.indisready
   ) THEN
     RAISE EXCEPTION 'QA525_WORKSHOP_TRANSITIONS_CONSTRAINTS_INVALID';
