@@ -76,13 +76,15 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
                 "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='pmgm';").stdout.strip())
             self.assertEqual("pmgm_keycloak", sql("pmgm_app",
                 "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='pmgm_keycloak';").stdout.strip())
+            self.assertEqual("f", sql("pmgm_app",
+                "SELECT rolsuper FROM pg_roles WHERE rolname='pmgm_migrator';").stdout.strip())
 
             sql("pmgm_migrator", "CREATE SCHEMA core;"
                 "CREATE TABLE core.audit_events "
                 "(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, payload text NOT NULL);"
                 'CREATE TABLE public."__EFMigrationsHistory" (id text PRIMARY KEY);')
 
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_app"],
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
                  name, "bash", "/scripts/grant-pilot-db2.sh"])
             sql("pmgm_runtime", "INSERT INTO core.audit_events(payload) VALUES ('synthetic-only');")
             self.assertEqual("1", sql("pmgm_runtime",
@@ -92,7 +94,7 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
             # the append-only table, a second run must remove its broad DML.
             sql("pmgm_migrator",
                 "CREATE TABLE core.workshop_status_transitions (id bigint PRIMARY KEY);")
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_app"],
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
                  name, "bash", "/scripts/grant-pilot-db2.sh"])
             self.assertEqual("t|t|f|f|f", sql("pmgm_app",
                 "SELECT has_table_privilege('pmgm_runtime', "
