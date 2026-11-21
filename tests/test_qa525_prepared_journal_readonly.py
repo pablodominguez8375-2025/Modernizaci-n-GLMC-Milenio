@@ -92,6 +92,7 @@ class EvidenceReaderTests(unittest.TestCase):
         image = 'sha256:' + 'c' * 64
         self.write('prepared-successor-archive-pending.json', b'{}')
         self.write('dual-' + 'a' * 40 + '.json.next', b'{}')
+        self.write('reconcile-previous-cut', b'{}')
         report = self.run_main(
             prepared={'source_sha': 'a' * 40, 'source_asset_sha256': 'sha256:' + 'b' * 64,
                       'status': 'APPLIED', 'api_image_id': image,
@@ -99,6 +100,7 @@ class EvidenceReaderTests(unittest.TestCase):
             journal={'source_sha': 'a' * 40, 'status': 'APPLIED',
                      'new_images': {'api': image}})
         self.assertEqual(report['pending_artifact_count'], 2)
+        self.assertEqual(report['reconcile_artifact_count_unclassified'], 1)
         self.assertEqual(report['prepared_new_images']['api'], image)
         self.assertEqual(report['journal_new_images']['api'], image)
         self.assertIsNone(report['journal_new_images']['web'])
