@@ -30,7 +30,7 @@ def fixture():
     }
     pins = {k: plan[k] for k in gate.PINS if k in plan}
     pins["baseline_history_sha256"] = digest(
-        "".join(mid + "\n" for mid in history).encode("ascii")
+        "\n".join(history).encode("ascii")
     )
     return plan, pins
 
