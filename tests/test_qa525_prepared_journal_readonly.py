@@ -122,8 +122,25 @@ class EvidenceReaderTests(unittest.TestCase):
     def test_other_journal_source_mismatch_stops(self):
         self.write('dual-' + 'c' * 40 + '.json', json.dumps({
             'source_sha': 'd' * 40, 'status': 'APPLIED'}).encode())
-        with self.assertRaisesRegex(MODULE.Stop, 'OTHER_JOURNAL_SOURCE_MISMATCH'):
-            self.run_main()
+        valid = 'e' * 40
+        self.write('dual-' + valid + '.json', json.dumps({
+            'source_sha': valid, 'status': 'APPLIED'}).encode())
+        report = self.run_main()
+        self.assertEqual(report['other_journal_statuses']['dual-' + 'c' * 40 + '.json'],
+                         'STOP_OTHER_JOURNAL_SOURCE_MISMATCH')
+        self.assertEqual(report['other_journal_statuses']['dual-' + valid + '.json'],
+                         'APPLIED')
+
+    def test_other_journal_bad_mode_and_nonconforming_name_reported(self):
+        other = 'c' * 40
+        p = self.write('dual-' + other + '.json', json.dumps({
+            'source_sha': other, 'status': 'APPLIED'}).encode())
+        p.chmod(0o644)
+        self.write('dual-bad.json', b'{}')
+        report = self.run_main()
+        self.assertEqual(report['other_journal_statuses']['dual-' + other + '.json'],
+                         'STOP_UNTRUSTED_EVIDENCE_FILE')
+        self.assertEqual(report['other_dual_nonconforming_count'], 1)
 
     def test_main_identifies_bad_image_field(self):
         with self.assertRaisesRegex(MODULE.Stop, 'IMAGE_ID_INVALID_PREPARED_API'):

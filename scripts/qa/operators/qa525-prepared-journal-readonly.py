@@ -114,11 +114,19 @@ def main():
     require(len(other_journals) <= 40, 'OTHER_JOURNALS_EXCESSIVE')
     other_statuses = {}
     for name in other_journals:
-        record, _ = read_private(name)
-        require(record.get('source_sha') == name[5:-5], 'OTHER_JOURNAL_SOURCE_MISMATCH')
-        status = record.get('status')
-        require(type(status) is str and STATUS.fullmatch(status), 'OTHER_JOURNAL_STATUS_INVALID')
-        other_statuses[name] = status
+        try:
+            record, _ = read_private(name)
+            require(record.get('source_sha') == name[5:-5], 'OTHER_JOURNAL_SOURCE_MISMATCH')
+            status = record.get('status')
+            require(type(status) is str and STATUS.fullmatch(status), 'OTHER_JOURNAL_STATUS_INVALID')
+            other_statuses[name] = status
+        except Stop as error:
+            other_statuses[name] = 'STOP_' + str(error)
+        except (OSError, ValueError, UnicodeError):
+            other_statuses[name] = 'STOP_OTHER_JOURNAL_READ_INVALID'
+    other_dual_nonconforming_count = sum(
+        n.startswith('dual-') and n.endswith('.json')
+        and not re.fullmatch(r'dual-[a-f0-9]{40}\.json', n) for n in names)
     pending = sorted(n for n in names if n in (
         'expired-prepared-archive-pending.json',
         'pending-dual-reconciliation.json',
@@ -145,6 +153,7 @@ def main():
         'journal_new_images': image_map(journal.get('new_images'), 'NEW'),
         'other_journal_count': len(other_journals),
         'other_journal_statuses': other_statuses,
+        'other_dual_nonconforming_count': other_dual_nonconforming_count,
         'pending_artifact_count': len(pending),
         'pending_artifact_names': pending[:40],
         'pending_artifact_names_truncated': len(pending) > 40,
