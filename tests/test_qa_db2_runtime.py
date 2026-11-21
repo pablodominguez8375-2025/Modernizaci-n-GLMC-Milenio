@@ -92,6 +92,8 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
             self.assertNotEqual(0, refused.returncode,
                                 "db-grants aceptó una tabla con dueño ajeno")
             self.assertIn("QA525_DB_GRANTS_OWNER_MISMATCH", refused.stderr)
+            self.assertNotEqual(0, sql("pmgm_runtime",
+                "SELECT * FROM core.audit_events LIMIT 0;", check=False).returncode)
             sql("pmgm_app", "DROP TABLE core.unowned_ci;")
 
             run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
