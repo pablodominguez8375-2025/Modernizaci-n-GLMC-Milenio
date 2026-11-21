@@ -84,6 +84,16 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
                 "(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, payload text NOT NULL);"
                 'CREATE TABLE public."__EFMigrationsHistory" (id text PRIMARY KEY);')
 
+            # An object created by the bootstrap superuser is not silently
+            # skipped by GRANT; the non-superuser job stops before any ACL change.
+            sql("pmgm_app", "CREATE TABLE core.unowned_ci (id integer);")
+            refused = run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
+                           name, "bash", "/scripts/grant-pilot-db2.sh"], check=False)
+            self.assertNotEqual(0, refused.returncode,
+                                "db-grants aceptó una tabla con dueño ajeno")
+            self.assertIn("QA525_DB_GRANTS_OWNER_MISMATCH", refused.stderr)
+            sql("pmgm_app", "DROP TABLE core.unowned_ci;")
+
             run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
                  name, "bash", "/scripts/grant-pilot-db2.sh"])
             sql("pmgm_runtime", "INSERT INTO core.audit_events(payload) VALUES ('synthetic-only');")
