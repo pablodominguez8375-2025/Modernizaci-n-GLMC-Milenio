@@ -111,6 +111,14 @@ def main():
     names = [p.name for p in STATE.iterdir()]
     other_journals = sorted(n for n in names if re.fullmatch(r'dual-[a-f0-9]{40}\.json', n)
                             and n != journal_name)
+    require(len(other_journals) <= 40, 'OTHER_JOURNALS_EXCESSIVE')
+    other_statuses = {}
+    for name in other_journals:
+        record, _ = read_private(name)
+        require(record.get('source_sha') == name[5:-5], 'OTHER_JOURNAL_SOURCE_MISMATCH')
+        status = record.get('status')
+        require(type(status) is str and STATUS.fullmatch(status), 'OTHER_JOURNAL_STATUS_INVALID')
+        other_statuses[name] = status
     pending = sorted(n for n in names if n in (
         'expired-prepared-archive-pending.json',
         'pending-dual-reconciliation.json',
@@ -119,6 +127,9 @@ def main():
     # A previous reconcile-* backup can be legitimate; report its count
     # separately and leave its meaning to the reviewed cut procedure.
     reconcile_artifacts = [n for n in names if n.startswith('reconcile-')]
+    require(len(reconcile_artifacts) <= 40 and all(
+        re.fullmatch(r'reconcile-[A-Za-z0-9_.-]{1,100}', n) for n in reconcile_artifacts),
+        'RECONCILE_NAMES_UNSAFE_OR_EXCESSIVE')
     # A status field alone does not prove that an update completed successfully.
     print(json.dumps({
         'diagnostic': 'QA525_PREPARED_JOURNAL_READ_ONLY',
@@ -133,10 +144,12 @@ def main():
         'journal_old_images': image_map(journal.get('old_images'), 'OLD'),
         'journal_new_images': image_map(journal.get('new_images'), 'NEW'),
         'other_journal_count': len(other_journals),
+        'other_journal_statuses': other_statuses,
         'pending_artifact_count': len(pending),
         'pending_artifact_names': pending[:40],
         'pending_artifact_names_truncated': len(pending) > 40,
         'reconcile_artifact_count_unclassified': len(reconcile_artifacts),
+        'reconcile_artifact_names_unclassified': sorted(reconcile_artifacts),
         'may_apply': False,
     }, sort_keys=True))
 

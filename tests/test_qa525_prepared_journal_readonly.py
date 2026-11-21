@@ -101,12 +101,29 @@ class EvidenceReaderTests(unittest.TestCase):
                      'new_images': {'api': image}})
         self.assertEqual(report['pending_artifact_count'], 2)
         self.assertEqual(report['reconcile_artifact_count_unclassified'], 1)
+        self.assertEqual(report['reconcile_artifact_names_unclassified'],
+                         ['reconcile-previous-cut'])
         self.assertEqual(report['prepared_new_images']['api'], image)
         self.assertEqual(report['journal_new_images']['api'], image)
         self.assertIsNone(report['journal_new_images']['web'])
         self.assertIn('api_image_id', report['prepared']['key_names'])
         self.assertIn('new_images', report['journal']['key_names'])
         self.assertNotIn('nonce', json.dumps(report))
+
+    def test_other_journals_report_status_without_private_values(self):
+        other = 'c' * 40
+        self.write('dual-' + other + '.json', json.dumps({
+            'source_sha': other, 'status': 'PENDING', 'nonce': 'private-value'}).encode())
+        report = self.run_main()
+        self.assertEqual(report['other_journal_statuses'],
+                         {'dual-' + other + '.json': 'PENDING'})
+        self.assertNotIn('private-value', json.dumps(report))
+
+    def test_other_journal_source_mismatch_stops(self):
+        self.write('dual-' + 'c' * 40 + '.json', json.dumps({
+            'source_sha': 'd' * 40, 'status': 'APPLIED'}).encode())
+        with self.assertRaisesRegex(MODULE.Stop, 'OTHER_JOURNAL_SOURCE_MISMATCH'):
+            self.run_main()
 
     def test_main_identifies_bad_image_field(self):
         with self.assertRaisesRegex(MODULE.Stop, 'IMAGE_ID_INVALID_PREPARED_API'):
