@@ -105,7 +105,10 @@ def main():
         'expired-prepared-archive-pending.json',
         'pending-dual-reconciliation.json',
         'prepared-successor-archive-pending.json',
-    ) or n.startswith('reconcile-') or n.endswith('.next'))
+    ) or n.endswith('.next'))
+    # A previous reconcile-* backup can be legitimate; report its count
+    # separately and leave its meaning to the reviewed cut procedure.
+    reconcile_artifacts = [n for n in names if n.startswith('reconcile-')]
     # A status field alone does not prove that an update completed successfully.
     print(json.dumps({
         'diagnostic': 'QA525_PREPARED_JOURNAL_READ_ONLY',
@@ -121,6 +124,7 @@ def main():
         'pending_artifact_count': len(pending),
         'pending_artifact_names': pending[:40],
         'pending_artifact_names_truncated': len(pending) > 40,
+        'reconcile_artifact_count_unclassified': len(reconcile_artifacts),
         'may_apply': False,
     }, sort_keys=True))
 
