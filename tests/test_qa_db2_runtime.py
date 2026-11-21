@@ -105,7 +105,7 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
                 "'core.workshop_status_transitions', 'DELETE'), "
                 "has_table_privilege('pmgm_runtime', "
                 "'core.workshop_status_transitions', 'TRUNCATE');"
-                ).stdout.strip().replace("|", "|"))
+                ).stdout.strip())
             sql("pmgm_runtime",
                 "INSERT INTO core.workshop_status_transitions(id) VALUES (1);")
             for statement in (
