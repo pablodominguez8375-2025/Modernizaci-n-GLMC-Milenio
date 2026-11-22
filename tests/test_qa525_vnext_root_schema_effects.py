@@ -69,6 +69,20 @@ class SchemaCutEffectsTests(unittest.TestCase):
         fx.ABORT_PATH = "\0bad"
         self.assertTrue(fx.abort_requested())
 
+    def test_schema_env_dir_exists_including_symlink_without_deletion(self):
+        original = fx.SCHEMA_ENV_DIR
+        self.addCleanup(setattr, fx, "SCHEMA_ENV_DIR", original)
+        path = self.root / "schema-env"
+        fx.SCHEMA_ENV_DIR = str(path)
+        self.assertFalse(fx.schema_env_dir_exists())
+        path.symlink_to(self.root / "nonexistent")
+        self.assertTrue(fx.schema_env_dir_exists())
+        self.assertTrue(path.is_symlink())
+        path.unlink()
+        path.mkdir()
+        self.assertTrue(fx.schema_env_dir_exists())
+        self.assertTrue(path.is_dir())
+
     def test_runner_is_closed_docker_only(self):
         for bad in (["/usr/bin/docker"], ("/bin/sh", "-c", "id"), (), ("/usr/bin/docker", "a\0"), "x"):
             with self.assertRaises(fx.Stop):
