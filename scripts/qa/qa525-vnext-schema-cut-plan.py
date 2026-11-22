@@ -91,5 +91,35 @@ def check_plan(raw, pins):
     }
 
 
+GO_PIN_FIELDS = frozenset({
+    "migrator_image_digest", "baseline_history_sha256",
+    "grant_script_sha256", "postgate_sha256", "api_image_id", "web_image_id",
+})
+
+
+def check_go_plan(raw, go_result):
+    """Bind a plan to a separately verified schema GO result, before nonce consumption.
+
+    This is still only a consistency gate: a caller must authenticate the GO,
+    config and release through PRE-4, then hold the lock plane and spend the nonce.
+    """
+    if (type(go_result) is not dict
+            or go_result.get("status") != "QA525_GO_CUT_CONSISTENT_ONLY_UNAUTHENTICATED_NO_APPLY"
+            or go_result.get("purpose") != "SCHEMA_API_WEB_QA_ONLY"
+            or go_result.get("schema_contract_shape_only") is not True
+            or go_result.get("callback_consistency_only") is not True
+            or go_result.get("may_apply") is not False
+            or type(go_result.get("schema_pins")) is not dict
+            or set(go_result["schema_pins"]) != GO_PIN_FIELDS):
+        raise Stop("SCHEMA_PLAN_GO_BINDING_INVALID")
+    pins = dict(go_result["schema_pins"])
+    pins.update({
+        "app_source_sha": go_result.get("app_source_sha"),
+        "app_archive_sha256": go_result.get("app_archive_sha256"),
+        "plan_sha256": go_result.get("plan_sha256"),
+    })
+    return check_plan(raw, pins)
+
+
 if __name__ == "__main__":
     raise SystemExit("QA525_SCHEMA_PLAN_LIBRARY_ONLY_NO_GO")
