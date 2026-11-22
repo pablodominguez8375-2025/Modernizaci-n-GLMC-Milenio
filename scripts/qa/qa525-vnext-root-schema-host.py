@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """QA525 schema-cut HOST assembly. INACTIVE library; loaded only by the verified PRE-4 launcher, never CLI.
 
-`build_steps(archive_bytes, plan_bytes, claims, plane, authority, schema_pins, modules, effects)` returns the exact
-seven zero-argument steps (`executor.STEPS`) built from the reviewed PORTS and the adapter. NOTHING authoritative comes
-from the archive except the two SQL/shell files, whose digests are pinned (`schema_pins`) and re-checked by the adapter.
-
-authority["schema_host"] (closed, Sponsor-pinned launch configuration; extra requirement for ChatGPT's config):
-  pg_container, network, migrator_env_file, grants_env_file, api_container_id (hex), write_roles (list of pmgm_*),
-  target_web_sha (40 hex), grant_script_member, gate_sql_member (archive member names)
-authority["g6"]: the five `pinned_*_sha256` evidence pins. modules: {"ports","adapter","plan"} (the pinned, loaded
-modules). effects: runner, clock, abort_requested, read_evidence, verifier, flight, uat_checks (tuple), archive_epoch (int);
-the UAT credential, if any, is inside `uat_checks` (injected from a root 0600 source); missing => STOP before the nonce.
-No value from the GO, the plan or the archive can name a command, path or role. Fixed codes only.
+Interface fixed by the launcher/child (#1073):
+  precheck(plan_bytes, claims, authority, schema_pins) -> True   BEFORE the nonce (shape + plan pins; else STOP, GO unspent)
+  build_steps(archive_bytes, plan_bytes, claims, plane, authority, schema_pins) -> dict == executor.STEPS (callables)
+`authority` is the closed apiweb section + admission/policy: only `g6` pins and `target.web_sha` are used. Everything
+host-specific (Postgres container, network, env files, write roles, archive member names) is a FIXED CONSTANT of this
+pinned module (glmdch only; never from the GO, the plan or the archive). Siblings are injected by the launcher through
+SIBLING_MODULES/bind_dependencies; `effects` (qa525-vnext-root-schema-effects.py, NOT YET WRITTEN => launcher fails
+closed) exposes `provide(authority, claims)` returning an object with runner, clock, abort_requested, read_evidence,
+verifier, flight, uat_checks (tuple; UAT credential only from a root 0600 source), archive_epoch, api_container_id.
+Fixed codes only.
 """
 import io
 import re
@@ -20,8 +19,22 @@ import zipfile
 SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 MEMBER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./-]{0,120}\Z")
-HOST_KEYS = frozenset({"pg_container", "network", "migrator_env_file", "grants_env_file", "api_container_id",
-                       "write_roles", "target_web_sha", "grant_script_member", "gate_sql_member"})
+SIBLING_MODULES = {"ports": "qa525-vnext-schema-cut-ports.py", "adapter": "qa525-vnext-schema-adapter.py",
+                   "plan": "qa525-vnext-schema-cut-plan.py", "effects": "qa525-vnext-root-schema-effects.py"}
+# glmdch constants (reviewed with this module's bytes; T0 read-only must confirm them before any GO).
+FIXED = {"pg_container": "centenario-qa-lab2-postgres-1", "network": "centenario-qa-lab2_default",
+         "migrator_env_file": "/etc/pmgm/srv01.env", "grants_env_file": "/etc/pmgm/srv01.env",
+         "write_roles": ("pmgm_runtime", "pmgm_app", "pmgm_keycloak"),
+         "grant_script_member": "scripts/grant-pilot-db2.sh",
+         "gate_sql_member": "scripts/qa/qa525-workshop-postmigration-gate.sql"}
+_DEPS = {}
+
+
+def bind_dependencies(mods):
+    if type(mods) is not dict or set(mods) != set(SIBLING_MODULES):
+        raise Stop("SCHEMA_HOST_INPUT_INVALID")
+    _DEPS.clear()
+    _DEPS.update(mods)
 SCHEMA_PIN_KEYS = frozenset({"migrator_image_digest", "baseline_history_sha256", "grant_script_sha256",
                              "postgate_sha256", "api_image_id", "web_image_id"})
 ALLOWED_ROLES = ("pmgm_runtime", "pmgm_app", "pmgm_keycloak")
@@ -41,26 +54,39 @@ def _need(ok):
         raise Stop("SCHEMA_HOST_INPUT_INVALID")
 
 
-def _shape(authority, schema_pins, modules, effects):
-    _need(type(authority) is dict and type(authority.get("g6")) is dict and type(authority.get("schema_host")) is dict
+def _shape(authority, schema_pins):
+    _need(type(authority) is dict and type(authority.get("g6")) is dict and type(authority.get("target")) is dict
           and type(schema_pins) is dict and set(schema_pins) == SCHEMA_PIN_KEYS
           and all(type(v) is str and SHA.fullmatch(v) for v in schema_pins.values())
-          and type(modules) is dict and set(modules) == {"ports", "adapter", "plan"})
-    host = authority["schema_host"]
-    _need(set(host) == HOST_KEYS and type(host["write_roles"]) is list
-          and tuple(sorted(host["write_roles"])) == tuple(sorted(ALLOWED_ROLES))  # exactly the Sponsor-listed roles
-          and type(host["target_web_sha"]) is str and HEX40.fullmatch(host["target_web_sha"])
-          and all(type(host[k]) is str and MEMBER.fullmatch(host[k]) for k in ("grant_script_member", "gate_sql_member"))
-          and all(type(authority["g6"].get(v)) is str and SHA.fullmatch(authority["g6"][v]) for v in G6_MAP.values()))
+          and type(authority["target"].get("web_sha")) is str and HEX40.fullmatch(authority["target"]["web_sha"])
+          and all(type(authority["g6"].get(v)) is str and SHA.fullmatch(authority["g6"][v]) for v in G6_MAP.values())
+          and set(_DEPS) == set(SIBLING_MODULES)
+          and callable(getattr(_DEPS["effects"], "provide", None)))
+
+
+def _effects(authority, claims):
+    try:
+        effects = _DEPS["effects"].provide(dict(authority), dict(claims))
+    except Exception:  # noqa: BLE001
+        raise Stop("SCHEMA_HOST_EFFECTS_UNAVAILABLE") from None
     _need(effects is not None and all(callable(getattr(effects, n, None)) for n in EFFECTS)
           and type(getattr(effects, "uat_checks", None)) is tuple and 1 <= len(effects.uat_checks)
-          and type(getattr(effects, "archive_epoch", None)) is int and not isinstance(effects.archive_epoch, bool))
-    return host
+          and type(getattr(effects, "archive_epoch", None)) is int and not isinstance(effects.archive_epoch, bool)
+          and type(getattr(effects, "api_container_id", None)) is str)
+    return effects
 
 
-def precheck(authority, schema_pins, modules, effects):
-    """Shape-only check the launcher can run BEFORE the nonce: missing credential/port => STOP with the GO unspent."""
-    _shape(authority, schema_pins, modules, effects)
+def precheck(*, plan_bytes, claims, authority, schema_pins):
+    """Runs BEFORE the nonce: any doubt (missing UAT credential, effects, plan/pin drift) => STOP with the GO unspent."""
+    _shape(authority, schema_pins)
+    _need(type(plan_bytes) is bytes and type(claims) is dict)
+    _effects(authority, claims)
+    pins = dict(schema_pins, app_source_sha=claims.get("app_source_sha"),
+                app_archive_sha256=claims.get("app_archive_sha256"), plan_sha256=claims.get("plan_sha256"))
+    try:
+        _DEPS["plan"].check_plan(plan_bytes, pins)
+    except Exception:  # noqa: BLE001
+        raise Stop("SCHEMA_HOST_PLAN_INVALID") from None
     return True
 
 
@@ -80,11 +106,14 @@ def _member(archive_bytes, name):
     return data
 
 
-def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_pins, modules, effects):
-    host = _shape(authority, schema_pins, modules, effects)
+def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_pins):
+    _shape(authority, schema_pins)
+    host = dict(FIXED, target_web_sha=authority["target"]["web_sha"])
+    effects = _effects(authority, claims)
+    host["api_container_id"] = effects.api_container_id
     _need(type(archive_bytes) is bytes and type(plan_bytes) is bytes and type(claims) is dict
           and callable(getattr(plane, "assert_held", None)))
-    ports, adapter, plan_mod = modules["ports"], modules["adapter"], modules["plan"]
+    ports, adapter, plan_mod = _DEPS["ports"], _DEPS["adapter"], _DEPS["plan"]
     pins = dict(schema_pins, app_source_sha=claims.get("app_source_sha"),
                 app_archive_sha256=claims.get("app_archive_sha256"), plan_sha256=claims.get("plan_sha256"))
     try:

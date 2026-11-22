@@ -30,8 +30,12 @@ def dg(b):
     return "sha256:" + hashlib.sha256(b).hexdigest()
 
 
+def fixed_params():
+    return adapter_tests.params(**{k: host.FIXED[k] for k in ("network", "pg_container", "migrator_env_file", "grants_env_file")})
+
+
 def case():
-    p = adapter_tests.params()
+    p = fixed_params()
     src = "a" * 40
     api, web, arch = "sha256:" + "1" * 64, "sha256:" + "2" * 64, "sha256:" + "3" * 64
     plan = {"schema": "qa525-schema-cut-plan-v1", "host": "glmdch", "environment": "QA_SYNTHETIC",
@@ -42,19 +46,13 @@ def case():
     raw = (json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\n").encode()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("ops/grants.sh", p["grant_script"])
-        z.writestr("ops/gate.sql", p["gate_sql"])
+        z.writestr(host.FIXED["grant_script_member"], p["grant_script"])
+        z.writestr(host.FIXED["gate_sql_member"], p["gate_sql"])
     pins = {"migrator_image_digest": p["migrator_image_id"], "baseline_history_sha256":
             dg("\n".join(p["baseline_history_ids"]).encode()), "grant_script_sha256": p["grant_script_sha256"],
             "postgate_sha256": p["postgate_sha256"], "api_image_id": api, "web_image_id": web}
     claims = {"app_source_sha": src, "app_archive_sha256": arch, "plan_sha256": dg(raw), "expires_at": 2000000000}
-    authority = {
-        "g6": {v: dg(k.encode()) for k, v in host.G6_MAP.items()},
-        "schema_host": {"pg_container": p["pg_container"], "network": p["network"],
-                        "migrator_env_file": p["migrator_env_file"], "grants_env_file": p["grants_env_file"],
-                        "api_container_id": "b" * 12, "write_roles": list(host.ALLOWED_ROLES),
-                        "target_web_sha": src, "grant_script_member": "ops/grants.sh",
-                        "gate_sql_member": "ops/gate.sql"}}
+    authority = {"g6": {v: dg(k.encode()) for k, v in host.G6_MAP.items()}, "target": {"web_sha": src}}
     return p, raw, buf.getvalue(), pins, claims, authority
 
 
@@ -74,14 +72,34 @@ class Effects:
         self.flight = lambda: {"journal": "APPLIED", "health": True, "served_sha": "a" * 40}
         self.uat_checks = (lambda: True,)
         self.archive_epoch = 1900000000 - 3600
+        self.api_container_id = "b" * 12
         for k, v in over.items():
             setattr(self, k, v)
 
 
-def build(**kw):
+class EffModule:
+    def __init__(self, effects):
+        self.effects = effects
+
+    def provide(self, authority, claims):
+        if isinstance(self.effects, Exception):
+            raise self.effects
+        return self.effects
+
+
+def bind(effects=None):
+    host.bind_dependencies(dict(MODULES, effects=EffModule(effects if effects is not None else Effects())))
+
+
+def case_with_member(p):
+    return p
+
+
+def build(effects=None, **kw):
     p, raw, arch, pins, claims, authority = case()
+    bind(effects)
     args = dict(archive_bytes=arch, plan_bytes=raw, claims=claims, plane=Plane(), authority=authority,
-                schema_pins=pins, modules=MODULES, effects=Effects())
+                schema_pins=pins)
     args.update(kw)
     return host.build_steps(**args), args
 
@@ -94,25 +112,36 @@ class HostTests(unittest.TestCase):
 
     def test_precheck_ok_and_fails_closed_without_uat_or_effects(self):
         _, a = build()
-        self.assertTrue(host.precheck(a["authority"], a["schema_pins"], MODULES, a["effects"]))
-        for bad in (Effects(uat_checks=()), Effects(uat_checks=None), Effects(verifier=None), None):
-            with self.assertRaises(host.Stop):
-                host.precheck(a["authority"], a["schema_pins"], MODULES, bad)
+        ok = dict(plan_bytes=a["plan_bytes"], claims=a["claims"], authority=a["authority"], schema_pins=a["schema_pins"])
+        bind()
+        self.assertTrue(host.precheck(**ok))
+        for bad in (Effects(uat_checks=()), Effects(uat_checks=None), Effects(verifier=None), Effects(api_container_id=None),
+                    RuntimeError("no credential")):
+            bind(bad)
+            with self.assertRaises(host.Stop) as c:
+                host.precheck(**ok)
+            self.assertRegex(str(c.exception), r"^SCHEMA_HOST_[A-Z_]+$")
+        bind()
+        with self.assertRaises(host.Stop):
+            host.precheck(**dict(ok, plan_bytes=ok["plan_bytes"] + b" "))
+        host._DEPS.clear()
+        with self.assertRaises(host.Stop):  # unbound siblings
+            host.precheck(**ok)
 
-    def test_write_roles_must_be_exactly_the_sponsor_list(self):
-        for roles in (["pmgm_runtime"], list(host.ALLOWED_ROLES) + ["pmgm_reports"], ["pmgm_runtime", "pmgm_app", "pmgm_x"]):
-            p, raw, arch, pins, claims, authority = case()
-            authority["schema_host"]["write_roles"] = roles
-            with self.assertRaises(host.Stop):
-                host.build_steps(archive_bytes=arch, plan_bytes=raw, claims=claims, plane=Plane(), authority=authority,
-                                 schema_pins=pins, modules=MODULES, effects=Effects())
+    def test_host_constants_are_fixed_and_roles_exact(self):
+        self.assertEqual(set(host.FIXED["write_roles"]), {"pmgm_runtime", "pmgm_app", "pmgm_keycloak"})
+        _, a = build()
+        for extra in ({"schema_host": {}}, {"pg_container": "x"}):
+            auth = dict(a["authority"], **extra)  # extra keys never change the fixed constants
+            steps, _ = build(authority=auth)
+            self.assertEqual(set(steps), ex.STEPS)
 
     def test_plan_or_archive_drift_is_refused_with_fixed_code(self):
         p, raw, arch, pins, claims, authority = case()
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
-            z.writestr("ops/grants.sh", b"evil")
-            z.writestr("ops/gate.sql", p["gate_sql"])
+            z.writestr(host.FIXED["grant_script_member"], b"evil")
+            z.writestr(host.FIXED["gate_sql_member"], p["gate_sql"])
         for kw in ({"plan_bytes": raw + b" "}, {"archive_bytes": buf.getvalue()}, {"archive_bytes": b"nozip"}):
             with self.assertRaises(host.Stop) as c:
                 build(**kw)
@@ -122,7 +151,7 @@ class HostTests(unittest.TestCase):
         p, raw, arch, pins, claims, authority = case()
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
-            z.writestr("ops/grants.sh", p["grant_script"])
+            z.writestr(host.FIXED["grant_script_member"], p["grant_script"])
         with self.assertRaises(host.Stop):
             build(archive_bytes=buf.getvalue())
 
@@ -133,7 +162,7 @@ class HostTests(unittest.TestCase):
             build(schema_pins=pins)
 
     def test_full_sequence_with_real_sequencer_and_scripted_effects(self):
-        p = adapter_tests.params()
+        p = fixed_params()
         fake = adapter_tests.Fake(p)
         revs = ("a" * 40 + "\n").encode()
 
@@ -167,12 +196,12 @@ class HostTests(unittest.TestCase):
             if phase == "POSTGATE_PASS":
                 self.state = True
             return {"phase": phase, "failure_class_if_interrupted": "PARTIAL_SCHEMA_STOP" if len(phases) > 3 else "PRE_DDL_STOP"}
-        steps, _ = build(effects=Effects(runner=runner))
+        steps, _ = build(Effects(runner=runner))
         out = ex.run(journal, Plane(), steps)
         self.assertEqual(tuple(out["phases"]), ex.PHASES_OK)
 
     def test_flight_not_applied_stops_before_uat(self):
-        steps, _ = build(effects=Effects(flight=lambda: {"journal": "FAILED", "health": True, "served_sha": "a" * 40}))
+        steps, _ = build(Effects(flight=lambda: {"journal": "FAILED", "health": True, "served_sha": "a" * 40}))
         self.assertEqual(steps["apply_api_web"](), {"terminal": "FAILED"})
 
 
