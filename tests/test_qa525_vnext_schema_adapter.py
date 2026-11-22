@@ -81,7 +81,7 @@ class Journal:
         self.phases.append(phase)
 
 
-class AdapterTests(unittest.TestCase):
+class SchemaCutAdapterTests(unittest.TestCase):
     def run_case(self, p=None, **over):
         p = p or params()
         runner = Fake(p, **over)
