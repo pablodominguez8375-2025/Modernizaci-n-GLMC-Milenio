@@ -1,0 +1,128 @@
+name: QA525 migrator OCI build and attest
+# Construye la imagen OCI del migrador EF (Workshops 100->104) FUERA del host, la compila dos veces y exige
+# bytes idénticos (reproducibilidad). Solo en dev se atesta con Sigstore (job aparte con OIDC; el build del
+# código candidato NO tiene id-token). Nada se despliega ni se publica: artifact de 14 días. QA_DEPLOY=NO_GO.
+on:
+  pull_request:
+    paths:
+      - "scripts/qa/operators/workshops104-migrator/**"
+      - ".github/workflows/qa525-migrator-oci.yml"
+  push:
+    branches: [dev]
+permissions:
+  contents: read
+concurrency:
+  group: qa525-migrator-oci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Resolve base images by digest
+        run: |
+          set -euo pipefail
+          for pair in "SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0" "RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0"; do
+            name="${pair%%=*}"; ref="${pair#*=}"
+            docker pull --platform linux/amd64 "$ref" >/dev/null
+            digest_ref="$(docker image inspect --format '{{index .RepoDigests 0}}' "$ref")"
+            echo "${name}=${digest_ref}" >> "$GITHUB_ENV"
+            echo "${name}=${digest_ref}"
+          done
+      - name: Build twice (OCI + docker archive) and require identical bytes
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          epoch="$(git log -1 --format=%ct)"
+          docker buildx create --name oci --driver docker-container --use >/dev/null
+          docker buildx inspect --bootstrap >/dev/null
+          build() { # kind run
+            docker buildx build --builder oci --platform linux/amd64 --provenance=false --sbom=false \
+              --build-arg SDK_IMAGE="$SDK_IMAGE" --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+              --build-arg SOURCE_DATE_EPOCH="$epoch" -t "workshops104-migrator:${GITHUB_SHA::8}" \
+              -f scripts/qa/operators/workshops104-migrator/Dockerfile \
+              -o "type=$1,dest=$out/$1-$2.tar,rewrite-timestamp=true" .
+          }
+          for kind in oci docker; do build "$kind" 1; build "$kind" 2; done
+          for kind in oci docker; do
+            a="$(sha256sum "$out/$kind-1.tar" | cut -d' ' -f1)"; b="$(sha256sum "$out/$kind-2.tar" | cut -d' ' -f1)"
+            test "$a" = "$b" || { echo "NOT_REPRODUCIBLE kind=$kind $a $b"; exit 1; }
+            mv "$out/$kind-1.tar" "$out/migrator-$kind.tar"; rm -f "$out/$kind-2.tar"
+          done
+      - name: Evidence, smoke and checksums
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"; mkdir -p "$out/x"
+          tar -xf "$out/migrator-oci.tar" -C "$out/x" index.json blobs
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          out = os.environ["RUNNER_TEMP"] + "/out"
+          idx = json.load(open(out + "/x/index.json"))
+          md = idx["manifests"][0]["digest"]
+          man = json.load(open(out + "/x/blobs/sha256/" + md.split(":")[1]))
+          sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+          ev = {
+            "artifact": "qa525-workshops104-migrator-oci",
+            "source_sha": os.environ["GITHUB_SHA"], "ref": os.environ["GITHUB_REF"],
+            "workflow_run": os.environ["GITHUB_RUN_ID"],
+            "sdk_image": os.environ["SDK_IMAGE"], "runtime_image": os.environ["RUNTIME_IMAGE"],
+            "oci_manifest_digest": md, "image_id_config_digest": man["config"]["digest"],
+            "oci_archive_sha256": sha(out + "/migrator-oci.tar"),
+            "docker_archive_sha256": sha(out + "/migrator-docker.tar"),
+            "reproducible": "oci x2 y docker-archive x2 idénticos byte a byte",
+            "runtime": {"user": "APP_UID", "entrypoint": ["dotnet", "Workshops104Migrator.dll"], "platform": "linux/amd64"},
+          }
+          json.dump(ev, open(out + "/evidence.json", "w"), indent=1, sort_keys=True)
+          print(json.dumps(ev, indent=1, sort_keys=True))
+          PY
+          rm -rf "$out/x"
+          docker load -i "$out/migrator-docker.tar" >/dev/null
+          id="$(docker image inspect "workshops104-migrator:${GITHUB_SHA::8}" --format '{{.Id}}')"
+          want="$(python3 -c "import json;print(json.load(open('$out/evidence.json'))['image_id_config_digest'])")"
+          test "$id" = "$want" || { echo "IMAGE_ID_MISMATCH $id $want"; exit 1; }
+          set +e
+          res="$(docker run --rm --network none --read-only --tmpfs /tmp "workshops104-migrator:${GITHUB_SHA::8}" 2>/dev/null)"; rc=$?
+          set -e
+          echo "smoke rc=$rc out=$res"
+          test "$rc" = 2
+          test "$res" = '{"status":"WORKSHOPS104_MIGRATION_BLOCKED_RECONCILE_REQUIRED"}'
+          ( cd "$out" && sha256sum migrator-oci.tar migrator-docker.tar evidence.json > SHA256SUMS )
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qa525-migrator-oci-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/out/migrator-oci.tar
+            ${{ runner.temp }}/out/migrator-docker.tar
+            ${{ runner.temp }}/out/evidence.json
+            ${{ runner.temp }}/out/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+  attest:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Fetch artifact produced WITHOUT id-token permission
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: qa525-migrator-oci-${{ github.sha }}
+          path: ${{ runner.temp }}/in
+      - name: Verify checksums before attesting
+        run: cd "$RUNNER_TEMP/in" && sha256sum -c SHA256SUMS
+      - name: Attest archives and evidence (Sigstore)
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            ${{ runner.temp }}/in/migrator-oci.tar
+            ${{ runner.temp }}/in/migrator-docker.tar
+            ${{ runner.temp }}/in/evidence.json
