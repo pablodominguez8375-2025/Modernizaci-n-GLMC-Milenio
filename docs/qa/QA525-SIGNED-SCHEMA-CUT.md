@@ -38,6 +38,8 @@ No basta introducir las ramas #1068–#1071 al ZIP: integrar y probar el **mismo
 | 7. Aplicación | Revalidar imágenes/pins y G6, usar vuelo API/WEB revisado sin relajar su contrato; `APP_APPLIED` solo con resultado terminal claro | mantener esquema 104; rollback de imágenes únicamente si compatible, marcar parcial |
 | 8. Servicio/UAT | Smoke autenticado, Talleres, Ficha del Taller, carga inicial Taller/Hermanos/Cargos, permisos y persistencia con datos sintéticos; capacidad real queda habilitable tras aceptación y fuente institucional | `UAT_STOP`; QA no se declara operativo |
 
+El reductor puro `qa525-vnext-schema-cut-journal-contract.py` exige el orden cerrado de nueve fases, eventos canónicos encadenados por SHA-256 y clasificación de interrupción (`PRE_DDL_STOP`, `PARTIAL_SCHEMA_STOP`, `APP_PARTIAL_STOP`, `UAT_STOP`); no escribe disco ni habilita efectos. El futuro port root deberá persistir cada evento en un archivo nuevo de forma durable bajo locks, antes de permitir la siguiente fase.
+
 El journal registra hash de entradas, fase en curso y salida terminal antes/después de cada efecto mediante escritura durable. Una caída entre DDL y el registro de éxito se trata como parcial desconocido, aun si la historia parece 104; recuperar requiere lectura/reconciliación supervisada y GO nuevo. El GO se consume antes del primer efecto y jamás se reusa. Mantener locks hasta finalizar la fase terminal; verificar su posesión antes y después de cada frontera. Nunca ejecutar una reversión EF `Down` automática ni afirmar restauración de base por revertir contenedores.
 
 ## Entregables bloqueantes antes de host
