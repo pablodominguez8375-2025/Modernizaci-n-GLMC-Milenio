@@ -1,9 +1,37 @@
 #!/usr/bin/env bash
 # Se ejecuta una sola vez en el contenedor efímero db-grants, tras finalizar las migraciones.
 set -euo pipefail
-: "${PGPASSWORD:?Se exige credencial bootstrap solo para el job grants}"
-psql -h postgres -U pmgm_app -d pmgm -X -v ON_ERROR_STOP=1 <<'SQL'
+: "${PGPASSWORD:?Se exige credencial de pmgm_migrator para el job grants}"
+# El job usa el dueño acotado de los objetos EF; no usa pmgm_app superusuario.
+psql -h postgres -U pmgm_migrator -d pmgm -X -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
+-- El rol limitado solo puede conceder permisos sobre objetos que posee.
+-- Evita warnings de GRANT ignorados en objetos heredados de otro dueño.
+DO $owner$
+BEGIN
+  -- pg_database_owner is only safe when this database is actually owned
+  -- by the restricted migrator. Otherwise public can hide a different owner.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_database
+    WHERE datname = current_database()
+      AND datdba = 'pmgm_migrator'::regrole
+  ) THEN
+    RAISE EXCEPTION 'QA525_DB_GRANTS_OWNER_MISMATCH';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_namespace n
+    WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
+      AND n.nspowner NOT IN ('pmgm_migrator'::regrole, 'pg_database_owner'::regrole)
+  ) OR EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
+      AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+      AND c.relowner <> 'pmgm_migrator'::regrole
+  ) THEN
+    RAISE EXCEPTION 'QA525_DB_GRANTS_OWNER_MISMATCH';
+  END IF;
+END;
+$owner$;
 DO $grant$
 DECLARE schema_name text;
 BEGIN

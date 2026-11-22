@@ -38,7 +38,7 @@ services:
       migrator:
         condition: service_completed_successfully
     environment:
-      PGPASSWORD: ${PMGM_QA_DB_PASSWORD:?Secreto bootstrap requerido}
+      PGPASSWORD: ${PMGM_QA_MIGRATOR_DB_PASSWORD:?Secreto migrador requerido}
     volumes:
       - ../scripts/grant-pilot-db2.sh:/scripts/grant-pilot-db2.sh:ro
     command: ["bash", "/scripts/grant-pilot-db2.sh"]

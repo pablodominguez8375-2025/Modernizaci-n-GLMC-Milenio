@@ -76,13 +76,42 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
                 "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='pmgm';").stdout.strip())
             self.assertEqual("pmgm_keycloak", sql("pmgm_app",
                 "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='pmgm_keycloak';").stdout.strip())
+            self.assertEqual("f", sql("pmgm_app",
+                "SELECT rolsuper FROM pg_roles WHERE rolname='pmgm_migrator';").stdout.strip())
 
             sql("pmgm_migrator", "CREATE SCHEMA core;"
                 "CREATE TABLE core.audit_events "
                 "(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, payload text NOT NULL);"
                 'CREATE TABLE public."__EFMigrationsHistory" (id text PRIMARY KEY);')
 
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_app"],
+            # An object created by the bootstrap superuser is not silently
+            # skipped by GRANT; the non-superuser job stops before any ACL change.
+            sql("pmgm_app", "CREATE TABLE core.unowned_ci (id integer);")
+            refused = run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
+                           name, "bash", "/scripts/grant-pilot-db2.sh"], check=False)
+            self.assertNotEqual(0, refused.returncode,
+                                "db-grants aceptó una tabla con dueño ajeno")
+            self.assertIn("QA525_DB_GRANTS_OWNER_MISMATCH", refused.stderr)
+            self.assertNotEqual(0, sql("pmgm_runtime",
+                "SELECT * FROM core.audit_events LIMIT 0;", check=False).returncode)
+            sql("pmgm_app", "DROP TABLE core.unowned_ci;")
+
+            # public is owned by pg_database_owner; a different database
+            # owner would make grants on that schema silently incomplete.
+            sql("pmgm_app", "ALTER DATABASE pmgm OWNER TO pmgm_app;"
+                "GRANT CONNECT ON DATABASE pmgm TO pmgm_migrator;")
+            refused_db_owner = run([
+                "docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
+                name, "bash", "/scripts/grant-pilot-db2.sh",
+            ], check=False)
+            self.assertNotEqual(0, refused_db_owner.returncode,
+                                "db-grants aceptó un dueño de BD ajeno")
+            self.assertIn("QA525_DB_GRANTS_OWNER_MISMATCH", refused_db_owner.stderr)
+            self.assertNotEqual(0, sql("pmgm_runtime",
+                "SELECT * FROM core.audit_events LIMIT 0;", check=False).returncode)
+            sql("pmgm_app", "ALTER DATABASE pmgm OWNER TO pmgm_migrator;")
+
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
                  name, "bash", "/scripts/grant-pilot-db2.sh"])
             sql("pmgm_runtime", "INSERT INTO core.audit_events(payload) VALUES ('synthetic-only');")
             self.assertEqual("1", sql("pmgm_runtime",
@@ -92,7 +121,7 @@ class QaBd2PostgresRuntimeTests(unittest.TestCase):
             # the append-only table, a second run must remove its broad DML.
             sql("pmgm_migrator",
                 "CREATE TABLE core.workshop_status_transitions (id bigint PRIMARY KEY);")
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_app"],
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["pmgm_migrator"],
                  name, "bash", "/scripts/grant-pilot-db2.sh"])
             self.assertEqual("t|t|f|f|f", sql("pmgm_app",
                 "SELECT has_table_privilege('pmgm_runtime', "
