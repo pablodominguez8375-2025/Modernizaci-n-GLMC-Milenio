@@ -80,6 +80,22 @@ EXPECTED_CLOSURE = frozenset({
     "qa525-vnext-root-launcher.py",
     "qa525-vnext-root-locks.py",
     "qa525-vnext-root-plane.py",
+    "qa525-vnext-root-schema-child.py",
+    "qa525-vnext-root-schema-host.py",
+    "qa525-vnext-root-schema-effects.py",
+    "qa525-vnext-root-schema-flight.py",
+    "qa525-vnext-schema-hold-stopped.py",
+    "qa525-vnext-root-schema-g6.py",
+    "qa525-vnext-root-schema-uat.py",
+    "qa525-vnext-synthetic-e2e.py",
+    "qa525-vnext-schema-cut-plan.py",
+    "qa525-vnext-schema-cut-executor.py",
+    "qa525-vnext-schema-cut-journal-contract.py",
+    "qa525-vnext-schema-cut-journal-store.py",
+    "qa525-vnext-schema-cut-ports.py",
+    "qa525-vnext-schema-adapter.py",
+    "qa525-vnext-schema-env-files.py",
+    "qa525-vnext-schema-env-render.py",
     "qa525-vnext-scope-store.py",
     "qa525-vnext-stage-store.py",
     "qa525-vnext-state-reader.py",
@@ -99,11 +115,12 @@ MAX_MANIFEST = 5_000_000
 STORAGE_MARK = "STORAGE=SIGNED_REBUILT_SILO_ARCHIVE_SYNTHETIC_QA"
 CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py",
             "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py",
+            "SCHEMA_API_WEB_QA_ONLY": "qa525-vnext-root-schema-child.py",
             **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c
                for c in ("preflight", "init", "backup", "restore", "review")}}
 CONFIG_KEYS = {"pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256",
                "app_subject_sha256", "inbox", "temp_root", "socket_path", "journal_root", "lease_dir",
-               "peer_uid", "timeout", "children", "g6_pins", "authenticity", "apiweb"}
+               "peer_uid", "timeout", "children", "g6_pins", "authenticity", "apiweb", "schema_cut"}
 PINS_KEYS = {"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256", "admission_sha256",
              "policy_hash"}
 LAUNCHER_PIN_KEYS = {"release_asset_sha256", "old_launcher_sha256", "candidate_operator_sha256"}
@@ -318,6 +335,12 @@ def validate_config(raw):
                                 and g6["g6_command"] in ("preflight", "init", "backup", "restore", "review")
                                 and _m(g6["g6_operation_sha256"], SHA_P)))
     ok = ok and (data["apiweb"] is None or type(data["apiweb"]) is dict)
+    schema = data["schema_cut"]
+    schema_fields = {"migrator_image_digest", "baseline_history_sha256", "grant_script_sha256",
+                     "postgate_sha256", "api_image_id", "web_image_id"}
+    ok = ok and (schema is None or (_shape(schema, schema_fields)
+                                 and all(_m(schema[k], SHA_P) for k in schema_fields)
+                                 and data["apiweb"] is not None))
     if not ok:
         raise Stop("BUILD_CONFIG_INVALID")
     ok = (all(_m(pins[k], GITSHA) for k in ("ops_source_sha", "app_source_sha"))

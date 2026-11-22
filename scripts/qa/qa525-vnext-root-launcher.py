@@ -63,22 +63,30 @@ APIWEB_HOST_MODULES = {"root_locks": LOCKS, "boundary": "qa525-vnext-b7-root-bou
                        "health": "qa525-vnext-health.py", "plan": "qa525-vnext-baseline-plan.py",
                        "b7": "qa525-vnext-b7-held-readonly.py", "physical_runner": "qa525-vnext-held-physical-runner.py"}
 APIWEB_EFFECTS = "qa525-vnext-root-apiweb-effects.py"
+SCHEMA_PLAN = "qa525-vnext-schema-cut-plan.py"
+SCHEMA_EXEC = "qa525-vnext-schema-cut-executor.py"
+SCHEMA_STORE = "qa525-vnext-schema-cut-journal-store.py"
+SCHEMA_CONTRACT = "qa525-vnext-schema-cut-journal-contract.py"
+SCHEMA_HOST = "qa525-vnext-root-schema-host.py"
+SCHEMA_PLAN_FILE = "schema-plan.json"
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256", "app_subject_sha256",
     "inbox", "temp_root", "socket_path", "journal_root", "lease_dir", "peer_uid", "timeout", "children",
-    "g6_pins", "authenticity", "apiweb"})
+    "g6_pins", "authenticity", "apiweb", "schema_cut"})
 AUTH_KEYS = frozenset({"ops_allowed_signers", "ops_signature_sha256", "app_bundle_sha256", "trusted_root_sha256",
                        "app_archive_path", "drop_uid", "drop_gid", "source_repository_id"})
 PINS_KEYS = frozenset({"ops_source_sha", "app_source_sha", "app_archive_sha256", "plan_sha256",
                        "admission_sha256", "policy_hash"})
 # schema -> scope. One signed GO authorizes exactly one scope; a G6 GO authorizes exactly ONE G6 command.
 SCOPES = {"qa525-go-launcher-v1": "LAUNCHER_ONLY", "qa525-go-g6-v1": "G6_V2_ONLY",
-          "qa525-go-cut-v1": "API_WEB_QA_ONLY"}
+          "qa525-go-cut-v1": "API_WEB_QA_ONLY",
+          "qa525-go-schema-cut-v1": "SCHEMA_API_WEB_QA_ONLY"}
 G6_COMMANDS = ("preflight", "init", "backup", "restore", "review")
 # The ONLY scope/command -> child mapping. It lives in code, not in the configuration: an authentic but
 # mis-bound config (swap, duplicate, alternative child) is refused before authentication, nonce or child.
 CHILD_MODULES = dict({"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py",
-                      "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
+                      "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py",
+                      "SCHEMA_API_WEB_QA_ONLY": "qa525-vnext-root-schema-child.py"},
                      **{"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in G6_COMMANDS})
 
 
@@ -124,6 +132,13 @@ def _config(module):
                            or SHA256.fullmatch(g6["g6_operation_sha256"]) is None):
         raise Stop("LAUNCH_CONFIG_INVALID")
     if cfg["apiweb"] is not None and type(cfg["apiweb"]) is not dict:
+        raise Stop("LAUNCH_CONFIG_INVALID")
+    schema = cfg["schema_cut"]
+    fields = {"migrator_image_digest", "baseline_history_sha256", "grant_script_sha256",
+              "postgate_sha256", "api_image_id", "web_image_id"}
+    if schema is not None and (type(schema) is not dict or set(schema) != fields
+                               or any(type(schema[k]) is not str or SHA256.fullmatch(schema[k]) is None
+                                      for k in fields) or cfg["apiweb"] is None):
         raise Stop("LAUNCH_CONFIG_INVALID")
     return cfg
 
@@ -388,6 +403,8 @@ def _compose(load, record, env):
         if cfg["g6_pins"] is None:
             raise Stop("LAUNCH_G6_NOT_CONFIGURED")  # this release pins no G6 command: a G6 GO is not honoured
         g6_pins = dict(cfg["g6_pins"])
+    if purpose == "SCHEMA_API_WEB_QA_ONLY" and cfg["schema_cut"] is None:
+        raise Stop("LAUNCH_SCHEMA_NOT_CONFIGURED")
     child_key = "G6:" + g6_pins["g6_command"] if g6_pins else purpose
     g6_runner = g6_bridge = g6_argv = None
     if g6_pins is not None:
@@ -415,6 +432,40 @@ def _compose(load, record, env):
             if claims is None:
                 raise Stop("LAUNCH_CLAIMS_MISSING")
             return act_for(claims=dict(claims), launcher_pins=dict(cfg["launcher_pins"]))(fd)
+    elif purpose == "SCHEMA_API_WEB_QA_ONLY":
+        schema_plan_bytes = _read_regular(cfg["inbox"], SCHEMA_PLAN_FILE, env["os_uid"], env["anchor"])
+        schema_cache = {}
+        def schema_load(name):
+            if name not in schema_cache:
+                schema_cache[name] = load(name)
+            return schema_cache[name]
+        schema_plan = schema_load(SCHEMA_PLAN)
+        executor, store, contract = (schema_load(SCHEMA_EXEC), schema_load(SCHEMA_STORE),
+                                     schema_load(SCHEMA_CONTRACT))
+        schema_host = schema_load(SCHEMA_HOST)  # PRE-4 manifest only; never a GO-supplied path
+        nonce_journal = schema_load("qa525-vnext-go-nonce-journal.py")
+        _bind_closure(schema_load, [SCHEMA_HOST])  # bind transitive host ports/effects before nonce
+        act_for = getattr(child_mod, "act_for", None)
+        if (not callable(act_for) or not callable(getattr(schema_plan, "check_go_plan", None))
+                or not callable(getattr(executor, "run", None)) or not callable(getattr(store, "append", None))
+                or not callable(getattr(contract, "next_event", None))
+                or not callable(getattr(schema_host, "build_steps", None))
+                or not callable(getattr(schema_host, "precheck", None))):
+            raise Stop("LAUNCH_SCHEMA_PORT_MISSING")
+        schema_authority = dict(cfg["apiweb"], admission_sha256=cfg["pins"]["admission_sha256"],
+                                policy_hash=cfg["pins"]["policy_hash"])
+        schema_outer = {}
+
+        def act(fd):
+            claims = granted.get("claims")
+            if claims is None or schema_outer.get("fp") is None:
+                raise Stop("LAUNCH_CLAIMS_MISSING")
+            return act_for(claims=dict(claims), fd=fd, plane=schema_outer["fp"]._plane,
+                           journal_root=cfg["journal_root"], uid=env["os_uid"],
+                           host=schema_host, executor=executor, store=store,
+                           contract=contract, nonce_journal=nonce_journal,
+                           plan_bytes=schema_plan_bytes, authority=dict(schema_authority),
+                           schema_pins=dict(cfg["schema_cut"]))
     elif purpose == "API_WEB_QA_ONLY":
         act_for = getattr(child_mod, "act_for", None)
         if not callable(act_for):
@@ -490,7 +541,8 @@ def _compose(load, record, env):
             go_bytes=raw["go.json"], go_signature_bytes=raw["go.json.sig"], pins=pins,
             ops_v3_receipt=ops, app_subject=subject, now_utc=dt.datetime.fromtimestamp(now, dt.timezone.utc),
             verify_go_signature=verifier, nonce_unused=lambda _n, _a: True,  # #967 consume is the ONLY marker
-            purpose=purpose, launcher_pins=dict(cfg["launcher_pins"]) if purpose == "LAUNCHER_ONLY" else None, g6_pins=g6_pins)
+            purpose=purpose, launcher_pins=dict(cfg["launcher_pins"]) if purpose == "LAUNCHER_ONLY" else None,
+            g6_pins=g6_pins, schema_pins=dict(cfg["schema_cut"]) if purpose == "SCHEMA_API_WEB_QA_ONLY" else None)
         try:
             authentic = port(ops_bytes=raw["ops-v3.json"], app_subject_bytes=raw["app-subject.json"], claims=dict(result))
         except Exception:  # noqa: BLE001
@@ -500,6 +552,16 @@ def _compose(load, record, env):
         if purpose == "API_WEB_QA_ONLY":  # abort marker + staged images, read-only, BEFORE the nonce can be spent
             apiweb_host.precheck(app_source_sha=result["app_source_sha"], authority=dict(apiweb_authority),
                                  modules=apiweb_host_modules, effects=apiweb_effects)
+        if purpose == "SCHEMA_API_WEB_QA_ONLY":
+            schema_plan.check_go_plan(schema_plan_bytes, result)  # before nonce; exact history, release and OCI pins
+            try:
+                ready = schema_host.precheck(plan_bytes=schema_plan_bytes, claims=dict(result),
+                                             authority=dict(schema_authority),
+                                             schema_pins=dict(cfg["schema_cut"]))
+            except Exception:
+                ready = False
+            if ready is not True:
+                raise Stop("LAUNCH_SCHEMA_PREFLIGHT_DENIED")
         if g6_pins and result.get("g6_command") != g6_pins["g6_command"]:
             raise Stop("LAUNCH_GO_CLAIMS_INVALID")
         if (result.get("purpose") != purpose or type(result.get("nonce")) is not str
@@ -510,6 +572,10 @@ def _compose(load, record, env):
                              "app_archive_sha256": result["app_archive_sha256"]}
         if g6_pins is not None:
             granted["claims"]["g6_command"] = result["g6_command"]
+        if purpose == "SCHEMA_API_WEB_QA_ONLY":
+            granted["claims"].update(go_sha256=result["go_bytes_sha256"],
+                                     plan_sha256=result["plan_sha256"],
+                                     expires_at=_epoch(result["expires_at"]))
         if purpose == "API_WEB_QA_ONLY":
             granted["claims"]["expires_at"] = _epoch(result["expires_at"])  # the host gate refuses any stage after it
         return {"nonce": result["nonce"], "app_archive_sha256": result["app_archive_sha256"],
@@ -521,7 +587,8 @@ def _compose(load, record, env):
 
     # The outer launcher plane and the re-entrant API/WEB child MUST share
     # the exact RootPlane class, not only identical verified source bytes.
-    locks = apiweb_modules["root_locks"] if purpose == "API_WEB_QA_ONLY" else load(LOCKS)
+    locks = (apiweb_modules["root_locks"] if purpose == "API_WEB_QA_ONLY"
+             else schema_load(LOCKS) if purpose == "SCHEMA_API_WEB_QA_ONLY" else load(LOCKS))
     posix, plane_mod = load(POSIX), load(PLANE)
     flight = plane_mod.launcher_flight(locks, posix.PosixPort(), cfg["lease_dir"], uid=0)  # genuine view only
     sock = env["accept"](cfg["socket_path"], cfg["peer_uid"], cfg["timeout"])
@@ -529,6 +596,8 @@ def _compose(load, record, env):
         flight_plane = entry.FlightPlane(flight)
         if purpose == "API_WEB_QA_ONLY":
             outer["fp"] = flight_plane
+        if purpose == "SCHEMA_API_WEB_QA_ONLY":
+            schema_outer["fp"] = flight_plane
         return entry.run(
             load, plane=flight_plane, verify_go=verify_go, sock=sock,
             peer_uid=cfg["peer_uid"], peer_pid=None, timeout=cfg["timeout"],

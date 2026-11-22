@@ -197,6 +197,27 @@ class ApiwebHostEvidence(ApiwebHostBase):
 
 
 class ApiwebHostAssembled(ApiwebHostBase):
+    def test_schema_profile_reuses_real_pinned_h0_with_exact_stopped_api(self):
+        normal = self.build()["inputs"]
+        h0 = normal["inspector"]()["baseline_sha256"]
+        self.authority["baseline_sha256"] = h0
+        api_id = self.docker.rows["api"][0]
+        self.docker.rows["api"][2] = "exited"
+        claims = {"purpose": "SCHEMA_API_WEB_QA_ONLY", "expires_at": 1800000300,
+                  "app_source_sha": "b" * 40}
+        built = host.build(b"zip", claims, self.authority, M, self.fx,
+                           schema_profile=True, api_container_id=api_id)
+        report = built["inputs"]["inspector"]()
+        self.assertEqual(report["baseline_sha256"], h0)
+        self.assertEqual(report["running_services_expected"], 6)
+        M["b7"]._shape(report, h0, "SCHEMA_POSTQUIESCE")
+        self.assertEqual(M["plan"].digest(built["inputs"]["reader"].capture_baseline()), h0)
+        with self.assertRaises(M["state_reader"].Stop):
+            host.build(b"zip", claims, self.authority, M, self.fx,
+                       schema_profile=True, api_container_id="f" * 64)["inputs"]["inspector"]()
+        self.assertFalse(self.fx.log)
+
+
     def test_inputs_cover_exactly_what_run_held_requires_and_nothing_executes_at_build(self):
         held = load("qa525-vnext-held-flight-bridge.py")
         built = self.build()

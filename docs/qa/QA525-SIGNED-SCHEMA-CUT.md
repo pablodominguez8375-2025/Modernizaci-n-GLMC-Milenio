@@ -1,0 +1,65 @@
+# QA525 — contrato del corte firmado de esquema y API/WEB
+
+Estado: propuesta de integración para #1072, **sin autoridad física**. Base de diseño `dev@eb1c4cf51176a70a71ec2174f976225232573b68` (21-11-2026). Este documento no es GO ni comando de glmdch.
+
+## Separación de alcances
+
+`qa525-go-cut-v1 / API_WEB_QA_ONLY` conserva su significado: el hijo `qa525-vnext-root-apiweb-child.py` rechaza migración, psql, identidad y volumen. No ampliar ese GO, ni invocar EF desde un callback de su host. Crear un esquema de GO y scope distintos, con configuración exacta y child dedicados, cargados únicamente por PRE-4 desde un manifiesto autenticado con pin externo. Cambiar de forma coordinada el contrato GO, config, launcher, cierre transitivo, pruebas y manifiesto. Una entrada nueva no se admite con config vieja ni viceversa.
+
+## Autoridad que debe quedar fijada antes de root
+
+La configuración autenticada y el GO deben ligar exactamente:
+
+| Campo | Comprobación |
+| --- | --- |
+| Host y entorno | `glmdch`, QA solamente, usuario operador `soporte`; sin fallback a otra VM |
+| Fuente y paquete | SHA de commit APP y SHA-256 del ZIP interno, bundle Sigstore offline y recibo OPS v3 de namespaces independientes |
+| Migrador | digest OCI `sha256:…` de la imagen construida fuera de glmdch, atestación/manifest del mismo código; ejecutable/assembly y parámetros cerrados, sin tag mutable |
+| Base | hash de lista ordenada de 100 IDs EF observados en T0, exactamente cuatro IDs siguientes y hash de lista ordenada de 104; fingerprint de rol/ownership y DB objetivo |
+| SQL | hashes de `grant-pilot-db2.sh`, H7/H7b y `qa525-workshop-postmigration-gate.sql`, todos del mismo corte revisado |
+| Imágenes API/WEB | IDs por digest de contenido de fuente APP, baseline físico T0, no nombres o tags |
+| Continuidad | hash de admisión, plan, política, GO, nonce único y caducidad corta; G6 v2 backup identificable y restauración aislada revisada |
+
+El chequeo puro `check_cut` del nuevo GO entrega los seis pins de esquema junto con los pins existentes de fuente/plan. `check_go_plan` construye sus entradas exclusivamente de ese resultado y valida el JSON canónico y la historia EF **antes** de consumir el nonce; ambos módulos devuelven `may_apply=False`. El launcher reconoce este scope, exige config PRE-4 con seis pins de esquema, valida el plan y ejecuta el `precheck` del host antes del nonce. Sin host/effects verificados y `precheck=True`, STOP sin gastar el GO.
+
+No basta introducir las ramas #1068–#1071 al ZIP: integrar y probar el **mismo SHA** final, congelar digests de salida y recién entonces firmar un GO para esa revisión. El dato T0 se mide físicamente en el volumen existente, no se presume a partir del historial de desarrollo.
+
+## Fronteras de efectos
+
+| Fase | Invariante antes de pasar | Si falla |
+| --- | --- | --- |
+| 0. Lectura y autenticidad | PRE-4, firmas y pins, expiración, cierre de módulos, T0 y plan exactos, ausencia de journal incompatible | STOP sin nonce gastado ni efectos |
+| 1. Reserva | Cinco locks históricos + lease, nonce consumido una vez, journal `RESERVED` durable | STOP; ningún segundo intento reutiliza el nonce |
+| 2. Respaldo | G6 v2 de BD/objetos con hash y prueba aislada correspondientes al corte, journal `BACKUP_VERIFIED` | STOP antes de DDL |
+| 3. Aislamiento | API no admite escrituras, cero sesiones de escritura al DB objetivo, lease/locks vigentes; journal `WRITES_QUIESCED` | STOP, restaurar servicio previo solo si no hubo DDL |
+| 4. EF | OCI pin por digest, `pmgm_migrator` no superusuario, exactamente 100→104; journal registra inicio antes del primer DDL y `SCHEMA_104` solo tras historia validada | `PARTIAL_SCHEMA_STOP`; sin Down ni API nueva |
+| 5. Grants | H7/H7b bajo `pmgm_migrator`, owner guard sin fallback, privilegios runtime esperados; journal `GRANTS_VERIFIED` | `PARTIAL_SCHEMA_STOP` |
+| 6. Gate | #1069 verifica 104, constraints, índices, triggers y ACL; `POSTGATE_PASS` durable | `PARTIAL_SCHEMA_STOP`, no reabrir API |
+| 7. Aplicación | Revalidar imágenes/pins y G6, usar vuelo API/WEB revisado sin relajar su contrato; `APP_STARTED` durable antes de cualquier efecto API/WEB; `APP_APPLIED` solo con resultado terminal claro | mantener esquema 104; rollback de imágenes únicamente si compatible, marcar parcial |
+| 8. Servicio/UAT | Smoke autenticado, Talleres, Ficha del Taller, carga inicial Taller/Hermanos/Cargos, permisos y persistencia con datos sintéticos; capacidad real queda habilitable tras aceptación y fuente institucional | `UAT_STOP`; QA no se declara operativo |
+
+El reductor puro `qa525-vnext-schema-cut-journal-contract.py` exige el orden cerrado de diez fases, eventos canónicos encadenados por SHA-256 y clasificación de interrupción (`PRE_DDL_STOP`, `PARTIAL_SCHEMA_STOP`, `APP_PARTIAL_STOP`, `UAT_STOP`); no escribe disco ni habilita efectos. El child y el almacén root persisten cada evento en un archivo exclusivo con fsync/readback bajo el plano de locks antes de permitir la siguiente fase.
+
+El journal registra hash de entradas, fase en curso y salida terminal antes/después de cada efecto mediante escritura durable. Una caída entre DDL y el registro de éxito se trata como parcial desconocido, aun si la historia parece 104; recuperar requiere lectura/reconciliación supervisada y GO nuevo. El GO se consume antes del primer efecto y jamás se reusa. Mantener locks hasta finalizar la fase terminal; verificar su posesión antes y después de cada frontera. Nunca ejecutar una reversión EF `Down` automática ni afirmar restauración de base por revertir contenedores.
+
+## Entregables bloqueantes antes de host
+
+1. Integración exacta #1068, #1069, #1070 y #1071, revisión independiente H7b y ownership T0.
+2. Child + host + config + GO/launcher nuevos, errores opacos, inputs de DB cerrados, pin OCI real y empaquetado del mismo SHA; suite de fallo en cada fase y reinicio con journal parcial.
+3. Ensayo completo fuera del host con ZIP/bundle y firma desechable, incluyendo PostgreSQL 17 y volumen sintético de Clau (70 Talleres/≈1050 Hermanos), carga en tandas reales de hasta 30 hermanos.
+4. Operación física supervisada en glmdch solo por Clau como interlocutora del Sponsor, con respaldo G6 v2 y T0 verificados. No pedir a Pablo comandos desde este hilo.
+5. UAT de talleres y carga inicial. Datos personales reales ingresan solo por el circuito institucional de QA privado; no en GitHub, Drive, chat ni demo.
+
+**Estado de rama 22-11-2026:** #1076 (executor, adapter, puertos, host y effects) integrado en #1073 por merge `91e112c2`; launcher, config, signing sheet, child, plan con `api_container_id` y cierre PRE-4 implementados. `effects.provide()` permanece deliberadamente en STOP (`SCHEMA_EFFECTS_NOT_WIRED`) hasta conectar verificador G6, vuelo held API/WEB, UAT autenticado y epoch del recibo. No hay pins/GO de corte ni T0 físico. Readiness/CI del HEAD exacto deben pasar antes de integrar a `dev`. `QA_DEPLOY=NO_GO`.
+
+## Secuenciador (`qa525-vnext-schema-cut-executor.py`) — sin autoridad
+
+Biblioteca pura (sin I/O, locks, nonce ni firma) que ordena las diez fases con colaboradores inyectados. El llamador root completa la fase 0 (PRE-4, firmas, pins, T0/plan, `check_go_plan`) **antes** de gastar el nonce y recién entonces invoca `run()`. Desde la primera línea de `run()` el GO ya está **consumido**: si falla el `preflight` interno o la escritura de `RESERVED`, no se reutiliza el GO y se requiere uno nuevo. `run()` no promete nonce sin gastar.
+
+- Cada fase queda durable (`journal(phase)`, fsync) **antes** del efecto que anuncia; `APP_STARTED` precede al único efecto API/WEB; el plano se verifica antes y después de cada escritura y efecto.
+- Cualquier error de la llamada al journal (incluso un `Stop` propio) deja el journal **ambiguo**; solo la pérdida del plano, fuera de esa llamada, se distingue: no se escribe nada más (jamás se borra ni reintenta un evento parcial) → `SCHEMA_EXEC_JOURNAL_AMBIGUOUS`.
+- Cualquier otro fallo tras `RESERVED` persiste una sola vez la clase terminal que el propio contrato informó para la última fase durable (`failure_class_if_interrupted`); no se adivina. Un plano perdido no escribe nada. Si el propio terminal no puede quedar durable, se informa esa ambigüedad o pérdida de plano (no el error previo, que queda solo como `.original`).
+- Solo `{"terminal": "APPLIED"}` del vuelo API/WEB continúa; solo `True` de backup, quiesce, revalidación y UAT. Sin reintentos, sin `Down`.
+- Códigos fijos; la causa de fases 4–6 se conserva solo si es un código `SCHEMA_ADAPTER_*` de la lista cerrada.
+- Un fallo de UAT tras `APP_APPLIED` termina en `UAT_STOP` (clase informada por el contrato corregido en #1073 @e48c9654); el secuenciador no la adivina.
+- El launcher/child usan el plano de locks y nonce de PRE-4; el host/ports están integrados en la rama, pero los cuatro efectos reales citados arriba siguen sin cablear. Sin ellos el precheck niega la operación antes del nonce. No afirmar QA funcional ni habilitar datos reales.

@@ -63,6 +63,12 @@ G6_GO_CONSTANTS = {
     "operator": "soporte@glmdch",
 }
 G6_COMMANDS = frozenset({"preflight", "init", "backup", "restore", "review"})
+SCHEMA_PIN_FIELDS = ("migrator_image_digest", "baseline_history_sha256", "grant_script_sha256",
+                     "postgate_sha256", "api_image_id", "web_image_id")
+SCHEMA_GO_FIELDS = GO_FIELDS + SCHEMA_PIN_FIELDS
+SCHEMA_GO_CONSTANTS = {"schema": "qa525-go-schema-cut-v1", "host": "glmdch",
+                       "environment": "QA_SYNTHETIC", "scope": "SCHEMA_API_WEB_QA_ONLY",
+                       "action": "ADMIT_SCHEMA_APIWEB_APPLY"}
 MAX_G6_AGE_SECONDS = 900
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 MAX_LAUNCHER_AGE_SECONDS = 900
@@ -122,7 +128,7 @@ def build_go_cut(*, nonce, ops_source_sha, app_source_sha, app_archive_sha256,
                  plan_sha256, admission_sha256, policy_hash, issued_at, expires_at,
                  purpose="API_WEB_QA_ONLY", release_asset_sha256=None,
                  old_launcher_sha256=None, candidate_operator_sha256=None,
-                 g6_command=None, g6_operation_sha256=None):
+                 g6_command=None, g6_operation_sha256=None, schema_pins=None):
     """Canonical GO document bytes for one of three disjoint purposes.
 
     G6 authorizes precisely ONE of preflight/init/backup/restore/review per document.
@@ -130,15 +136,18 @@ def build_go_cut(*, nonce, ops_source_sha, app_source_sha, app_archive_sha256,
     """
     launcher = purpose == "LAUNCHER_ONLY"
     g6 = purpose == "G6_V2_ONLY"
-    if type(purpose) is not str or purpose not in ("API_WEB_QA_ONLY", "LAUNCHER_ONLY", "G6_V2_ONLY"):
+    schema = purpose == "SCHEMA_API_WEB_QA_ONLY"
+    if type(purpose) is not str or purpose not in ("API_WEB_QA_ONLY", "LAUNCHER_ONLY", "G6_V2_ONLY", "SCHEMA_API_WEB_QA_ONLY"):
         raise Stop("SIGNSHEET_PURPOSE_INVALID")
     launcher_extra = (release_asset_sha256, old_launcher_sha256, candidate_operator_sha256)
     g6_extra = (g6_command, g6_operation_sha256)
     if ((not launcher and any(v is not None for v in launcher_extra))
-            or (not g6 and any(v is not None for v in g6_extra))):
+            or (not g6 and any(v is not None for v in g6_extra))
+            or (schema_pins is not None and not schema)
+            or (schema and (type(schema_pins) is not dict or set(schema_pins) != set(SCHEMA_PIN_FIELDS)))):
         raise Stop("SIGNSHEET_PURPOSE_INVALID")
-    record = dict(LAUNCHER_GO_CONSTANTS if launcher else G6_GO_CONSTANTS if g6 else GO_CONSTANTS)
-    record["nonce"] = _need(nonce, HEX64 if launcher or g6 else NONCE,
+    record = dict(LAUNCHER_GO_CONSTANTS if launcher else G6_GO_CONSTANTS if g6 else SCHEMA_GO_CONSTANTS if schema else GO_CONSTANTS)
+    record["nonce"] = _need(nonce, HEX64 if launcher or g6 or schema else NONCE,
                             "SIGNSHEET_INPUT_INVALID")
     if launcher:
         record["release_asset_sha256"] = _need(
@@ -154,6 +163,9 @@ def build_go_cut(*, nonce, ops_source_sha, app_source_sha, app_archive_sha256,
         record["g6_operation_sha256"] = _need(
             g6_operation_sha256, DIGEST, "SIGNSHEET_INPUT_INVALID")
         record["action"] = "g6-v2-%s-supervised" % g6_command
+    if schema:
+        for name in SCHEMA_PIN_FIELDS:
+            record[name] = _need(schema_pins[name], DIGEST, "SIGNSHEET_INPUT_INVALID")
     record["ops_source_sha"] = _need(ops_source_sha, SHA40, "SIGNSHEET_INPUT_INVALID")
     record["app_source_sha"] = _need(app_source_sha, SHA40, "SIGNSHEET_INPUT_INVALID")
     for name, value in (("app_archive_sha256", app_archive_sha256),
@@ -162,7 +174,7 @@ def build_go_cut(*, nonce, ops_source_sha, app_source_sha, app_archive_sha256,
         record[name] = _need(value, DIGEST, "SIGNSHEET_INPUT_INVALID")
     issued, expires = _utc(issued_at), _utc(expires_at)
     if not 0 < (expires - issued).total_seconds() <= (
-            MAX_G6_AGE_SECONDS if g6 else MAX_LAUNCHER_AGE_SECONDS if launcher else MAX_GO_AGE_SECONDS):
+            MAX_G6_AGE_SECONDS if g6 or schema else MAX_LAUNCHER_AGE_SECONDS if launcher else MAX_GO_AGE_SECONDS):
         raise Stop("SIGNSHEET_WINDOW_INVALID")
     record["issued_at"], record["expires_at"] = issued_at, expires_at
     return _canonical(record)
@@ -197,6 +209,13 @@ def review_card(raw):
         if (doc.get("scope") != LAUNCHER_GO_CONSTANTS["scope"]
                 or doc.get("action") != LAUNCHER_GO_CONSTANTS["action"]
                 or doc.get("operator") != LAUNCHER_GO_CONSTANTS["operator"]):
+            raise Stop("SIGNSHEET_DOCUMENT_INVALID")
+    elif schema == "qa525-go-schema-cut-v1":
+        order, namespace = SCHEMA_GO_FIELDS, GO_NAMESPACE
+        if (any(doc.get(k) != v for k, v in SCHEMA_GO_CONSTANTS.items())
+                or any(type(doc.get(k)) is not str or DIGEST.fullmatch(doc[k]) is None
+                       for k in SCHEMA_PIN_FIELDS)
+                or type(doc.get("nonce")) is not str or HEX64.fullmatch(doc["nonce"]) is None):
             raise Stop("SIGNSHEET_DOCUMENT_INVALID")
     elif schema == "qa525-go-g6-v1":
         order, namespace = G6_GO_FIELDS, GO_NAMESPACE

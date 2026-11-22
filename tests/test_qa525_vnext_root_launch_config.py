@@ -47,7 +47,7 @@ def values():
         "peer_uid": 1001,
         "timeout": 5,
         "children": dict(factory.CHILD_MODULES),
-        "g6_pins": None, "apiweb": None,
+        "g6_pins": None, "apiweb": None, "schema_cut": None,
         "authenticity": {
             "ops_allowed_signers": b"ops-test-signers-lines",
             "ops_signature_sha256": h("4"),
@@ -68,6 +68,17 @@ class RootConfigFactoryTests(unittest.TestCase):
         with self.assertRaises(factory.Stop) as raised:
             factory.materialize(preverified_config=candidate)
         self.assertEqual(str(raised.exception), "LAUNCH_CONFIG_INVALID")
+
+    def test_schema_cut_needs_distinct_pins_and_apiweb_authority(self):
+        pins = {k: "sha256:" + "a" * 64 for k in (
+            "migrator_image_digest", "baseline_history_sha256", "grant_script_sha256",
+            "postgate_sha256", "api_image_id", "web_image_id")}
+        self.denied(lambda x: x.__setitem__("schema_cut", pins))
+        self.denied(lambda x: x.__setitem__("schema_cut", dict(pins, extra="x")))
+        self.denied(lambda x: x.__setitem__("schema_cut", dict(pins, api_image_id="latest")))
+        candidate = values()
+        candidate.update(schema_cut=pins, apiweb={})
+        self.assertEqual(factory.materialize(preverified_config=candidate).CONFIG["schema_cut"], pins)
 
     def test_import_is_never_authority(self):
         self.assertIsNone(factory.CONFIG)

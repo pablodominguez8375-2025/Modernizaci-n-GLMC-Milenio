@@ -45,7 +45,7 @@ def good_config(asset_hex):
                          "app_bundle_sha256": "sha256:" + "c" * 64, "trusted_root_sha256": "sha256:" + "d" * 64,
                          "app_archive_path": "/var/lib/x/app.zip", "drop_uid": 65534, "drop_gid": 65534,
                          "source_repository_id": "123456"},
-        "apiweb": None}
+        "apiweb": None, "schema_cut": None}
 
 
 def make_release(mutate=None, extra=None, inner_names=None, outer_extra=None, manifest_override=None):
@@ -215,7 +215,7 @@ class BuildTests(unittest.TestCase):
         return make_release(mutate=mut, extra=extra)
 
     def test_closure_exact_set_gate(self):
-        self.assertEqual(len(B.EXPECTED_CLOSURE), 48)
+        self.assertEqual(len(B.EXPECTED_CLOSURE), 64)
         # a NEW literal dependency (module present and hashed in the release) must STOP: manifest would differ
         added = self._launcher_plus('\nEXTRA = "qa525-vnext-newdep.py"\n',
                                     extra={"scripts/qa/qa525-vnext-newdep.py": b"x = 1\n"})
@@ -230,8 +230,8 @@ class BuildTests(unittest.TestCase):
 
     def test_dependency_dropped_from_code_is_detected(self):
         def mut(f):
-            k = "scripts/qa/qa525-vnext-root-launcher.py"
-            f[k] = f[k].replace(b"qa525-vnext-admission-bridge.py", b"qa525-vnext-health.py")
+            k = "scripts/qa/qa525-vnext-root-schema-effects.py"
+            f[k] = f[k].replace(b"qa525-vnext-root-schema-g6.py", b"qa525-vnext-health.py")
         self.stop("BUILD_CLOSURE_ALLOWLIST_MISMATCH", asset=make_release(mutate=mut))
 
     def test_real_asset_end_to_end_when_provided(self):

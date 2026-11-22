@@ -83,14 +83,34 @@ def web_revision_label(label_value) -> str:
     return label_value
 
 
-def baseline_from_rows(rows: dict, web_sha: str, config: dict = None) -> dict:
-    """Baseline for the verifier. Targets must be running; one-shots exited 0."""
+PROFILES = ("NORMAL", "SCHEMA_POSTQUIESCE")
+
+
+def baseline_from_rows(rows: dict, web_sha: str, config: dict = None, *,
+                       profile: str = "NORMAL", api_container_id: str = None) -> dict:
+    """Baseline for the verifier. Targets must be running; one-shots exited 0.
+
+    profile "SCHEMA_POSTQUIESCE" (6 running services): the schema cut has stopped the OLD api, so the api row must be
+    the EXACT authenticated container `api_container_id` in state "exited" (its image is still the old one: nothing
+    is recreated or invented as running); web must still be running. The baseline keeps the same shape.
+    """
     config = default_config() if config is None else config
+    if profile not in PROFILES:
+        raise Stop("PROFILE_INVALID")
+    if profile == "NORMAL" and api_container_id is not None:
+        raise Stop("PROFILE_INVALID")
+    if profile != "NORMAL" and (type(api_container_id) is not str or CONTAINER_ID.fullmatch(api_container_id) is None):
+        raise Stop("PROFILE_API_ID_REQUIRED")
     _check_rows(rows, config)
     images, layers, deps, ones = {}, {}, {}, {}
     for name in config["targets"]:
         row = _row(rows, name)
-        if row[2] != "running":
+        if profile != "NORMAL" and name == "api":
+            if row[0] != api_container_id:
+                raise Stop("BASELINE_API_ID_MISMATCH")
+            if row[2] != "exited":
+                raise Stop("BASELINE_API_NOT_STOPPED")
+        elif row[2] != "running":
             raise Stop("BASELINE_TARGET_NOT_RUNNING_" + name.upper())
         images[name] = row[1]
         layers[name] = _layers(row, name)
@@ -145,7 +165,11 @@ class StateReader:
     state; nothing in this module proves any of that on a host.
     """
 
-    def __init__(self, metadata, web_revision, health, config: dict = None):
+    def __init__(self, metadata, web_revision, health, config: dict = None, *,
+                 profile: str = "NORMAL", api_container_id: str = None):
+        if profile not in PROFILES:
+            raise Stop("PROFILE_INVALID")
+        self.profile, self._api_container_id = profile, api_container_id
         if not (callable(metadata) and callable(web_revision) and callable(health)):
             raise Stop("PROVIDERS_INVALID")
         self._metadata, self._web_revision, self._health = metadata, web_revision, health
@@ -154,7 +178,8 @@ class StateReader:
             raise Stop("CONFIG_NOT_DEFAULT")
 
     def capture_baseline(self) -> dict:
-        return baseline_from_rows(self._metadata(), self._web_revision(), self._config)
+        return baseline_from_rows(self._metadata(), self._web_revision(), self._config,
+                                  profile=self.profile, api_container_id=self._api_container_id)
 
     def observe(self) -> dict:
         return observation_from_rows(self._metadata(), self._health(), self._config)

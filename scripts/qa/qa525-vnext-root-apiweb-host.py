@@ -166,11 +166,16 @@ def precheck(*, app_source_sha, authority, modules, effects):
     require_staged_images(read, authority["target"], app_source_sha)
 
 
-def build(archive_bytes, claims, authority, modules, effects, now=None):
+def build(archive_bytes, claims, authority, modules, effects, now=None, *,
+          schema_profile=False, api_container_id=None):
     if (type(archive_bytes) is not bytes or type(claims) is not dict or type(modules) is not dict
             or not MODULE_KEYS <= set(modules) or any(not callable(getattr(effects, m, None)) for m in EFFECT_METHODS)):
         raise Stop("APIWEB_HOST_BINDING_INVALID")
     _shape(authority)
+    if (type(schema_profile) is not bool or (schema_profile and
+            (claims.get("purpose") != "SCHEMA_API_WEB_QA_ONLY" or type(api_container_id) is not str))
+            or (not schema_profile and api_container_id is not None)):
+        raise Stop("APIWEB_HOST_BINDING_INVALID")
     expires = claims.get("expires_at")
     if type(expires) is not int or isinstance(expires, bool) or expires <= 0:
         raise Stop("APIWEB_HOST_BINDING_INVALID")
@@ -215,15 +220,18 @@ def build(archive_bytes, claims, authority, modules, effects, now=None):
         except Exception:  # noqa: BLE001
             return {"ok": False, "web_sha": ""}
         return {"ok": ok and type(sha) is str, "web_sha": sha if type(sha) is str else ""}
-    reader = sr.StateReader(metadata, web_revision, health_state)
+    reader = sr.StateReader(metadata, web_revision, health_state,
+                            **({"profile": "SCHEMA_POSTQUIESCE", "api_container_id": api_container_id}
+                               if schema_profile else {}))
 
     def inspector():
         base = reader.capture_baseline()
         obs = [reader.observe() for _ in range(2)]
         if any(plan_mod.digest(o) != plan_mod.digest(obs[0]) for o in obs):
             raise Stop("APIWEB_OBSERVATION_UNSTABLE")
-        return {"status": modules["b7"].SHAPE_STATUS, "baseline_sha256": plan_mod.digest(base),
-                "observation_sha256": plan_mod.digest(obs[0]), "running_services_expected": 7,
+        return {"status": (modules["b7"].SCHEMA_SHAPE_STATUS if schema_profile else modules["b7"].SHAPE_STATUS),
+                "baseline_sha256": plan_mod.digest(base),
+                "observation_sha256": plan_mod.digest(obs[0]), "running_services_expected": (6 if schema_profile else 7),
                 "exited_zero_oneshots_verified": 3, "api_compose_layers": len(base["layers"]["api"]),
                 "web_compose_layers": len(base["layers"]["web"]), "samples": 2,
                 "sourced_from_authenticated_host": False, "sponsor_approved_here": False,

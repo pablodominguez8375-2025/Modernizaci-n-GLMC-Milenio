@@ -90,7 +90,8 @@ def _inputs(inputs, g6_evidence, modules):
 
 
 def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
-             flight, g6_anchor, g6_evidence, checkpoint=None, **inputs):
+             flight, g6_anchor, g6_evidence, checkpoint=None, rollback_factory=None,
+             forbid_baseline_api=False, b7_profile="NORMAL", **inputs):
     """Compose ONE journal-bound physical RootPlane with injected effects.
 
     This is deliberately NOT a runnable updater and MUST NOT be called by an
@@ -99,6 +100,11 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
     external_gate does not prove a Sponsor signature; no authority is conferred
     by returning a successful outcome. It cannot be used to skip issue #822.
     """
+    if (rollback_factory is not None and not callable(rollback_factory)) or type(forbid_baseline_api) is not bool:
+        raise Stop("HELDFLIGHT_SCHEMA_MODE_INVALID")
+    if b7_profile not in ("NORMAL", "SCHEMA_POSTQUIESCE") or (b7_profile == "SCHEMA_POSTQUIESCE"
+            and (rollback_factory is None or forbid_baseline_api is not True)):
+        raise Stop("HELDFLIGHT_SCHEMA_MODE_INVALID")
     modules = dict(root_locks=root_locks, bridge=bridge, boundary=boundary,
                    b7=b7, observer=observer, scopes=scopes, switch=switch,
                    flight=flight, g6_anchor=g6_anchor)
@@ -178,7 +184,8 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
             try:
                 report = held.inspect_once(
                     b7=b7, inspector=inputs["inspector"],
-                    baseline_sha256=inputs["baseline_sha256"])
+                    baseline_sha256=inputs["baseline_sha256"],
+                    **({"profile": b7_profile} if b7_profile == "SCHEMA_POSTQUIESCE" else {}))
                 held.require_current_record(report)
             except Exception:
                 raise Stop("HELDFLIGHT_B7_DENIED") from None
@@ -245,8 +252,12 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
                 held.require_current_record(report)
                 return digest
 
+            forbidden = []  # schema mode: exact argv that would start the BASELINE (old) API; filled below
+
             def guarded_run(argv):
                 held.require_current_record(report)
+                if forbidden and tuple(argv) in forbidden:
+                    raise Stop("HELDFLIGHT_BASELINE_API_FORBIDDEN")
                 try:
                     code = runner(argv)
                 except Exception:
@@ -263,11 +274,24 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
                           settle=inputs["settle"])
             try:
                 forward = switch.ServiceSwitcher.for_plan(plan, "target", **common)
-                rollback = switch.ServiceSwitcher.for_plan(plan, "baseline", **common)
+                baseline = switch.ServiceSwitcher.for_plan(plan, "baseline", **common)
+                if forbid_baseline_api:
+                    # After EF104 the old API image must never run again (neither as rollback nor by any other path).
+                    old_api = baseline.argv_for("api")
+                    if old_api == forward.argv_for("api"):
+                        raise Stop("HELDFLIGHT_BASELINE_EQUALS_TARGET")
+                    forbidden.append(old_api)
+                if rollback_factory is not None:
+                    hold = rollback_factory(plan=deepcopy(plan), runner=guarded_run)
+                    if not callable(hold):
+                        raise Stop("HELDFLIGHT_ROLLBACK_FACTORY_INVALID")
+                    rollback_call = hold
+                else:
+                    rollback_call = baseline.switch_all
                 result = flight.run_apply(
                     lease, plan, switch_api=forward.switch_api,
                     switch_web=forward.switch_web,
-                    rollback=rollback.switch_all,
+                    rollback=rollback_call,
                     observe=observer.make_observe(
                         inputs["reader"], plan["baseline"], plan["target"],
                         samples=2),
@@ -277,6 +301,10 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
                 held.require_current_record(report)
                 if ended["outcome"] not in ("APPLIED", "ROLLED_BACK"):
                     raise Stop("HELDFLIGHT_TERMINAL_UNKNOWN")
+                if rollback_factory is not None and ended["outcome"] == "ROLLED_BACK":
+                    # Schema mode: after EF104 the world can never be "rolled back"; fail closed => APP_PARTIAL_STOP.
+                    ended["outcome"] = "FLIGHT_STOP"
+                    raise Stop("HELDFLIGHT_SCHEMA_ROLLED_BACK_IMPOSSIBLE")
                 return {
                     "status": STATUS,
                     "terminal_outcome": ended["outcome"],

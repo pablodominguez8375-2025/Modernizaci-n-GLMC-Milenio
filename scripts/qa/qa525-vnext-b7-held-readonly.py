@@ -25,6 +25,9 @@ except NameError:  # PRE-4 Verified exec has no __file__: siblings are INJECTED 
 SHA256 = re.compile(r"sha256:[a-f0-9]{64}\Z")
 STATUS = "B7_HELD_READONLY_PREFLIGHT_NO_HOST_AUTHORITY"
 SHAPE_STATUS = "QA525_VNEXT_READONLY_SHAPE_STABLE_NOT_AUTHORIZED"
+SCHEMA_STATUS = "B7_HELD_READONLY_SCHEMA_POSTQUIESCE_NO_HOST_AUTHORITY"
+SCHEMA_SHAPE_STATUS = "QA525_VNEXT_READONLY_SHAPE_SCHEMA_POSTQUIESCE_NOT_AUTHORIZED"
+PROFILES = ("NORMAL", "SCHEMA_POSTQUIESCE")
 SHAPE_FIELDS = frozenset({
     "status", "baseline_sha256", "observation_sha256",
     "running_services_expected", "exited_zero_oneshots_verified",
@@ -70,18 +73,19 @@ def _held(plane):
         raise Stop("B7_PLANE_NOT_HELD")
 
 
-def _shape(report, baseline_sha256):
+def _shape(report, baseline_sha256, profile="NORMAL"):
     """Structural inspection only; NOT authenticated Docker or pin evidence."""
     if type(report) is not dict or set(report) != SHAPE_FIELDS:
         raise Stop("B7_SHAPE_FIELDS_INVALID")
-    if (report["status"] != SHAPE_STATUS
+    schema = profile == "SCHEMA_POSTQUIESCE"
+    if (report["status"] != (SCHEMA_SHAPE_STATUS if schema else SHAPE_STATUS)
             or type(report["baseline_sha256"]) is not str
             or SHA256.fullmatch(report["baseline_sha256"]) is None
             or not hmac.compare_digest(report["baseline_sha256"], baseline_sha256)
             or type(report["observation_sha256"]) is not str
             or SHA256.fullmatch(report["observation_sha256"]) is None
             or type(report["running_services_expected"]) is not int
-            or report["running_services_expected"] != 7
+            or report["running_services_expected"] != (6 if schema else 7)
             or type(report["exited_zero_oneshots_verified"]) is not int
             or report["exited_zero_oneshots_verified"] != 3
             or type(report["api_compose_layers"]) is not int
@@ -96,7 +100,7 @@ def _shape(report, baseline_sha256):
         raise Stop("B7_SHAPE_MISMATCH")
 
 
-def inspect_inside_held_plane(*, plane, inspector, expected_baseline_sha256):
+def inspect_inside_held_plane(*, plane, inspector, expected_baseline_sha256, profile="NORMAL"):
     """Inspect with a caller-owned RootPlane that remains held after return.
 
     This is the composable, still-INACTIVE part of B7 for the future single
@@ -106,7 +110,7 @@ def inspect_inside_held_plane(*, plane, inspector, expected_baseline_sha256):
     inspector or pin is NOT authenticated by this function.
     """
     if (not callable(inspector) or type(expected_baseline_sha256) is not str
-            or SHA256.fullmatch(expected_baseline_sha256) is None):
+            or SHA256.fullmatch(expected_baseline_sha256) is None or profile not in PROFILES):
         raise Stop("B7_INPUT_INVALID")
     _held(plane)
     try:
@@ -114,13 +118,14 @@ def inspect_inside_held_plane(*, plane, inspector, expected_baseline_sha256):
     except Exception:
         raise Stop("B7_INSPECTION_FAILED") from None
     _held(plane)
-    _shape(report, expected_baseline_sha256)
+    _shape(report, expected_baseline_sha256, profile)
     _held(plane)
+    schema = profile == "SCHEMA_POSTQUIESCE"
     return {
-        "status": STATUS,
+        "status": SCHEMA_STATUS if schema else STATUS,
         "baseline_sha256": expected_baseline_sha256,
         "observation_sha256": report["observation_sha256"],
-        "running_services_verified_structurally": 7,
+        "running_services_verified_structurally": 6 if schema else 7,
         "oneshot_exits_verified_structurally": 3,
         "root_locks_held_during_inspection": 5,
         "journal_lease_held_during_inspection": True,
