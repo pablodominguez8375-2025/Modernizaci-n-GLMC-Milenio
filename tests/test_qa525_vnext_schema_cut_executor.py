@@ -216,8 +216,8 @@ class ExecutorTests(unittest.TestCase):
             ex.run(journal, Plane(), dict(steps))
         self.assertEqual("SCHEMA_EXEC_UAT_FAILED", str(caught.exception))
         self.assertNotIn("UAT_PASS", journal.phases())
-        # The contract classifies an interruption after APP_APPLIED as APP_PARTIAL_STOP (UAT_STOP is unreachable).
-        self.assertEqual("APP_PARTIAL_STOP", journal.phases()[-1])
+        # The contract classifies an interruption after APP_APPLIED as UAT_STOP.
+        self.assertEqual("UAT_STOP", journal.phases()[-1])
         self.assertEqual("APP_APPLIED", journal.phases()[-2])
 
     def test_lost_plane_stops_without_any_further_journal_write(self):

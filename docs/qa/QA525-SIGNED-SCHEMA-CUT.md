@@ -61,5 +61,5 @@ Biblioteca pura (sin I/O, locks, nonce ni firma) que ordena las diez fases con c
 - Cualquier otro fallo tras `RESERVED` persiste una sola vez la clase terminal que el propio contrato informó para la última fase durable (`failure_class_if_interrupted`); no se adivina. Un plano perdido no escribe nada.
 - Solo `{"terminal": "APPLIED"}` del vuelo API/WEB continúa; solo `True` de backup, quiesce, revalidación y UAT. Sin reintentos, sin `Down`.
 - Códigos fijos; la causa de fases 4–6 se conserva solo si es un código `SCHEMA_ADAPTER_*` de la lista cerrada.
-- Hallazgo del contrato: `UAT_STOP` es inalcanzable (tras `APP_APPLIED` el contrato solo acepta `UAT_PASS` o `APP_PARTIAL_STOP`); el secuenciador usa lo que el contrato informa. Si se quiere `UAT_STOP`, cambiar `_failure_for("APP_APPLIED")` (decisión de ChatGPT).
+- Un fallo de UAT tras `APP_APPLIED` termina en `UAT_STOP` (clase informada por el contrato corregido en #1073 @e48c9654); el secuenciador no la adivina.
 - Queda fuera: scope/GO/config/launcher/PRE-4, adquisición real de locks y nonce, G6 v2, child/host API/WEB de este scope.
