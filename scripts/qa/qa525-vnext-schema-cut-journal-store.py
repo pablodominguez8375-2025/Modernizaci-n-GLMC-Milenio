@@ -5,13 +5,11 @@ A root caller must supply the already verified phase contract, nonce journal
 filesystem helpers and held root plane. One fresh nonce directory per flight;
 one O_EXCL event per phase. A partial event is NEVER removed or retried.
 """
-import hashlib
 import os
 import re
 import stat
 
 NONCE = re.compile(r"[0-9a-f]{64}\Z")
-NAME = re.compile(r"[0-9]{8}\.event\Z")
 OPEN_DIR = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 OPEN_FILE = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
 MAX_EVENTS = 10
@@ -44,7 +42,7 @@ def _directory(rootfd, nonce, uid, first):
         dfd = os.open(nonce, OPEN_DIR, dir_fd=rootfd)
         info, linked = os.fstat(dfd), os.stat(nonce, dir_fd=rootfd, follow_symlinks=False)
         if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid
-                or info.st_mode & 0o077
+                or stat.S_IMODE(info.st_mode) != 0o700
                 or (info.st_dev, info.st_ino) != (linked.st_dev, linked.st_ino)):
             raise Stop("SCHEMA_STORE_DIR_UNTRUSTED")
         return dfd
@@ -67,7 +65,7 @@ def _events(dfd, uid):
             try:
                 st = os.fstat(fd)
                 if (not stat.S_ISREG(st.st_mode) or st.st_uid != uid or st.st_nlink != 1
-                        or st.st_mode & 0o177 or not 0 < st.st_size <= MAX_EVENT):
+                        or stat.S_IMODE(st.st_mode) != 0o600 or not 0 < st.st_size <= MAX_EVENT):
                     raise Stop("SCHEMA_STORE_EVENT_UNTRUSTED")
                 raw = os.read(fd, MAX_EVENT + 1)
                 if len(raw) != st.st_size or os.read(fd, 1):
@@ -108,7 +106,7 @@ def append(root, binding, phase, *, uid, plane, contract, nonce_journal):
             os.fsync(fd)
             st = os.fstat(fd)
             if (not stat.S_ISREG(st.st_mode) or st.st_uid != uid or st.st_nlink != 1
-                    or st.st_mode & 0o177 or st.st_size != len(raw)
+                    or stat.S_IMODE(st.st_mode) != 0o600 or st.st_size != len(raw)
                     or os.pread(fd, len(raw) + 1, 0) != raw):
                 raise Stop("SCHEMA_STORE_WRITE_INCOMPLETE")
         finally:
