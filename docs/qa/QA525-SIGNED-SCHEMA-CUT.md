@@ -54,11 +54,11 @@ El journal registra hash de entradas, fase en curso y salida terminal antes/desp
 
 ## Secuenciador (`qa525-vnext-schema-cut-executor.py`) — sin autoridad
 
-Biblioteca pura (sin I/O, locks, nonce ni firma) que ordena las diez fases con colaboradores inyectados. El llamador root ya autenticó GO/plan, sostiene el plano y gastó el nonce.
+Biblioteca pura (sin I/O, locks, nonce ni firma) que ordena las diez fases con colaboradores inyectados. El llamador root completa la fase 0 (PRE-4, firmas, pins, T0/plan, `check_go_plan`) **antes** de gastar el nonce y recién entonces invoca `run()`. Desde la primera línea de `run()` el GO ya está **consumido**: si falla el `preflight` interno o la escritura de `RESERVED`, no se reutiliza el GO y se requiere uno nuevo. `run()` no promete nonce sin gastar.
 
 - Cada fase queda durable (`journal(phase)`, fsync) **antes** del efecto que anuncia; `APP_STARTED` precede al único efecto API/WEB; el plano se verifica antes y después de cada escritura y efecto.
-- La primera escritura de journal que lanza deja el journal **ambiguo**: no se escribe nada más (jamás se borra ni reintenta un evento parcial) → `SCHEMA_EXEC_JOURNAL_AMBIGUOUS`.
-- Cualquier otro fallo tras `RESERVED` persiste una sola vez la clase terminal que el propio contrato informó para la última fase durable (`failure_class_if_interrupted`); no se adivina. Un plano perdido no escribe nada.
+- Cualquier error de la llamada al journal (incluso un `Stop` propio) deja el journal **ambiguo**; solo la pérdida del plano, fuera de esa llamada, se distingue: no se escribe nada más (jamás se borra ni reintenta un evento parcial) → `SCHEMA_EXEC_JOURNAL_AMBIGUOUS`.
+- Cualquier otro fallo tras `RESERVED` persiste una sola vez la clase terminal que el propio contrato informó para la última fase durable (`failure_class_if_interrupted`); no se adivina. Un plano perdido no escribe nada. Si el propio terminal no puede quedar durable, se informa esa ambigüedad o pérdida de plano (no el error previo, que queda solo como `.original`).
 - Solo `{"terminal": "APPLIED"}` del vuelo API/WEB continúa; solo `True` de backup, quiesce, revalidación y UAT. Sin reintentos, sin `Down`.
 - Códigos fijos; la causa de fases 4–6 se conserva solo si es un código `SCHEMA_ADAPTER_*` de la lista cerrada.
 - Un fallo de UAT tras `APP_APPLIED` termina en `UAT_STOP` (clase informada por el contrato corregido en #1073 @e48c9654); el secuenciador no la adivina.

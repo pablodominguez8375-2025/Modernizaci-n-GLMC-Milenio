@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """QA525 schema-cut sequencer (phases 0-8). Pure library; NO signature, root, lock, nonce or host authority.
 
-The caller (the future root host, after PRE-4 + GO verification) has already authenticated the GO/plan, taken the
-five historical locks + lease and spent the nonce. This module only sequences reviewed steps and applies the
+BOUNDARY: everything of phase 0 that can still leave the GO unspent (PRE-4, signatures, pins, expiry, T0/plan,
+`check_go_plan`, absence of an incompatible journal) is done by the CALLER before it takes the five historical locks
++ lease and SPENDS THE NONCE. `run()` is only invoked afterwards, so from the first line of `run()` the GO is
+already CONSUMED: a failure in `preflight` or in the `RESERVED` write leaves nothing (or nothing usable) journalled
+and the GO can never be reused; a new GO is required. This module only sequences reviewed steps and applies the
 journal discipline of `qa525-vnext-schema-cut-journal-contract.py`:
 
 * every phase is made durable BEFORE the effect it announces (`journal(phase)` must fsync and return a record
@@ -16,7 +19,8 @@ journal discipline of `qa525-vnext-schema-cut-journal-contract.py`:
 * diagnostics are fixed codes; collaborator output, argv, paths and exception text are never echoed.
 
 Collaborators are injected callables so the module performs no I/O of its own:
-  preflight()          read-only, before RESERVED; failure = STOP with nothing journalled (GO still unspent)
+  preflight()          read-only re-check under the held plane, before RESERVED; failure = STOP with nothing
+                       journalled, nonce ALREADY SPENT (see BOUNDARY)
   verify_backup()      G6 v2 evidence for THIS cut (hash + isolated restore); after RESERVED
   quiesce_writes()     API refuses writes, zero write sessions on the target DB; after BACKUP_VERIFIED
   schema(journal)      phases 4-6 (e.g. adapter #1074 `run_phases`), receives the sequencer's journal wrapper and
@@ -42,6 +46,7 @@ class Stop(Exception):
     def __init__(self, code, cause=None):
         super().__init__(code)
         self.cause = cause
+        self.original = None  # fixed earlier code when a terminal write itself failed
 
 
 class _State:
@@ -79,12 +84,10 @@ def run(journal, plane, steps):
     def write(phase):
         if state.broken:
             raise Stop("SCHEMA_EXEC_JOURNAL_AMBIGUOUS")
-        _held(plane)
+        _held(plane)  # outside the journal call: the only error here is a lost plane
         try:
             record = journal(phase)
-        except Stop:
-            raise
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001  # ANY error of the journal call (even a Stop of ours) is ambiguity
             state.broken = True
             raise Stop("SCHEMA_EXEC_JOURNAL_AMBIGUOUS") from None
         if (type(record) is not dict or record.get("phase") != phase
@@ -115,12 +118,16 @@ def run(journal, plane, steps):
                 and state.interrupt in TERMINAL):
             try:
                 write(state.interrupt)
-            except Exception:  # noqa: BLE001
-                pass  # the original code is what the caller must see; nothing is retried
+            except Stop as terminal_failure:
+                # The terminal could not be made durable: report THAT (ambiguity or lost plane), not the earlier
+                # failure; the original fixed code is kept only as `.original`. Nothing is retried.
+                terminal_failure.original = code
+                raise terminal_failure from None
         raise Stop(code, _cause(error) if error is not None else None) from None
 
     try:
-        # Phase 0: read-only; a failure here leaves the GO unspent and writes nothing.
+        # Read-only re-check under the held plane. The nonce is already spent by the caller (BOUNDARY): a failure
+        # here writes nothing, but the GO is consumed and must not be reused.
         try:
             if effect("preflight") is not None:
                 raise Stop("SCHEMA_EXEC_PREFLIGHT_FAILED")

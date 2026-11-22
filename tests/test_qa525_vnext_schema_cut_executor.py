@@ -236,6 +236,43 @@ class ExecutorTests(unittest.TestCase):
             self.assertTrue(all(p not in ex.TERMINAL for p in written), allowed)  # nothing written blind
             self.assertEqual(plane.calls, allowed + 1)  # stopped at the first failed check, no further plane use
 
+    def test_journal_that_raises_our_own_stop_after_a_partial_write_is_ambiguous(self):
+        for exc in (lambda: ex.Stop("SCHEMA_EXEC_PLANE_LOST"), lambda: ex.Stop("ANYTHING")):
+            real = Journal()
+
+            def journal(phase, real=real, exc=exc):
+                if phase == "BACKUP_VERIFIED":
+                    real(phase)          # the event became durable ...
+                    raise exc()          # ... and the collaborator then raised a Stop of ours
+                return real(phase)
+            _, steps = build(real)
+            with self.assertRaises(ex.Stop) as caught:
+                ex.run(journal, Plane(), dict(steps))
+            self.assertEqual("SCHEMA_EXEC_JOURNAL_AMBIGUOUS", str(caught.exception))
+            self.assertEqual(["RESERVED", "BACKUP_VERIFIED"], real.phases())  # nothing after the partial write
+            self.assertNotIn("quiesce", [name for name, _ in steps.effects])
+
+    def test_terminal_write_failure_is_reported_not_hidden_by_the_original_error(self):
+        journal, steps = build(Journal(fail_on="PRE_DDL_STOP"), verify_backup=lambda: False)
+        with self.assertRaises(ex.Stop) as caught:
+            ex.run(journal, Plane(), dict(steps))
+        self.assertEqual("SCHEMA_EXEC_JOURNAL_AMBIGUOUS", str(caught.exception))
+        self.assertEqual("SCHEMA_EXEC_BACKUP_FAILED", caught.exception.original)
+        self.assertEqual(["RESERVED"], journal.phases())
+        seen = set()
+        for allowed in range(0, 14):  # the plane may be lost exactly while the terminal is being written
+            journal, steps = build(verify_backup=lambda: False)
+            try:
+                ex.run(journal, Plane(fail_after=allowed), dict(steps))
+            except ex.Stop as stop:
+                seen.add((str(stop), stop.original))
+        self.assertIn(("SCHEMA_EXEC_PLANE_LOST", "SCHEMA_EXEC_BACKUP_FAILED"), seen)
+
+    def test_boundary_is_documented_nonce_spent_before_run(self):
+        self.assertIn("CONSUMED", ex.__doc__)
+        self.assertIn("SPENDS THE NONCE", ex.__doc__)
+        self.assertNotIn("GO still unspent", ex.__doc__)
+
     def test_invalid_inputs_are_refused(self):
         journal, steps = build()
         for args in ((None, Plane(), dict(steps)), (journal, object(), dict(steps)), (journal, Plane(), {}),
