@@ -9,7 +9,7 @@ host-specific (Postgres container, network, env files, write roles, archive memb
 pinned module (glmdch only; never from the GO, the plan or the archive). Siblings are injected by the launcher through
 SIBLING_MODULES/bind_dependencies; `effects` (qa525-vnext-root-schema-effects.py, NOT YET WRITTEN => launcher fails
 closed) exposes `provide(authority, claims)` returning an object with runner, clock, abort_requested, read_evidence,
-verifier, flight, uat_checks (tuple; UAT credential only from a root 0600 source), archive_epoch, api_container_id.
+verifier, uat_checks (tuple; UAT credential only from a root 0600 source), archive_epoch, api_container_id.
 Fixed codes only.
 """
 import io
@@ -20,7 +20,8 @@ SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 MEMBER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./-]{0,120}\Z")
 SIBLING_MODULES = {"ports": "qa525-vnext-schema-cut-ports.py", "adapter": "qa525-vnext-schema-adapter.py",
-                   "plan": "qa525-vnext-schema-cut-plan.py", "effects": "qa525-vnext-root-schema-effects.py"}
+                   "plan": "qa525-vnext-schema-cut-plan.py", "effects": "qa525-vnext-root-schema-effects.py",
+                   "flight_adapter": "qa525-vnext-root-schema-flight.py"}
 # glmdch constants (reviewed with this module's bytes; T0 read-only must confirm them before any GO).
 FIXED = {"pg_container": "centenario-qa-lab2-postgres-1", "network": "centenario-qa-lab2_default",
          "migrator_env_file": "/etc/pmgm/srv01.env", "grants_env_file": "/etc/pmgm/srv01.env",
@@ -40,7 +41,7 @@ SCHEMA_PIN_KEYS = frozenset({"migrator_image_digest", "baseline_history_sha256",
 ALLOWED_ROLES = ("pmgm_runtime", "pmgm_app", "pmgm_keycloak")
 G6_MAP = {"admission": "pinned_admission_sha256", "approval": "pinned_approval_sha256",
           "review": "pinned_review_sha256", "receipt": "pinned_receipt_sha256", "restore": "pinned_restore_sha256"}
-EFFECTS = ("runner", "clock", "abort_requested", "read_evidence", "verifier", "flight")
+EFFECTS = ("runner", "clock", "abort_requested", "read_evidence", "verifier")
 MAX_MEMBER = 1 << 20
 MAX_ARCHIVE_MEMBERS = 10000
 
@@ -61,7 +62,8 @@ def _shape(authority, schema_pins):
           and type(authority["target"].get("web_sha")) is str and HEX40.fullmatch(authority["target"]["web_sha"])
           and all(type(authority["g6"].get(v)) is str and SHA.fullmatch(authority["g6"][v]) for v in G6_MAP.values())
           and set(_DEPS) == set(SIBLING_MODULES)
-          and callable(getattr(_DEPS["effects"], "provide", None)))
+          and callable(getattr(_DEPS["effects"], "provide", None))
+          and callable(getattr(_DEPS["flight_adapter"], "make", None)))
 
 
 def _effects(authority, claims):
@@ -160,7 +162,9 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
             "schema": ports.make_schema(adapter, params, effects.runner),
             "revalidate": ports.make_revalidate(effects.runner, effects.clock, effects.abort_requested, spec,
                                                 expected_104),
-            "apply_api_web": ports.make_apply_api_web(effects.flight, host["target_web_sha"]),
+            "apply_api_web": ports.make_apply_api_web(_DEPS["flight_adapter"].make(
+                archive_bytes=archive_bytes, claims=claims, authority=authority, plane=plane),
+                host["target_web_sha"]),
             "uat": ports.make_uat(effects.uat_checks),
         }
     except Stop:
