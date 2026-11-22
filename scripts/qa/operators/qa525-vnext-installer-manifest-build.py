@@ -94,6 +94,8 @@ EXPECTED_CLOSURE = frozenset({
     "qa525-vnext-schema-cut-journal-store.py",
     "qa525-vnext-schema-cut-ports.py",
     "qa525-vnext-schema-adapter.py",
+    "qa525-vnext-schema-env-files.py",
+    "qa525-vnext-schema-env-render.py",
     "qa525-vnext-scope-store.py",
     "qa525-vnext-stage-store.py",
     "qa525-vnext-state-reader.py",
