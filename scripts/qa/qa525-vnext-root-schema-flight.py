@@ -134,6 +134,11 @@ def make(*, archive_bytes, claims, authority, plane, api_container_id, old_api_i
             if rc != 0 or running != b"false\n":
                 raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
         plane.assert_held()
+        running_query = ("/usr/bin/docker", "ps", "-q", "--no-trunc", *labels[4:])
+        rc, running_ids = schema_runner(running_query, 60, None)
+        if rc != 0 or running_ids != b"":
+            raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
+        plane.assert_held()
         return True
 
     def flight():
