@@ -101,10 +101,12 @@ def _common(spec):
           and all(type(v) is str and HEX40.fullmatch(v) for v in spec["revisions"].values()))
 
 
-def make_preflight(runner, clock, abort, spec):
-    """spec: pg_container, expires_at, images{api,web}, revisions{api,web}, migrator_image_id, baseline_sha256."""
+def make_preflight(runner, clock, abort, spec, b7_inspect=None):
+    """b7_inspect (optional, injected read-only): () -> baseline B7 sha256 (7 services running, API+WEB); spec then needs
+    b7_baseline_sha256 and a mismatch stops BEFORE quiesce. spec: pg_container, expires_at, images{api,web}, revisions{api,web}, migrator_image_id, baseline_sha256."""
     _common(spec)
     _need(SHA.fullmatch(spec.get("migrator_image_id", "")) and SHA.fullmatch(spec.get("baseline_sha256", "")))
+    _need(b7_inspect is None or (callable(b7_inspect) and SHA.fullmatch(spec.get("b7_baseline_sha256", ""))))
 
     def preflight():
         _gate(clock, abort, spec["expires_at"])
@@ -115,6 +117,13 @@ def make_preflight(runner, clock, abort, spec):
         count, sha = _history_sha(runner, spec["pg_container"])
         if count != 100 or sha != spec["baseline_sha256"]:
             raise Stop("SCHEMA_PORT_BASELINE_MISMATCH")
+        if b7_inspect is not None:
+            try:
+                got = b7_inspect()
+            except Exception:  # noqa: BLE001
+                raise Stop("SCHEMA_PORT_B7_NOT_NORMAL") from None
+            if got != spec["b7_baseline_sha256"]:
+                raise Stop("SCHEMA_PORT_B7_NOT_NORMAL")
     return preflight
 
 
