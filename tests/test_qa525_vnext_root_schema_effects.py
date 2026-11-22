@@ -20,7 +20,7 @@ fx = load("sh_effects", "qa525-vnext-root-schema-effects.py")
 
 class UATModule:
     @staticmethod
-    def make(read_private, clock):
+    def make(read_private, clock, expected_sha=None):
         return (lambda: True,)
 
 
