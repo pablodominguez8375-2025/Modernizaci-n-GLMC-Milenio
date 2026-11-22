@@ -20,6 +20,8 @@ La configuración autenticada y el GO deben ligar exactamente:
 | Imágenes API/WEB | IDs por digest de contenido de fuente APP, baseline físico T0, no nombres o tags |
 | Continuidad | hash de admisión, plan, política, GO, nonce único y caducidad corta; G6 v2 backup identificable y restauración aislada revisada |
 
+El chequeo puro `check_cut` del nuevo GO entrega los seis pins de esquema junto con los pins existentes de fuente/plan. `check_go_plan` construye sus entradas exclusivamente de ese resultado y valida el JSON canónico y la historia EF **antes** de consumir el nonce; ambos módulos devuelven `may_apply=False`. El launcher no reconoce aún este scope.
+
 No basta introducir las ramas #1068–#1071 al ZIP: integrar y probar el **mismo SHA** final, congelar digests de salida y recién entonces firmar un GO para esa revisión. El dato T0 se mide físicamente en el volumen existente, no se presume a partir del historial de desarrollo.
 
 ## Fronteras de efectos
