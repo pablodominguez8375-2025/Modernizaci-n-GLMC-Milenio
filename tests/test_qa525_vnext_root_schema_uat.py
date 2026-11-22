@@ -39,6 +39,31 @@ class UATTests(unittest.TestCase):
         self.assertEqual(calls[0][1], calls[1][1])
         self.assertNotEqual(calls[1][1], calls[2][1])
 
+    def test_synthetic_preview_routes_master_and_registry_operator(self):
+        calls = []
+        class Synthetic:
+            @staticmethod
+            def uat_checks(http, expected_sha, unauth):
+                self.assertEqual(expected_sha, "a" * 40)
+                def check():
+                    body = {"Talleres.csv": "x", "Hermanos.csv": "y", "CargosVigentes.csv": "z"}
+                    http("POST", uat.BASE + "/preview", body)
+                    http("GET", "/api/system/workshops")
+                    unauth("GET", uat.BASE + "/contract")
+                    return True
+                return (check,)
+        uat.bind_dependencies({"synthetic": Synthetic})
+        def probe(method, path, jwt, body):
+            calls.append((method, path, jwt, body))
+            return 200, {}
+        checks = uat.make(credentials, lambda: NOW, expected_sha="a" * 40, synthetic_probe=probe)
+        self.assertEqual(len(checks), 4)
+        self.assertIs(checks[-1](), True)
+        self.assertEqual(calls[0][2], token("master"))
+        self.assertEqual(calls[1][2], token("operator"))
+        self.assertIsNone(calls[2][2])
+        self.assertEqual(calls[0][3], {"Talleres.csv": "x", "Hermanos.csv": "y", "CargosVigentes.csv": "z"})
+
     def test_bad_credentials_rejected_before_any_probe(self):
         calls = []
         for raw in (b"", b"{}", b"[]", b"not-json", json.dumps({
