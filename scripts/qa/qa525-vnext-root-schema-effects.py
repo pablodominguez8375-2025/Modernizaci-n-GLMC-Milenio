@@ -169,7 +169,8 @@ def provide(authority, claims, run=None):
     if (not callable(eff.verifier) or type(eff.archive_epoch) is not int):
         raise Stop("SCHEMA_EFFECTS_G6_INVALID")
     try:
-        eff.uat_checks = _DEPS["uat"].make(read_credential, eff.clock)
+        eff.uat_checks = _DEPS["uat"].make(read_credential, eff.clock,
+                                              expected_sha=claims.get("app_source_sha"))
     except Exception:
         raise Stop("SCHEMA_EFFECTS_UAT_INVALID") from None
     return eff
