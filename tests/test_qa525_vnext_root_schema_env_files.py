@@ -50,7 +50,7 @@ class SchemaEnvFilesTests(unittest.TestCase):
                 if path == "/proc/mounts":
                     return Mounts()
                 return real_open(path, *args, **kwargs)
-            with patch.object(mod, "TMP_ROOT", root), patch.object(mod, "_read_source", return_value=b"synthetic"), \\
+            with patch.object(mod, "TMP_ROOT", root), patch.object(mod, "_read_source", return_value=b"synthetic"), \
                  patch.object(mod.os, "stat", side_effect=stat_mock), patch.object(builtins, "open", side_effect=open_mock):
                 for fail in (False, True):
                     with self.subTest(fail=fail):
