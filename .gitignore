@@ -39,3 +39,7 @@ coverage/
 
 # Pilot backups may contain institutional/personal data. Never version them.
 backups/
+
+# Python
+__pycache__/
+*.py[cod]
