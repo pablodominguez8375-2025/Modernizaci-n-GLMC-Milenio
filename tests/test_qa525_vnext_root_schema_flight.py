@@ -19,6 +19,11 @@ class RootPlane:
 
 
 class SchemaFlightReadbackTests(unittest.TestCase):
+    def test_stopped_api_transition_blocks_before_nonce(self):
+        with self.assertRaises(flight.Stop) as cm:
+            flight.precheck_schema_transition()
+        self.assertEqual(str(cm.exception), "SCHEMA_FLIGHT_STOPPED_API_BASELINE_UNSUPPORTED")
+
     def bind(self, outcome="APPLIED", health=True, revision="a" * 40):
         plane = RootPlane()
         seen = []
