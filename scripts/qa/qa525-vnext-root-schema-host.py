@@ -112,6 +112,19 @@ def precheck(*, plan_bytes, claims, authority, schema_pins):
         raise Stop("SCHEMA_HOST_PLAN_INVALID") from None
     effects = _effects(authority, claims)
     _container(effects, checked.get("api_container_id"), schema_pins["api_image_id"])
+    # Fail before nonce and before API quiesce if source or tmpfs is unsafe.
+    try:
+        import json
+        history = json.loads(plan_bytes.decode("ascii"))["history_ids"]
+        if effects.verify_schema_tmpfs("/run") is not True:
+            raise Stop("SCHEMA_HOST_ENV_NOT_TMPFS")
+        rendered = _DEPS["env_render"].render(effects.read_schema_source(), history)
+        if type(rendered) is not tuple or len(rendered) != 2 or any(type(x) is not bytes for x in rendered):
+            raise Stop("SCHEMA_HOST_ENV_INVALID")
+    except Stop:
+        raise
+    except Exception:
+        raise Stop("SCHEMA_HOST_ENV_INVALID") from None
     try:
         _DEPS["flight_adapter"].precheck_schema_transition()
     except Exception:
