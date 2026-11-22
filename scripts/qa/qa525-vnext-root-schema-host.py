@@ -60,11 +60,13 @@ def _shape(authority, schema_pins):
           and type(schema_pins) is dict and set(schema_pins) == SCHEMA_PIN_KEYS
           and all(type(v) is str and SHA.fullmatch(v) for v in schema_pins.values())
           and type(authority["target"].get("web_sha")) is str and HEX40.fullmatch(authority["target"]["web_sha"])
+          and type(authority.get("baseline_sha256")) is str and SHA.fullmatch(authority["baseline_sha256"])
           and all(type(authority["g6"].get(v)) is str and SHA.fullmatch(authority["g6"][v]) for v in G6_MAP.values())
           and set(_DEPS) == set(SIBLING_MODULES)
           and callable(getattr(_DEPS["effects"], "provide", None))
           and callable(getattr(_DEPS["flight_adapter"], "make", None))
-          and callable(getattr(_DEPS["flight_adapter"], "precheck_schema_transition", None)))
+          and callable(getattr(_DEPS["flight_adapter"], "precheck_schema_transition", None))
+          and callable(getattr(_DEPS["flight_adapter"], "preflight", None)))
 
 
 def _effects(authority, claims):
@@ -155,10 +157,15 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
         spec = {"pg_container": host["pg_container"], "expires_at": claims["expires_at"], "images": images,
                 "revisions": revisions}
         g6 = authority["g6"]
+        def b7_normal():
+            return _DEPS["flight_adapter"].preflight(
+                archive_bytes=archive_bytes, claims=claims, authority=authority, plane=plane)
         steps = {
             "preflight": ports.make_preflight(effects.runner, effects.clock, effects.abort_requested,
                                               dict(spec, migrator_image_id=schema_pins["migrator_image_digest"],
-                                                   baseline_sha256=schema_pins["baseline_history_sha256"])),
+                                                   baseline_sha256=schema_pins["baseline_history_sha256"],
+                                                   b7_baseline_sha256=authority["baseline_sha256"]),
+                                              b7_inspect=b7_normal),
             "verify_backup": ports.make_verify_backup(effects.read_evidence, effects.verifier, effects.clock,
                                                       {k: g6[v] for k, v in G6_MAP.items()}, effects.archive_epoch),
             "quiesce_writes": ports.make_quiesce_writes(
@@ -168,8 +175,9 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
             "revalidate": ports.make_revalidate(effects.runner, effects.clock, effects.abort_requested, spec,
                                                 expected_104),
             "apply_api_web": ports.make_apply_api_web(_DEPS["flight_adapter"].make(
-                archive_bytes=archive_bytes, claims=claims, authority=authority, plane=plane),
-                host["target_web_sha"]),
+                archive_bytes=archive_bytes, claims=claims, authority=authority, plane=plane,
+                api_container_id=checked["api_container_id"], old_api_image_id=schema_pins["api_image_id"],
+                schema_runner=effects.runner), host["target_web_sha"]),
             "uat": ports.make_uat(effects.uat_checks),
         }
     except Stop:
