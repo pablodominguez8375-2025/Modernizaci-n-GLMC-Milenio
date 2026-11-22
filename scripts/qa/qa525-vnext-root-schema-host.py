@@ -21,7 +21,9 @@ HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 MEMBER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./-]{0,120}\Z")
 SIBLING_MODULES = {"ports": "qa525-vnext-schema-cut-ports.py", "adapter": "qa525-vnext-schema-adapter.py",
                    "plan": "qa525-vnext-schema-cut-plan.py", "effects": "qa525-vnext-root-schema-effects.py",
-                   "flight_adapter": "qa525-vnext-root-schema-flight.py"}
+                   "flight_adapter": "qa525-vnext-root-schema-flight.py",
+                   "env_files": "qa525-vnext-root-schema-env-files.py",
+                   "env_render": "qa525-vnext-schema-env-render.py"}
 # glmdch constants (reviewed with this module's bytes; T0 read-only must confirm them before any GO).
 FIXED = {"pg_container": "centenario-qa-lab2-postgres-1", "network": "centenario-qa-lab2_pmgm_srv01_internal",
          "migrator_env_file": "/etc/pmgm/srv01.env", "grants_env_file": "/etc/pmgm/srv01.env",
@@ -66,7 +68,9 @@ def _shape(authority, schema_pins):
           and callable(getattr(_DEPS["effects"], "provide", None))
           and callable(getattr(_DEPS["flight_adapter"], "make", None))
           and callable(getattr(_DEPS["flight_adapter"], "precheck_schema_transition", None))
-          and callable(getattr(_DEPS["flight_adapter"], "preflight", None)))
+          and callable(getattr(_DEPS["flight_adapter"], "preflight", None))
+          and callable(getattr(_DEPS["env_files"], "open_env", None))
+          and callable(getattr(_DEPS["env_render"], "render", None)))
 
 
 def _effects(authority, claims):
@@ -171,7 +175,7 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
             "quiesce_writes": ports.make_quiesce_writes(
                 effects.runner, {"pg_container": host["pg_container"], "api_container_id": host["api_container_id"],
                                  "write_roles": tuple(host["write_roles"])}),
-            "schema": ports.make_schema(adapter, params, effects.runner),
+            "schema": None,  # wired below: env files live ONLY for the DDL/grants phase
             "revalidate": ports.make_revalidate(effects.runner, effects.clock, effects.abort_requested, spec,
                                                 expected_104),
             "apply_api_web": ports.make_apply_api_web(_DEPS["flight_adapter"].make(
@@ -180,6 +184,14 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
                 schema_runner=effects.runner), host["target_web_sha"]),
             "uat": ports.make_uat(effects.uat_checks),
         }
+        def schema_with_ephemeral_env(journal):
+            plane.assert_held()
+            with _DEPS["env_files"].open_env(plane, _DEPS["env_render"], history) as paths:
+                if type(paths) is not tuple or len(paths) != 2:
+                    raise Stop("SCHEMA_HOST_ENV_INVALID")
+                ephemeral = dict(params, migrator_env_file=paths[0], grants_env_file=paths[1])
+                return ports.make_schema(adapter, ephemeral, effects.runner)(journal)
+        steps["schema"] = schema_with_ephemeral_env
     except Stop:
         raise
     except Exception:  # noqa: BLE001  # includes ports/adapter/plan Stops: never echo their text
