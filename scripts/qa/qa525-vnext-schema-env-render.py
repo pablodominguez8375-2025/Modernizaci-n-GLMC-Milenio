@@ -9,7 +9,7 @@ import json
 import re
 
 PASSWORD_KEY = b"PMGM_QA_MIGRATOR_DB_PASSWORD"
-MIGRATION = re.compile(r"20[0-9]{12}_[A-Za-z0-9_]+\\Z")
+MIGRATION = re.compile(r"20[0-9]{12}_[A-Za-z0-9_]+\Z")
 MAX_SOURCE = 65536
 
 class Stop(Exception):
@@ -27,7 +27,7 @@ def _password(source):
         key, value = line.split(b"=", 1)
         if key == PASSWORD_KEY:
             if found is not None or not 0 < len(value) <= 256 or any(
-                x in value for x in (b"\\r", b"\\n", b"\\x00", b"\\", b"'", b'"', b";", b" ", b"\\t")
+                x in value for x in (b"\r", b"\n", b"\x00", b"\\", b"'", b'"', b";", b" ", b"\t")
             ):
                 raise Stop("SCHEMA_ENV_PASSWORD_INVALID")
             if any(ch < 33 or ch > 126 for ch in value):
@@ -46,9 +46,9 @@ def render(source, history):
     expected = json.dumps(history, ensure_ascii=True, separators=(",", ":")).encode("ascii")
     # Docker --env-file accepts unquoted values; forbid special syntax in the password.
     migrator = (b"QA525_DDL_CONNECTION=Host=postgres;Port=5432;Database=pmgm;"
-                b"Username=pmgm_migrator;Password=" + password + b"\\n"
-                b"QA525_EXPECTED_EF_HISTORY=" + expected + b"\\n")
-    grants = b"PGPASSWORD=" + password + b"\\n"
+                b"Username=pmgm_migrator;Password=" + password + b"\n"
+                b"QA525_EXPECTED_EF_HISTORY=" + expected + b"\n")
+    grants = b"PGPASSWORD=" + password + b"\n"
     return migrator, grants
 
 if __name__ == "__main__":
