@@ -88,7 +88,10 @@ class SchemaRootChildJournalTests(unittest.TestCase):
                     claims=dict(CLAIMS if claims is None else claims), fd=fd, plane=Plane(),
                     journal_root=directory, uid=os.getuid(), host=host, executor=executor,
                     store=store, contract=contract, nonce_journal=nonce_journal,
-                    plan_bytes=b"plan")
+                    plan_bytes=b"plan", authority={},
+                    schema_pins={k: D(k.encode()) for k in (
+                        "migrator_image_digest", "baseline_history_sha256", "grant_script_sha256",
+                        "postgate_sha256", "api_image_id", "web_image_id")})
                 events = sorted((Path(directory) / CLAIMS["nonce"]).glob("*.event"))
                 phases = [json.loads(path.read_text())["phase"] for path in events]
                 return result, phases, host.calls
