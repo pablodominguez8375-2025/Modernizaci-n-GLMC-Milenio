@@ -30,6 +30,7 @@ SIBLING_MODULES = {
     "health": "qa525-vnext-health.py",
     "plan": "qa525-vnext-baseline-plan.py",
     "physical_runner": "qa525-vnext-held-physical-runner.py",
+    "hold": "qa525-vnext-schema-hold-stopped.py",
 }
 CORE = ("root_locks", "bridge", "boundary", "b7", "observer", "scopes",
         "switch", "flight", "g6_anchor", "run_held")
@@ -55,7 +56,18 @@ def precheck_schema_transition():
     raise Stop("SCHEMA_FLIGHT_STOPPED_API_BASELINE_UNSUPPORTED")
 
 
-def make(*, archive_bytes, claims, authority, plane):
+def preflight(*, archive_bytes, claims, authority, plane):
+    """Read a NORMAL B7 baseline while API is still running, before quiesce."""
+    modules = {key: _DEPS[key] for key in HOST}
+    built = _DEPS["apiweb_host"].build(archive_bytes, dict(claims), dict(authority), modules,
+                                        _DEPS["apiweb_effects"])
+    report = _DEPS["b7"].inspect_inside_held_plane(
+        plane=plane, inspector=built["inputs"]["inspector"],
+        expected_baseline_sha256=authority["baseline_sha256"])
+    return report["baseline_sha256"]
+
+
+def make(*, archive_bytes, claims, authority, plane, api_container_id, old_api_image_id, schema_runner):
     if (set(_DEPS) != set(SIBLING_MODULES)
             or not isinstance(getattr(_DEPS["root_locks"], "RootPlane", None), type)):
         raise Stop("SCHEMA_FLIGHT_BINDING_INVALID")
@@ -70,7 +82,15 @@ def make(*, archive_bytes, claims, authority, plane):
             or not callable(getattr(_DEPS.get("posix"), "PosixPort", None))
             or type(authority.get("target")) is not dict
             or type(authority["target"].get("web_sha")) is not str
-            or SOURCE.fullmatch(authority["target"]["web_sha"]) is None):
+            or SOURCE.fullmatch(authority["target"]["web_sha"]) is None
+            or type(api_container_id) is not str or CID.fullmatch(api_container_id) is None
+            or type(old_api_image_id) is not str or IMAGE.fullmatch(old_api_image_id) is None
+            or type(authority["target"].get("images")) is not dict
+            or type(authority["target"]["images"].get("api")) is not str
+            or IMAGE.fullmatch(authority["target"]["images"]["api"]) is None
+            or old_api_image_id == authority["target"]["images"]["api"]
+            or not callable(schema_runner)
+            or not callable(getattr(_DEPS.get("hold"), "make_rollback_factory", None))):
         raise Stop("SCHEMA_FLIGHT_BINDING_INVALID")
     plane.assert_held()
     modules = {key: _DEPS[key] for key in CORE}
@@ -78,11 +98,39 @@ def make(*, archive_bytes, claims, authority, plane):
     host, effects = _DEPS["apiweb_host"], _DEPS["apiweb_effects"]
     port = _DEPS["posix"].PosixPort()
     target = authority["target"]["web_sha"]
+    target_api_image_id = authority["target"]["images"]["api"]
+
+    def stop_api():
+        plane.assert_held()
+        labels = ("/usr/bin/docker", "ps", "-aq", "--no-trunc",
+                  "--filter", "label=com.docker.compose.project=centenario-qa-lab2",
+                  "--filter", "label=com.docker.compose.service=api")
+        rc, out = schema_runner(labels, 60, None)
+        if rc != 0 or type(out) is not bytes or len(out) > 256:
+            raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
+        ids = out.decode("ascii").splitlines()
+        if len(ids) > 2 or len(set(ids)) != len(ids) or any(CID.fullmatch(i) is None for i in ids):
+            raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
+        for cid in ids:
+            plane.assert_held()
+            rc, image = schema_runner(("/usr/bin/docker", "inspect", "--format", "{{.Image}}", cid), 60, None)
+            if rc != 0 or image not in ((old_api_image_id + "\\n").encode(),
+                                        (target_api_image_id + "\\n").encode()):
+                raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
+            rc, _ = schema_runner(("/usr/bin/docker", "stop", "--time", "30", cid), 60, None)
+            if rc != 0:
+                raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
+            rc, running = schema_runner(("/usr/bin/docker", "inspect", "--format", "{{.State.Running}}", cid), 60, None)
+            if rc != 0 or running != b"false\\n":
+                raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
+        plane.assert_held()
+        return True
 
     def flight():
         plane.assert_held()
         try:
-            built = host.build(archive_bytes, dict(claims), dict(authority), host_modules, effects)
+            built = host.build(archive_bytes, dict(claims), dict(authority), host_modules, effects,
+                               schema_profile=True, api_container_id=api_container_id)
             if type(built) is not dict or set(built) != {"g6_evidence", "inputs"}:
                 raise Stop("SCHEMA_FLIGHT_HOST_INVALID")
             inputs = dict(built["inputs"])
@@ -94,7 +142,9 @@ def make(*, archive_bytes, claims, authority, plane):
                 bridge=modules["bridge"], boundary=modules["boundary"], b7=modules["b7"],
                 observer=modules["observer"], scopes=modules["scopes"], switch=modules["switch"],
                 flight=modules["flight"], g6_anchor=modules["g6_anchor"],
-                g6_evidence=dict(built["g6_evidence"]), **inputs)
+                g6_evidence=dict(built["g6_evidence"]), b7_profile="SCHEMA_POSTQUIESCE",
+                forbid_baseline_api=True,
+                rollback_factory=_DEPS["hold"].make_rollback_factory(stop_api), **inputs)
             plane.assert_held()
             outcome = result.get("terminal_outcome") if type(result) is dict else None
             if outcome != "APPLIED":
