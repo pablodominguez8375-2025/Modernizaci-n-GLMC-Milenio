@@ -22,11 +22,12 @@ MEMBER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./-]{0,120}\Z")
 SIBLING_MODULES = {"ports": "qa525-vnext-schema-cut-ports.py", "adapter": "qa525-vnext-schema-adapter.py",
                    "plan": "qa525-vnext-schema-cut-plan.py", "effects": "qa525-vnext-root-schema-effects.py",
                    "flight_adapter": "qa525-vnext-root-schema-flight.py",
-                   "env_files": "qa525-vnext-root-schema-env-files.py",
+                   "env_files": "qa525-vnext-schema-env-files.py",
                    "env_render": "qa525-vnext-schema-env-render.py"}
 # glmdch constants (reviewed with this module's bytes; T0 read-only must confirm them before any GO).
 FIXED = {"pg_container": "centenario-qa-lab2-postgres-1", "network": "centenario-qa-lab2_pmgm_srv01_internal",
-         "migrator_env_file": "/etc/pmgm/srv01.env", "grants_env_file": "/etc/pmgm/srv01.env",
+         "migrator_env_file": "/run/qa525-schema-env/migrator.env",
+         "grants_env_file": "/run/qa525-schema-env/grants.env",
          "write_roles": ("pmgm_runtime", "pmgm_app", "pmgm_keycloak"),
          "grant_script_member": "scripts/grant-pilot-db2.sh",
          "gate_sql_member": "scripts/qa/qa525-workshop-postmigration-gate.sql"}
@@ -69,7 +70,7 @@ def _shape(authority, schema_pins):
           and callable(getattr(_DEPS["flight_adapter"], "make", None))
           and callable(getattr(_DEPS["flight_adapter"], "precheck_schema_transition", None))
           and callable(getattr(_DEPS["flight_adapter"], "preflight", None))
-          and callable(getattr(_DEPS["env_files"], "open_env", None))
+          and callable(getattr(_DEPS["env_files"], "ephemeral_env_files", None))
           and callable(getattr(_DEPS["env_render"], "render", None)))
 
 
@@ -81,7 +82,9 @@ def _effects(authority, claims):
     _need(effects is not None and all(callable(getattr(effects, n, None)) for n in EFFECTS)
           and type(getattr(effects, "uat_checks", None)) is tuple and 1 <= len(effects.uat_checks)
           and type(getattr(effects, "archive_epoch", None)) is int and not isinstance(effects.archive_epoch, bool)
-          and type(getattr(effects, "api_container_id", None)) is str)
+          and type(getattr(effects, "api_container_id", None)) is str
+          and callable(getattr(effects, "read_schema_source", None))
+          and callable(getattr(effects, "verify_schema_tmpfs", None)))
     return effects
 
 
@@ -186,7 +189,10 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
         }
         def schema_with_ephemeral_env(journal):
             plane.assert_held()
-            with _DEPS["env_files"].open_env(plane, _DEPS["env_render"], history) as paths:
+            with _DEPS["env_files"].ephemeral_env_files(
+                    base_dir="/run/qa525-schema-env", source_reader=effects.read_schema_source,
+                    history=history, render=_DEPS["env_render"].render,
+                    verify_tmpfs=effects.verify_schema_tmpfs, uid=0) as paths:
                 if type(paths) is not tuple or len(paths) != 2:
                     raise Stop("SCHEMA_HOST_ENV_INVALID")
                 ephemeral = dict(params, migrator_env_file=paths[0], grants_env_file=paths[1])
