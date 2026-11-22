@@ -230,8 +230,8 @@ class BuildTests(unittest.TestCase):
 
     def test_dependency_dropped_from_code_is_detected(self):
         def mut(f):
-            k = "scripts/qa/qa525-vnext-root-launcher.py"
-            f[k] = f[k].replace(b"qa525-vnext-admission-bridge.py", b"qa525-vnext-health.py")
+            k = "scripts/qa/qa525-vnext-root-schema-effects.py"
+            f[k] = f[k].replace(b"qa525-vnext-root-schema-g6.py", b"qa525-vnext-health.py")
         self.stop("BUILD_CLOSURE_ALLOWLIST_MISMATCH", asset=make_release(mutate=mut))
 
     def test_real_asset_end_to_end_when_provided(self):
