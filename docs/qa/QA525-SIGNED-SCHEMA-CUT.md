@@ -20,7 +20,7 @@ La configuración autenticada y el GO deben ligar exactamente:
 | Imágenes API/WEB | IDs por digest de contenido de fuente APP, baseline físico T0, no nombres o tags |
 | Continuidad | hash de admisión, plan, política, GO, nonce único y caducidad corta; G6 v2 backup identificable y restauración aislada revisada |
 
-El chequeo puro `check_cut` del nuevo GO entrega los seis pins de esquema junto con los pins existentes de fuente/plan. `check_go_plan` construye sus entradas exclusivamente de ese resultado y valida el JSON canónico y la historia EF **antes** de consumir el nonce; ambos módulos devuelven `may_apply=False`. El launcher no reconoce aún este scope.
+El chequeo puro `check_cut` del nuevo GO entrega los seis pins de esquema junto con los pins existentes de fuente/plan. `check_go_plan` construye sus entradas exclusivamente de ese resultado y valida el JSON canónico y la historia EF **antes** de consumir el nonce; ambos módulos devuelven `may_apply=False`. El launcher reconoce este scope, exige config PRE-4 con seis pins de esquema, valida el plan y ejecuta el `precheck` del host antes del nonce. Sin host/effects verificados y `precheck=True`, STOP sin gastar el GO.
 
 No basta introducir las ramas #1068–#1071 al ZIP: integrar y probar el **mismo SHA** final, congelar digests de salida y recién entonces firmar un GO para esa revisión. El dato T0 se mide físicamente en el volumen existente, no se presume a partir del historial de desarrollo.
 
@@ -38,7 +38,7 @@ No basta introducir las ramas #1068–#1071 al ZIP: integrar y probar el **mismo
 | 7. Aplicación | Revalidar imágenes/pins y G6, usar vuelo API/WEB revisado sin relajar su contrato; `APP_STARTED` durable antes de cualquier efecto API/WEB; `APP_APPLIED` solo con resultado terminal claro | mantener esquema 104; rollback de imágenes únicamente si compatible, marcar parcial |
 | 8. Servicio/UAT | Smoke autenticado, Talleres, Ficha del Taller, carga inicial Taller/Hermanos/Cargos, permisos y persistencia con datos sintéticos; capacidad real queda habilitable tras aceptación y fuente institucional | `UAT_STOP`; QA no se declara operativo |
 
-El reductor puro `qa525-vnext-schema-cut-journal-contract.py` exige el orden cerrado de diez fases, eventos canónicos encadenados por SHA-256 y clasificación de interrupción (`PRE_DDL_STOP`, `PARTIAL_SCHEMA_STOP`, `APP_PARTIAL_STOP`, `UAT_STOP`); no escribe disco ni habilita efectos. El futuro port root deberá persistir cada evento en un archivo nuevo de forma durable bajo locks, antes de permitir la siguiente fase.
+El reductor puro `qa525-vnext-schema-cut-journal-contract.py` exige el orden cerrado de diez fases, eventos canónicos encadenados por SHA-256 y clasificación de interrupción (`PRE_DDL_STOP`, `PARTIAL_SCHEMA_STOP`, `APP_PARTIAL_STOP`, `UAT_STOP`); no escribe disco ni habilita efectos. El child y el almacén root persisten cada evento en un archivo exclusivo con fsync/readback bajo el plano de locks antes de permitir la siguiente fase.
 
 El journal registra hash de entradas, fase en curso y salida terminal antes/después de cada efecto mediante escritura durable. Una caída entre DDL y el registro de éxito se trata como parcial desconocido, aun si la historia parece 104; recuperar requiere lectura/reconciliación supervisada y GO nuevo. El GO se consume antes del primer efecto y jamás se reusa. Mantener locks hasta finalizar la fase terminal; verificar su posesión antes y después de cada frontera. Nunca ejecutar una reversión EF `Down` automática ni afirmar restauración de base por revertir contenedores.
 
@@ -50,7 +50,7 @@ El journal registra hash de entradas, fase en curso y salida terminal antes/desp
 4. Operación física supervisada en glmdch solo por Clau como interlocutora del Sponsor, con respaldo G6 v2 y T0 verificados. No pedir a Pablo comandos desde este hilo.
 5. UAT de talleres y carga inicial. Datos personales reales ingresan solo por el circuito institucional de QA privado; no en GitHub, Drive, chat ni demo.
 
-**Estado actual:** #1068 listo para revisión; #1069, #1070 y #1071 draft con CI exact-head reportada. No están integrados en dev, no hay GO nuevo, OCI pin, T0 físico ni despliegue. `QA_DEPLOY=NO_GO`.
+**Estado de rama 22-11-2026:** #1076 (executor, adapter, puertos, host y effects) integrado en #1073 por merge `91e112c2`; launcher, config, signing sheet, child, plan con `api_container_id` y cierre PRE-4 implementados. `effects.provide()` permanece deliberadamente en STOP (`SCHEMA_EFFECTS_NOT_WIRED`) hasta conectar verificador G6, vuelo held API/WEB, UAT autenticado y epoch del recibo. No hay pins/GO de corte ni T0 físico. Readiness/CI del HEAD exacto deben pasar antes de integrar a `dev`. `QA_DEPLOY=NO_GO`.
 
 ## Secuenciador (`qa525-vnext-schema-cut-executor.py`) — sin autoridad
 
@@ -62,4 +62,4 @@ Biblioteca pura (sin I/O, locks, nonce ni firma) que ordena las diez fases con c
 - Solo `{"terminal": "APPLIED"}` del vuelo API/WEB continúa; solo `True` de backup, quiesce, revalidación y UAT. Sin reintentos, sin `Down`.
 - Códigos fijos; la causa de fases 4–6 se conserva solo si es un código `SCHEMA_ADAPTER_*` de la lista cerrada.
 - Un fallo de UAT tras `APP_APPLIED` termina en `UAT_STOP` (clase informada por el contrato corregido en #1073 @e48c9654); el secuenciador no la adivina.
-- Queda fuera: scope/GO/config/launcher/PRE-4, adquisición real de locks y nonce, G6 v2, child/host API/WEB de este scope.
+- El launcher/child usan el plano de locks y nonce de PRE-4; el host/ports están integrados en la rama, pero los cuatro efectos reales citados arriba siguen sin cablear. Sin ellos el precheck niega la operación antes del nonce. No afirmar QA funcional ni habilitar datos reales.
