@@ -23,7 +23,7 @@ SIBLING_MODULES = {"ports": "qa525-vnext-schema-cut-ports.py", "adapter": "qa525
                    "plan": "qa525-vnext-schema-cut-plan.py", "effects": "qa525-vnext-root-schema-effects.py",
                    "flight_adapter": "qa525-vnext-root-schema-flight.py"}
 # glmdch constants (reviewed with this module's bytes; T0 read-only must confirm them before any GO).
-FIXED = {"pg_container": "centenario-qa-lab2-postgres-1", "network": "centenario-qa-lab2_default",
+FIXED = {"pg_container": "centenario-qa-lab2-postgres-1", "network": "centenario-qa-lab2_pmgm_srv01_internal",
          "migrator_env_file": "/etc/pmgm/srv01.env", "grants_env_file": "/etc/pmgm/srv01.env",
          "write_roles": ("pmgm_runtime", "pmgm_app", "pmgm_keycloak"),
          "grant_script_member": "scripts/grant-pilot-db2.sh",

@@ -54,8 +54,16 @@ def bind_dependencies(mods):
 
 
 def precheck_schema_transition():
-    """The schema step stops API; legacy B7 requires API running. No nonce until a reviewed 7→6→7 bridge exists."""
-    raise Stop("SCHEMA_FLIGHT_STOPPED_API_BASELINE_UNSUPPORTED")
+    """Verify the signed 7→6→7 profile and stop-only collaborators are bound before the GO nonce."""
+    if (set(_DEPS) != set(SIBLING_MODULES)
+            or not callable(getattr(_DEPS["state_reader"], "StateReader", None))
+            or "SCHEMA_POSTQUIESCE" not in getattr(_DEPS["state_reader"], "PROFILES", ())
+            or "SCHEMA_POSTQUIESCE" not in getattr(_DEPS["b7"], "PROFILES", ())
+            or "SCHEMA_POSTQUIESCE" not in getattr(_DEPS["boundary"], "PROFILES", ())
+            or not callable(getattr(_DEPS["hold"], "make_rollback_factory", None))
+            or not callable(getattr(_DEPS["run_held"], "run_held", None))):
+        raise Stop("SCHEMA_FLIGHT_TRANSITION_UNWIRED")
+    return True
 
 
 def preflight(*, archive_bytes, claims, authority, plane):
@@ -125,6 +133,11 @@ def make(*, archive_bytes, claims, authority, plane, api_container_id, old_api_i
             rc, running = schema_runner(("/usr/bin/docker", "inspect", "--format", "{{.State.Running}}", cid), 60, None)
             if rc != 0 or running != b"false\n":
                 raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
+        plane.assert_held()
+        running_query = ("/usr/bin/docker", "ps", "-q", "--no-trunc", *labels[4:])
+        rc, running_ids = schema_runner(running_query, 60, None)
+        if rc != 0 or running_ids != b"":
+            raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
         plane.assert_held()
         return True
 

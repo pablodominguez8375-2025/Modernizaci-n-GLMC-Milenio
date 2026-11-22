@@ -56,8 +56,12 @@ class UATTests(unittest.TestCase):
         def probe(method, path, jwt, body):
             calls.append((method, path, jwt, body))
             return 200, {}
-        checks = uat.make(credentials, lambda: NOW, expected_sha="a" * 40, synthetic_probe=probe)
-        self.assertEqual(len(checks), 4)
+        checks = uat.make(credentials, lambda: NOW, expected_sha="a" * 40, synthetic_probe=probe,
+                          probe=lambda path, jwt: {"code": "OK", "status": "not_opened",
+                                                   "writesPerformed": 0, "version": 0})
+        self.assertEqual(len(checks), 5)
+        self.assertIs(checks[2](), True)
+        self.assertIs(checks[3](), True)
         self.assertIs(checks[-1](), True)
         self.assertEqual(calls[0][2], token("master"))
         self.assertEqual(calls[1][2], token("operator"))
@@ -73,6 +77,25 @@ class UATTests(unittest.TestCase):
             with self.assertRaises(uat.Stop):
                 uat.make(lambda raw=raw: raw, lambda: NOW, lambda p, t: calls.append(p))
         self.assertEqual(calls, [])
+
+    def test_window_change_after_synthetic_preview_is_rejected(self):
+        class Synthetic:
+            @staticmethod
+            def uat_checks(http, expected_sha, unauth):
+                return (lambda: True,)
+        uat.bind_dependencies({"synthetic": Synthetic})
+        state = {"calls": 0}
+        def status(path, jwt):
+            state["calls"] += 1
+            return {"code": "OK", "status": "not_opened" if state["calls"] == 1 else "open",
+                    "version": state["calls"] - 1, "writesPerformed": 0}
+        checks = uat.make(credentials, lambda: NOW, probe=status, expected_sha="a" * 40,
+                          synthetic_probe=lambda *args: (200, {}))
+        self.assertIs(checks[2](), True)
+        self.assertIs(checks[3](), True)
+        with self.assertRaises(uat.Stop) as cm:
+            checks[-1]()
+        self.assertEqual(str(cm.exception), "SCHEMA_UAT_WINDOW_CHANGED")
 
     def test_denied_or_malformed_response_fails_closed(self):
         for response in (None, [], {}, {"status": "unavailable", "code": "WINDOW_STATUS_UNAVAILABLE"},

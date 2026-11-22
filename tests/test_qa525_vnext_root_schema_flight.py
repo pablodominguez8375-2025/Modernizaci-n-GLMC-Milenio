@@ -19,10 +19,13 @@ class RootPlane:
 
 
 class SchemaFlightReadbackTests(unittest.TestCase):
-    def test_stopped_api_transition_blocks_before_nonce(self):
+    def test_schema_transition_requires_bound_verified_collaborators(self):
+        flight._DEPS.clear()
         with self.assertRaises(flight.Stop) as cm:
             flight.precheck_schema_transition()
-        self.assertEqual(str(cm.exception), "SCHEMA_FLIGHT_STOPPED_API_BASELINE_UNSUPPORTED")
+        self.assertEqual(str(cm.exception), "SCHEMA_FLIGHT_TRANSITION_UNWIRED")
+        self.bind()
+        self.assertIs(flight.precheck_schema_transition(), True)
 
     def bind(self, outcome="APPLIED", health=True, revision="a" * 40):
         plane = RootPlane()
@@ -51,6 +54,9 @@ class SchemaFlightReadbackTests(unittest.TestCase):
         deps["posix"] = types.SimpleNamespace(PosixPort=lambda: object())
         deps["run_held"] = types.SimpleNamespace(run_held=run_held)
         deps["hold"] = types.SimpleNamespace(make_rollback_factory=lambda stop: lambda **kw: stop)
+        for name in ("state_reader", "b7", "boundary"):
+            deps[name].PROFILES = ("NORMAL", "SCHEMA_POSTQUIESCE")
+        deps["state_reader"].StateReader = lambda *a: None
         deps["health"] = types.SimpleNamespace(build=lambda fetch: (lambda: health, lambda: revision))
         flight.bind_dependencies(deps)
         return plane, seen
@@ -85,7 +91,7 @@ class SchemaFlightReadbackTests(unittest.TestCase):
         def runner(argv, timeout, stdin):
             commands.append(argv)
             if argv[1] == "ps":
-                return 0, (cid + "\n").encode()
+                return (0, (cid + "\n").encode()) if "-aq" in argv else (0, b"")
             if argv[1] == "inspect" and "{{.Image}}" in argv:
                 return 0, ("sha256:" + "2" * 64 + "\n").encode()
             if argv[1] == "inspect":
@@ -101,6 +107,7 @@ class SchemaFlightReadbackTests(unittest.TestCase):
                           schema_runner=runner)()
         self.assertEqual(out["journal"], "FAILED")
         self.assertEqual(sum(cmd[1] == "stop" for cmd in commands), 1)
+        self.assertTrue(any(cmd[1] == "ps" and "-q" in cmd for cmd in commands))
         self.assertTrue(all(cmd[1] != "up" for cmd in commands))
 
     def test_unknown_api_image_cannot_be_stopped_as_target(self):
