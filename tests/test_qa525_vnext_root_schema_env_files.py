@@ -31,9 +31,14 @@ class SchemaEnvFilesTests(unittest.TestCase):
     def test_scope_cleanup_on_success_and_exception(self):
         # Replace the root source and tmpfs guard only in this synthetic test.
         with tempfile.TemporaryDirectory() as root:
-            class FakeStat:
-                st_mode = 0o40700
-                st_uid = 0
+            real_stat = mod.os.stat
+            def stat_mock(path, *args, **kwargs):
+                result = real_stat(path, *args, **kwargs)
+                if str(path) == root:
+                    values = list(result)
+                    values[4] = 0  # st_uid: root, synthetic only
+                    return mod.os.stat_result(values)
+                return result
             import builtins
             real_open = builtins.open
             class Mounts:
@@ -46,7 +51,7 @@ class SchemaEnvFilesTests(unittest.TestCase):
                     return Mounts()
                 return real_open(path, *args, **kwargs)
             with patch.object(mod, "TMP_ROOT", root), patch.object(mod, "_read_source", return_value=b"synthetic"), \\
-                 patch.object(mod.os, "stat", return_value=FakeStat()), patch.object(builtins, "open", side_effect=open_mock):
+                 patch.object(mod.os, "stat", side_effect=stat_mock), patch.object(builtins, "open", side_effect=open_mock):
                 for fail in (False, True):
                     with self.subTest(fail=fail):
                         try:
