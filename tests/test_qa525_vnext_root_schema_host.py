@@ -23,7 +23,23 @@ ad = load("sh_adapter", "qa525-vnext-schema-adapter.py")
 plan_mod = load("sh_plan", "qa525-vnext-schema-cut-plan.py")
 ex = load("sh_exec", "qa525-vnext-schema-cut-executor.py")
 adapter_tests = load("sh_adapter_tests", "../../tests/test_qa525_vnext_schema_adapter.py")
-MODULES = {"ports": ports, "adapter": ad, "plan": plan_mod}
+class EnvRender:
+    @staticmethod
+    def render(source, history):
+        return b"synthetic", b"synthetic"
+
+class EnvFiles:
+    @staticmethod
+    def open_env(plane, renderer, history):
+        from contextlib import contextmanager
+        @contextmanager
+        def scope():
+            plane.assert_held()
+            yield ("/run/qa525-schema-test/migrator.env", "/run/qa525-schema-test/grants.env")
+        return scope()
+
+MODULES = {"ports": ports, "adapter": ad, "plan": plan_mod,
+           "env_render": EnvRender, "env_files": EnvFiles}
 
 
 def dg(b):
