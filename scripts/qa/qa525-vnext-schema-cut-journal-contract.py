@@ -47,7 +47,7 @@ def _failure_for(phase):
         return "PRE_DDL_STOP"
     if phase in STEPS[3:7]:
         return "PARTIAL_SCHEMA_STOP"
-    if phase in ("APP_STARTED", "APP_APPLIED"):
+    if phase == "APP_STARTED":
         return "APP_PARTIAL_STOP"
     return "UAT_STOP"
 

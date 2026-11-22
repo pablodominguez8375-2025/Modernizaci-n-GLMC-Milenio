@@ -37,7 +37,7 @@ class SchemaJournalTests(unittest.TestCase):
             "GRANTS_VERIFIED": "PARTIAL_SCHEMA_STOP",
             "POSTGATE_PASS": "PARTIAL_SCHEMA_STOP",
             "APP_STARTED": "APP_PARTIAL_STOP",
-            "APP_APPLIED": "APP_PARTIAL_STOP",
+            "APP_APPLIED": "UAT_STOP",
             "UAT_PASS": "UAT_STOP",
         }
         events = []
@@ -64,6 +64,16 @@ class SchemaJournalTests(unittest.TestCase):
         append(events, "MIGRATION_STARTED")
         with self.assertRaisesRegex(journal.Stop, "SCHEMA_JOURNAL_ORDER_INVALID"):
             append(events, "PRE_DDL_STOP")
+
+    def test_uat_failure_cannot_be_mislabeled_as_partial_apply(self):
+        events = []
+        for phase in journal.STEPS[:-1]:
+            append(events, phase)
+        with self.assertRaisesRegex(journal.Stop, "SCHEMA_JOURNAL_ORDER_INVALID"):
+            append(list(events), "APP_PARTIAL_STOP")
+        append(events, "UAT_STOP")
+        with self.assertRaisesRegex(journal.Stop, "SCHEMA_JOURNAL_TERMINAL"):
+            append(events, "UAT_PASS")
 
     def test_binding_and_chain_tampering_rejected(self):
         events = []
