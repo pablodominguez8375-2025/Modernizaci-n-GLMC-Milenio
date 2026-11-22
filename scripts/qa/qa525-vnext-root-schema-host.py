@@ -172,6 +172,7 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
                   "gate_sql": _member(archive_bytes, host["gate_sql_member"]),
                   "grant_script_sha256": schema_pins["grant_script_sha256"],
                   "postgate_sha256": schema_pins["postgate_sha256"]}
+        adapter.plan_commands(params)  # validate signed archive SQL pins BEFORE nonce, not after quiesce
         images = {"api": schema_pins["api_image_id"], "web": schema_pins["web_image_id"]}
         revisions = {"api": claims["app_source_sha"], "web": claims["app_source_sha"]}
         spec = {"pg_container": host["pg_container"], "expires_at": claims["expires_at"], "images": images,
