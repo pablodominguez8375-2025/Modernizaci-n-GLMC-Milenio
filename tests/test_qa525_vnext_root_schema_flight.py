@@ -91,7 +91,7 @@ class SchemaFlightReadbackTests(unittest.TestCase):
         def runner(argv, timeout, stdin):
             commands.append(argv)
             if argv[1] == "ps":
-                return 0, (cid + "\n").encode()
+                return (0, (cid + "\n").encode()) if "-aq" in argv else (0, b"")
             if argv[1] == "inspect" and "{{.Image}}" in argv:
                 return 0, ("sha256:" + "2" * 64 + "\n").encode()
             if argv[1] == "inspect":
