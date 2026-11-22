@@ -4,12 +4,10 @@
 `provide(authority, claims)` is called by qa525-vnext-root-schema-host.py (precheck BEFORE the nonce, then build_steps)
 and returns the effects object the reviewed ports need. It is the only schema-cut file that touches subprocess or the
 filesystem. Everything it reads is root-owned, regular, single-link and 0600/0400 (evidence, UAT credential); the
-credential VALUE is never returned, logged or placed in argv: it is only checked for presence/ownership/mode here and
-is read by the (not yet wired) UAT check itself. Fixed diagnostic codes only.
+credential VALUE is never logged or placed in argv; it is passed in memory only to fixed authenticated UAT GETs. Fixed diagnostic codes only.
 
-NOT YET WIRED (provide() STOPS closed, so the launcher precheck denies the GO with the nonce unspent):
-  * UAT checks  : authenticated smoke + Talleres + carga inicial using the root 0600 credential
-Each is injected below through WIRING; a missing entry is a STOP. Nothing here can name a command: `runner` accepts only
+The verified UAT sibling validates root 0600 credential bytes before the nonce and probes fixed authenticated GETs
+only after the flight; G6 sibling verifies evidence through the reviewed v2 inspector. Nothing here can name a command: `runner` accepts only
 argv whose first element is /usr/bin/docker and that the ports built.
 """
 import datetime as dt
@@ -30,10 +28,8 @@ EVIDENCE = {"admission": "admission.json", "approval": "approval.json", "review"
 MAX_EVIDENCE = 1 << 20
 MAX_OUT = 1 << 20
 CID = re.compile(r"[0-9a-f]{64}\Z")
-SIBLING_MODULES = {"g6": "qa525-vnext-root-schema-g6.py"}
+SIBLING_MODULES = {"g6": "qa525-vnext-root-schema-g6.py", "uat": "qa525-vnext-root-schema-uat.py"}
 _DEPS = {}
-WIRING = {}  # reviewed authenticated UAT checks; unset until actual endpoint/credential wiring is ready
-WIRED = ("uat_checks",)
 
 
 def bind_dependencies(mods):
@@ -147,11 +143,19 @@ def provide(authority, claims, run=None):
         raise Stop("SCHEMA_EFFECTS_INPUT_INVALID")
     if abort_requested() is not False:
         raise Stop("SCHEMA_EFFECTS_ABORT_REQUESTED")
-    missing = [name for name in WIRED if name not in WIRING]
-    if missing or set(_DEPS) != set(SIBLING_MODULES) or not callable(getattr(_DEPS.get("g6"), "make", None)):
+    if (set(_DEPS) != set(SIBLING_MODULES) or not callable(getattr(_DEPS.get("g6"), "make", None))
+            or not callable(getattr(_DEPS.get("uat"), "make", None))):
         raise Stop("SCHEMA_EFFECTS_NOT_WIRED")
-    fd, _ = _root_file(UAT_CREDENTIAL_PATH, 4096)  # presence/ownership/mode only; the value is NOT read here
-    os.close(fd)
+    def read_credential():
+        fd, size = _root_file(UAT_CREDENTIAL_PATH, 4096)
+        try:
+            raw = os.read(fd, 4097)
+            if len(raw) != size or not 0 < size <= 4096:
+                raise Stop("SCHEMA_EFFECTS_FILE_UNSAFE")
+            return raw
+        finally:
+            os.close(fd)
+    read_credential()  # root ownership/mode and complete bounded read before nonce
     eff = _Effects()
     eff.runner = run or runner
     eff.clock = clock
@@ -164,7 +168,10 @@ def provide(authority, claims, run=None):
         raise Stop("SCHEMA_EFFECTS_G6_INVALID") from None
     if (not callable(eff.verifier) or type(eff.archive_epoch) is not int):
         raise Stop("SCHEMA_EFFECTS_G6_INVALID")
-    eff.uat_checks = WIRING["uat_checks"]
+    try:
+        eff.uat_checks = _DEPS["uat"].make(read_credential, eff.clock)
+    except Exception:
+        raise Stop("SCHEMA_EFFECTS_UAT_INVALID") from None
     return eff
 
 
