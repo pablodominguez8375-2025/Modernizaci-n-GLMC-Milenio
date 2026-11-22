@@ -225,6 +225,16 @@ class SchemaCutHostTests(unittest.TestCase):
         revs = ("a" * 40 + "\n").encode()
 
         def runner(argv, t, s):
+            # Ephemeral files are a security boundary, not a change to Docker's
+            # schema command contract. Normalize only the two generated paths
+            # for the legacy scripted adapter fake.
+            argv = tuple(argv)
+            if argv[:2] == ("/usr/bin/docker", "run") and "--env-file" in argv:
+                idx = argv.index("--env-file")
+                argv = argv[:idx+1] + (p["migrator_env_file"],) + argv[idx+2:]
+            if argv[:2] == ("/usr/bin/docker", "exec") and "--env-file" in argv:
+                idx = argv.index("--env-file")
+                argv = argv[:idx+1] + (p["grants_env_file"],) + argv[idx+2:]
             if tuple(argv) == fake.cmds["history"] and not self.state:
                 return 0, ("\n".join(p["baseline_history_ids"]) + "\n").encode()
             if tuple(argv) == fake.cmds["migrate"]:
