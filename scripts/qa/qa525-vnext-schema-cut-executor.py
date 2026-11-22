@@ -49,6 +49,15 @@ class Stop(Exception):
         self.original = None  # fixed earlier code when a terminal write itself failed
 
 
+class _StepError(Exception):
+    """Internal wrapper: ANY exception raised by an injected step (even our own `Stop`) is collaborator output, so it
+    can never be mistaken for a sequencer diagnostic (plane lost / journal ambiguous) nor skip `fail()`."""
+
+    def __init__(self, inner):
+        super().__init__("step")
+        self.inner = inner
+
+
 class _State:
     def __init__(self):
         self.last = None          # last durable phase
@@ -103,8 +112,11 @@ def run(journal, plane, steps):
         return record
 
     def effect(name, *args):
-        _held(plane)
-        result = steps[name](*args)
+        _held(plane)  # outside the step call: the only error here is a lost plane
+        try:
+            result = steps[name](*args)
+        except Exception as inner:  # noqa: BLE001
+            raise _StepError(inner) from None
         _held(plane)
         return result
 
@@ -123,6 +135,7 @@ def run(journal, plane, steps):
                 # failure; the original fixed code is kept only as `.original`. Nothing is retried.
                 terminal_failure.original = code
                 raise terminal_failure from None
+        error = getattr(error, "inner", error)
         raise Stop(code, _cause(error) if error is not None else None) from None
 
     try:

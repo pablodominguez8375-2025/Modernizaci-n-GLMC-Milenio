@@ -273,6 +273,48 @@ class ExecutorTests(unittest.TestCase):
         self.assertIn("SPENDS THE NONCE", ex.__doc__)
         self.assertNotIn("GO still unspent", ex.__doc__)
 
+    def test_a_stop_raised_by_any_step_is_collaborator_output_and_still_gets_its_terminal(self):
+        table = (("preflight", "SCHEMA_EXEC_PREFLIGHT_FAILED", []),
+                 ("verify_backup", "SCHEMA_EXEC_BACKUP_FAILED", ["RESERVED", "PRE_DDL_STOP"]),
+                 ("quiesce_writes", "SCHEMA_EXEC_QUIESCE_FAILED", ["RESERVED", "BACKUP_VERIFIED", "PRE_DDL_STOP"]),
+                 ("schema", "SCHEMA_EXEC_SCHEMA_FAILED",
+                  ["RESERVED", "BACKUP_VERIFIED", "WRITES_QUIESCED", "PRE_DDL_STOP"]),
+                 ("revalidate", "SCHEMA_EXEC_REVALIDATION_FAILED", list(ex.PHASES_OK[:7]) + ["PARTIAL_SCHEMA_STOP"]),
+                 ("apply_api_web", "SCHEMA_EXEC_APP_FAILED", list(ex.PHASES_OK[:8]) + ["APP_PARTIAL_STOP"]),
+                 ("uat", "SCHEMA_EXEC_UAT_FAILED", list(ex.PHASES_OK[:9]) + ["UAT_STOP"]))
+        texts = ("password=hunter2 /root/secret", "SCHEMA_EXEC_PLANE_LOST", "SCHEMA_EXEC_JOURNAL_AMBIGUOUS",
+                 "SCHEMA_EXEC_BACKUP_FAILED")
+        for key, code, expected in table:
+            for text in texts:
+                def boom(*_args, text=text):
+                    raise ex.Stop(text)
+                journal, steps = build(**{key: boom})
+                with self.assertRaises(ex.Stop) as caught:
+                    ex.run(journal, Plane(), dict(steps))
+                self.assertEqual(code, str(caught.exception), (key, text))     # normalized, never the collaborator text
+                self.assertIsNone(caught.exception.cause, (key, text))
+                self.assertNotIn("hunter2", repr(caught.exception))
+                self.assertEqual(expected, journal.phases(), (key, text))       # the contract's own terminal
+
+    def test_an_allowlisted_adapter_code_inside_a_stop_is_preserved_as_cause_only(self):
+        def boom(*_args):
+            raise ex.Stop("SCHEMA_ADAPTER_GATE_FAILED")
+        journal, steps = build(apply_api_web=boom)
+        with self.assertRaises(ex.Stop) as caught:
+            ex.run(journal, Plane(), dict(steps))
+        self.assertEqual("SCHEMA_EXEC_APP_FAILED", str(caught.exception))
+        self.assertEqual("SCHEMA_ADAPTER_GATE_FAILED", caught.exception.cause)
+        self.assertEqual("APP_PARTIAL_STOP", journal.phases()[-1])
+
+    def test_a_step_stop_with_a_broken_journal_or_lost_plane_reports_the_sequencer_diagnostic(self):
+        def boom(*_args):
+            raise ex.Stop("whatever")
+        journal, steps = build(Journal(fail_on="PRE_DDL_STOP"), verify_backup=boom)
+        with self.assertRaises(ex.Stop) as caught:
+            ex.run(journal, Plane(), dict(steps))
+        self.assertEqual("SCHEMA_EXEC_JOURNAL_AMBIGUOUS", str(caught.exception))
+        self.assertEqual("SCHEMA_EXEC_BACKUP_FAILED", caught.exception.original)
+
     def test_invalid_inputs_are_refused(self):
         journal, steps = build()
         for args in ((None, Plane(), dict(steps)), (journal, object(), dict(steps)), (journal, Plane(), {}),
