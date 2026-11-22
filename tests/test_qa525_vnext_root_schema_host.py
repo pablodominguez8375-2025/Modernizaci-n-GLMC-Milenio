@@ -169,6 +169,8 @@ class SchemaCutHostTests(unittest.TestCase):
         self.assertTrue(host.precheck(**ok))
 
     def test_host_constants_are_fixed_and_roles_exact(self):
+        self.assertEqual(host.FIXED["network"], "centenario-qa-lab2_pmgm_srv01_internal")
+        self.assertNotEqual(host.FIXED["network"], "centenario-qa-lab2_default")
         self.assertEqual(set(host.FIXED["write_roles"]), {"pmgm_runtime", "pmgm_app", "pmgm_keycloak"})
         _, a = build()
         for extra in ({"schema_host": {}}, {"pg_container": "x"}):
