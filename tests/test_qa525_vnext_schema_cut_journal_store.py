@@ -46,7 +46,7 @@ class StoreTests(unittest.TestCase):
         for phase in contract.STEPS:
             result = self.append(phase)
             self.assertIs(result["may_apply"], False)
-        self.assertEqual(9, len(list(self.flight.glob("*.event"))))
+        self.assertEqual(10, len(list(self.flight.glob("*.event"))))
         with self.assertRaisesRegex(store.Stop, "SCHEMA_STORE_REPLAY"):
             self.append("RESERVED")
         with self.assertRaisesRegex(contract.Stop, "SCHEMA_JOURNAL_TERMINAL"):
