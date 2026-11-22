@@ -113,6 +113,9 @@ def precheck(*, plan_bytes, claims, authority, schema_pins):
     effects = _effects(authority, claims)
     _container(effects, checked.get("api_container_id"), schema_pins["api_image_id"])
     # Fail before nonce and before API quiesce if source or tmpfs is unsafe.
+    import os
+    if os.path.lexists("/run/qa525-schema-env"):
+        raise Stop("SCHEMA_HOST_ENV_DIR_EXISTS")
     try:
         import json
         history = json.loads(plan_bytes.decode("ascii"))["history_ids"]
@@ -210,7 +213,9 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
                 if type(paths) is not tuple or len(paths) != 2:
                     raise Stop("SCHEMA_HOST_ENV_INVALID")
                 ephemeral = dict(params, migrator_env_file=paths[0], grants_env_file=paths[1])
-                return ports.make_schema(adapter, ephemeral, effects.runner)(journal)
+                result = ports.make_schema(adapter, ephemeral, effects.runner)(journal)
+            plane.assert_held()
+            return result
         steps["schema"] = schema_with_ephemeral_env
     except Stop:
         raise
