@@ -38,6 +38,7 @@ def _directory(rootfd, nonce, uid, first):
             raise Stop("SCHEMA_STORE_REPLAY") from None
         except OSError:
             raise Stop("SCHEMA_STORE_IO") from None
+    dfd = None
     try:
         dfd = os.open(nonce, OPEN_DIR, dir_fd=rootfd)
         info, linked = os.fstat(dfd), os.stat(nonce, dir_fd=rootfd, follow_symlinks=False)
@@ -45,9 +46,13 @@ def _directory(rootfd, nonce, uid, first):
                 or stat.S_IMODE(info.st_mode) != 0o700
                 or (info.st_dev, info.st_ino) != (linked.st_dev, linked.st_ino)):
             raise Stop("SCHEMA_STORE_DIR_UNTRUSTED")
-        return dfd
+        result, dfd = dfd, None
+        return result
     except OSError:
         raise Stop("SCHEMA_STORE_DIR_UNTRUSTED") from None
+    finally:
+        if dfd is not None:
+            os.close(dfd)
 
 
 def _events(dfd, uid):
