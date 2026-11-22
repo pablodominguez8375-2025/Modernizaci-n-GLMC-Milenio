@@ -84,7 +84,8 @@ def _effects(authority, claims):
           and type(getattr(effects, "archive_epoch", None)) is int and not isinstance(effects.archive_epoch, bool)
           and type(getattr(effects, "api_container_id", None)) is str
           and callable(getattr(effects, "read_schema_source", None))
-          and callable(getattr(effects, "verify_schema_tmpfs", None)))
+          and callable(getattr(effects, "verify_schema_tmpfs", None))
+          and callable(getattr(effects, "schema_env_dir_exists", None)))
     return effects
 
 
@@ -113,8 +114,7 @@ def precheck(*, plan_bytes, claims, authority, schema_pins):
     effects = _effects(authority, claims)
     _container(effects, checked.get("api_container_id"), schema_pins["api_image_id"])
     # Fail before nonce and before API quiesce if source or tmpfs is unsafe.
-    import os
-    if os.path.lexists("/run/qa525-schema-env"):
+    if effects.schema_env_dir_exists():
         raise Stop("SCHEMA_HOST_ENV_DIR_EXISTS")
     try:
         import json
