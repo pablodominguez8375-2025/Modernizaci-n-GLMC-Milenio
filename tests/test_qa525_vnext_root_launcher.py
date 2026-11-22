@@ -54,7 +54,8 @@ G6_OPERATION = json.dumps({
     "argv": ["--restic-sha256", "a" * 64, "--repo-id", "b" * 64, "--key-epoch", "c" * 32],
 }, sort_keys=True, separators=(",", ":")).encode()
 G6_OP = "sha256:" + hashlib.sha256(G6_OPERATION).hexdigest()
-CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py", "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"}
+CHILDREN = {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py", "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py",
+            "SCHEMA_API_WEB_QA_ONLY": "qa525-vnext-root-schema-child.py"}
 CHILDREN.update({"G6:" + c: "qa525-vnext-root-g6-%s.py" % c for c in launcher.G6_COMMANDS})
 
 
@@ -135,7 +136,7 @@ class LauncherComposeTests(unittest.TestCase):
                "inbox": os.path.join(self.dir, "inbox"), "temp_root": os.path.join(self.dir, "tmp"),
                "socket_path": os.path.join(self.dir, "s"), "journal_root": os.path.join(self.dir, "j"),
                "lease_dir": os.path.join(self.dir, "l"), "peer_uid": UID, "timeout": 5,
-               "children": dict(CHILDREN), "g6_pins": None, "apiweb": None,
+               "children": dict(CHILDREN), "g6_pins": None, "apiweb": None, "schema_cut": None,
                "authenticity": {"ops_allowed_signers": self.allowed.replace(NS.encode(), b"qa525-ops-v2@pmgm"),
                                 "ops_signature_sha256": sha(self.files["ops-v3.json.sig"]),
                                 "app_bundle_sha256": sha(self.files["app-bundle.json"]),
@@ -297,6 +298,12 @@ class LauncherComposeTests(unittest.TestCase):
         cfg = self.config()
         cfg["apiweb"] = {"marker": 1} if configured else None
         return self.loader(cfg=cfg, **extra)
+
+    def test_schema_go_without_distinct_configuration_never_spends_nonce(self):
+        go = self.go_bytes(purpose="SCHEMA_API_WEB_QA_ONLY")
+        self.write_inbox(go=go)
+        self.stop("LAUNCH_SCHEMA_NOT_CONFIGURED")
+        self.assertEqual([], self.spent)
 
     def test_apiweb_go_dispatches_to_the_closed_apiweb_child_exactly_once(self):
         self.write_inbox(go=self.apiweb_go())
