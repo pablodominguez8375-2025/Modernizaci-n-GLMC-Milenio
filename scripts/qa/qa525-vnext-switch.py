@@ -106,6 +106,12 @@ class ServiceSwitcher:
         except containment.Stop:
             raise Stop("SWITCH_COMMAND_INVALID") from None
 
+    def argv_for(self, service):
+        """The exact (immutable) command this switcher would run for `service`; never executes anything."""
+        if service not in ("api", "web"):
+            raise Stop("SWITCH_SERVICE_INVALID")
+        return tuple(self._argv(service)[1])
+
     def _scope(self, unit):
         try:
             scope = self._scope_factory(unit)
