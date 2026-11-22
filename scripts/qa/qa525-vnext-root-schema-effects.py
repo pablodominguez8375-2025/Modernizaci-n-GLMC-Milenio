@@ -9,7 +9,6 @@ is read by the (not yet wired) UAT check itself. Fixed diagnostic codes only.
 
 NOT YET WIRED (provide() STOPS closed, so the launcher precheck denies the GO with the nonce unspent):
   * `verifier`  : the reviewed G6 v2 evidence verifier for the five evidence files
-  * `flight`    : the reviewed API/WEB held flight returning {journal, health, served_sha}
   * UAT checks  : authenticated smoke + Talleres + carga inicial using the root 0600 credential
   * `archive_epoch` from the signed G6 receipt
 Each is injected below through WIRING; a missing entry is a STOP. Nothing here can name a command: `runner` accepts only
@@ -33,8 +32,8 @@ EVIDENCE = {"admission": "admission.json", "approval": "approval.json", "review"
 MAX_EVIDENCE = 1 << 20
 MAX_OUT = 1 << 20
 CID = re.compile(r"[0-9a-f]{64}\Z")
-WIRING = {}  # name -> callable/value; the reviewed G6 verifier, flight, UAT factory and epoch reader (none yet)
-WIRED = ("verifier", "flight", "uat_checks", "archive_epoch")
+WIRING = {}  # name -> callable/value; the reviewed G6 verifier, UAT checks and epoch reader (none yet)
+WIRED = ("verifier", "uat_checks", "archive_epoch")
 
 
 class Stop(Exception):
@@ -153,7 +152,6 @@ def provide(authority, claims, run=None):
     eff.read_evidence = read_evidence_factory(authority["host"].get("evidence_dir"))
     eff.api_container_id = _api_container_id(eff.runner)
     eff.verifier = WIRING["verifier"]
-    eff.flight = WIRING["flight"]
     eff.uat_checks = WIRING["uat_checks"]
     eff.archive_epoch = WIRING["archive_epoch"]
     return eff
