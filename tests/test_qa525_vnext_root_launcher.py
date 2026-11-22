@@ -300,7 +300,13 @@ class LauncherComposeTests(unittest.TestCase):
         return self.loader(cfg=cfg, **extra)
 
     def test_schema_go_without_distinct_configuration_never_spends_nonce(self):
-        go = self.go_bytes(purpose="SCHEMA_API_WEB_QA_ONLY")
+        schema_pins = {k: D("a") for k in REAL["qa525-vnext-go-cut-contract.py"].SCHEMA_PIN_FIELDS}
+        go = sheet.build_go_cut(
+            nonce=NONCE, ops_source_sha=OPS_SHA, app_source_sha=APP_SHA,
+            app_archive_sha256=ARCHIVE, plan_sha256=PINS["plan_sha256"],
+            admission_sha256=PINS["admission_sha256"], policy_hash=PINS["policy_hash"],
+            issued_at=ISSUED, expires_at=EXPIRES, purpose="SCHEMA_API_WEB_QA_ONLY",
+            schema_pins=schema_pins)
         self.write_inbox(go=go)
         self.stop("LAUNCH_SCHEMA_NOT_CONFIGURED")
         self.assertEqual([], self.spent)
@@ -585,7 +591,7 @@ class LauncherComposeTests(unittest.TestCase):
 
     def test_children_mapping_is_the_code_constant(self):
         self.assertEqual(launcher.CHILD_MODULES["G6:backup"], "qa525-vnext-root-g6-backup.py")
-        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 7)
+        self.assertEqual(len(set(launcher.CHILD_MODULES.values())), 8)
         self.assertEqual(launcher.CHILD_MODULES["API_WEB_QA_ONLY"], "qa525-vnext-root-apiweb-child.py")
         self.assertEqual(launcher.SCOPES["qa525-go-cut-v1"], "API_WEB_QA_ONLY")
         self.assertEqual(self.config()["children"], launcher.CHILD_MODULES)
