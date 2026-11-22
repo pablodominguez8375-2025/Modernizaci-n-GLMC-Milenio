@@ -104,7 +104,7 @@ def build(effects=None, **kw):
     return host.build_steps(**args), args
 
 
-class HostTests(unittest.TestCase):
+class SchemaCutHostTests(unittest.TestCase):
     def test_builds_exactly_the_sequencer_steps(self):
         steps, _ = build()
         self.assertEqual(set(steps), ex.STEPS)
