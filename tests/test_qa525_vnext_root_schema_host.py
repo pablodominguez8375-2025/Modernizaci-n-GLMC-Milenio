@@ -69,12 +69,21 @@ class Effects:
         self.abort_requested = lambda: False
         self.read_evidence = lambda n: n.encode()
         self.verifier = lambda d: True
-        self.flight = lambda: {"journal": "APPLIED", "health": True, "served_sha": "a" * 40}
         self.uat_checks = (lambda: True,)
         self.archive_epoch = 1900000000 - 3600
         self.api_container_id = "b" * 64
         for k, v in over.items():
             setattr(self, k, v)
+
+
+class FlightAdapter:
+    result = {"journal": "APPLIED", "health": True, "served_sha": "a" * 40}
+    calls = []
+
+    @classmethod
+    def make(cls, **kw):
+        cls.calls.append(kw)
+        return lambda: cls.result
 
 
 class EffModule:
@@ -88,7 +97,8 @@ class EffModule:
 
 
 def bind(effects=None):
-    host.bind_dependencies(dict(MODULES, effects=EffModule(effects if effects is not None else Effects())))
+    host.bind_dependencies(dict(MODULES, effects=EffModule(effects if effects is not None else Effects()),
+                                flight_adapter=FlightAdapter))
 
 
 def case_with_member(p):
@@ -109,6 +119,7 @@ class SchemaCutHostTests(unittest.TestCase):
         steps, _ = build()
         self.assertEqual(set(steps), ex.STEPS)
         self.assertTrue(all(callable(v) for v in steps.values()))
+        self.assertEqual(FlightAdapter.calls[-1]["claims"]["app_source_sha"], "a" * 40)
 
     def test_precheck_ok_and_fails_closed_without_uat_or_effects(self):
         _, a = build()
@@ -223,8 +234,13 @@ class SchemaCutHostTests(unittest.TestCase):
         self.assertEqual(tuple(out["phases"]), ex.PHASES_OK)
 
     def test_flight_not_applied_stops_before_uat(self):
-        steps, _ = build(Effects(flight=lambda: {"journal": "FAILED", "health": True, "served_sha": "a" * 40}))
-        self.assertEqual(steps["apply_api_web"](), {"terminal": "FAILED"})
+        previous = FlightAdapter.result
+        try:
+            FlightAdapter.result = {"journal": "FAILED", "health": True, "served_sha": "a" * 40}
+            steps, _ = build()
+            self.assertEqual(steps["apply_api_web"](), {"terminal": "FAILED"})
+        finally:
+            FlightAdapter.result = previous
 
 
 if __name__ == "__main__":
