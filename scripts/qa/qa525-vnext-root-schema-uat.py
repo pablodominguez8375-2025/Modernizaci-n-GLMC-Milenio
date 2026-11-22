@@ -134,6 +134,7 @@ def make(read_private, clock, probe=None, expected_sha=None, synthetic_probe=Non
                                      or not callable(getattr(_DEPS["synthetic"], "uat_checks", None))):
         raise Stop("SCHEMA_UAT_BINDING_INVALID")
     request = probe or _get
+    before = {}
 
     def session():
         tokens = _tokens(read_private, clock)
@@ -157,6 +158,7 @@ def make(read_private, clock, probe=None, expected_sha=None, synthetic_probe=Non
                 or result.get("status") not in ("not_opened", "open", "closed")
                 or type(result.get("writesPerformed")) is not int):
             raise Stop("SCHEMA_UAT_LOAD_INVALID")
+        before["snapshot"] = (result.get("status"), result.get("version"), result["writesPerformed"])
         return True
 
     checks = (session, workshops, initial_load)
@@ -171,7 +173,15 @@ def make(read_private, clock, probe=None, expected_sha=None, synthetic_probe=Non
     def unauth(method, path):
         return (synthetic_probe or _synthetic_request)(method, path, None, None)
 
-    return checks + _DEPS["synthetic"].uat_checks(http, expected_sha, unauth=unauth)
+    def unchanged():
+        tokens = _tokens(read_private, clock)
+        result = request(PATHS[2], tokens["master_token"])
+        if (type(result) is not dict or result.get("code") != "OK"
+                or before.get("snapshot") != (result.get("status"), result.get("version"), result.get("writesPerformed"))):
+            raise Stop("SCHEMA_UAT_WINDOW_CHANGED")
+        return True
+
+    return checks + _DEPS["synthetic"].uat_checks(http, expected_sha, unauth=unauth) + (unchanged,)
 
 
 if __name__ == "__main__":
