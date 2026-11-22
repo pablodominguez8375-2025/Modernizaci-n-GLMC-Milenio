@@ -42,7 +42,10 @@ def _valid_digest(value):
     return type(value) is str and DIGEST.fullmatch(value) is not None
 
 
-def _fingerprint(nonce, admission_sha256, baseline_sha256, observation_sha256):
+PROFILES = ("NORMAL", "SCHEMA_POSTQUIESCE")
+
+
+def _fingerprint(nonce, admission_sha256, baseline_sha256, observation_sha256, profile="NORMAL"):
     value = {
         "schema": "qa525-b7-root-boundary-v1",
         "nonce": nonce,
@@ -50,6 +53,8 @@ def _fingerprint(nonce, admission_sha256, baseline_sha256, observation_sha256):
         "baseline_sha256": baseline_sha256,
         "observation_sha256": observation_sha256,
     }
+    if profile != "NORMAL":  # the NORMAL fingerprint stays byte-identical
+        value["profile"] = profile
     data = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("ascii")
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
@@ -75,6 +80,7 @@ class Boundary:
         self._nonce = nonce
         self._admission_sha256 = admission_sha256
         self._last_record = None
+        self._profile = "NORMAL"
         self._check()
 
     def _check(self):
@@ -100,7 +106,7 @@ class Boundary:
                     "physical_runtime_verified", "legacy_entrypoint_disabled_verified"))):
             raise Stop("ROOTBOUNDARY_PLANE_INVALID")
 
-    def inspect_once(self, *, b7, inspector, baseline_sha256):
+    def inspect_once(self, *, b7, inspector, baseline_sha256, profile="NORMAL"):
         """Call the existing B7 inspector with our EXACT still-held plane.
 
         No physical host effect exists in this library. A real signed caller
@@ -109,21 +115,24 @@ class Boundary:
         if self._last_record is not None:
             raise Stop("ROOTBOUNDARY_ALREADY_INSPECTED")
         if (not callable(getattr(b7, "inspect_inside_held_plane", None))
-                or not callable(inspector) or not _valid_digest(baseline_sha256)):
+                or not callable(inspector) or not _valid_digest(baseline_sha256)
+                or profile not in PROFILES):
             raise Stop("ROOTBOUNDARY_INSPECT_INPUT_INVALID")
         self._check()
+        schema = profile == "SCHEMA_POSTQUIESCE"
         try:
+            kwargs = {"profile": profile} if schema else {}
             report = b7.inspect_inside_held_plane(
                 plane=self._plane, inspector=inspector,
-                expected_baseline_sha256=baseline_sha256)
+                expected_baseline_sha256=baseline_sha256, **kwargs)
         except Exception:
             raise Stop("ROOTBOUNDARY_INSPECTION_STOP") from None
         self._check()
         if (type(report) is not dict or set(report) != B7_REQUIRED
-                or report["status"] != getattr(b7, "STATUS", None)
+                or report["status"] != getattr(b7, "SCHEMA_STATUS" if schema else "STATUS", None)
                 or report["baseline_sha256"] != baseline_sha256
                 or not _valid_digest(report["observation_sha256"])
-                or report["running_services_verified_structurally"] != 7
+                or report["running_services_verified_structurally"] != (6 if schema else 7)
                 or report["oneshot_exits_verified_structurally"] != 3
                 or report["root_locks_held_during_inspection"] != 5
                 or report["journal_lease_held_during_inspection"] is not True
@@ -136,7 +145,7 @@ class Boundary:
             "status": STATUS,
             "flight_context_sha256": _fingerprint(
                 self._nonce, self._admission_sha256,
-                baseline_sha256, report["observation_sha256"]),
+                baseline_sha256, report["observation_sha256"], profile),
             "baseline_sha256": baseline_sha256,
             "observation_sha256": report["observation_sha256"],
             "may_apply": False,
@@ -147,6 +156,7 @@ class Boundary:
         }
         self._check()
         self._last_record = record
+        self._profile = profile
         return record
 
     def require_current_record(self, record):
@@ -165,7 +175,7 @@ class Boundary:
                 or not _valid_digest(record["observation_sha256"])
                 or record["flight_context_sha256"] != _fingerprint(
                     self._nonce, self._admission_sha256,
-                    record["baseline_sha256"], record["observation_sha256"])):
+                    record["baseline_sha256"], record["observation_sha256"], self._profile)):
             raise Stop("ROOTBOUNDARY_RECORD_STALE")
         self._check()
         return True
