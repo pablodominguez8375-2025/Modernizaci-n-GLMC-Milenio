@@ -123,6 +123,28 @@ class QaSiloFetchDiagnosticsTests(unittest.TestCase):
                 supply.registry_evidence()
         self.assertEqual(['token', 'index', 'manifest', 'config'], stages)
 
+    def test_authorization_is_not_forwarded_to_redirect_target(self):
+        import http.server, threading
+        seen = {}
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def do_GET(self):
+                if self.path == '/start':
+                    seen['start'] = self.headers.get('Authorization')
+                    self.send_response(307); self.send_header('Location', '/blob'); self.end_headers()
+                else:
+                    seen['blob'] = self.headers.get('Authorization')
+                    self.send_response(200); self.send_header('Content-Length', '2'); self.end_headers(); self.wfile.write(b'ok')
+        srv = http.server.HTTPServer(('127.0.0.1', 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            url = 'http://127.0.0.1:%d/start' % srv.server_port
+            self.assertEqual(b'ok', supply.fetch(url, {'Authorization': 'Bearer t', 'Accept': 'x'}, stage='config'))
+        finally:
+            srv.shutdown()
+        self.assertEqual('Bearer t', seen['start'])
+        self.assertIsNone(seen['blob'])
+
     def test_fail_closed_behaviour_unchanged_on_success_path(self):
         class Response:
             def __enter__(self): return self
