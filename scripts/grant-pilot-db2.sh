@@ -1,9 +1,37 @@
 #!/usr/bin/env bash
 # Se ejecuta una sola vez en el contenedor efímero db-grants, tras finalizar las migraciones.
 set -euo pipefail
-: "${PGPASSWORD:?Se exige credencial bootstrap solo para el job grants}"
-psql -h postgres -U pmgm_app -d pmgm -X -v ON_ERROR_STOP=1 <<'SQL'
+: "${PGPASSWORD:?Se exige credencial de pmgm_migrator para el job grants}"
+# El job usa el dueño acotado de los objetos EF; no usa pmgm_app superusuario.
+psql -h postgres -U pmgm_migrator -d pmgm -X -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
+-- El rol limitado solo puede conceder permisos sobre objetos que posee.
+-- Evita warnings de GRANT ignorados en objetos heredados de otro dueño.
+DO $owner$
+BEGIN
+  -- pg_database_owner is only safe when this database is actually owned
+  -- by the restricted migrator. Otherwise public can hide a different owner.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_database
+    WHERE datname = current_database()
+      AND datdba = 'pmgm_migrator'::regrole
+  ) THEN
+    RAISE EXCEPTION 'QA525_DB_GRANTS_OWNER_MISMATCH';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_namespace n
+    WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
+      AND n.nspowner NOT IN ('pmgm_migrator'::regrole, 'pg_database_owner'::regrole)
+  ) OR EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
+      AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+      AND c.relowner <> 'pmgm_migrator'::regrole
+  ) THEN
+    RAISE EXCEPTION 'QA525_DB_GRANTS_OWNER_MISMATCH';
+  END IF;
+END;
+$owner$;
 DO $grant$
 DECLARE schema_name text;
 BEGIN
@@ -28,6 +56,26 @@ $grant$;
 -- El runtime NO posee el objeto y jamás modifica ni deshabilita triggers de auditoría.
 REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON core.audit_events FROM pmgm_runtime;
 GRANT SELECT, INSERT ON core.audit_events TO pmgm_runtime;
+-- El job también se usa antes de esta migración: la tabla puede no existir aún.
+-- Una vez creada, cada reejecución revoca el GRANT global y comprueba
+-- privilegios efectivos, incluidos los heredados. La migración del corte
+-- verifica por separado que la tabla exista antes de habilitar escritura.
+DO $verify_workshop$
+BEGIN
+  IF to_regclass('core.workshop_status_transitions') IS NOT NULL THEN
+    EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON core.workshop_status_transitions FROM pmgm_runtime';
+    IF NOT (
+      has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'SELECT')
+      AND has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'INSERT')
+      AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'UPDATE')
+      AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'DELETE')
+      AND NOT has_table_privilege('pmgm_runtime', 'core.workshop_status_transitions', 'TRUNCATE')
+    ) THEN
+      RAISE EXCEPTION 'QA525_WORKSHOP_TRANSITIONS_RUNTIME_PRIVILEGES_INVALID';
+    END IF;
+  END IF;
+END;
+$verify_workshop$;
 -- El historial de EF Core controla qué migraciones se aplican. El runtime
 -- jamás debe consultarlo o alterarlo, incluso si recibe DML por esquema.
 -- El migrador mantiene ownership y permisos para nuevas migraciones.

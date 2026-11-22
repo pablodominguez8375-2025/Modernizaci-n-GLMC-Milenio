@@ -121,7 +121,7 @@ class PilotDb2RealMigrationsTests(unittest.TestCase):
                 'SELECT count(*) FROM public."__EFMigrationsHistory";'
             ).stdout.strip()), 20)
 
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["admin"],
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["migrator"],
                  db, "bash", "/scripts/grant-pilot-db2.sh"], timeout=90)
             # El rol de API puede leer la tabla, pero no migrarla.
             self.assertEqual("t", psql("pmgm_app", pw["admin"],
@@ -208,7 +208,7 @@ class PilotDb2RealMigrationsTests(unittest.TestCase):
                  "-d", "pmgm", "--clean", "--if-exists", "--no-owner",
                  "--no-privileges", "--exit-on-error",
                  "--role=pmgm_migrator", backup_path], timeout=120)
-            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["admin"],
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["migrator"],
                  db, "bash", "/scripts/grant-pilot-db2.sh"], timeout=45)
             restored_owner = psql("pmgm_app", pw["admin"],
                  "SELECT pg_get_userbyid(relowner) FROM pg_class "
