@@ -434,10 +434,17 @@ def _compose(load, record, env):
             return act_for(claims=dict(claims), launcher_pins=dict(cfg["launcher_pins"]))(fd)
     elif purpose == "SCHEMA_API_WEB_QA_ONLY":
         schema_plan_bytes = _read_regular(cfg["inbox"], SCHEMA_PLAN_FILE, env["os_uid"], env["anchor"])
-        schema_plan = load(SCHEMA_PLAN)
-        executor, store, contract = load(SCHEMA_EXEC), load(SCHEMA_STORE), load(SCHEMA_CONTRACT)
-        schema_host = load(SCHEMA_HOST)  # PRE-4 manifest must include the genuine host port, never a GO-supplied path
-        nonce_journal = load("qa525-vnext-go-nonce-journal.py")
+        schema_cache = {}
+        def schema_load(name):
+            if name not in schema_cache:
+                schema_cache[name] = load(name)
+            return schema_cache[name]
+        schema_plan = schema_load(SCHEMA_PLAN)
+        executor, store, contract = (schema_load(SCHEMA_EXEC), schema_load(SCHEMA_STORE),
+                                     schema_load(SCHEMA_CONTRACT))
+        schema_host = schema_load(SCHEMA_HOST)  # PRE-4 manifest only; never a GO-supplied path
+        nonce_journal = schema_load("qa525-vnext-go-nonce-journal.py")
+        _bind_closure(schema_load, [SCHEMA_HOST])  # bind transitive host ports/effects before nonce
         act_for = getattr(child_mod, "act_for", None)
         if (not callable(act_for) or not callable(getattr(schema_plan, "check_go_plan", None))
                 or not callable(getattr(executor, "run", None)) or not callable(getattr(store, "append", None))
