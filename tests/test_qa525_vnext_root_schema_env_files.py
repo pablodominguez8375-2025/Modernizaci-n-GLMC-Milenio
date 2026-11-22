@@ -24,6 +24,7 @@ class SchemaEnvFilesTests(unittest.TestCase):
             path = directory + "/source"
             with open(path, "wb") as stream:
                 stream.write(b"PMGM_QA_MIGRATOR_DB_PASSWORD=synthetic\\n")
+            Path(path).chmod(0o644)  # unsafe even if tests run as root
             with patch.object(mod, "SOURCE", path):
                 with self.assertRaises(mod.Stop):
                     mod._read_source()
