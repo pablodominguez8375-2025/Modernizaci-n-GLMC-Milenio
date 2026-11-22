@@ -60,7 +60,7 @@ class Runner:
         raise AssertionError(argv)
 
 
-class PortTests(unittest.TestCase):
+class SchemaCutPortsTests(unittest.TestCase):
     def test_preflight_ok_and_each_failure_stops(self):
         self.assertIsNone(pt.make_preflight(Runner(), clock(), lambda: False, spec())())
         for bad in ({"migrator": (0, b"sha256:" + b"0" * 64 + b"\n")}, {"image_api": (0, b"0" * 40 + b"\n")},
