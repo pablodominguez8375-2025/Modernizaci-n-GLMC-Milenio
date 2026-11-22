@@ -50,6 +50,11 @@ def bind_dependencies(mods):
     _DEPS.update(mods)
 
 
+def precheck_schema_transition():
+    """The schema step stops API; legacy B7 requires API running. No nonce until a reviewed 7→6→7 bridge exists."""
+    raise Stop("SCHEMA_FLIGHT_STOPPED_API_BASELINE_UNSUPPORTED")
+
+
 def make(*, archive_bytes, claims, authority, plane):
     if (set(_DEPS) != set(SIBLING_MODULES)
             or not isinstance(getattr(_DEPS["root_locks"], "RootPlane", None), type)):

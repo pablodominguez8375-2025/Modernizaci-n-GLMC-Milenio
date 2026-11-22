@@ -63,7 +63,8 @@ def _shape(authority, schema_pins):
           and all(type(authority["g6"].get(v)) is str and SHA.fullmatch(authority["g6"][v]) for v in G6_MAP.values())
           and set(_DEPS) == set(SIBLING_MODULES)
           and callable(getattr(_DEPS["effects"], "provide", None))
-          and callable(getattr(_DEPS["flight_adapter"], "make", None)))
+          and callable(getattr(_DEPS["flight_adapter"], "make", None))
+          and callable(getattr(_DEPS["flight_adapter"], "precheck_schema_transition", None)))
 
 
 def _effects(authority, claims):
@@ -102,6 +103,10 @@ def precheck(*, plan_bytes, claims, authority, schema_pins):
         raise Stop("SCHEMA_HOST_PLAN_INVALID") from None
     effects = _effects(authority, claims)
     _container(effects, checked.get("api_container_id"), schema_pins["api_image_id"])
+    try:
+        _DEPS["flight_adapter"].precheck_schema_transition()
+    except Exception:
+        raise Stop("SCHEMA_HOST_FLIGHT_TRANSITION_UNWIRED") from None
     return True
 
 
