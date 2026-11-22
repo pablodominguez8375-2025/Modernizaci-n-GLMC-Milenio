@@ -442,8 +442,11 @@ def _compose(load, record, env):
         if (not callable(act_for) or not callable(getattr(schema_plan, "check_go_plan", None))
                 or not callable(getattr(executor, "run", None)) or not callable(getattr(store, "append", None))
                 or not callable(getattr(contract, "next_event", None))
-                or not callable(getattr(schema_host, "build_steps", None))):
+                or not callable(getattr(schema_host, "build_steps", None))
+                or not callable(getattr(schema_host, "precheck", None))):
             raise Stop("LAUNCH_SCHEMA_PORT_MISSING")
+        schema_authority = dict(cfg["apiweb"], admission_sha256=cfg["pins"]["admission_sha256"],
+                                policy_hash=cfg["pins"]["policy_hash"])
         schema_outer = {}
 
         def act(fd):
@@ -454,7 +457,8 @@ def _compose(load, record, env):
                            journal_root=cfg["journal_root"], uid=env["os_uid"],
                            host=schema_host, executor=executor, store=store,
                            contract=contract, nonce_journal=nonce_journal,
-                           plan_bytes=schema_plan_bytes)
+                           plan_bytes=schema_plan_bytes, authority=dict(schema_authority),
+                           schema_pins=dict(cfg["schema_cut"]))
     elif purpose == "API_WEB_QA_ONLY":
         act_for = getattr(child_mod, "act_for", None)
         if not callable(act_for):
@@ -543,6 +547,14 @@ def _compose(load, record, env):
                                  modules=apiweb_host_modules, effects=apiweb_effects)
         if purpose == "SCHEMA_API_WEB_QA_ONLY":
             schema_plan.check_go_plan(schema_plan_bytes, result)  # before nonce; exact history, release and OCI pins
+            try:
+                ready = schema_host.precheck(plan_bytes=schema_plan_bytes, claims=dict(result),
+                                             authority=dict(schema_authority),
+                                             schema_pins=dict(cfg["schema_cut"]))
+            except Exception:
+                ready = False
+            if ready is not True:
+                raise Stop("LAUNCH_SCHEMA_PREFLIGHT_DENIED")
         if g6_pins and result.get("g6_command") != g6_pins["g6_command"]:
             raise Stop("LAUNCH_GO_CLAIMS_INVALID")
         if (result.get("purpose") != purpose or type(result.get("nonce")) is not str

@@ -46,7 +46,7 @@ def _archive(fd, expected):
 
 
 def act_for(*, claims, fd, plane, journal_root, uid, host, executor, store,
-            contract, nonce_journal, plan_bytes):
+            contract, nonce_journal, plan_bytes, authority, schema_pins):
     if (type(claims) is not dict or set(claims) != CLAIMS
             or claims["purpose"] != "SCHEMA_API_WEB_QA_ONLY"
             or type(claims["nonce"]) is not str or NONCE.fullmatch(claims["nonce"]) is None
@@ -55,6 +55,12 @@ def act_for(*, claims, fd, plane, journal_root, uid, host, executor, store,
                    for k in ("app_archive_sha256", "go_sha256", "plan_sha256"))
             or type(claims["expires_at"]) is not int or claims["expires_at"] <= 0
             or type(plan_bytes) is not bytes or not 0 < len(plan_bytes) <= 65536
+            or type(authority) is not dict
+            or type(schema_pins) is not dict
+            or set(schema_pins) != {"migrator_image_digest", "baseline_history_sha256",
+                                    "grant_script_sha256", "postgate_sha256", "api_image_id", "web_image_id"}
+            or any(type(value) is not str or SHA.fullmatch(value) is None
+                   for value in schema_pins.values())
             or type(uid) is not int or isinstance(uid, bool) or uid < 0
             or type(journal_root) is not str or not os.path.isabs(journal_root)
             or os.path.normpath(journal_root) != journal_root
@@ -70,7 +76,8 @@ def act_for(*, claims, fd, plane, journal_root, uid, host, executor, store,
         binding = {"nonce": claims["nonce"], "go_sha256": claims["go_sha256"],
                    "plan_sha256": claims["plan_sha256"]}
         steps = host.build_steps(archive_bytes=payload, plan_bytes=plan_bytes,
-                                 claims=dict(claims), plane=plane)
+                                 claims=dict(claims), plane=plane,
+                                 authority=dict(authority), schema_pins=dict(schema_pins))
         if type(steps) is not dict or set(steps) != executor.STEPS or any(
                 not callable(steps[k]) for k in executor.STEPS):
             raise Stop("SCHEMA_CHILD_STEPS_INVALID")
