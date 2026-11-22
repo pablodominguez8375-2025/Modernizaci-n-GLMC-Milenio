@@ -82,5 +82,29 @@ class SchemaCutPlanTests(unittest.TestCase):
             gate.check_plan(bad, pins)
 
 
+    def test_go_claims_supply_all_plan_pins(self):
+        plan, pins = fixture()
+        raw, pins = encoded(plan, pins)
+        go = {
+            "status": "QA525_GO_CUT_CONSISTENT_ONLY_UNAUTHENTICATED_NO_APPLY",
+            "purpose": "SCHEMA_API_WEB_QA_ONLY",
+            "schema_contract_shape_only": True,
+            "callback_consistency_only": True,
+            "may_apply": False,
+            "schema_pins": {k: pins[k] for k in gate.GO_PIN_FIELDS},
+            "app_source_sha": pins["app_source_sha"],
+            "app_archive_sha256": pins["app_archive_sha256"],
+            "plan_sha256": pins["plan_sha256"],
+        }
+        self.assertIs(gate.check_go_plan(raw, go)["may_apply"], False)
+        with self.assertRaisesRegex(gate.Stop, "SCHEMA_PLAN_GO_BINDING_INVALID"):
+            gate.check_go_plan(raw, dict(go, purpose="API_WEB_QA_ONLY"))
+        with self.assertRaisesRegex(gate.Stop, "SCHEMA_PLAN_BINDING_MISMATCH"):
+            gate.check_go_plan(raw, dict(go, schema_pins=dict(
+                go["schema_pins"], migrator_image_digest=digest(b"wrong"))))
+        with self.assertRaisesRegex(gate.Stop, "SCHEMA_PLAN_PIN_MISMATCH"):
+            gate.check_go_plan(raw, dict(go, plan_sha256=digest(b"wrong")))
+
+
 if __name__ == "__main__":
     unittest.main()
