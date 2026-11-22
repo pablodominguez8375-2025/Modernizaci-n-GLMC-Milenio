@@ -18,7 +18,7 @@ def load(name, relative):
 fx = load("sh_effects", "qa525-vnext-root-schema-effects.py")
 
 
-class EffectsTests(unittest.TestCase):
+class SchemaCutEffectsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
