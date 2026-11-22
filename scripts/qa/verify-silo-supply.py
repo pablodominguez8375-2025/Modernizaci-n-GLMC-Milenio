@@ -26,7 +26,15 @@ FETCH_STAGES = ('token', 'index', 'manifest', 'config', 'attestation', 'attestat
 def fetch(url, headers=None, maximum=32 * 1024 * 1024, stage=None):
     # `stage` only labels failures (closed allowlist); it never changes behaviour.
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=60) as response:
+        request = urllib.request.Request(url)
+        for name, value in (headers or {}).items():
+            if name.lower() == 'authorization':
+                # Never forwarded on redirects: urllib copies normal headers to the redirect target (the blob CDN),
+                # which rejects a registry bearer token with HTTP 400. Unredirected headers go to the original URL only.
+                request.add_unredirected_header(name, value)
+            else:
+                request.add_header(name, value)
+        with urllib.request.urlopen(request, timeout=60) as response:
             value = response.read(maximum + 1)
     except urllib.error.URLError as error:
         if stage in FETCH_STAGES:
