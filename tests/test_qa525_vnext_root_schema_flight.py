@@ -107,6 +107,7 @@ class SchemaFlightReadbackTests(unittest.TestCase):
                           schema_runner=runner)()
         self.assertEqual(out["journal"], "FAILED")
         self.assertEqual(sum(cmd[1] == "stop" for cmd in commands), 1)
+        self.assertTrue(any(cmd[1] == "ps" and "-q" in cmd for cmd in commands))
         self.assertTrue(all(cmd[1] != "up" for cmd in commands))
 
     def test_unknown_api_image_cannot_be_stopped_as_target(self):
