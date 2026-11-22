@@ -26,7 +26,7 @@ class SchemaJournalTests(unittest.TestCase):
             self.assertIs(result["may_apply"], False)
         with self.assertRaisesRegex(journal.Stop, "SCHEMA_JOURNAL_TERMINAL"):
             append(events, "RESERVED")
-        self.assertEqual(9, len(events))
+        self.assertEqual(10, len(events))
 
     def test_failure_class_at_each_boundary(self):
         expected = {
@@ -36,6 +36,7 @@ class SchemaJournalTests(unittest.TestCase):
             "SCHEMA_104": "PARTIAL_SCHEMA_STOP",
             "GRANTS_VERIFIED": "PARTIAL_SCHEMA_STOP",
             "POSTGATE_PASS": "PARTIAL_SCHEMA_STOP",
+            "APP_STARTED": "APP_PARTIAL_STOP",
             "APP_APPLIED": "APP_PARTIAL_STOP",
             "UAT_PASS": "UAT_STOP",
         }
