@@ -83,6 +83,24 @@ class SponsorSigningBuilderTests(unittest.TestCase):
                     self.assertEqual(self.code(sheet.build_go_cut, **{**GO, key: bad}),
                                      "SIGNSHEET_INPUT_INVALID")
 
+    def test_schema_go_is_canonical_disjoint_and_reviewable_without_signing(self):
+        pins = {k: D("a") for k in sheet.SCHEMA_PIN_FIELDS}
+        args = dict(GO, nonce="e" * 64, purpose="SCHEMA_API_WEB_QA_ONLY",
+                    schema_pins=pins, expires_at="2026-11-09T15:10:00Z")
+        raw = sheet.build_go_cut(**args)
+        doc = json.loads(raw)
+        self.assertEqual(set(doc), set(gocut.SCHEMA_FIELDS))
+        self.assertEqual({k: doc[k] for k in sheet.SCHEMA_GO_CONSTANTS}, sheet.SCHEMA_GO_CONSTANTS)
+        self.assertEqual({k: doc[k] for k in pins}, pins)
+        self.assertEqual(sheet.review_card(raw)["kind"], "qa525-go-schema-cut-v1")
+        self.assertFalse(sheet.review_card(raw)["may_apply"])
+        self.assertEqual(self.code(sheet.build_go_cut, **dict(args, schema_pins=dict(pins, web_image_id="latest"))),
+                         "SIGNSHEET_INPUT_INVALID")
+        self.assertEqual(self.code(sheet.build_go_cut, **dict(args, purpose="API_WEB_QA_ONLY")),
+                         "SIGNSHEET_PURPOSE_INVALID")
+        self.assertEqual(self.code(sheet.build_go_cut, **dict(args, expires_at="2026-11-09T15:20:00Z")),
+                         "SIGNSHEET_WINDOW_INVALID")
+
     def test_launcher_go_is_canonical_separate_and_binds_existing_root_approval(self):
         args = dict(GO, nonce="e" * 64, purpose="LAUNCHER_ONLY",
                     release_asset_sha256=D("8"), old_launcher_sha256="8" * 64,
