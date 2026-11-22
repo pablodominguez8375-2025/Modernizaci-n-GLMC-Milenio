@@ -18,6 +18,12 @@ def load(name, relative):
 fx = load("sh_effects", "qa525-vnext-root-schema-effects.py")
 
 
+class UATModule:
+    @staticmethod
+    def make(read_private, clock):
+        return (lambda: True,)
+
+
 class G6Module:
     @staticmethod
     def make(authority, claims, read_evidence, clock):
@@ -34,8 +40,7 @@ class SchemaCutEffectsTests(unittest.TestCase):
         os.chmod(self.root, 0o700)
         fx.ABORT_PATH = str(self.root / "abort")
         fx.UAT_CREDENTIAL_PATH = str(self.root / "uat")
-        fx.WIRING.clear()
-        fx.bind_dependencies({"g6": G6Module})
+        fx.bind_dependencies({"g6": G6Module, "uat": UATModule})
 
     def write(self, name, data=b"x", mode=0o600):
         p = self.root / name
@@ -73,6 +78,7 @@ class SchemaCutEffectsTests(unittest.TestCase):
 
     def test_provide_stops_closed_until_every_reviewed_piece_is_wired(self):
         auth = {"host": {"evidence_dir": str(self.root)}}
+        fx._DEPS.clear()
         with self.assertRaises(fx.Stop) as c:
             fx.provide(auth, {})
         self.assertEqual(str(c.exception), "SCHEMA_EFFECTS_NOT_WIRED")
@@ -83,7 +89,6 @@ class SchemaCutEffectsTests(unittest.TestCase):
 
     def test_provide_with_wiring_requires_credential_file_and_single_api_container(self):
         auth = {"host": {"evidence_dir": str(self.root)}}
-        fx.WIRING.update(uat_checks=(lambda: True,))
         with self.assertRaises(fx.Stop) as c:  # credential absent
             fx.provide(auth, {}, run=lambda a, t, s: (0, ("a" * 64 + "\n").encode()))
         self.assertEqual(str(c.exception), "SCHEMA_EFFECTS_FILE_MISSING")
