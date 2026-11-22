@@ -8,9 +8,7 @@ credential VALUE is never returned, logged or placed in argv: it is only checked
 is read by the (not yet wired) UAT check itself. Fixed diagnostic codes only.
 
 NOT YET WIRED (provide() STOPS closed, so the launcher precheck denies the GO with the nonce unspent):
-  * `verifier`  : the reviewed G6 v2 evidence verifier for the five evidence files
   * UAT checks  : authenticated smoke + Talleres + carga inicial using the root 0600 credential
-  * `archive_epoch` from the signed G6 receipt
 Each is injected below through WIRING; a missing entry is a STOP. Nothing here can name a command: `runner` accepts only
 argv whose first element is /usr/bin/docker and that the ports built.
 """
@@ -32,8 +30,17 @@ EVIDENCE = {"admission": "admission.json", "approval": "approval.json", "review"
 MAX_EVIDENCE = 1 << 20
 MAX_OUT = 1 << 20
 CID = re.compile(r"[0-9a-f]{64}\Z")
-WIRING = {}  # name -> callable/value; the reviewed G6 verifier, UAT checks and epoch reader (none yet)
-WIRED = ("verifier", "uat_checks", "archive_epoch")
+SIBLING_MODULES = {"g6": "qa525-vnext-root-schema-g6.py"}
+_DEPS = {}
+WIRING = {}  # reviewed authenticated UAT checks; unset until actual endpoint/credential wiring is ready
+WIRED = ("uat_checks",)
+
+
+def bind_dependencies(mods):
+    if type(mods) is not dict or set(mods) != set(SIBLING_MODULES):
+        raise Stop("SCHEMA_EFFECTS_INPUT_INVALID")
+    _DEPS.clear()
+    _DEPS.update(mods)
 
 
 class Stop(Exception):
@@ -141,7 +148,7 @@ def provide(authority, claims, run=None):
     if abort_requested() is not False:
         raise Stop("SCHEMA_EFFECTS_ABORT_REQUESTED")
     missing = [name for name in WIRED if name not in WIRING]
-    if missing:
+    if missing or set(_DEPS) != set(SIBLING_MODULES) or not callable(getattr(_DEPS.get("g6"), "make", None)):
         raise Stop("SCHEMA_EFFECTS_NOT_WIRED")
     fd, _ = _root_file(UAT_CREDENTIAL_PATH, 4096)  # presence/ownership/mode only; the value is NOT read here
     os.close(fd)
@@ -151,9 +158,13 @@ def provide(authority, claims, run=None):
     eff.abort_requested = abort_requested
     eff.read_evidence = read_evidence_factory(authority["host"].get("evidence_dir"))
     eff.api_container_id = _api_container_id(eff.runner)
-    eff.verifier = WIRING["verifier"]
+    try:
+        eff.verifier, eff.archive_epoch = _DEPS["g6"].make(authority, claims, eff.read_evidence, eff.clock)
+    except Exception:
+        raise Stop("SCHEMA_EFFECTS_G6_INVALID") from None
+    if (not callable(eff.verifier) or type(eff.archive_epoch) is not int):
+        raise Stop("SCHEMA_EFFECTS_G6_INVALID")
     eff.uat_checks = WIRING["uat_checks"]
-    eff.archive_epoch = WIRING["archive_epoch"]
     return eff
 
 
