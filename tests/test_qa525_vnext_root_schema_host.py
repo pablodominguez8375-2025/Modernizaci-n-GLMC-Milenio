@@ -174,6 +174,8 @@ class SchemaCutHostTests(unittest.TestCase):
         ok = {k: a[k] for k in ("plan_bytes", "claims", "authority", "schema_pins")}
         events = []
         class FlightGuard:
+            make = staticmethod(lambda **kwargs: None)
+            preflight = staticmethod(lambda **kwargs: None)
             @staticmethod
             def precheck_schema_transition():
                 events.append("flight")
