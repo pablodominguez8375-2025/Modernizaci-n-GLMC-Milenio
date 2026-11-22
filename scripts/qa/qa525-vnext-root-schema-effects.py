@@ -59,6 +59,44 @@ def _root_file(path, max_size, dir_ok=False):
         raise
 
 
+
+SCHEMA_SOURCE = "/etc/pmgm/srv01.env"
+SCHEMA_ENV_DIR = "/run/qa525-schema-env"
+
+
+def read_schema_source():
+    """Bounded root 0600 source; no secret ever leaves memory except ephemeral files."""
+    fd, size = _root_file(SCHEMA_SOURCE, 65536)
+    try:
+        if size <= 0:
+            raise Stop("SCHEMA_EFFECTS_FILE_UNSAFE")
+        data = os.read(fd, 65537)
+        if len(data) != size:
+            raise Stop("SCHEMA_EFFECTS_FILE_UNSAFE")
+        return data
+    finally:
+        os.close(fd)
+
+
+def verify_schema_tmpfs(parent):
+    """Verify /run is the exact tmpfs mount, not merely a writable directory."""
+    if parent != "/run":
+        return False
+    try:
+        with open("/proc/self/mountinfo", "r", encoding="utf-8") as stream:
+            for line in stream:
+                before, sep, after = line.rstrip("\\n").partition(" - ")
+                fields = before.split()
+                fs = after.split()
+                if sep and len(fields) >= 5 and len(fs) >= 1 and fields[4] == "/run":
+                    st = os.stat("/run", follow_symlinks=False)
+                    return (fs[0] == "tmpfs" and stat.S_ISDIR(st.st_mode)
+                            and st.st_uid == ROOT_UID and not st.st_mode & 0o022)
+    except (OSError, UnicodeError, ValueError):
+        return False
+    return False
+
+
 def read_evidence_factory(directory):
     if type(directory) is not str or not directory.startswith("/") or ".." in directory.split("/"):
         raise Stop("SCHEMA_EFFECTS_INPUT_INVALID")
@@ -158,6 +196,8 @@ def provide(authority, claims, run=None):
     read_credential()  # root ownership/mode and complete bounded read before nonce
     eff = _Effects()
     eff.runner = run or runner
+    eff.read_schema_source = read_schema_source
+    eff.verify_schema_tmpfs = verify_schema_tmpfs
     eff.clock = clock
     eff.abort_requested = abort_requested
     eff.read_evidence = read_evidence_factory(authority["host"].get("evidence_dir"))
