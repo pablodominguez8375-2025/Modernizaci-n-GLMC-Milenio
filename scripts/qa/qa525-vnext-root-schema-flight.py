@@ -37,6 +37,8 @@ CORE = ("root_locks", "bridge", "boundary", "b7", "observer", "scopes",
 HOST = ("root_locks", "boundary", "scopes", "containment", "host_adapters",
         "state_reader", "health", "plan", "b7", "physical_runner")
 SOURCE = re.compile(r"[0-9a-f]{40}\Z")
+CID = re.compile(r"[0-9a-f]{64}\Z")
+IMAGE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _DEPS = {}
 
 
