@@ -215,7 +215,7 @@ class BuildTests(unittest.TestCase):
         return make_release(mutate=mut, extra=extra)
 
     def test_closure_exact_set_gate(self):
-        self.assertEqual(len(B.EXPECTED_CLOSURE), 56)
+        self.assertEqual(len(B.EXPECTED_CLOSURE), 57)
         # a NEW literal dependency (module present and hashed in the release) must STOP: manifest would differ
         added = self._launcher_plus('\nEXTRA = "qa525-vnext-newdep.py"\n',
                                     extra={"scripts/qa/qa525-vnext-newdep.py": b"x = 1\n"})
