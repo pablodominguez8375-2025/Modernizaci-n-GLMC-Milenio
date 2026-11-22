@@ -30,12 +30,14 @@ class EnvRender:
 
 class EnvFiles:
     @staticmethod
-    def open_env(plane, renderer, history):
+    def ephemeral_env_files(*, base_dir, source_reader, history, render, verify_tmpfs, uid):
         from contextlib import contextmanager
         @contextmanager
         def scope():
-            plane.assert_held()
-            yield ("/run/qa525-schema-test/migrator.env", "/run/qa525-schema-test/grants.env")
+            assert base_dir == "/run/qa525-schema-env"
+            assert uid == 0
+            assert verify_tmpfs("/run") is True
+            yield (base_dir + "/migrator.env", base_dir + "/grants.env")
         return scope()
 
 MODULES = {"ports": ports, "adapter": ad, "plan": plan_mod,
@@ -89,6 +91,8 @@ class Effects:
         self.uat_checks = (lambda: True,)
         self.archive_epoch = 1900000000 - 3600
         self.api_container_id = "b" * 64
+        self.read_schema_source = lambda: b"synthetic"
+        self.verify_schema_tmpfs = lambda p: p == "/run"
         for k, v in over.items():
             setattr(self, k, v)
 
