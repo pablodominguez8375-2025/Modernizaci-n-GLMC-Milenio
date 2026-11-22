@@ -51,3 +51,15 @@ El journal registra hash de entradas, fase en curso y salida terminal antes/desp
 5. UAT de talleres y carga inicial. Datos personales reales ingresan solo por el circuito institucional de QA privado; no en GitHub, Drive, chat ni demo.
 
 **Estado actual:** #1068 listo para revisión; #1069, #1070 y #1071 draft con CI exact-head reportada. No están integrados en dev, no hay GO nuevo, OCI pin, T0 físico ni despliegue. `QA_DEPLOY=NO_GO`.
+
+## Secuenciador (`qa525-vnext-schema-cut-executor.py`) — sin autoridad
+
+Biblioteca pura (sin I/O, locks, nonce ni firma) que ordena las diez fases con colaboradores inyectados. El llamador root ya autenticó GO/plan, sostiene el plano y gastó el nonce.
+
+- Cada fase queda durable (`journal(phase)`, fsync) **antes** del efecto que anuncia; `APP_STARTED` precede al único efecto API/WEB; el plano se verifica antes y después de cada escritura y efecto.
+- La primera escritura de journal que lanza deja el journal **ambiguo**: no se escribe nada más (jamás se borra ni reintenta un evento parcial) → `SCHEMA_EXEC_JOURNAL_AMBIGUOUS`.
+- Cualquier otro fallo tras `RESERVED` persiste una sola vez la clase terminal que el propio contrato informó para la última fase durable (`failure_class_if_interrupted`); no se adivina. Un plano perdido no escribe nada.
+- Solo `{"terminal": "APPLIED"}` del vuelo API/WEB continúa; solo `True` de backup, quiesce, revalidación y UAT. Sin reintentos, sin `Down`.
+- Códigos fijos; la causa de fases 4–6 se conserva solo si es un código `SCHEMA_ADAPTER_*` de la lista cerrada.
+- Hallazgo del contrato: `UAT_STOP` es inalcanzable (tras `APP_APPLIED` el contrato solo acepta `UAT_PASS` o `APP_PARTIAL_STOP`); el secuenciador usa lo que el contrato informa. Si se quiere `UAT_STOP`, cambiar `_failure_for("APP_APPLIED")` (decisión de ChatGPT).
+- Queda fuera: scope/GO/config/launcher/PRE-4, adquisición real de locks y nonce, G6 v2, child/host API/WEB de este scope.
