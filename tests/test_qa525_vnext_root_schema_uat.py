@@ -56,8 +56,12 @@ class UATTests(unittest.TestCase):
         def probe(method, path, jwt, body):
             calls.append((method, path, jwt, body))
             return 200, {}
-        checks = uat.make(credentials, lambda: NOW, expected_sha="a" * 40, synthetic_probe=probe)
-        self.assertEqual(len(checks), 4)
+        checks = uat.make(credentials, lambda: NOW, expected_sha="a" * 40, synthetic_probe=probe,
+                          probe=lambda path, jwt: {"code": "OK", "status": "not_opened",
+                                                   "writesPerformed": 0, "version": 0})
+        self.assertEqual(len(checks), 5)
+        self.assertIs(checks[2](), True)
+        self.assertIs(checks[3](), True)
         self.assertIs(checks[-1](), True)
         self.assertEqual(calls[0][2], token("master"))
         self.assertEqual(calls[1][2], token("operator"))
