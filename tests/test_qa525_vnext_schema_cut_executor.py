@@ -80,7 +80,7 @@ def build(journal=None, **override):
     return journal, steps
 
 
-class ExecutorTests(unittest.TestCase):
+class SchemaCutExecutorTests(unittest.TestCase):
     def test_happy_path_writes_all_ten_phases_in_order_and_grants_no_authority(self):
         journal, steps = build()
         result = ex.run(journal, Plane(), dict(steps))
@@ -335,7 +335,7 @@ class ExecutorTests(unittest.TestCase):
             self.assertEqual([], [name for name, _ in steps.effects if name != "preflight"])
 
 
-class RealStoreIntegration(unittest.TestCase):
+class SchemaCutRealStoreIntegration(unittest.TestCase):
     """Sequencer + the REAL journal contract/store on a private directory (adapter replaced by a scripted callee)."""
 
     class NonceJournal:
