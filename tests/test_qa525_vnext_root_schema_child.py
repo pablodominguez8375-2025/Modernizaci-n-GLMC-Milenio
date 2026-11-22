@@ -76,7 +76,7 @@ class Host:
                 "apply_api_web": lambda: {"terminal": "APPLIED"}, "uat": lambda: True}
 
 
-class ChildTests(unittest.TestCase):
+class SchemaRootChildJournalTests(unittest.TestCase):
     def exercise_child(self, archive=PAYLOAD, claims=None, host=None):
         with tempfile.TemporaryDirectory() as directory:
             os.chmod(directory, 0o700)
