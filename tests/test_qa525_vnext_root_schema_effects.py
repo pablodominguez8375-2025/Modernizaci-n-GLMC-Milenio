@@ -18,6 +18,12 @@ def load(name, relative):
 fx = load("sh_effects", "qa525-vnext-root-schema-effects.py")
 
 
+class G6Module:
+    @staticmethod
+    def make(authority, claims, read_evidence, clock):
+        return lambda data: True, 1
+
+
 class SchemaCutEffectsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -29,6 +35,7 @@ class SchemaCutEffectsTests(unittest.TestCase):
         fx.ABORT_PATH = str(self.root / "abort")
         fx.UAT_CREDENTIAL_PATH = str(self.root / "uat")
         fx.WIRING.clear()
+        fx.bind_dependencies({"g6": G6Module})
 
     def write(self, name, data=b"x", mode=0o600):
         p = self.root / name
@@ -76,7 +83,7 @@ class SchemaCutEffectsTests(unittest.TestCase):
 
     def test_provide_with_wiring_requires_credential_file_and_single_api_container(self):
         auth = {"host": {"evidence_dir": str(self.root)}}
-        fx.WIRING.update(verifier=lambda d: True, flight=lambda: {}, uat_checks=(lambda: True,), archive_epoch=1)
+        fx.WIRING.update(uat_checks=(lambda: True,))
         with self.assertRaises(fx.Stop) as c:  # credential absent
             fx.provide(auth, {}, run=lambda a, t, s: (0, ("a" * 64 + "\n").encode()))
         self.assertEqual(str(c.exception), "SCHEMA_EFFECTS_FILE_MISSING")
