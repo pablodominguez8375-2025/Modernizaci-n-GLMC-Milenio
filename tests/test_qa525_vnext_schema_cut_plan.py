@@ -24,7 +24,7 @@ def fixture():
         "schema": "qa525-schema-cut-plan-v1", "host": "glmdch",
         "environment": "QA_SYNTHETIC", "app_source_sha": "a" * 40,
         "app_archive_sha256": sha, "migrator_image_digest": sha,
-        "api_image_id": sha, "web_image_id": sha,
+        "api_image_id": sha, "web_image_id": sha, "api_container_id": "c" * 64,
         "grant_script_sha256": sha, "postgate_sha256": sha,
         "history_ids": history, "pending_ids": list(gate.REQUIRED),
     }
@@ -48,6 +48,7 @@ class SchemaCutPlanTests(unittest.TestCase):
         self.assertEqual(100, result["migration_count_before"])
         self.assertEqual(gate.REQUIRED, result["pending_ids"])
         self.assertIs(result["may_apply"], False)
+        self.assertEqual("c" * 64, result["api_container_id"])
 
     def test_tampered_bytes_fail_even_if_json_would_parse(self):
         plan, pins = fixture()
@@ -72,6 +73,18 @@ class SchemaCutPlanTests(unittest.TestCase):
         plan["migrator_image_digest"] = pins["migrator_image_digest"] = "workshops104:latest"
         with self.assertRaisesRegex(gate.Stop, "SCHEMA_PLAN_INPUT_INVALID"):
             gate.check_plan(*encoded(plan, pins))
+
+    def test_container_id_is_exact_and_bound_by_plan_digest(self):
+        plan, pins = fixture()
+        for wrong in ("", "latest", "C" * 64, "c" * 63):
+            with self.subTest(wrong=wrong):
+                plan["api_container_id"] = wrong
+                with self.assertRaisesRegex(gate.Stop, "SCHEMA_PLAN_SHAPE_INVALID"):
+                    gate.check_plan(*encoded(plan, pins))
+        plan, pins = fixture()
+        raw, pins = encoded(plan, pins)
+        with self.assertRaisesRegex(gate.Stop, "SCHEMA_PLAN_PIN_MISMATCH"):
+            gate.check_plan(raw.replace(b"c" * 64, b"d" * 64), pins)
 
     def test_duplicate_key_rejected(self):
         plan, pins = fixture()

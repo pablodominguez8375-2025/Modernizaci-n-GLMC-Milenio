@@ -11,6 +11,7 @@ import re
 
 SOURCE = re.compile(r"[0-9a-f]{40}\Z")
 SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
+CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
 MIGRATION = re.compile(r"20[0-9]{12}_[A-Za-z0-9_]+\Z")
 REQUIRED = (
     "20261118150000_AddWorkshopRegistryState",
@@ -21,10 +22,10 @@ REQUIRED = (
 PREVIOUS = "20261030223000_SeedSupportWorkshop00"
 FIELDS = frozenset({
     "schema", "host", "environment", "app_source_sha", "app_archive_sha256",
-    "migrator_image_digest", "api_image_id", "web_image_id",
+    "migrator_image_digest", "api_image_id", "web_image_id", "api_container_id",
     "history_ids", "pending_ids", "grant_script_sha256", "postgate_sha256",
 })
-PINS = frozenset(FIELDS - {"schema", "host", "environment", "history_ids", "pending_ids"}
+PINS = frozenset(FIELDS - {"schema", "host", "environment", "history_ids", "pending_ids", "api_container_id"}
                  | {"baseline_history_sha256", "plan_sha256"})
 
 
@@ -65,7 +66,9 @@ def check_plan(raw, pins):
             or raw != (json.dumps(plan, sort_keys=True, separators=(",", ":"),
                                   ensure_ascii=True) + "\n").encode("ascii")
             or plan["schema"] != "qa525-schema-cut-plan-v1"
-            or plan["host"] != "glmdch" or plan["environment"] != "QA_SYNTHETIC"):
+            or plan["host"] != "glmdch" or plan["environment"] != "QA_SYNTHETIC"
+            or type(plan["api_container_id"]) is not str
+            or CONTAINER_ID.fullmatch(plan["api_container_id"]) is None):
         raise Stop("SCHEMA_PLAN_SHAPE_INVALID")
     for key in PINS - {"plan_sha256", "baseline_history_sha256"}:
         if type(plan[key]) is not str or plan[key] != pins[key]:
@@ -87,6 +90,7 @@ def check_plan(raw, pins):
         "migration_count_before": 100,
         "pending_ids": REQUIRED,
         "migrator_image_digest": pins["migrator_image_digest"],
+        "api_container_id": plan["api_container_id"],
         "may_apply": False,
     }
 
