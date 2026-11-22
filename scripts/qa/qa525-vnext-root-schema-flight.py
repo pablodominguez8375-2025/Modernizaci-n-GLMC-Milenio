@@ -51,9 +51,12 @@ def bind_dependencies(mods):
 
 
 def make(*, archive_bytes, claims, authority, plane):
+    if (set(_DEPS) != set(SIBLING_MODULES)
+            or not isinstance(getattr(_DEPS["root_locks"], "RootPlane", None), type)):
+        raise Stop("SCHEMA_FLIGHT_BINDING_INVALID")
     if (type(archive_bytes) is not bytes or type(claims) is not dict
             or claims.get("purpose") != "SCHEMA_API_WEB_QA_ONLY"
-            or type(authority) is not dict or type(plane) is not _DEPS.get("root_locks", object()).RootPlane
+            or type(authority) is not dict or type(plane) is not _DEPS["root_locks"].RootPlane
             or not callable(getattr(plane, "assert_held", None))
             or not callable(getattr(_DEPS.get("apiweb_host"), "build", None))
             or not callable(getattr(_DEPS.get("run_held"), "run_held", None))
