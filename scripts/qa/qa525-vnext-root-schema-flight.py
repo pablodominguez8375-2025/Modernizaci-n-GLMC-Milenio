@@ -116,14 +116,14 @@ def make(*, archive_bytes, claims, authority, plane, api_container_id, old_api_i
         for cid in ids:
             plane.assert_held()
             rc, image = schema_runner(("/usr/bin/docker", "inspect", "--format", "{{.Image}}", cid), 60, None)
-            if rc != 0 or image not in ((old_api_image_id + "\\n").encode(),
-                                        (target_api_image_id + "\\n").encode()):
+            if rc != 0 or image not in ((old_api_image_id + "\n").encode(),
+                                        (target_api_image_id + "\n").encode()):
                 raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
             rc, _ = schema_runner(("/usr/bin/docker", "stop", "--time", "30", cid), 60, None)
             if rc != 0:
                 raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
             rc, running = schema_runner(("/usr/bin/docker", "inspect", "--format", "{{.State.Running}}", cid), 60, None)
-            if rc != 0 or running != b"false\\n":
+            if rc != 0 or running != b"false\n":
                 raise Stop("SCHEMA_FLIGHT_API_STOP_UNVERIFIED")
         plane.assert_held()
         return True
