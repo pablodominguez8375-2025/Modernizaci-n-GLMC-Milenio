@@ -368,6 +368,101 @@ public sealed class SupportViewAsPostgreSqlTests
             expected, expected.Append(PMGM.Qa.Support00MigrationRunner.Target).ToArray(), []));
     }
 
+    [Fact]
+    public async Task Reviewed_migrator_applies_exactly_the_four_workshop_migrations_and_rejects_replay()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        var name = "qa525_workshops104_" + Guid.NewGuid().ToString("N");
+        var adminBuilder = new Npgsql.NpgsqlConnectionStringBuilder(cs) { Database = "postgres", Pooling = false };
+        await using var admin = new Npgsql.NpgsqlConnection(adminBuilder.ConnectionString);
+        await admin.OpenAsync(ct);
+        await using (var create = new Npgsql.NpgsqlCommand($"CREATE DATABASE \"{name}\"", admin))
+            await create.ExecuteNonQueryAsync(ct);
+        try
+        {
+            var testBuilder = new Npgsql.NpgsqlConnectionStringBuilder(cs) { Database = name, Pooling = false };
+            var options = new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(testBuilder.ConnectionString).Options;
+            await using var db = new PmgmDbContext(options);
+            await db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().MigrateAsync(PMGM.Qa.Workshops104MigrationRunner.Previous, ct);
+            var applied = (await db.Database.GetAppliedMigrationsAsync(ct)).ToList();
+            // The host's 100 IDs include other DbContexts sharing the history; synthetic entries stand in for them.
+            for (var i = applied.Count; i < 100; i++)
+            {
+                var id = $"19000101_OtherContextSynthetic{i:D3}";
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO public.\"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({id}, {"10.0.11"})", ct);
+                applied.Add(id);
+            }
+            Assert.Equal(PMGM.Qa.Workshops104MigrationRunner.Required,
+                (await db.Database.GetPendingMigrationsAsync(ct)).ToArray());
+            await PMGM.Qa.Workshops104MigrationRunner.MigrateExactlyAsync(db, applied.ToArray(), ct);
+            var after = (await db.Database.GetAppliedMigrationsAsync(ct)).ToArray();
+            Assert.Equal(104, after.Length);
+            Assert.All(PMGM.Qa.Workshops104MigrationRunner.Required, id => Assert.Contains(id, after));
+            Assert.Empty(await db.Database.GetPendingMigrationsAsync(ct));
+
+            await using var verify = new Npgsql.NpgsqlConnection(testBuilder.ConnectionString);
+            await verify.OpenAsync(ct);
+            async Task<long> Scalar(string sql)
+            {
+                await using var c = new Npgsql.NpgsqlCommand(sql, verify);
+                return Convert.ToInt64(await c.ExecuteScalarAsync(ct));
+            }
+            Assert.Equal(1, await Scalar("select count(*) from pg_class where oid = to_regclass('core.workshop_status_transitions')"));
+            Assert.Equal(3, await Scalar("select count(*) from pg_trigger where tgrelid = to_regclass('core.workshop_status_transitions') and not tgisinternal and tgenabled = 'O'"));
+            Assert.Equal(1, await Scalar("select count(*) from pg_trigger where tgrelid = to_regclass('core.organizations') and tgname = 'a00_workshop_retired_guard' and tgtype = 31 and tgenabled = 'O'"));
+            Assert.Equal(4, await Scalar("select count(*) from pg_attribute where attrelid = to_regclass('core.organizations') and attname in ('Status','RetiredAtUtc','RetiredReason','Origin') and not attisdropped"));
+
+            // Replay must fail closed and change nothing.
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                PMGM.Qa.Workshops104MigrationRunner.MigrateExactlyAsync(db, applied.ToArray(), ct));
+            Assert.Equal(104, (await db.Database.GetAppliedMigrationsAsync(ct)).Count());
+        }
+        finally
+        {
+            await using var drop = new Npgsql.NpgsqlCommand($"DROP DATABASE \"{name}\" WITH (FORCE)", admin);
+            await drop.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public void Reviewed_migrator_requires_exact_history_and_exact_pending_migrations()
+    {
+        var required = PMGM.Qa.Workshops104MigrationRunner.Required;
+        var expected = Enumerable.Range(0, 99).Select(i => $"synthetic{i}")
+            .Append(PMGM.Qa.Workshops104MigrationRunner.Previous).ToArray();
+        PMGM.Qa.Workshops104MigrationRunner.ValidateBefore(expected, expected, required, required);
+        void Rejects(string[] exp, string[] app, string[] pend, IReadOnlyCollection<string>? known = null) =>
+            Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Workshops104MigrationRunner.ValidateBefore(exp, app, pend, known));
+        Rejects(expected.Skip(1).ToArray(), expected.Skip(1).ToArray(), required);          // 99 entries
+        Rejects(expected, expected.Skip(1).Append("different").ToArray(), required);         // history differs
+        Rejects(expected, expected, required.Skip(1).ToArray());                             // a migration missing
+        Rejects(expected, expected, required.Reverse().ToArray());                           // out of order
+        Rejects(expected, expected, required.Append("20261201000000_ExtraLater").ToArray()); // extra pending
+        Rejects(expected, expected, required.Append(required[0]).ToArray());                 // repeated
+        Rejects(expected, expected, [.. required.Take(3), "20261119010100_AddWorkshopStatusTransitionsAppendOnly\n"]);
+        Rejects(expected, expected, required, ["unrelated"]);                                // not in the assembly
+        Rejects(expected.Take(99).Append(required[0]).ToArray(),
+                expected.Take(99).Append(required[0]).ToArray(), required);                  // already applied
+        Rejects(expected.Take(99).Append("other").ToArray(),
+                expected.Take(99).Append("other").ToArray(), required);                      // Previous absent
+    }
+
+    [Theory]
+    [InlineData("pmgm_app")]
+    [InlineData("pmgm_runtime")]
+    [InlineData("postgres")]
+    [InlineData("")]
+    public async Task Workshops104_migrator_refuses_any_ddl_user_other_than_pmgm_migrator(string user)
+    {
+        var cs = $"Host=postgres;Port=5432;Database=pmgm;Username={user};Password=x";
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            PMGM.Qa.Workshops104MigrationRunner.RunAsync(cs, [], TestContext.Current.CancellationToken));
+        Assert.Equal("WORKSHOPS104_DDL_CONNECTION_REQUIRED", ex.Message);
+    }
+
     private static Task<HttpResponseMessage> StartProfile(HttpClient c, string key, CancellationToken ct)
         => c.PostAsJsonAsync("/api/system/support/view-as", new { profileKey = key }, ct);
     private static Task<HttpResponseMessage> Start(HttpClient c, string target, string reason, CancellationToken ct)

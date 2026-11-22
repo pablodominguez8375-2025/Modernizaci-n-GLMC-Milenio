@@ -365,6 +365,55 @@ public sealed class InitialLoadApplyOrchestratorPostgreSqlTests
         Assert.Equal(baseline, await CountsAsync(iso.Connection, ct));
     }
 
+    private static string SyntheticRut(int n)
+    {
+        var body = 30_000_000 + n;
+        var sum = 0; var f = 2;
+        for (var x = body; x > 0; x /= 10) { sum += (x % 10) * f; f = f == 7 ? 2 : f + 1; }
+        var dv = 11 - sum % 11;
+        var d = dv == 11 ? "0" : dv == 10 ? "K" : dv.ToString();
+        var t = body.ToString("N0", System.Globalization.CultureInfo.InvariantCulture).Replace(',', '.');
+        return t + "-" + d;
+    }
+
+    [Fact]
+    public async Task Second_batch_of_the_same_workshop_reuses_it_and_adds_members_without_duplicating()
+    {
+        if (string.IsNullOrWhiteSpace(Conn)) return;
+        var ct = TestContext.Current.CancellationToken;
+        await using var iso = await IsolatedDb.CreateAsync(Conn!, ct);
+        await PrepareAsync(iso.Connection, ct);
+        var w = new[] { W("L1", "9901", "SYA") };
+        var first = Enumerable.Range(1, 30).Select(i => M("P" + i, SyntheticRut(i), "L1", "N" + i, "S" + i)).ToArray();
+        var second = Enumerable.Range(31, 10).Select(i => M("P" + i, SyntheticRut(i), "L1", "N" + i, "S" + i)).ToArray();
+
+        var r1 = await RunAsync(iso.Connection, Fp(), w, first, ct);
+        Assert.True(r1.Applied, r1.Code);
+        Assert.Equal((1, 30), (r1.WorkshopsCreated, r1.MembersCreated));
+
+        Guid workshopId;
+        await using (var db = Boot(iso.Connection))
+            workshopId = await db.Organizations.Where(x => x.Origin == "initial_load").Select(x => x.Id).SingleAsync(ct);
+
+        var r2 = await RunAsync(iso.Connection, Fp(), w, second, ct);
+        Assert.True(r2.Applied, r2.Code);
+        Assert.Equal((0, 10), (r2.WorkshopsCreated, r2.MembersCreated));
+
+        await using var db2 = Boot(iso.Connection);
+        Assert.Equal(workshopId, await db2.Organizations.Where(x => x.Origin == "initial_load").Select(x => x.Id).SingleAsync(ct));
+        await using var core = Core(iso.Connection);
+        Assert.Equal(40, await core.People.CountAsync(ct));
+        Assert.Equal(40, await core.Members.CountAsync(ct));
+        Assert.Equal(40, await core.Memberships.CountAsync(ct));
+        Assert.Equal(2, await db2.InitialLoadBatchLedgers.CountAsync(ct));
+
+        // A repeated second batch is a pure replay: zero writes.
+        var replayFp = await db2.InitialLoadBatchLedgers.OrderByDescending(x => x.CreatedAtUtc).Select(x => x.Fingerprint).FirstAsync(ct);
+        var replay = await RunAsync(iso.Connection, replayFp, w, second, ct);
+        Assert.True(replay.AlreadyApplied);
+        Assert.Equal(40, await core.Members.CountAsync(ct));
+    }
+
     private sealed class IsolatedDb : IAsyncDisposable
     {
         private readonly string _admin;
