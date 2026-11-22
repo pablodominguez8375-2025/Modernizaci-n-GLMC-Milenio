@@ -20,6 +20,12 @@ class SchemaEnvRenderTests(unittest.TestCase):
         self.assertIn(b"Username=pmgm_migrator;Password=synthetic-secret-123", migrator)
         self.assertIn(b'["20250101', migrator)
 
+    def test_equals_and_dollar_are_literal(self):
+        source = b"PMGM_QA_MIGRATOR_DB_PASSWORD=syn=$the$tic==\\n"
+        migrator, grants = mod.render(source, HISTORY)
+        self.assertIn(b"Password=syn=$the$tic==\\n", migrator)
+        self.assertEqual(grants, b"PGPASSWORD=syn=$the$tic==\\n")
+
     def test_password_missing_duplicate_or_unsafe(self):
         for raw in (b"OTHER=value\n", SOURCE + SOURCE, b"PMGM_QA_MIGRATOR_DB_PASSWORD=\n",
                     b"PMGM_QA_MIGRATOR_DB_PASSWORD=bad;evil\n",
