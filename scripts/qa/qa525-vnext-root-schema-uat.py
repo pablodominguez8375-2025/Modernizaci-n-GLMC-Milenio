@@ -18,7 +18,7 @@ ISSUER = "https://" + HOST + "/identity/realms/pmgm"
 PATHS = ("/api/session/me", "/api/system/workshops",
          "/api/platform/bootstrap/initial-load/status")
 MAX_BODY = 65536
-TOKEN = re.compile(r"[A-Za-z0-9_-]+[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+\\Z")
+TOKEN = re.compile(r"[A-Za-z0-9_-]+[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+\Z")
 
 
 class Stop(Exception):
