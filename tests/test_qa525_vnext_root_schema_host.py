@@ -52,7 +52,8 @@ def case():
             dg("\n".join(p["baseline_history_ids"]).encode()), "grant_script_sha256": p["grant_script_sha256"],
             "postgate_sha256": p["postgate_sha256"], "api_image_id": api, "web_image_id": web}
     claims = {"app_source_sha": src, "app_archive_sha256": arch, "plan_sha256": dg(raw), "expires_at": 2000000000}
-    authority = {"g6": {v: dg(k.encode()) for k, v in host.G6_MAP.items()}, "target": {"web_sha": src}}
+    authority = {"g6": {v: dg(k.encode()) for k, v in host.G6_MAP.items()},
+                 "target": {"web_sha": src}, "baseline_sha256": dg(b"baseline")}
     return p, raw, buf.getvalue(), pins, claims, authority
 
 
@@ -77,6 +78,10 @@ class Effects:
 
 
 class FlightAdapter:
+    @staticmethod
+    def preflight(*, archive_bytes, claims, authority, plane):
+        return authority["baseline_sha256"]
+
     @staticmethod
     def precheck_schema_transition():
         return True

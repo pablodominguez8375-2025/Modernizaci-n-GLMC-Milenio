@@ -28,13 +28,15 @@ class SchemaFlightReadbackTests(unittest.TestCase):
         plane = RootPlane()
         seen = []
 
-        def host_build(*args):
+        def host_build(*args, **kwargs):
             seen.append("host")
             return {"g6_evidence": {}, "inputs": {}}
 
         def run_held(**kw):
             seen.append("held")
             self.assertIs(kw["root_locks"].outer, plane)
+            self.assertEqual(kw["b7_profile"], "SCHEMA_POSTQUIESCE")
+            self.assertIs(kw["forbid_baseline_api"], True)
             return {"terminal_outcome": outcome}
 
         class Reentrant:
@@ -48,13 +50,16 @@ class SchemaFlightReadbackTests(unittest.TestCase):
         deps["apiweb_effects"] = types.SimpleNamespace(https_fetch=lambda: object())
         deps["posix"] = types.SimpleNamespace(PosixPort=lambda: object())
         deps["run_held"] = types.SimpleNamespace(run_held=run_held)
+        deps["hold"] = types.SimpleNamespace(make_rollback_factory=lambda stop: lambda **kw: stop)
         deps["health"] = types.SimpleNamespace(build=lambda fetch: (lambda: health, lambda: revision))
         flight.bind_dependencies(deps)
         return plane, seen
 
     def make(self, plane):
         return flight.make(archive_bytes=b"signed zip", claims={"purpose": "SCHEMA_API_WEB_QA_ONLY"},
-                           authority={"target": {"web_sha": "a" * 40}}, plane=plane)
+                           authority={"target": {"web_sha": "a" * 40, "images": {"api": "sha256:" + "2" * 64}}},
+                           plane=plane, api_container_id="b" * 64, old_api_image_id="sha256:" + "1" * 64,
+                           schema_runner=lambda a, t, s: (0, b""))
 
     def test_applied_requires_health_and_served_sha_readback(self):
         plane, seen = self.bind()
@@ -77,7 +82,9 @@ class SchemaFlightReadbackTests(unittest.TestCase):
         plane, _ = self.bind()
         with self.assertRaises(flight.Stop):
             flight.make(archive_bytes=b"zip", claims={"purpose": "API_WEB_QA_ONLY"},
-                        authority={"target": {"web_sha": "a" * 40}}, plane=plane)
+                        authority={"target": {"web_sha": "a" * 40, "images": {"api": "sha256:" + "2" * 64}}},
+                        plane=plane, api_container_id="b" * 64, old_api_image_id="sha256:" + "1" * 64,
+                        schema_runner=lambda a, t, s: (0, b""))
         with self.assertRaises(flight.Stop):
             self.make(object())
 

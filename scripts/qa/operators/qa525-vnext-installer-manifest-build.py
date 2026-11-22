@@ -84,6 +84,7 @@ EXPECTED_CLOSURE = frozenset({
     "qa525-vnext-root-schema-host.py",
     "qa525-vnext-root-schema-effects.py",
     "qa525-vnext-root-schema-flight.py",
+    "qa525-vnext-schema-hold-stopped.py",
     "qa525-vnext-root-schema-g6.py",
     "qa525-vnext-root-schema-uat.py",
     "qa525-vnext-schema-cut-plan.py",

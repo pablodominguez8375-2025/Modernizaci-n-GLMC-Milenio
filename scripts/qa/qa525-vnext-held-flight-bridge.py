@@ -91,7 +91,7 @@ def _inputs(inputs, g6_evidence, modules):
 
 def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
              flight, g6_anchor, g6_evidence, checkpoint=None, rollback_factory=None,
-             forbid_baseline_api=False, **inputs):
+             forbid_baseline_api=False, b7_profile="NORMAL", **inputs):
     """Compose ONE journal-bound physical RootPlane with injected effects.
 
     This is deliberately NOT a runnable updater and MUST NOT be called by an
@@ -101,6 +101,9 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
     by returning a successful outcome. It cannot be used to skip issue #822.
     """
     if (rollback_factory is not None and not callable(rollback_factory)) or type(forbid_baseline_api) is not bool:
+        raise Stop("HELDFLIGHT_SCHEMA_MODE_INVALID")
+    if b7_profile not in ("NORMAL", "SCHEMA_POSTQUIESCE") or (b7_profile == "SCHEMA_POSTQUIESCE"
+            and (rollback_factory is None or forbid_baseline_api is not True)):
         raise Stop("HELDFLIGHT_SCHEMA_MODE_INVALID")
     modules = dict(root_locks=root_locks, bridge=bridge, boundary=boundary,
                    b7=b7, observer=observer, scopes=scopes, switch=switch,
@@ -181,7 +184,8 @@ def run_held(*, root_locks, bridge, boundary, b7, observer, scopes, switch,
             try:
                 report = held.inspect_once(
                     b7=b7, inspector=inputs["inspector"],
-                    baseline_sha256=inputs["baseline_sha256"])
+                    baseline_sha256=inputs["baseline_sha256"],
+                    **({"profile": b7_profile} if b7_profile == "SCHEMA_POSTQUIESCE" else {}))
                 held.require_current_record(report)
             except Exception:
                 raise Stop("HELDFLIGHT_B7_DENIED") from None
