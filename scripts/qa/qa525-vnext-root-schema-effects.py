@@ -64,6 +64,11 @@ SCHEMA_SOURCE = "/etc/pmgm/srv01.env"
 SCHEMA_ENV_DIR = "/run/qa525-schema-env"
 
 
+def schema_env_dir_exists():
+    """Fail closed for a stale schema env directory before nonce; never remove it."""
+    return os.path.lexists(SCHEMA_ENV_DIR)
+
+
 def read_schema_source():
     """Bounded root 0600 source; no secret ever leaves memory except ephemeral files."""
     fd, size = _root_file(SCHEMA_SOURCE, 65536)
@@ -198,6 +203,7 @@ def provide(authority, claims, run=None):
     eff.runner = run or runner
     eff.read_schema_source = read_schema_source
     eff.verify_schema_tmpfs = verify_schema_tmpfs
+    eff.schema_env_dir_exists = schema_env_dir_exists
     eff.clock = clock
     eff.abort_requested = abort_requested
     eff.read_evidence = read_evidence_factory(authority["host"].get("evidence_dir"))
