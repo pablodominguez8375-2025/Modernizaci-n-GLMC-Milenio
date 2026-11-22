@@ -93,6 +93,7 @@ class Effects:
         self.api_container_id = "b" * 64
         self.read_schema_source = lambda: b"synthetic"
         self.verify_schema_tmpfs = lambda p: p == "/run"
+        self.schema_env_dir_exists = lambda: False
         for k, v in over.items():
             setattr(self, k, v)
 
@@ -167,6 +168,29 @@ class SchemaCutHostTests(unittest.TestCase):
         host._DEPS.clear()
         with self.assertRaises(host.Stop):  # unbound siblings
             host.precheck(**ok)
+
+    def test_stale_env_directory_stops_before_flight_without_cleanup(self):
+        _, a = build()
+        ok = {k: a[k] for k in ("plan_bytes", "claims", "authority", "schema_pins")}
+        events = []
+        class FlightGuard:
+            @staticmethod
+            def precheck_schema_transition():
+                events.append("flight")
+        class NoCleanup:
+            @staticmethod
+            def ephemeral_env_files(**kwargs):
+                events.append("cleanup_or_scope")
+                raise AssertionError("must not enter scope")
+        stale = Effects(schema_env_dir_exists=lambda: events.append("exists") or True,
+                        read_schema_source=lambda: events.append("source") or b"synthetic")
+        bind(stale)
+        host._DEPS["flight_adapter"] = FlightGuard
+        host._DEPS["env_files"] = NoCleanup
+        with self.assertRaises(host.Stop) as caught:
+            host.precheck(**ok)
+        self.assertEqual(str(caught.exception), "SCHEMA_HOST_ENV_DIR_EXISTS")
+        self.assertEqual(events, ["exists"])
 
     def test_container_must_match_plan_pin_and_pinned_image(self):
         _, a = build()
