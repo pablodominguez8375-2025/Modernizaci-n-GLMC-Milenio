@@ -27,7 +27,7 @@ REPO_ID = re.compile(r"[1-9][0-9]{0,19}\Z")
 CONFIG_KEYS = frozenset({
     "pins", "launcher_pins", "allowed_signers", "go_fingerprint", "ops_v3_sha256",
     "app_subject_sha256", "inbox", "temp_root", "socket_path", "journal_root",
-    "lease_dir", "peer_uid", "timeout", "children", "g6_pins", "authenticity", "apiweb",
+    "lease_dir", "peer_uid", "timeout", "children", "g6_pins", "authenticity", "apiweb", "schema_cut",
 })
 PINS_KEYS = frozenset({
     "ops_source_sha", "app_source_sha", "app_archive_sha256",
@@ -43,7 +43,8 @@ AUTH_KEYS = frozenset({
 })
 CHILD_MODULES = dict(
     {"LAUNCHER_ONLY": "qa525-vnext-root-launcher-child.py",
-     "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py"},
+     "API_WEB_QA_ONLY": "qa525-vnext-root-apiweb-child.py",
+     "SCHEMA_API_WEB_QA_ONLY": "qa525-vnext-root-schema-child.py"},
     **{"G6:" + cmd: "qa525-vnext-root-g6-%s.py" % cmd
        for cmd in ("preflight", "init", "backup", "restore", "review")}
 )
@@ -88,6 +89,14 @@ def _validated(data):
 
     if data["apiweb"] is not None and type(data["apiweb"]) is not dict:
         raise Stop("LAUNCH_CONFIG_INVALID")  # deep shape is checked by the pinned host before any effect
+
+    schema = data["schema_cut"]
+    schema_fields = {"migrator_image_digest", "baseline_history_sha256", "grant_script_sha256",
+                     "postgate_sha256", "api_image_id", "web_image_id"}
+    if schema is not None and (not _shape(schema, schema_fields)
+                               or not all(_matches(schema[k], SHA) for k in schema_fields)
+                               or data["apiweb"] is None):
+        raise Stop("LAUNCH_CONFIG_INVALID")
 
     pins, launch, auth = data["pins"], data["launcher_pins"], data["authenticity"]
     if (not all(_matches(pins[k], SOURCE) for k in ("ops_source_sha", "app_source_sha"))
