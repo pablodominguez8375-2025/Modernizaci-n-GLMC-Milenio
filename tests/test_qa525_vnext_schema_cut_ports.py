@@ -61,6 +61,17 @@ class Runner:
 
 
 class SchemaCutPortsTests(unittest.TestCase):
+    def test_preflight_b7_normal_gate_is_optional_and_fails_closed(self):
+        h = "sha256:" + "b" * 64
+        sp = dict(spec(), b7_baseline_sha256=h)
+        self.assertIsNone(pt.make_preflight(Runner(), clock(), lambda: False, sp, b7_inspect=lambda: h)())
+        for bad in (lambda: "sha256:" + "c" * 64, lambda: (_ for _ in ()).throw(RuntimeError("secret"))):
+            with self.assertRaises(pt.Stop) as caught:
+                pt.make_preflight(Runner(), clock(), lambda: False, sp, b7_inspect=bad)()
+            self.assertEqual(str(caught.exception), "SCHEMA_PORT_B7_NOT_NORMAL")
+        with self.assertRaises(pt.Stop):
+            pt.make_preflight(Runner(), clock(), lambda: False, spec(), b7_inspect=lambda: h)
+
     def test_preflight_ok_and_each_failure_stops(self):
         self.assertIsNone(pt.make_preflight(Runner(), clock(), lambda: False, spec())())
         for bad in ({"migrator": (0, b"sha256:" + b"0" * 64 + b"\n")}, {"image_api": (0, b"0" * 40 + b"\n")},
