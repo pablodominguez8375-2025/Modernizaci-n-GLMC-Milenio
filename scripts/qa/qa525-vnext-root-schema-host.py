@@ -76,17 +76,30 @@ def _effects(authority, claims):
     return effects
 
 
+def _container(effects, pinned_id, api_image_id):
+    """The container to stop is the one the AUTHENTICATED plan pins; discovery by label must agree and it must run
+    the pinned API image. Any difference => STOP (never stop a container found only by name)."""
+    _need(type(pinned_id) is str and effects.api_container_id == pinned_id)
+    try:
+        rc, out = effects.runner(("/usr/bin/docker", "inspect", "--format", "{{.Image}}", pinned_id), 60, None)
+    except Exception:  # noqa: BLE001
+        raise Stop("SCHEMA_HOST_CONTAINER_MISMATCH") from None
+    if rc != 0 or out != (api_image_id + "\n").encode("ascii"):
+        raise Stop("SCHEMA_HOST_CONTAINER_MISMATCH")
+
+
 def precheck(*, plan_bytes, claims, authority, schema_pins):
     """Runs BEFORE the nonce: any doubt (missing UAT credential, effects, plan/pin drift) => STOP with the GO unspent."""
     _shape(authority, schema_pins)
     _need(type(plan_bytes) is bytes and type(claims) is dict)
-    _effects(authority, claims)
     pins = dict(schema_pins, app_source_sha=claims.get("app_source_sha"),
                 app_archive_sha256=claims.get("app_archive_sha256"), plan_sha256=claims.get("plan_sha256"))
     try:
-        _DEPS["plan"].check_plan(plan_bytes, pins)
+        checked = _DEPS["plan"].check_plan(plan_bytes, pins)
     except Exception:  # noqa: BLE001
         raise Stop("SCHEMA_HOST_PLAN_INVALID") from None
+    effects = _effects(authority, claims)
+    _container(effects, checked.get("api_container_id"), schema_pins["api_image_id"])
     return True
 
 
@@ -110,14 +123,15 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
     _shape(authority, schema_pins)
     host = dict(FIXED, target_web_sha=authority["target"]["web_sha"])
     effects = _effects(authority, claims)
-    host["api_container_id"] = effects.api_container_id
     _need(type(archive_bytes) is bytes and type(plan_bytes) is bytes and type(claims) is dict
           and callable(getattr(plane, "assert_held", None)))
     ports, adapter, plan_mod = _DEPS["ports"], _DEPS["adapter"], _DEPS["plan"]
     pins = dict(schema_pins, app_source_sha=claims.get("app_source_sha"),
                 app_archive_sha256=claims.get("app_archive_sha256"), plan_sha256=claims.get("plan_sha256"))
     try:
-        plan_mod.check_plan(plan_bytes, pins)  # bytes == pin, canonical, history/pending/baseline bound to the GO pins
+        checked = plan_mod.check_plan(plan_bytes, pins)  # bytes == pin, canonical, history/pending/baseline bound
+        _container(effects, checked["api_container_id"], schema_pins["api_image_id"])
+        host["api_container_id"] = checked["api_container_id"]
         import json
         history = json.loads(plan_bytes.decode("ascii"))["history_ids"]
         expected_104 = "sha256:" + __import__("hashlib").sha256(
