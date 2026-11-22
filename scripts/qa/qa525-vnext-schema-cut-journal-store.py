@@ -12,7 +12,7 @@ import stat
 NONCE = re.compile(r"[0-9a-f]{64}\Z")
 OPEN_DIR = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 OPEN_FILE = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
-MAX_EVENTS = 10
+MAX_EVENTS = 11
 MAX_EVENT = 1024
 
 
