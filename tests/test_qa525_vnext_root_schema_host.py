@@ -77,6 +77,10 @@ class Effects:
 
 
 class FlightAdapter:
+    @staticmethod
+    def precheck_schema_transition():
+        return True
+
     result = {"journal": "APPLIED", "health": True, "served_sha": "a" * 40}
     calls = []
 
