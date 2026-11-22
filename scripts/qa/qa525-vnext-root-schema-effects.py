@@ -85,7 +85,7 @@ def verify_schema_tmpfs(parent):
     try:
         with open("/proc/self/mountinfo", "r", encoding="utf-8") as stream:
             for line in stream:
-                before, sep, after = line.rstrip("\\n").partition(" - ")
+                before, sep, after = line.rstrip("\n").partition(" - ")
                 fields = before.split()
                 fs = after.split()
                 if sep and len(fields) >= 5 and len(fs) >= 1 and fields[4] == "/run":
