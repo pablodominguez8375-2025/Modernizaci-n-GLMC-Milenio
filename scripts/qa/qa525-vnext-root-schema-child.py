@@ -10,9 +10,9 @@ import os
 import re
 import stat
 
-SHA = re.compile(r"sha256:[0-9a-f]{64}\\Z")
-SOURCE = re.compile(r"[0-9a-f]{40}\\Z")
-NONCE = re.compile(r"[0-9a-f]{64}\\Z")
+SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
+SOURCE = re.compile(r"[0-9a-f]{40}\Z")
+NONCE = re.compile(r"[0-9a-f]{64}\Z")
 CLAIMS = frozenset({"purpose", "nonce", "app_source_sha", "app_archive_sha256",
                     "go_sha256", "plan_sha256", "expires_at"})
 MAX_ARCHIVE = 512 * 1024 * 1024
