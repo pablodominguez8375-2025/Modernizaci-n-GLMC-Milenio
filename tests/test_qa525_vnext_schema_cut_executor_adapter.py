@@ -65,7 +65,7 @@ def cut(**answers):
     return outcome, phases, fake
 
 
-class SequencerWithAdapter(unittest.TestCase):
+class SchemaCutSequencerWithAdapter(unittest.TestCase):
     def test_full_cut_through_the_adapter_and_the_real_store(self):
         outcome, phases, fake = cut()
         self.assertEqual(ex.PHASES_OK, outcome["phases"])
