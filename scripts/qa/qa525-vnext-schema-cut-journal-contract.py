@@ -14,7 +14,7 @@ SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 NONCE = re.compile(r"[0-9a-f]{64}\Z")
 STEPS = (
     "RESERVED", "BACKUP_VERIFIED", "WRITES_QUIESCED", "MIGRATION_STARTED",
-    "SCHEMA_104", "GRANTS_VERIFIED", "POSTGATE_PASS", "APP_APPLIED", "UAT_PASS",
+    "SCHEMA_104", "GRANTS_VERIFIED", "POSTGATE_PASS", "APP_STARTED", "APP_APPLIED", "UAT_PASS",
 )
 TERMINAL = frozenset({"PRE_DDL_STOP", "PARTIAL_SCHEMA_STOP", "APP_PARTIAL_STOP", "UAT_STOP"})
 FIELDS = frozenset({"seq", "phase", "nonce", "go_sha256", "plan_sha256", "prev_sha256"})
@@ -47,7 +47,7 @@ def _failure_for(phase):
         return "PRE_DDL_STOP"
     if phase in STEPS[3:7]:
         return "PARTIAL_SCHEMA_STOP"
-    if phase == "APP_APPLIED":
+    if phase in ("APP_STARTED", "APP_APPLIED"):
         return "APP_PARTIAL_STOP"
     return "UAT_STOP"
 
