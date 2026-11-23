@@ -93,6 +93,74 @@ class BuildTests(unittest.TestCase):
             with self.assertRaises(op.Stop):
                 op.write_private(raw, link)
 
+    def test_short_writes_are_completed(self):
+        real = os.write
+        calls = []
+
+        def one_byte(fd, data):
+            calls.append(1)
+            return real(fd, bytes(data)[:1])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "o.json")
+            raw, _ = op.build("preflight", CASES["preflight"])
+            os.write = one_byte
+            try:
+                op.write_private(raw, path)
+            finally:
+                os.write = real
+            self.assertEqual(Path(path).read_bytes(), raw)
+            self.assertGreater(len(calls), 1)
+
+    def test_write_returning_zero_fails_closed_and_removes_partial(self):
+        real = os.write
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "o.json")
+            os.write = lambda fd, data: 0
+            try:
+                with self.assertRaises(op.Stop) as cm:
+                    op.write_private(b"{}", path)
+            finally:
+                os.write = real
+            self.assertEqual(str(cm.exception), "G6OP_OUTPUT_FAILED")
+            self.assertEqual(os.listdir(tmp), [])
+
+    def test_write_error_and_fsync_failure_remove_partial(self):
+        real_write, real_fsync = os.write, os.fsync
+        for name in ("write", "fsync"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "o.json")
+
+                def boom(*a, **k):
+                    raise OSError("boom")
+                if name == "write":
+                    os.write = boom
+                else:
+                    os.fsync = boom
+                try:
+                    with self.assertRaises(op.Stop) as cm:
+                        op.write_private(b"{}", path)
+                finally:
+                    os.write, os.fsync = real_write, real_fsync
+                self.assertEqual(str(cm.exception), "G6OP_OUTPUT_FAILED")
+                self.assertEqual(os.listdir(tmp), [])
+
+    def test_failure_never_deletes_a_path_replaced_by_someone_else(self):
+        real_fsync = os.fsync
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "o.json")
+
+            def swap_then_fail(fd):
+                os.unlink(path)
+                Path(path).write_bytes(b"other")
+                raise OSError("boom")
+            os.fsync = swap_then_fail
+            try:
+                with self.assertRaises(op.Stop):
+                    op.write_private(b"{}", path)
+            finally:
+                os.fsync = real_fsync
+            self.assertEqual(Path(path).read_bytes(), b"other")
+
     def test_main_prints_only_command_and_pin(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "o.json")

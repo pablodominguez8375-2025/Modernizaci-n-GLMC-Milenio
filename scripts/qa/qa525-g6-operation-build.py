@@ -69,20 +69,44 @@ def build(command, options, runner=None):
 
 
 def write_private(raw, path):
-    """Create `path` (must not exist) with mode 0600; never follows links."""
+    """Create `path` (must not exist) with mode 0600; never follows links.
+
+    The whole payload is written (write-all loop, short writes are retried) and fsynced. On ANY
+    failure the partial file is removed, but only if the path still names the very inode this call
+    created (device+inode compared before unlink), so a replaced path is never deleted.
+    """
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError:
         raise Stop("G6OP_OUTPUT_EXISTS") from None
     except OSError:
         raise Stop("G6OP_OUTPUT_FAILED") from None
+    ok = False
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
             raise Stop("G6OP_OUTPUT_FAILED")
-        os.write(fd, raw)
+        view = memoryview(raw)
+        while view:
+            n = os.write(fd, view)
+            if type(n) is not int or n <= 0:
+                raise Stop("G6OP_OUTPUT_FAILED")
+            view = view[n:]
         os.fsync(fd)
+        ok = True
+    except Stop:
+        raise
+    except OSError:
+        raise Stop("G6OP_OUTPUT_FAILED") from None
     finally:
         os.close(fd)
+        if not ok:
+            try:
+                cur = os.lstat(path)
+                if (cur.st_dev, cur.st_ino) == (st.st_dev, st.st_ino) and stat.S_ISREG(cur.st_mode):
+                    os.unlink(path)
+            except (OSError, UnboundLocalError):
+                pass
 
 
 def main(argv=None):
