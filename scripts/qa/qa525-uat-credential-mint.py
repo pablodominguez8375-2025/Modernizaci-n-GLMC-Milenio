@@ -17,6 +17,11 @@ Security properties:
 - both tokens are checked for issuer, expiry (> MIN_REMAINING seconds), claims
   and distinctness BEFORE anything is written; on any failure nothing is written.
 
+Modes: default (mint), --check-only (same logins and checks, plus GET
+/api/session/me with each token; writes nothing, needs no root, 60 s minimum
+validity so it works with the current 300 s lifespan) and --remove (deletes the
+credential file after the cut).
+
 Run manually by the Sponsor in the host terminal. It is not part of the signed
 cut and performs no GO, deployment or Keycloak change.
 """
@@ -29,6 +34,7 @@ import json
 import os
 import re
 import ssl
+import stat
 import sys
 import urllib.parse
 
@@ -38,6 +44,8 @@ ISSUER = "https://" + HOST + "/identity/realms/pmgm"
 CLIENT_ID = "pmgm-web"
 TARGET = "/root/.qa525-uat-credential"
 MIN_REMAINING = 2400  # script rejects below 40 min; the UAT itself requires > 1800 s
+CHECK_MIN_REMAINING = 60  # --check-only: only proves claims and API authorization
+SESSION_PATH = "/api/session/me"
 MAX_FILE = 4096
 MAX_TOKEN = 2048
 JWT = re.compile(r"[A-Za-z0-9_-]+[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+\Z")
@@ -65,13 +73,13 @@ def _as_list(value):
     return value if type(value) is list else [value]
 
 
-def check_token(token, role, now):
+def check_token(token, role, now, min_remaining=MIN_REMAINING):
     """role: 'master' or 'operator'. Mirrors the UAT reader plus the API's role claims."""
     claims = claims_of(token)
     if claims.get("iss") != ISSUER:
         raise Stop("UATMINT_ISSUER_INVALID")
     exp = claims.get("exp")
-    if type(exp) is not int or exp <= now.timestamp() + MIN_REMAINING:
+    if type(exp) is not int or exp <= now.timestamp() + min_remaining:
         raise Stop("UATMINT_LIFESPAN_TOO_SHORT")
     if claims.get("pmgm_scope") != "order":
         raise Stop("UATMINT_CLAIM_SCOPE_MISSING")
@@ -118,11 +126,51 @@ def http_post(body):
         conn.close()
 
 
+def http_get(path, token):
+    conn = http.client.HTTPSConnection(HOST, 443, timeout=15, context=ssl.create_default_context())
+    try:
+        conn.request("GET", path, headers={"Authorization": "Bearer " + token,
+                     "Accept": "application/json", "Cache-Control": "no-store"})
+        resp = conn.getresponse()
+        resp.read(65536)
+        return resp.status
+    except Exception:
+        raise Stop("UATMINT_NETWORK_FAILED") from None
+    finally:
+        conn.close()
+
+
+def _require_plain_file(target, uid):
+    """--replace and --remove act only on a regular, non-linked file owned by root."""
+    try:
+        st = os.lstat(target)
+    except OSError:
+        raise Stop("UATMINT_TARGET_UNSAFE") from None
+    if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_uid != uid:
+        raise Stop("UATMINT_TARGET_UNSAFE")
+
+
+def remove_credential(target=TARGET, uid=0, euid=None, out=print):
+    if (os.geteuid() if euid is None else euid) != uid:
+        raise Stop("UATMINT_ROOT_REQUIRED")
+    if not os.path.lexists(target):
+        out("OK no existe %s; nada que borrar." % target)
+        return
+    _require_plain_file(target, uid)
+    try:
+        os.unlink(target)
+    except OSError:
+        raise Stop("UATMINT_REMOVE_FAILED") from None
+    out("OK credencial borrada: %s" % target)
+
+
 def write_atomic(data, target, replace, uid=0):
     """Create target root-only; never follows links; atomic rename; never leaves a temp."""
     directory = os.path.dirname(target)
-    if os.path.lexists(target) and not replace:
-        raise Stop("UATMINT_TARGET_EXISTS")
+    if os.path.lexists(target):
+        if not replace:
+            raise Stop("UATMINT_TARGET_EXISTS")
+        _require_plain_file(target, uid)
     tmp = os.path.join(directory, ".qa525-uat-credential.tmp-" + str(os.getpid()))
     fd = None
     try:
@@ -164,16 +212,19 @@ def write_atomic(data, target, replace, uid=0):
 
 
 def run(master_user, operator_user, *, ask, post, clock, target=TARGET, replace=False,
-        uid=0, euid=None, out=print):
-    if (os.geteuid() if euid is None else euid) != uid:
+        uid=0, euid=None, out=print, check_only=False, get=None):
+    if not check_only and (os.geteuid() if euid is None else euid) != uid:
         raise Stop("UATMINT_ROOT_REQUIRED")
+    if check_only and (get is None or replace):
+        raise Stop("UATMINT_CHECK_ONLY_INVALID")
     for name in (master_user, operator_user):
         if type(name) is not str or USERNAME.fullmatch(name) is None:
             raise Stop("UATMINT_USERNAME_INVALID")
     if master_user == operator_user:
         out("AVISO: Master y operador son la misma cuenta; el UAT lo rechazara si no es Superusuario.")
-    if os.path.lexists(target) and not replace:
+    if not check_only and os.path.lexists(target) and not replace:
         raise Stop("UATMINT_TARGET_EXISTS")
+    minimum = CHECK_MIN_REMAINING if check_only else MIN_REMAINING
     tokens = {}
     for key, user, role in (("master_token", master_user, "master"),
                             ("operator_token", operator_user, "operator")):
@@ -182,11 +233,20 @@ def run(master_user, operator_user, *, ask, post, clock, target=TARGET, replace=
             raise Stop("UATMINT_PASSWORD_EMPTY")
         token = request_token(user, password, post)
         password = None
-        minutes = check_token(token, role, clock())
+        minutes = check_token(token, role, clock(), minimum)
         out("OK %s: claims correctas, vigencia %d min" % (role, minutes))
+        if check_only:
+            status = get(SESSION_PATH, token)
+            if status != 200:
+                raise Stop("UATMINT_API_REJECTED_%d" % status if type(status) is int and 100 <= status <= 599
+                           else "UATMINT_API_REJECTED")
+            out("OK %s: la API acepta el token (GET %s = 200)" % (role, SESSION_PATH))
         tokens[key] = token
     if tokens["master_token"] == tokens["operator_token"]:
         raise Stop("UATMINT_TOKENS_EQUAL")
+    if check_only:
+        out("OK verificacion completa. No se escribio ningun archivo ni se cambio nada.")
+        return
     data = json.dumps(tokens, sort_keys=True, separators=(",", ":")).encode("ascii")
     if len(data) > MAX_FILE:
         raise Stop("UATMINT_FILE_TOO_LARGE")
@@ -196,16 +256,26 @@ def run(master_user, operator_user, *, ask, post, clock, target=TARGET, replace=
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--master-user", required=True)
-    parser.add_argument("--operator-user", required=True)
+    parser.add_argument("--master-user")
+    parser.add_argument("--operator-user")
     parser.add_argument("--replace", action="store_true")
+    parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--remove", action="store_true")
     args = parser.parse_args(argv)
     try:
+        os.umask(0o077)
+        if args.remove:
+            if args.check_only or args.replace or args.master_user or args.operator_user:
+                raise Stop("UATMINT_ARGUMENTS_INVALID")
+            remove_credential()
+            return 0
+        if not args.master_user or not args.operator_user:
+            raise Stop("UATMINT_ARGUMENTS_INVALID")
         if not sys.stdin.isatty() or not sys.stdout.isatty():
             raise Stop("UATMINT_TTY_REQUIRED")
-        os.umask(0o077)
         run(args.master_user, args.operator_user, ask=getpass.getpass, post=http_post,
-            clock=lambda: dt.datetime.now(dt.timezone.utc), replace=args.replace)
+            clock=lambda: dt.datetime.now(dt.timezone.utc), replace=args.replace,
+            check_only=args.check_only, get=http_get if args.check_only else None)
     except Stop as e:
         print("ERROR " + str(e), file=sys.stderr)
         return 2

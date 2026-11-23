@@ -187,3 +187,96 @@ class MintTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CheckOnlyAndCleanupTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.target = os.path.join(self.tmp.name, ".qa525-uat-credential")
+        self.out = []
+
+    def check(self, endpoint, status=200, **kw):
+        calls = []
+
+        def get(path, token):
+            calls.append((path, token))
+            return status
+        mint.run("admin", "pablo", ask=lambda p: "PASSWORD-SENTINEL", post=endpoint.post, clock=lambda: NOW,
+                 target=self.target, uid=UID + 1, euid=UID, out=self.out.append, check_only=True, get=get, **kw)
+        return calls
+
+    def test_check_only_writes_nothing_needs_no_root_and_accepts_short_tokens(self):
+        short = Endpoint(master=jwt(exp=int(NOW.timestamp()) + 300), oper=operator(exp=int(NOW.timestamp()) + 300))
+        calls = self.check(short)
+        self.assertEqual([p for p, _ in calls], ["/api/session/me", "/api/session/me"])
+        self.assertFalse(os.path.lexists(self.target))
+        self.assertEqual(os.listdir(self.tmp.name), [])
+        text = "\n".join(self.out)
+        for _, token in calls:
+            self.assertNotIn(token, text)
+        self.assertIn("No se escribio ningun archivo", text)
+
+    def test_check_only_still_requires_claims(self):
+        with self.assertRaises(mint.Stop) as cm:
+            self.check(Endpoint(oper=operator(pmgm_scope="organization")))
+        self.assertEqual(str(cm.exception), "UATMINT_CLAIM_SCOPE_MISSING")
+
+    def test_check_only_rejects_expired_token(self):
+        with self.assertRaises(mint.Stop) as cm:
+            self.check(Endpoint(master=jwt(exp=int(NOW.timestamp()) + 30)))
+        self.assertEqual(str(cm.exception), "UATMINT_LIFESPAN_TOO_SHORT")
+
+    def test_check_only_api_rejection_is_fixed_code(self):
+        with self.assertRaises(mint.Stop) as cm:
+            self.check(Endpoint(), status=403)
+        self.assertEqual(str(cm.exception), "UATMINT_API_REJECTED_403")
+
+    def test_check_only_requires_get_and_forbids_replace(self):
+        with self.assertRaises(mint.Stop):
+            mint.run("admin", "pablo", ask=lambda p: "x", post=Endpoint().post, clock=lambda: NOW,
+                     target=self.target, uid=UID, euid=UID, out=self.out.append, check_only=True)
+        with self.assertRaises(mint.Stop):
+            self.check(Endpoint(), replace=True)
+
+    def test_replace_refuses_symlink_directory_and_hardlink(self):
+        victim = os.path.join(self.tmp.name, "victim")
+        Path(victim).write_bytes(b"keep")
+        os.symlink(victim, self.target)
+        with self.assertRaises(mint.Stop) as cm:
+            mint.write_atomic(b"{}", self.target, True, UID)
+        self.assertEqual(str(cm.exception), "UATMINT_TARGET_UNSAFE")
+        self.assertEqual(Path(victim).read_bytes(), b"keep")
+        os.unlink(self.target)
+        os.link(victim, self.target)
+        with self.assertRaises(mint.Stop) as cm:
+            mint.write_atomic(b"{}", self.target, True, UID)
+        self.assertEqual(str(cm.exception), "UATMINT_TARGET_UNSAFE")
+        os.unlink(self.target)
+        os.mkdir(self.target)
+        with self.assertRaises(mint.Stop) as cm:
+            mint.write_atomic(b"{}", self.target, True, UID)
+        self.assertEqual(str(cm.exception), "UATMINT_TARGET_UNSAFE")
+
+    def test_remove_deletes_plain_file_only(self):
+        Path(self.target).write_bytes(b"secret")
+        mint.remove_credential(self.target, uid=UID, euid=UID, out=self.out.append)
+        self.assertFalse(os.path.lexists(self.target))
+        mint.remove_credential(self.target, uid=UID, euid=UID, out=self.out.append)  # idempotent
+        victim = os.path.join(self.tmp.name, "victim")
+        Path(victim).write_bytes(b"keep")
+        os.symlink(victim, self.target)
+        with self.assertRaises(mint.Stop):
+            mint.remove_credential(self.target, uid=UID, euid=UID, out=self.out.append)
+        self.assertEqual(Path(victim).read_bytes(), b"keep")
+
+    def test_remove_requires_root(self):
+        Path(self.target).write_bytes(b"secret")
+        with self.assertRaises(mint.Stop) as cm:
+            mint.remove_credential(self.target, uid=UID + 1, euid=UID, out=self.out.append)
+        self.assertEqual(str(cm.exception), "UATMINT_ROOT_REQUIRED")
+        self.assertTrue(os.path.exists(self.target))
+
+    def test_main_argument_rules(self):
+        self.assertEqual(mint.main(["--remove", "--check-only"]), 2)
+        self.assertEqual(mint.main(["--check-only"]), 2)
