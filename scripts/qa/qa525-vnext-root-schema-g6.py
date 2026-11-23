@@ -19,6 +19,9 @@ SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
 STAMP = re.compile(r"centenario-qa-g6-v2-CIFRADO-(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z\.tar\.gz\Z")
 PIN_KEYS = ("pinned_review_sha256", "pinned_receipt_sha256", "pinned_restore_sha256",
             "observed_archive_sha256", "downloaded_offhost_sha256")
+G6_KEYS = frozenset(PIN_KEYS + ("expected_restic_repo_id", "expected_key_epoch"))
+HEX64 = re.compile(r"[a-f0-9]{64}\Z")
+EPOCH = re.compile(r"[a-f0-9]{32}\Z")
 
 
 class Stop(Exception):
@@ -39,8 +42,10 @@ def _need(ok):
 
 def make(authority, claims, read_evidence, clock):
     g6 = authority.get("g6") if type(authority) is dict else None
-    _need(type(g6) is dict and all(type(g6.get(k)) is str and SHA.fullmatch(g6[k]) for k in PIN_KEYS)
-          and type(g6.get("expected_restic_repo_id")) is str and type(g6.get("expected_key_epoch")) is str
+    _need(type(g6) is dict and set(g6) == G6_KEYS
+          and all(type(g6.get(k)) is str and SHA.fullmatch(g6[k]) for k in PIN_KEYS)
+          and type(g6.get("expected_restic_repo_id")) is str and HEX64.fullmatch(g6["expected_restic_repo_id"])
+          and type(g6.get("expected_key_epoch")) is str and EPOCH.fullmatch(g6["expected_key_epoch"])
           and type(claims) is dict and type(claims.get("expires_at")) is int and not isinstance(claims["expires_at"], bool)
           and callable(read_evidence) and callable(clock) and set(_DEPS) == set(SIBLING_MODULES)
           and callable(getattr(_DEPS["evidence"], "inspect", None)))
