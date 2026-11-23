@@ -69,11 +69,32 @@ class T(unittest.TestCase):
         finally:
             g.RESTIC = old
 
+    def _ls(self, fmode=0o100700, fuid=0, fnlink=1, dmode=0o040755, duid=0):
+        import os
+        def ls(p):
+            if p == "/root/x.py":
+                return os.stat_result((fmode, 1, 1, fnlink, fuid, 0, 10, 0, 0, 0))
+            return os.stat_result((dmode, 2, 1, 2, duid, 0, 4096, 0, 0, 0))
+        return ls
+
     def test_check_self(self):
-        g.check_self("a" * 64, lambda p: "a" * 64)
+        g.check_self("a" * 64, lambda p: "a" * 64, "/root/x.py", self._ls())
         for bad, rd in (("a" * 64, lambda p: "b" * 64), ("short", lambda p: "a" * 64), (None, lambda p: "a" * 64)):
             with self.assertRaises(g.Stop):
-                g.check_self(bad, rd)
+                g.check_self(bad, rd, "/root/x.py", self._ls())
+
+    def test_trusted_copy_conditions(self):
+        g.check_trusted_copy("/root/x.py", self._ls())
+        for kw in ({"fmode": 0o100755}, {"fmode": 0o100750}, {"fmode": 0o120700}, {"fuid": 1000},
+                   {"fnlink": 2}, {"dmode": 0o040777}, {"dmode": 0o040775}, {"duid": 1000}):
+            with self.assertRaises(g.Stop, msg=str(kw)):
+                g.check_trusted_copy("/root/x.py", self._ls(**kw))
+
+    def test_check_self_untrusted_copy_checked_before_hash(self):
+        called = []
+        with self.assertRaises(g.Stop):
+            g.check_self("a" * 64, lambda p: called.append(1) or "a" * 64, "/root/x.py", self._ls(fuid=1000))
+        self.assertEqual(called, [])
 
     def test_pipe_write_all_and_close_on_error(self):
         import os

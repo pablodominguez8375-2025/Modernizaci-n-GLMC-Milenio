@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 
@@ -45,10 +46,25 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def check_self(expected, sha_reader=sha256_file, path=None):
+def check_trusted_copy(path, lstat=os.lstat):
+    """Root-owned 0700 regular file, single link, no symlink, in a root-owned directory not group/other writable."""
+    try:
+        st = lstat(path)
+        dst = lstat(os.path.dirname(path))
+    except OSError:
+        raise Stop("G6B_SCRIPT_COPY_UNTRUSTED") from None
+    if (not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o700
+            or st.st_nlink != 1 or not stat.S_ISDIR(dst.st_mode) or dst.st_uid != 0
+            or stat.S_IMODE(dst.st_mode) & 0o022):
+        raise Stop("G6B_SCRIPT_COPY_UNTRUSTED")
+
+
+def check_self(expected, sha_reader=sha256_file, path=None, lstat=os.lstat):
     if not isinstance(expected, str) or not HEX64.match(expected):
         raise Stop("G6B_SCRIPT_PIN_INVALID")
-    if sha_reader(path or os.path.abspath(__file__)) != expected:
+    path = path or os.path.abspath(__file__)
+    check_trusted_copy(path, lstat)
+    if sha_reader(path) != expected:
         raise Stop("G6B_SCRIPT_SHA_MISMATCH")
 
 
