@@ -20,8 +20,8 @@ STAMP = re.compile(r"centenario-qa-g6-v2-CIFRADO-(\d{4})(\d{2})(\d{2})T(\d{2})(\
 PIN_KEYS = ("pinned_review_sha256", "pinned_receipt_sha256", "pinned_restore_sha256",
             "observed_archive_sha256", "downloaded_offhost_sha256")
 G6_KEYS = frozenset(PIN_KEYS + ("expected_restic_repo_id", "expected_key_epoch"))
-HEX64 = re.compile(r"[a-f0-9]{64}\\Z")
-EPOCH = re.compile(r"[a-f0-9]{32}\\Z")
+HEX64 = re.compile(r"[a-f0-9]{64}\Z")
+EPOCH = re.compile(r"[a-f0-9]{32}\Z")
 
 
 class Stop(Exception):
