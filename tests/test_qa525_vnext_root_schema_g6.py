@@ -92,6 +92,21 @@ class SchemaG6Tests(unittest.TestCase):
             (verifier, _), files, _ = setup(now=now)
             self.assertIs(verifier(files), False)
 
+    def test_authority_rejects_unknown_g6_keys_and_bad_identity_pins(self):
+        _, authority = fixture()
+        g6_data = authority["g6"]
+        for extra in ({"unexpected": "value"}, {"g6_operation_sha256": "sha256:" + "a" * 64}):
+            with self.subTest(extra=extra):
+                altered = dict(g6_data, **extra)
+                with self.assertRaises(g6.Stop):
+                    g6.make({"g6": altered}, CLAIMS, lambda n: fixture()[0][n], lambda: NOW)
+        for key, value in (("expected_restic_repo_id", "not-hex"),
+                           ("expected_key_epoch", "not-epoch")):
+            with self.subTest(key=key):
+                altered = dict(g6_data, **{key: value})
+                with self.assertRaises(g6.Stop):
+                    g6.make({"g6": altered}, CLAIMS, lambda n: fixture()[0][n], lambda: NOW)
+
     def test_bad_inputs_fail_closed_with_fixed_codes(self):
         f, a = fixture()
         g6.bind_dependencies({"evidence": ev})
