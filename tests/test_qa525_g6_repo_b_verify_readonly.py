@@ -69,11 +69,45 @@ class T(unittest.TestCase):
         finally:
             g.RESTIC = old
 
+    def test_check_self(self):
+        g.check_self("a" * 64, lambda p: "a" * 64)
+        for bad, rd in (("a" * 64, lambda p: "b" * 64), ("short", lambda p: "a" * 64), (None, lambda p: "a" * 64)):
+            with self.assertRaises(g.Stop):
+                g.check_self(bad, rd)
+
+    def test_pipe_write_all_and_close_on_error(self):
+        import os
+        big = "p" * 70000  # larger than a 64 KiB pipe buffer would take in one os.write
+        calls = []
+        real = os.write
+        def short(fd, data):
+            calls.append(len(data)); return real(fd, bytes(data[:1])) if len(calls) < 3 else real(fd, data)
+        # a short pipe write must not lose data: restic fake just reads the first line
+        import tempfile, stat
+        d = tempfile.mkdtemp(); fake = os.path.join(d, "restic")
+        with open(fake, "w") as fh:
+            fh.write('#!/bin/sh\nf=""; while [ $# -gt 0 ]; do [ "$1" = "--password-file" ] && f="$2"; shift; done\n'
+                     'read p < "$f"; echo "{\\"id\\":\\"%s\\"}"\n' % g.REPO_ID)
+        os.chmod(fake, 0o755); old = g.RESTIC; g.RESTIC = fake
+        try:
+            self.assertIn(g.REPO_ID.encode(), g.run_restic("pw"))
+            os.write = short
+            try:
+                self.assertIn(g.REPO_ID.encode(), g.run_restic("pw"))
+            finally:
+                os.write = real
+        finally:
+            g.RESTIC = old
+
+    def test_main_requires_script_pin(self):
+        with self.assertRaises(SystemExit):
+            g.main([])
+
     def test_main_refuses_without_root_tty(self):
         import io, contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = g.main([])
+            rc = g.main(["--expect-script-sha256", "a" * 64])
         self.assertNotEqual(rc, 0); self.assertIn("STOP", buf.getvalue())
 
 

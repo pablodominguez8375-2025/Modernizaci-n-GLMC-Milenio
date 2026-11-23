@@ -6,6 +6,11 @@ Proves, without printing any secret, that (1) /usr/bin/restic has the pinned sha
 terminal, never echoed/stored/logged) and (3) the observed repo id equals the pinned repo id of repo B.
 Only operation: `restic --no-cache --no-lock cat config --json` (reads config; writes nothing).
 The password reaches restic through an anonymous pipe fd (`--password-file /dev/fd/N`), never argv/env/disk.
+Trust boundary: this script is NOT a second root route. It refuses to run unless `--expect-script-sha256 HEX`
+(the hash published in GitHub/#1082 for the exact reviewed head) equals the sha256 of its own bytes, and it should
+be run from a ROOT-OWNED copy (`sudo install -m 0700 -o root -g root -t /root <file>`), never from a user-writable
+path. The receipt is: script sha256 + the fixed markers below + timestamp. Integration into the signed launcher
+(canonical `verify-identity` command) is the planned follow-up; this is the separate operator procedure until then.
 Output: fixed marker lines only. Any mismatch/failure => STOP, never `init`, never retry loops.
 """
 import argparse
@@ -40,13 +45,25 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+def check_self(expected, sha_reader=sha256_file, path=None):
+    if not isinstance(expected, str) or not HEX64.match(expected):
+        raise Stop("G6B_SCRIPT_PIN_INVALID")
+    if sha_reader(path or os.path.abspath(__file__)) != expected:
+        raise Stop("G6B_SCRIPT_SHA_MISMATCH")
+
+
 def run_restic(password, runner=None):
     """Return restic stdout bytes for `cat config --json`; the password only travels via a pipe fd."""
     if runner is not None:
         return runner(password)
     r, w = os.pipe()
     try:
-        os.write(w, password.encode("utf-8") + b"\n")
+        data = memoryview(password.encode("utf-8") + b"\n")
+        while data:
+            n = os.write(w, data)
+            if n <= 0:
+                raise Stop("G6B_PIPE_WRITE_FAILED")
+            data = data[n:]
         os.close(w)
         w = -1
         argv = [RESTIC, "--no-cache", "--no-lock", "--repo", REPO, "--password-file", "/dev/fd/%d" % r,
@@ -58,9 +75,12 @@ def run_restic(password, runner=None):
     except OSError:
         raise Stop("G6B_RESTIC_NOT_RUNNABLE") from None
     finally:
-        os.close(r)
-        if w != -1:
-            os.close(w)
+        for fd in (r, w):
+            if fd != -1:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
     if p.returncode != 0:
         raise Stop("G6B_REPO_AUTH_OR_OPEN_FAILED")
     return p.stdout
@@ -86,11 +106,13 @@ def verify(password, sha_reader=sha256_file, runner=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.parse_args(argv)
+    ap.add_argument("--expect-script-sha256", required=True)
+    a = ap.parse_args(argv)
     if os.geteuid() != 0 or not sys.stdin.isatty():
         print("G6B_REPO_VERIFY=STOP G6B_CODE=NEEDS_ROOT_AND_TTY")
         return 2
     try:
+        check_self(a.expect_script_sha256)
         pw = getpass.getpass("Restic password for repo B (hidden): ")
         observed = verify(pw)
     except Stop as e:
@@ -98,6 +120,7 @@ def main(argv=None):
         return 1
     finally:
         pw = None
+    print("G6B_SCRIPT_SHA256=PASS script_sha256=%s" % a.expect_script_sha256)
     print("G6B_RESTIC_SHA256=PASS")
     print("G6B_REPO_OPEN=PASS")
     print("G6B_REPO_ID_MATCH=PASS observed_repo_id=%s" % observed)
