@@ -11,7 +11,7 @@ Guarantees (enforced by tests):
 * Only runs commands from a fixed allowlist, shell=False, constant argv, short timeout, bounded output.
   No docker run/exec/start/stop, no systemctl start/stop/restart, no restic repo access.
 * Never reads file CONTENTS except to compute sha256 of regular files <= 64 MiB; files whose name
-  looks secret-bearing (cred|secret|password|token|key|jwt) are stat-only, never hashed.
+  looks secret-bearing (cred|secret|passw|token|key|jwt, plus .pat/.env/.pem/.p12/.pfx/.jks/.kdbx, id_rsa/id_ed25519, case-insensitive) are stat-only, never hashed.
 * Never touches Keycloak/API/network; lifespan is NOT collected here (F2-check owns that).
 * Output has no secrets: stat metadata, hashes, names, Docker ids. Unreadable => {"status":"denied"}.
 Run as the normal operator; run with sudo only if the Sponsor authorizes it, to read root-only paths.
@@ -30,7 +30,9 @@ SCHEMA = "qa525-host-inventory-v1"
 HASH_MAX = 64 * 1024 * 1024
 OUT_MAX = 1024 * 1024
 TIMEOUT = 20
-SECRETISH = re.compile(r"(cred|secret|passw|token|key|jwt)", re.I)
+SECRETISH = re.compile(
+    r"(cred|secret|passw|token|key|jwt|htpasswd|id_rsa|id_ed25519|id_ecdsa|\.kdbx$"
+    r"|(^|\.)(pat|env|pem|p12|pfx|jks|keystore|pgpass|netrc)(\.|$))", re.I)
 PROJECT = "centenario-qa-lab2"
 MIGRATOR_TAG = "workshops104-migrator:16262d47"
 HEX64 = re.compile(r"^[0-9a-f]{64}$")

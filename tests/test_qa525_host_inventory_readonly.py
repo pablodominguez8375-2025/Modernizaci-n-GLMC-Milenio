@@ -52,6 +52,21 @@ class T(unittest.TestCase):
         res = inv.collect(paths=(), runner=lambda a: (0, "n|[postgres]\n") if "inspect" in a and "--format" in a and "{{.Id}}" not in a else (0, ""), now="T")
         self.assertEqual(res["postgres_networks"]["rows"], ["n|[postgres]"])
 
+    def test_secretish_names_never_hashed(self):
+        for n in ("qa525-github-readonly.pat", "master-qa.env", "srv01.env", "SRV01.ENV", "x.PEM", "a.p12", "b.pfx",
+                  "c.jks", "d.kdbx", "id_rsa", "id_ed25519", ".env", "app.env.bak", "tls.key", "my-token.txt",
+                  "qa-account-admin-secret", ".pgpass", ".netrc", "AuthJWT.json"):
+            f = Path(self.d, n); f.write_bytes(b"x")
+            r = inv.probe_path(str(f), "file")
+            self.assertIsNone(r["sha256"], n)
+            e = {x["name"]: x for x in inv.probe_path(self.d, "dir")["entries"]}[n]
+            self.assertNotIn("sha256", e, n)
+
+    def test_normal_names_still_hashed(self):
+        for n in ("qa525-supervised-cut.json", "pmgm-qa-update", "restic", "environment-notes.txt", "patch.json"):
+            f = Path(self.d, n); f.write_bytes(b"x")
+            self.assertEqual(inv.probe_path(str(f), "file")["sha256"], hashlib.sha256(b"x").hexdigest(), n)
+
     def test_pin_mismatch_and_garbage(self):
         res = inv.collect(paths=(), runner=lambda a: (0, "sha256:" + "9" * 64) if "inspect" in a else (0, ""))
         self.assertFalse(res["migrator"]["matches_expected_pin"])
