@@ -57,6 +57,9 @@ COMMANDS = {
     "docker_images": ["/usr/bin/docker", "image", "ls", "--digests", "--no-trunc",
                       "--format", "{{.Repository}}:{{.Tag}}|{{.ID}}|{{.Digest}}|{{.CreatedAt}}"],
     "migrator_image_id": ["/usr/bin/docker", "image", "inspect", "--format", "{{.Id}}", MIGRATOR_TAG],
+    "pg_networks": ["/usr/bin/docker", "inspect", "--format",
+                    "{{range $k,$v := .NetworkSettings.Networks}}{{$k}}|{{$v.Aliases}}{{println}}{{end}}",
+                    "centenario-qa-lab2-postgres-1"],
     "networks": ["/usr/bin/docker", "network", "ls", "--format", "{{.Name}}|{{.Driver}}"],
     "systemd_timers": ["/usr/bin/systemctl", "list-timers", "--all", "--no-pager", "--no-legend"],
     "unit_api_refresh": ["/usr/bin/systemctl", "show", "pmgm-qa-api-refresh-v2.service", "--no-pager",
@@ -188,6 +191,9 @@ def collect(paths=PATHS, runner=None, now=None):
     res["migrator"] = {"tag": MIGRATOR_TAG, "rc": c, "id": mid if HEX64.match(mid.replace("sha256:", "")) else None,
                        "expected_pin": "sha256:a3d78cc8d4c021695d6b5b637ce1bb38b1a21ef4e8afeba68181e791764c76b3"}
     res["migrator"]["matches_expected_pin"] = res["migrator"]["id"] == res["migrator"]["expected_pin"]
+    c, o = cmd("pg_networks")
+    res["postgres_networks"] = {"rc": c, "rows": _lines(o),
+                                "needs": "centenario-qa-lab2_pmgm_srv01_internal with alias postgres"}
     c, o = cmd("networks")
     res["networks"] = {"rc": c, "rows": [r for r in _lines(o) if PROJECT in r]}
     c, o = cmd("systemd_timers")

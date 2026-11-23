@@ -48,6 +48,10 @@ class T(unittest.TestCase):
         self.assertIsNone(names["secret-token.txt"].get("sha256"))
         self.assertTrue(res["read_only"])
 
+    def test_postgres_networks_collected(self):
+        res = inv.collect(paths=(), runner=lambda a: (0, "n|[postgres]\n") if "inspect" in a and "--format" in a and "{{.Id}}" not in a else (0, ""), now="T")
+        self.assertEqual(res["postgres_networks"]["rows"], ["n|[postgres]"])
+
     def test_pin_mismatch_and_garbage(self):
         res = inv.collect(paths=(), runner=lambda a: (0, "sha256:" + "9" * 64) if "inspect" in a else (0, ""))
         self.assertFalse(res["migrator"]["matches_expected_pin"])
