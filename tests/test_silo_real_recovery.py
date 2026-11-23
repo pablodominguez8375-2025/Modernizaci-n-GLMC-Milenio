@@ -54,6 +54,10 @@ def _failure_category(result):
     error = ((result.stderr or "") + "\n" + (result.stdout or "")).lower()
     for needle, label in (
         ("flag provided but not defined", "cli-argument-parsing"),
+        ("unknown shorthand flag", "cli-argument-parsing"),
+        ("unknown flag", "cli-argument-parsing"),
+        ("flag needs an argument", "cli-argument-parsing"),
+        ("invalid argument", "cli-argument-parsing"),
         ("connection refused", "transport-refused"),
         ("connection reset", "transport-reset"),
         ("no such host", "dns-resolution"),
