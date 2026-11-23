@@ -101,6 +101,20 @@ class T(unittest.TestCase):
         finally:
             inv.COMMANDS["uname"] = old
 
+    def test_stdout_is_single_json_and_pin_goes_to_stderr(self):
+        import io, contextlib
+        out, err = io.StringIO(), io.StringIO()
+        orig = inv.collect
+        inv.collect = lambda: orig(paths=(), runner=fake, now="T")
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                self.assertEqual(inv.main([]), 0)
+        finally:
+            inv.collect = orig
+        doc = json.loads(out.getvalue())
+        self.assertEqual(doc["schema"], inv.SCHEMA)
+        self.assertEqual(err.getvalue().strip(), "inventory_sha256=" + hashlib.sha256(out.getvalue().encode()).hexdigest())
+
     def test_source_has_no_mutating_calls(self):
         src = SRC.read_text()
         for bad in ("shell=True", "os.remove", "os.unlink", "shutil", "os.rename", "chmod(", "os.system"):

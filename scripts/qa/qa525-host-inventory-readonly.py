@@ -241,9 +241,10 @@ def main(argv=None):
             print("INVENTORY_OUT_FAILED")
             return 2
         print("inventory_out=%s" % a.out)
+        print("inventory_sha256=%s" % digest)
     else:
         sys.stdout.write(raw.decode())
-    print("inventory_sha256=%s" % digest)
+        print("inventory_sha256=%s" % digest, file=sys.stderr)
     return 0
 
 
