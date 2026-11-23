@@ -31,6 +31,7 @@ def b64(obj):
 
 def jwt(**over):
     claims = {"iss": mint.ISSUER, "exp": int(NOW.timestamp()) + 7000, "pmgm_scope": "order",
+              "aud": ["pmgm-api", "account"], "azp": "pmgm-web",
               "pmgm_role": ["platform_superadmin"], "jti": over.pop("jti", "a")}
     claims.update(over)
     return b64({"alg": "RS256"}) + "." + b64(claims) + "." + "sig"
@@ -72,8 +73,14 @@ class MintTests(unittest.TestCase):
     def run_mint(self, endpoint=None, **kw):
         endpoint = endpoint or Endpoint()
         self.endpoint = endpoint
+        self.api_calls = []
+        status = kw.pop("api_status", 200)
+
+        def get(path, token):
+            self.api_calls.append((path, token))
+            return status
         mint.run("admin", "pablo", ask=self.ask, post=endpoint.post, clock=lambda: NOW,
-                 target=self.target, uid=UID, euid=UID, out=self.out.append, **kw)
+                 target=self.target, uid=UID, euid=UID, out=self.out.append, get=get, **kw)
 
     def assertStop(self, code, **kw):
         with self.assertRaises(mint.Stop) as cm:
@@ -138,6 +145,7 @@ class MintTests(unittest.TestCase):
 
     def test_existing_target_untouched_without_replace(self):
         Path(self.target).write_bytes(b"old")
+        os.chmod(self.target, 0o600)
         with self.assertRaises(mint.Stop) as cm:
             self.run_mint()
         self.assertEqual(str(cm.exception), "UATMINT_TARGET_EXISTS")
@@ -146,6 +154,7 @@ class MintTests(unittest.TestCase):
 
     def test_replace_overwrites_atomically(self):
         Path(self.target).write_bytes(b"old")
+        os.chmod(self.target, 0o600)
         self.run_mint(replace=True)
         self.assertIn(b"master_token", Path(self.target).read_bytes())
         self.assertEqual(os.listdir(self.tmp.name), [".qa525-uat-credential"])
@@ -161,20 +170,20 @@ class MintTests(unittest.TestCase):
     def test_requires_root(self):
         with self.assertRaises(mint.Stop) as cm:
             mint.run("admin", "pablo", ask=self.ask, post=Endpoint().post, clock=lambda: NOW,
-                     target=self.target, uid=UID + 1, euid=UID, out=self.out.append)
+                     target=self.target, uid=UID + 1, euid=UID, out=self.out.append, get=lambda p, t: 200)
         self.assertEqual(str(cm.exception), "UATMINT_ROOT_REQUIRED")
         self.assertEqual(self.asked, [])
 
     def test_username_validation(self):
         with self.assertRaises(mint.Stop):
             mint.run("admin&x=1", "pablo", ask=self.ask, post=Endpoint().post, clock=lambda: NOW,
-                     target=self.target, uid=UID, euid=UID, out=self.out.append)
+                     target=self.target, uid=UID, euid=UID, out=self.out.append, get=lambda p, t: 200)
 
     def test_empty_password_stops_before_network(self):
         endpoint = Endpoint()
         with self.assertRaises(mint.Stop):
             mint.run("admin", "pablo", ask=lambda p: "", post=endpoint.post, clock=lambda: NOW,
-                     target=self.target, uid=UID, euid=UID, out=self.out.append)
+                     target=self.target, uid=UID, euid=UID, out=self.out.append, get=lambda p, t: 200)
         self.assertEqual(endpoint.calls, [])
 
     def test_identical_tokens_rejected(self):
@@ -185,8 +194,6 @@ class MintTests(unittest.TestCase):
         self.assertFalse(os.path.lexists(self.target))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class CheckOnlyAndCleanupTests(unittest.TestCase):
@@ -257,10 +264,18 @@ class CheckOnlyAndCleanupTests(unittest.TestCase):
         with self.assertRaises(mint.Stop) as cm:
             mint.write_atomic(b"{}", self.target, True, UID)
         self.assertEqual(str(cm.exception), "UATMINT_TARGET_UNSAFE")
+        os.rmdir(self.target)
+        Path(self.target).write_bytes(b"x")  # regular file but mode 0644
+        os.chmod(self.target, 0o644)
+        with self.assertRaises(mint.Stop) as cm:
+            mint.write_atomic(b"{}", self.target, True, UID)
+        self.assertEqual(str(cm.exception), "UATMINT_TARGET_UNSAFE")
 
     def test_remove_deletes_plain_file_only(self):
         Path(self.target).write_bytes(b"secret")
+        os.chmod(self.target, 0o600)
         mint.remove_credential(self.target, uid=UID, euid=UID, out=self.out.append)
+        self.assertIn("NO revoca", "\n".join(self.out))
         self.assertFalse(os.path.lexists(self.target))
         mint.remove_credential(self.target, uid=UID, euid=UID, out=self.out.append)  # idempotent
         victim = os.path.join(self.tmp.name, "victim")
@@ -272,6 +287,7 @@ class CheckOnlyAndCleanupTests(unittest.TestCase):
 
     def test_remove_requires_root(self):
         Path(self.target).write_bytes(b"secret")
+        os.chmod(self.target, 0o600)
         with self.assertRaises(mint.Stop) as cm:
             mint.remove_credential(self.target, uid=UID + 1, euid=UID, out=self.out.append)
         self.assertEqual(str(cm.exception), "UATMINT_ROOT_REQUIRED")
@@ -280,3 +296,51 @@ class CheckOnlyAndCleanupTests(unittest.TestCase):
     def test_main_argument_rules(self):
         self.assertEqual(mint.main(["--remove", "--check-only"]), 2)
         self.assertEqual(mint.main(["--check-only"]), 2)
+
+
+class HardeningTests(MintTests):
+    """Reviewer findings: audience/azp/nbf, API gate in mint mode, unsafe directory, link/unlink failure."""
+
+    def test_missing_audience_or_wrong_azp_or_future_nbf(self):
+        self.assertStop("UATMINT_AUDIENCE_INVALID", endpoint=Endpoint(master=jwt(aud=["account"])))
+        self.assertStop("UATMINT_CLIENT_INVALID", endpoint=Endpoint(oper=operator(azp="other")))
+        self.assertStop("UATMINT_NOT_YET_VALID",
+                        endpoint=Endpoint(master=jwt(nbf=int(NOW.timestamp()) + 3600)))
+
+    def test_mint_mode_requires_api_acceptance_before_writing(self):
+        self.assertStop("UATMINT_API_REJECTED_401", api_status=401)
+        self.assertEqual(len(self.api_calls), 1)  # stops at the first rejected token
+
+    def test_mint_mode_calls_api_for_both_tokens(self):
+        self.run_mint()
+        self.assertEqual([p for p, _ in self.api_calls], ["/api/session/me", "/api/session/me"])
+
+    def test_unsafe_directory_refused(self):
+        os.chmod(self.tmp.name, 0o777)
+        with self.assertRaises(mint.Stop) as cm:
+            self.run_mint()
+        self.assertEqual(str(cm.exception), "UATMINT_DIRECTORY_UNSAFE")
+        os.chmod(self.tmp.name, 0o700)
+
+    def test_unlink_failure_after_link_leaves_no_credential(self):
+        real = os.unlink
+        state = {"hit": False}
+
+        def flaky(path, *a, **k):
+            if not state["hit"] and ".tmp-" in str(path):
+                state["hit"] = True
+                raise OSError("boom")
+            return real(path, *a, **k)
+        os.unlink = flaky
+        try:
+            with self.assertRaises(mint.Stop) as cm:
+                self.run_mint()
+        finally:
+            os.unlink = real
+        self.assertEqual(str(cm.exception), "UATMINT_WRITE_FAILED")
+        self.assertFalse(os.path.lexists(self.target))
+        self.assertEqual(os.listdir(self.tmp.name), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -81,6 +81,14 @@ def check_token(token, role, now, min_remaining=MIN_REMAINING):
     exp = claims.get("exp")
     if type(exp) is not int or exp <= now.timestamp() + min_remaining:
         raise Stop("UATMINT_LIFESPAN_TOO_SHORT")
+    aud = claims.get("aud")
+    if "pmgm-api" not in (aud if type(aud) is list else [aud]):
+        raise Stop("UATMINT_AUDIENCE_INVALID")
+    if claims.get("azp") != CLIENT_ID:
+        raise Stop("UATMINT_CLIENT_INVALID")
+    nbf = claims.get("nbf")
+    if nbf is not None and (type(nbf) is not int or nbf > now.timestamp() + 60):
+        raise Stop("UATMINT_NOT_YET_VALID")
     if claims.get("pmgm_scope") != "order":
         raise Stop("UATMINT_CLAIM_SCOPE_MISSING")
     roles = [str(x).lower() for x in _as_list(claims.get("pmgm_role", []))]
@@ -140,13 +148,25 @@ def http_get(path, token):
         conn.close()
 
 
+def _require_safe_directory(directory, uid):
+    """The parent must be a real directory owned by root and not writable by group/other."""
+    try:
+        st = os.lstat(directory)
+    except OSError:
+        raise Stop("UATMINT_DIRECTORY_UNSAFE") from None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != uid or (st.st_mode & 0o022):
+        raise Stop("UATMINT_DIRECTORY_UNSAFE")
+
+
 def _require_plain_file(target, uid):
-    """--replace and --remove act only on a regular, non-linked file owned by root."""
+    """--replace and --remove act only on a regular, non-linked, root-owned 0600 file in a safe directory."""
+    _require_safe_directory(os.path.dirname(target), uid)
     try:
         st = os.lstat(target)
     except OSError:
         raise Stop("UATMINT_TARGET_UNSAFE") from None
-    if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_uid != uid:
+    if (not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_uid != uid
+            or (st.st_mode & 0o777) != 0o600):
         raise Stop("UATMINT_TARGET_UNSAFE")
 
 
@@ -162,11 +182,14 @@ def remove_credential(target=TARGET, uid=0, euid=None, out=print):
     except OSError:
         raise Stop("UATMINT_REMOVE_FAILED") from None
     out("OK credencial borrada: %s" % target)
+    out("AVISO: borrar el archivo NO revoca los tokens ya emitidos; siguen validos hasta su expiracion. "
+        "Revertir el lifespan no los invalida; la invalidacion de sesiones requiere autorizacion separada.")
 
 
 def write_atomic(data, target, replace, uid=0):
     """Create target root-only; never follows links; atomic rename; never leaves a temp."""
     directory = os.path.dirname(target)
+    _require_safe_directory(directory, uid)
     if os.path.lexists(target):
         if not replace:
             raise Stop("UATMINT_TARGET_EXISTS")
@@ -188,7 +211,11 @@ def write_atomic(data, target, replace, uid=0):
             os.replace(tmp, target)
         else:
             os.link(tmp, target)  # fails if target appeared meanwhile: no overwrite
-            os.unlink(tmp)
+            try:
+                os.unlink(tmp)
+            except OSError:
+                os.unlink(target)  # never leave a second name for the credential
+                raise
         tmp = None
         dfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
         try:
@@ -215,7 +242,7 @@ def run(master_user, operator_user, *, ask, post, clock, target=TARGET, replace=
         uid=0, euid=None, out=print, check_only=False, get=None):
     if not check_only and (os.geteuid() if euid is None else euid) != uid:
         raise Stop("UATMINT_ROOT_REQUIRED")
-    if check_only and (get is None or replace):
+    if get is None or (check_only and replace):
         raise Stop("UATMINT_CHECK_ONLY_INVALID")
     for name in (master_user, operator_user):
         if type(name) is not str or USERNAME.fullmatch(name) is None:
@@ -235,12 +262,13 @@ def run(master_user, operator_user, *, ask, post, clock, target=TARGET, replace=
         password = None
         minutes = check_token(token, role, clock(), minimum)
         out("OK %s: claims correctas, vigencia %d min" % (role, minutes))
-        if check_only:
-            status = get(SESSION_PATH, token)
-            if status != 200:
-                raise Stop("UATMINT_API_REJECTED_%d" % status if type(status) is int and 100 <= status <= 599
-                           else "UATMINT_API_REJECTED")
-            out("OK %s: la API acepta el token (GET %s = 200)" % (role, SESSION_PATH))
+        # The API verifies signature and authorization; the credential is never
+        # written from claims alone (the script only decodes the payload).
+        status = get(SESSION_PATH, token)
+        if status != 200:
+            raise Stop("UATMINT_API_REJECTED_%d" % status if type(status) is int and 100 <= status <= 599
+                       else "UATMINT_API_REJECTED")
+        out("OK %s: la API acepta el token (GET %s = 200)" % (role, SESSION_PATH))
         tokens[key] = token
     if tokens["master_token"] == tokens["operator_token"]:
         raise Stop("UATMINT_TOKENS_EQUAL")
@@ -275,7 +303,7 @@ def main(argv=None):
             raise Stop("UATMINT_TTY_REQUIRED")
         run(args.master_user, args.operator_user, ask=getpass.getpass, post=http_post,
             clock=lambda: dt.datetime.now(dt.timezone.utc), replace=args.replace,
-            check_only=args.check_only, get=http_get if args.check_only else None)
+            check_only=args.check_only, get=http_get)
     except Stop as e:
         print("ERROR " + str(e), file=sys.stderr)
         return 2
