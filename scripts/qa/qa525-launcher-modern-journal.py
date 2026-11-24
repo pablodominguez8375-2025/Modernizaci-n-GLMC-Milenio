@@ -180,3 +180,31 @@ def collect_legacy_snapshot(*, directory, authenticated_pins, read_bound,
     if {record["nonce"] for record in records} != {n for n,p in authenticated_pins.items() if p.get("generation") == "legacy"}:
         raise ValueError("SNAPSHOT_LEGACY_COVERAGE")
     return records
+
+
+def reconcile_locked_custody(*, lock_context, authenticate_pins, read_endpoints,
+                             collect_legacy, collect_modern, verify_chain):
+    """Orchestrate read-only reconciliation inside the existing lock context.
+    All callbacks must be trusted by the caller; this is not an admission gate.
+    """
+    with lock_context(read_only=True):
+        pins = authenticate_pins()
+        if type(pins) is not dict or len(pins) > 1000:
+            raise ValueError("CUSTODY_PINS")
+        for nonce, pin in pins.items():
+            if type(nonce) is not str or not HEX.fullmatch(nonce) or type(pin) is not dict or pin.get("generation") not in ("legacy", "modern"):
+                raise ValueError("CUSTODY_PIN_INVALID")
+        original, live = read_endpoints()
+        legacy = collect_legacy(authenticated_pins=pins)
+        modern = collect_modern(authenticated_pins=pins)
+        if type(legacy) is not list or type(modern) is not list:
+            raise ValueError("CUSTODY_COLLECTOR_TYPE")
+        if any(type(r) is not dict or r.get("generation") != generation
+               for generation, records in (("legacy", legacy), ("modern", modern))
+               for r in records):
+            raise ValueError("CUSTODY_COLLECTOR_GENERATION")
+        result = reconcile_snapshot(original=original, live=live,
+            records=legacy + modern, authenticated_pins=pins, verify_chain=verify_chain)
+        if read_endpoints() != (original, live):
+            raise ValueError("CUSTODY_ENDPOINT_CHANGED")
+        return result
