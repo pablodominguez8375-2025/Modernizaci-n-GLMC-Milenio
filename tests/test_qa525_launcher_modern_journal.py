@@ -113,5 +113,28 @@ class MixedGenerationTests(unittest.TestCase):
                 chain.verify_chain(original=first[1], live=live, edges=edges)
 
 
+class SnapshotTests(unittest.TestCase):
+    def test_pin_coverage_and_dispatch(self):
+        s = importlib.util.spec_from_file_location("snapshot_chain", p.with_name("qa525-launcher-custody-chain.py"))
+        c = importlib.util.module_from_spec(s)
+        s.loader.exec_module(c)
+        x = LegacyJournalTests().fixture()
+        pins = {x["nonce"]: {"generation": "legacy", "evidence": x.pop("expected_evidence")}}
+        record = dict(x, generation="legacy")
+        args = dict(original=hashlib.sha256(x["backup"]).hexdigest(), live="f"*64,
+                    records=[record], authenticated_pins=pins, verify_chain=c.verify_chain)
+        self.assertEqual(j.reconcile_snapshot(**args), (x["nonce"],))
+        for patch in (
+            {"authenticated_pins": {}},
+            {"authenticated_pins": {x["nonce"]: {"generation": "modern", "evidence": pins[x["nonce"]]["evidence"]}}},
+            {"records": [dict(record, expected_evidence={})]},
+            {"records": [record, record]},
+            {"live": "0"*64},
+        ):
+            with self.subTest(patch=patch):
+                with self.assertRaises(ValueError):
+                    j.reconcile_snapshot(**dict(args, **patch))
+
+
 if __name__ == "__main__":
     unittest.main()
