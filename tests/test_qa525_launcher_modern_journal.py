@@ -189,5 +189,45 @@ class SnapshotTests(unittest.TestCase):
                 j.reconcile_snapshot(**dict(args, **patch))
 
 
+
+class LegacyCollectorTests(unittest.TestCase):
+    def test_collection_and_fail_closed(self):
+        import tempfile
+        x = LegacyJournalTests().fixture()
+        n = x["nonce"]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            receipt = directory / ("receipt-"+n+".json")
+            backup = directory / ("old-"+n+".bin")
+            receipt.write_bytes(x["receipt"])
+            backup.write_bytes(x["backup"])
+            calls = []
+            def read(path, *, maximum, exact_mode):
+                calls.append((path.name, maximum, exact_mode))
+                return path.read_bytes()
+            args = dict(directory=directory,
+                        authenticated_pins={n: {"generation":"legacy"}},
+                        read_bound=read, root_chain=lambda *a, **kw: None,
+                        residual_intent_is_committed=lambda *a: False)
+            expected = dict(x, generation="legacy")
+            expected.pop("expected_evidence")
+            self.assertEqual(j.collect_legacy_snapshot(**args), [expected])
+            self.assertEqual(calls, [(receipt.name,4096,0o600),(backup.name,4096,0o700)])
+            for name in ("unexpected", "intent-"+n+".json"):
+                extra = directory / name
+                extra.write_bytes(b"x")
+                with self.assertRaises(ValueError):
+                    j.collect_legacy_snapshot(**args)
+                extra.unlink()
+            with self.assertRaises(ValueError):
+                j.collect_legacy_snapshot(**dict(args, authenticated_pins={}))
+            backup.unlink()
+            with self.assertRaises(ValueError):
+                j.collect_legacy_snapshot(**args)
+            backup.symlink_to(receipt)
+            with self.assertRaises(ValueError):
+                j.collect_legacy_snapshot(**args)
+
+
 if __name__ == "__main__":
     unittest.main()
