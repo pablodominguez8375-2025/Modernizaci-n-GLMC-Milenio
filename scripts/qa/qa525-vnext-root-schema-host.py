@@ -62,6 +62,8 @@ def _shape(authority, schema_pins):
     _need(type(authority) is dict and type(authority.get("g6")) is dict and type(authority.get("target")) is dict
           and type(schema_pins) is dict and set(schema_pins) == SCHEMA_PIN_KEYS
           and all(type(v) is str and SHA.fullmatch(v) for v in schema_pins.values())
+          and type(authority["target"].get("images")) is dict
+          and authority["target"]["images"] == {"api": schema_pins["api_image_id"], "web": schema_pins["web_image_id"]}
           and type(authority["target"].get("web_sha")) is str and HEX40.fullmatch(authority["target"]["web_sha"])
           and type(authority.get("baseline_sha256")) is str and SHA.fullmatch(authority["baseline_sha256"])
           and all(type(authority["g6"].get(v)) is str and SHA.fullmatch(authority["g6"][v]) for v in G6_MAP.values())
