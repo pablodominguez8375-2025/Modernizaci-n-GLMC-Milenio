@@ -114,6 +114,13 @@ class MixedGenerationTests(unittest.TestCase):
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_aggregate_snapshot_limit(self):
+        record = {"backup": b"x" * (1024 * 1024)}
+        with self.assertRaisesRegex(ValueError, "SNAPSHOT_TOTAL_SIZE"):
+            j.reconcile_snapshot(original="0"*64, live="1"*64,
+                records=[record] * 17, authenticated_pins={str(i): {} for i in range(17)},
+                verify_chain=None)
+
     def test_pin_coverage_and_dispatch(self):
         s = importlib.util.spec_from_file_location("snapshot_chain", p.with_name("qa525-launcher-custody-chain.py"))
         c = importlib.util.module_from_spec(s)
