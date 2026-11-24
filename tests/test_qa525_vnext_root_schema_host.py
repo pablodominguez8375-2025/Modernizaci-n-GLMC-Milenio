@@ -71,7 +71,7 @@ def case():
             "postgate_sha256": p["postgate_sha256"], "api_image_id": api, "web_image_id": web}
     claims = {"app_source_sha": src, "app_archive_sha256": arch, "plan_sha256": dg(raw), "expires_at": 2000000000}
     authority = {"g6": {v: dg(k.encode()) for k, v in host.G6_MAP.items()},
-                 "target": {"web_sha": src}, "baseline_sha256": dg(b"baseline")}
+                 "target": {"web_sha": src, "images": {"api": api, "web": web}}, "baseline_sha256": dg(b"baseline")}
     return p, raw, buf.getvalue(), pins, claims, authority
 
 
@@ -244,6 +244,16 @@ class SchemaCutHostTests(unittest.TestCase):
             z.writestr(host.FIXED["grant_script_member"], p["grant_script"])
         with self.assertRaises(host.Stop):
             build(archive_bytes=buf.getvalue())
+
+    def test_authority_target_must_match_schema_pins(self):
+        _, a = build()
+        auth = dict(a["authority"], target={"web_sha": "a" * 40,
+                    "images": {"api": "sha256:" + "9" * 64, "web": a["schema_pins"]["web_image_id"]}})
+        with self.assertRaises(host.Stop):
+            build(authority=auth)
+        bind()
+        with self.assertRaises(host.Stop):
+            host.precheck(plan_bytes=a["plan_bytes"], claims=a["claims"], authority=auth, schema_pins=a["schema_pins"])
 
     def test_pin_mismatch_between_go_and_plan_is_refused(self):
         _, a = build()
