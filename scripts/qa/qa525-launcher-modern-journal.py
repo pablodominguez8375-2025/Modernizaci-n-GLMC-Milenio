@@ -94,6 +94,20 @@ def reconcile_snapshot(*, original, live, records, authenticated_pins, verify_ch
         raise ValueError("SNAPSHOT_RECORDS")
     if type(authenticated_pins) is not dict or len(authenticated_pins) != len(records):
         raise ValueError("SNAPSHOT_PIN_COVERAGE")
+    # Bound aggregate input before parsing any journal. Individual backup
+    # limits alone permit a gigabyte of attacker-controlled input.
+    total = 0
+    for record in records:
+        if type(record) is not dict:
+            raise ValueError("SNAPSHOT_RECORD")
+        for field in ("receipt", "backup", "intent", "marker"):
+            if field in record:
+                raw = record[field]
+                if type(raw) is not bytes:
+                    raise ValueError("SNAPSHOT_BYTES")
+                total += len(raw)
+                if total > 16 * 1024 * 1024:
+                    raise ValueError("SNAPSHOT_TOTAL_SIZE")
     seen, edges = set(), []
     for record in records:
         if type(record) is not dict:
