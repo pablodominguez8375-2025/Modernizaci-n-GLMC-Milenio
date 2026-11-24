@@ -85,5 +85,33 @@ class LegacyJournalTests(unittest.TestCase):
             j.verify_legacy_swap(**x)
 
 
+class MixedGenerationTests(unittest.TestCase):
+    def test_authenticated_edges_join_and_reject_drift(self):
+        chain_path = p.with_name("qa525-launcher-custody-chain.py")
+        chain_spec = importlib.util.spec_from_file_location("custody_mixed", chain_path)
+        chain = importlib.util.module_from_spec(chain_spec)
+        chain_spec.loader.exec_module(chain)
+        legacy = LegacyJournalTests().fixture()
+        modern = ModernJournalTests().fixture()
+        # Bind the legacy successor to the actual modern backup bytes.
+        lr = json.loads(legacy["receipt"])
+        lr["new_launcher_sha256"] = hashlib.sha256(modern["backup"]).hexdigest()
+        legacy["receipt"] = enc(lr)
+        modern["nonce"] = "9"*64
+        mr = json.loads(modern["receipt"])
+        mr["nonce"] = modern["nonce"]
+        modern["receipt"] = enc(mr)
+        modern["intent"] = enc(dict(mr, status="SWAP_INTENT_NO_DEPLOYMENT"))
+        modern["marker"] = enc(dict(op="swap", nonce=modern["nonce"], status="IN_FLIGHT"))
+        first = j.verify_legacy_swap(**legacy)
+        second = j.verify_modern_swap(**modern)
+        self.assertEqual(chain.verify_chain(original=first[1], live=second[2],
+                         edges=[second, first]), tuple(sorted((first[0], second[0]))))
+        for edges, live in (([first], second[2]), ([first, second], "0"*64),
+                            ([first, second, first], second[2])):
+            with self.assertRaises(ValueError):
+                chain.verify_chain(original=first[1], live=live, edges=edges)
+
+
 if __name__ == "__main__":
     unittest.main()
