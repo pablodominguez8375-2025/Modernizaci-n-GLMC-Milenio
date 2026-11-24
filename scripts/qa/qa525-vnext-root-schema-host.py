@@ -62,6 +62,8 @@ def _shape(authority, schema_pins):
     _need(type(authority) is dict and type(authority.get("g6")) is dict and type(authority.get("target")) is dict
           and type(schema_pins) is dict and set(schema_pins) == SCHEMA_PIN_KEYS
           and all(type(v) is str and SHA.fullmatch(v) for v in schema_pins.values())
+          and type(authority["target"].get("images")) is dict
+          and authority["target"]["images"] == {"api": schema_pins["api_image_id"], "web": schema_pins["web_image_id"]}
           and type(authority["target"].get("web_sha")) is str and HEX40.fullmatch(authority["target"]["web_sha"])
           and type(authority.get("baseline_sha256")) is str and SHA.fullmatch(authority["baseline_sha256"])
           and all(type(authority["g6"].get(v)) is str and SHA.fullmatch(authority["g6"][v]) for v in G6_MAP.values())
@@ -89,16 +91,24 @@ def _effects(authority, claims):
     return effects
 
 
-def _container(effects, pinned_id, api_image_id):
+def _container(effects, pinned_id, target_api_image_id):
     """The container to stop is the one the AUTHENTICATED plan pins; discovery by label must agree and it must run
-    the pinned API image. Any difference => STOP (never stop a container found only by name)."""
+    a distinct prior API image. The full baseline is authenticated by B7 before quiesce."""
     _need(type(pinned_id) is str and effects.api_container_id == pinned_id)
     try:
         rc, out = effects.runner(("/usr/bin/docker", "inspect", "--format", "{{.Image}}", pinned_id), 60, None)
     except Exception:  # noqa: BLE001
         raise Stop("SCHEMA_HOST_CONTAINER_MISMATCH") from None
-    if rc != 0 or out != (api_image_id + "\n").encode("ascii"):
+    if (rc != 0 or type(out) is not bytes or len(out) != 72
+            or not out.endswith(b"\n")):
         raise Stop("SCHEMA_HOST_CONTAINER_MISMATCH")
+    try:
+        image = out[:-1].decode("ascii")
+    except UnicodeError:
+        raise Stop("SCHEMA_HOST_CONTAINER_MISMATCH") from None
+    if SHA.fullmatch(image) is None or image == target_api_image_id:
+        raise Stop("SCHEMA_HOST_CONTAINER_MISMATCH")
+    return image
 
 
 def precheck(*, plan_bytes, claims, authority, schema_pins):
@@ -162,7 +172,7 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
                 app_archive_sha256=claims.get("app_archive_sha256"), plan_sha256=claims.get("plan_sha256"))
     try:
         checked = plan_mod.check_plan(plan_bytes, pins)  # bytes == pin, canonical, history/pending/baseline bound
-        _container(effects, checked["api_container_id"], schema_pins["api_image_id"])
+        old_api_image_id = _container(effects, checked["api_container_id"], schema_pins["api_image_id"])
         host["api_container_id"] = checked["api_container_id"]
         import json
         history = json.loads(plan_bytes.decode("ascii"))["history_ids"]
@@ -183,7 +193,8 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
         g6 = authority["g6"]
         def b7_normal():
             return _DEPS["flight_adapter"].preflight(
-                archive_bytes=archive_bytes, claims=claims, authority=authority, plane=plane)
+                archive_bytes=archive_bytes, claims=claims, authority=authority, plane=plane,
+                expected_old_api_image_id=old_api_image_id)
         steps = {
             "preflight": ports.make_preflight(effects.runner, effects.clock, effects.abort_requested,
                                               dict(spec, migrator_image_id=schema_pins["migrator_image_digest"],
@@ -200,7 +211,7 @@ def build_steps(*, archive_bytes, plan_bytes, claims, plane, authority, schema_p
                                                 expected_104),
             "apply_api_web": ports.make_apply_api_web(_DEPS["flight_adapter"].make(
                 archive_bytes=archive_bytes, claims=claims, authority=authority, plane=plane,
-                api_container_id=checked["api_container_id"], old_api_image_id=schema_pins["api_image_id"],
+                api_container_id=checked["api_container_id"], old_api_image_id=old_api_image_id,
                 schema_runner=effects.runner), host["target_web_sha"]),
             "uat": ports.make_uat(effects.uat_checks),
         }

@@ -66,11 +66,17 @@ def precheck_schema_transition():
     return True
 
 
-def preflight(*, archive_bytes, claims, authority, plane):
+def preflight(*, archive_bytes, claims, authority, plane, expected_old_api_image_id):
     """Read a NORMAL B7 baseline while API is still running, before quiesce."""
     modules = {key: _DEPS[key] for key in HOST}
     built = _DEPS["apiweb_host"].build(archive_bytes, dict(claims), dict(authority), modules,
                                         _DEPS["apiweb_effects"])
+    plane.assert_held()
+    base = built["inputs"]["reader"].capture_baseline()
+    if (_DEPS["plan"].validate_baseline(base) != authority["baseline_sha256"]
+            or base["images"]["api"] != expected_old_api_image_id
+            or expected_old_api_image_id == authority["target"]["images"]["api"]):
+        raise Stop("SCHEMA_FLIGHT_BASELINE_IMAGE_MISMATCH")
     report = _DEPS["b7"].inspect_inside_held_plane(
         plane=plane, inspector=built["inputs"]["inspector"],
         expected_baseline_sha256=authority["baseline_sha256"])

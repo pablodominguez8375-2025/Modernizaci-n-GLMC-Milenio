@@ -71,7 +71,7 @@ def case():
             "postgate_sha256": p["postgate_sha256"], "api_image_id": api, "web_image_id": web}
     claims = {"app_source_sha": src, "app_archive_sha256": arch, "plan_sha256": dg(raw), "expires_at": 2000000000}
     authority = {"g6": {v: dg(k.encode()) for k, v in host.G6_MAP.items()},
-                 "target": {"web_sha": src}, "baseline_sha256": dg(b"baseline")}
+                 "target": {"web_sha": src, "images": {"api": api, "web": web}}, "baseline_sha256": dg(b"baseline")}
     return p, raw, buf.getvalue(), pins, claims, authority
 
 
@@ -83,7 +83,7 @@ class Plane:
 class Effects:
     def __init__(self, **over):
         self.calls = []
-        self.runner = lambda argv, t, s: (0, (("sha256:" + "1" * 64) + "\n").encode()) if "{{.Image}}" in argv else (0, b"")
+        self.runner = lambda argv, t, s: (0, (("sha256:" + "8" * 64) + "\n").encode()) if "{{.Image}}" in argv else (0, b"")
         self.clock = lambda: __import__("datetime").datetime.fromtimestamp(1900000000)
         self.abort_requested = lambda: False
         self.read_evidence = lambda n: n.encode()
@@ -100,7 +100,8 @@ class Effects:
 
 class FlightAdapter:
     @staticmethod
-    def preflight(*, archive_bytes, claims, authority, plane):
+    def preflight(*, archive_bytes, claims, authority, plane, expected_old_api_image_id):
+        assert expected_old_api_image_id == "sha256:" + "8" * 64
         return authority["baseline_sha256"]
 
     @staticmethod
@@ -150,6 +151,7 @@ class SchemaCutHostTests(unittest.TestCase):
         self.assertEqual(set(steps), ex.STEPS)
         self.assertTrue(all(callable(v) for v in steps.values()))
         self.assertEqual(FlightAdapter.calls[-1]["claims"]["app_source_sha"], "a" * 40)
+        self.assertEqual(FlightAdapter.calls[-1]["old_api_image_id"], "sha256:" + "8" * 64)
 
     def test_precheck_ok_and_fails_closed_without_uat_or_effects(self):
         _, a = build()
@@ -203,7 +205,7 @@ class SchemaCutHostTests(unittest.TestCase):
         self.assertEqual(str(c.exception), "SCHEMA_HOST_INPUT_INVALID")
         with self.assertRaises(host.Stop):
             build(Effects(api_container_id="c" * 64))
-        wrong_image = Effects(runner=lambda argv, t, s: (0, ("sha256:" + "9" * 64 + "\n").encode()))
+        wrong_image = Effects(runner=lambda argv, t, s: (0, ("sha256:" + "1" * 64 + "\n").encode()))
         bind(wrong_image)
         with self.assertRaises(host.Stop) as c:
             host.precheck(**ok)
@@ -243,6 +245,16 @@ class SchemaCutHostTests(unittest.TestCase):
         with self.assertRaises(host.Stop):
             build(archive_bytes=buf.getvalue())
 
+    def test_authority_target_must_match_schema_pins(self):
+        _, a = build()
+        auth = dict(a["authority"], target={"web_sha": "a" * 40,
+                    "images": {"api": "sha256:" + "9" * 64, "web": a["schema_pins"]["web_image_id"]}})
+        with self.assertRaises(host.Stop):
+            build(authority=auth)
+        bind()
+        with self.assertRaises(host.Stop):
+            host.precheck(plan_bytes=a["plan_bytes"], claims=a["claims"], authority=auth, schema_pins=a["schema_pins"])
+
     def test_pin_mismatch_between_go_and_plan_is_refused(self):
         _, a = build()
         pins = dict(a["schema_pins"], api_image_id="sha256:" + "9" * 64)
@@ -278,7 +290,7 @@ class SchemaCutHostTests(unittest.TestCase):
                 if "image" in a:
                     return 0, revs
                 if "{{.Image}}" in a:
-                    return 0, (("sha256:" + "1" * 64) + "\n").encode()
+                    return 0, (("sha256:" + "8" * 64) + "\n").encode()
                 if a[1] == "stop":
                     return 0, b""
                 if a[1] == "inspect":
