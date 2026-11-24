@@ -139,5 +139,40 @@ class SnapshotTests(unittest.TestCase):
                     j.reconcile_snapshot(**dict(args, **patch))
 
 
+
+    def test_complete_mixed_snapshot(self):
+        spec = importlib.util.spec_from_file_location("mixed_snapshot_chain", p.with_name("qa525-launcher-custody-chain.py"))
+        c = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(c)
+        legacy, modern = LegacyJournalTests().fixture(), ModernJournalTests().fixture()
+        modern["nonce"] = "9"*64
+        lr, mr = json.loads(legacy["receipt"]), json.loads(modern["receipt"])
+        lr["new_launcher_sha256"] = hashlib.sha256(modern["backup"]).hexdigest()
+        mr["nonce"] = modern["nonce"]
+        legacy["receipt"] = enc(lr)
+        modern["receipt"] = enc(mr)
+        modern["intent"] = enc(dict(mr, status="SWAP_INTENT_NO_DEPLOYMENT"))
+        modern["marker"] = enc(dict(op="swap", nonce=modern["nonce"], status="IN_FLIGHT"))
+        pins, records = {}, []
+        for generation, item in (("legacy", legacy), ("modern", modern)):
+            evidence = item.pop("expected_evidence")
+            receipt = json.loads(item["receipt"])
+            pins[item["nonce"]] = dict(generation=generation, evidence=evidence,
+                old_sha256=receipt["old_launcher_sha256"].removeprefix("sha256:"),
+                new_sha256=receipt["new_launcher_sha256"].removeprefix("sha256:"))
+            records.append(dict(item, generation=generation))
+        args = dict(original=lr["old_launcher_sha256"], live=mr["new_launcher_sha256"][7:],
+                    records=records[::-1], authenticated_pins=pins, verify_chain=c.verify_chain)
+        self.assertEqual(j.reconcile_snapshot(**args), tuple(sorted(pins)))
+        for patch in (
+            {"records": records[:1]},
+            {"records": [records[0], dict(records[1], marker=b"{}")]},
+            {"authenticated_pins": {**pins, modern["nonce"]: dict(pins[modern["nonce"]], evidence={})}},
+            {"original": "0"*64},
+        ):
+            with self.subTest(patch=patch), self.assertRaises(ValueError):
+                j.reconcile_snapshot(**dict(args, **patch))
+
+
 if __name__ == "__main__":
     unittest.main()
