@@ -114,6 +114,14 @@ class MixedGenerationTests(unittest.TestCase):
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_parser_depth_and_encoding(self):
+        for raw in (b"\xff", b'{"x":' + b"["*1500 + b"0" + b"]"*1500 + b"}"):
+            with self.subTest(length=len(raw)):
+                for fixture, validator in ((ModernJournalTests().fixture(), j.verify_modern_swap),
+                                           (LegacyJournalTests().fixture(), j.verify_legacy_swap)):
+                    with self.assertRaises(ValueError):
+                        validator(**dict(fixture, receipt=raw))
+
     def test_aggregate_snapshot_limit(self):
         record = {"backup": b"x" * (1024 * 1024)}
         with self.assertRaisesRegex(ValueError, "SNAPSHOT_TOTAL_SIZE"):
