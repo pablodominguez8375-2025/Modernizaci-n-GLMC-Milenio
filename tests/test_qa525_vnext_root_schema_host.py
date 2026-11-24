@@ -83,7 +83,7 @@ class Plane:
 class Effects:
     def __init__(self, **over):
         self.calls = []
-        self.runner = lambda argv, t, s: (0, (("sha256:" + "1" * 64) + "\n").encode()) if "{{.Image}}" in argv else (0, b"")
+        self.runner = lambda argv, t, s: (0, (("sha256:" + "8" * 64) + "\n").encode()) if "{{.Image}}" in argv else (0, b"")
         self.clock = lambda: __import__("datetime").datetime.fromtimestamp(1900000000)
         self.abort_requested = lambda: False
         self.read_evidence = lambda n: n.encode()
@@ -100,7 +100,8 @@ class Effects:
 
 class FlightAdapter:
     @staticmethod
-    def preflight(*, archive_bytes, claims, authority, plane):
+    def preflight(*, archive_bytes, claims, authority, plane, expected_old_api_image_id):
+        assert expected_old_api_image_id == "sha256:" + "8" * 64
         return authority["baseline_sha256"]
 
     @staticmethod
@@ -150,6 +151,7 @@ class SchemaCutHostTests(unittest.TestCase):
         self.assertEqual(set(steps), ex.STEPS)
         self.assertTrue(all(callable(v) for v in steps.values()))
         self.assertEqual(FlightAdapter.calls[-1]["claims"]["app_source_sha"], "a" * 40)
+        self.assertEqual(FlightAdapter.calls[-1]["old_api_image_id"], "sha256:" + "8" * 64)
 
     def test_precheck_ok_and_fails_closed_without_uat_or_effects(self):
         _, a = build()
@@ -203,7 +205,7 @@ class SchemaCutHostTests(unittest.TestCase):
         self.assertEqual(str(c.exception), "SCHEMA_HOST_INPUT_INVALID")
         with self.assertRaises(host.Stop):
             build(Effects(api_container_id="c" * 64))
-        wrong_image = Effects(runner=lambda argv, t, s: (0, ("sha256:" + "9" * 64 + "\n").encode()))
+        wrong_image = Effects(runner=lambda argv, t, s: (0, ("sha256:" + "1" * 64 + "\n").encode()))
         bind(wrong_image)
         with self.assertRaises(host.Stop) as c:
             host.precheck(**ok)
@@ -278,7 +280,7 @@ class SchemaCutHostTests(unittest.TestCase):
                 if "image" in a:
                     return 0, revs
                 if "{{.Image}}" in a:
-                    return 0, (("sha256:" + "1" * 64) + "\n").encode()
+                    return 0, (("sha256:" + "8" * 64) + "\n").encode()
                 if a[1] == "stop":
                     return 0, b""
                 if a[1] == "inspect":
