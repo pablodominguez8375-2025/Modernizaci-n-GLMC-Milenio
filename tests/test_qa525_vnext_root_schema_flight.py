@@ -129,6 +129,29 @@ class SchemaFlightReadbackTests(unittest.TestCase):
                         schema_runner=runner)()
         self.assertFalse(any(cmd[1] == "stop" for cmd in commands))
 
+    def test_preflight_binds_prior_image_to_authenticated_baseline(self):
+        plane, seen = self.bind()
+        old, new = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+        pin = "sha256:" + "3" * 64
+        base = {"images": {"api": old}}
+        flight._DEPS["apiweb_host"].build = lambda *a: {
+            "inputs": {"reader": types.SimpleNamespace(capture_baseline=lambda: base),
+                       "inspector": lambda: None}}
+        flight._DEPS["plan"].validate_baseline = lambda b: pin
+        flight._DEPS["b7"].inspect_inside_held_plane = lambda **kw: (
+            seen.append("b7") or {"baseline_sha256": pin})
+        authority = {"baseline_sha256": pin, "target": {"images": {"api": new}}}
+        args = dict(archive_bytes=b"zip", claims={}, authority=authority, plane=plane)
+        self.assertEqual(flight.preflight(**args, expected_old_api_image_id=old), pin)
+        self.assertEqual(seen, ["b7"])
+        for bad in (new, "sha256:" + "9" * 64):
+            with self.assertRaisesRegex(flight.Stop, "SCHEMA_FLIGHT_BASELINE_IMAGE_MISMATCH"):
+                flight.preflight(**args, expected_old_api_image_id=bad)
+        flight._DEPS["plan"].validate_baseline = lambda b: "sha256:" + "4" * 64
+        with self.assertRaisesRegex(flight.Stop, "SCHEMA_FLIGHT_BASELINE_IMAGE_MISMATCH"):
+            flight.preflight(**args, expected_old_api_image_id=old)
+        self.assertEqual(seen, ["b7"])
+
     def test_scope_and_plane_are_exact(self):
         plane, _ = self.bind()
         with self.assertRaises(flight.Stop):
