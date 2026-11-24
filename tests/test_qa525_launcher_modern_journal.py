@@ -16,8 +16,8 @@ class ModernJournalTests(unittest.TestCase):
     def fixture(self):
         n = "a"*64
         backup = b"old launcher"
-        e = {"app_source_sha":"b"*40, "app_archive_sha256":"c"*64,
-             "candidate_operator_sha256":"d"*64, "shim_sha256":"e"*64}
+        e = {"app_source_sha":"b"*40, "app_archive_sha256":"sha256:"+"c"*64,
+             "candidate_operator_sha256":"sha256:"+"d"*64, "shim_sha256":"sha256:"+"f"*64}
         r = {"nonce":n,"status":"LAUNCHER_ATOMIC_SWAP_COMMITTED",
              "old_launcher_sha256":"sha256:"+hashlib.sha256(backup).hexdigest(),
              "new_launcher_sha256":"sha256:"+"f"*64,"evidence":e}
@@ -27,6 +27,19 @@ class ModernJournalTests(unittest.TestCase):
     def test_valid(self):
         x = self.fixture()
         self.assertEqual(j.verify_modern_swap(**x), (x["nonce"],hashlib.sha256(x["backup"]).hexdigest(),"f"*64))
+    def test_evidence_format_and_shim_binding(self):
+        for key, value in [("shim_sha256", "sha256:"+"e"*64),
+                           ("app_archive_sha256", "c"*64),
+                           ("candidate_operator_sha256", "d"*64)]:
+            with self.subTest(key=key):
+                x = self.fixture()
+                r = json.loads(x["receipt"])
+                r["evidence"][key] = value
+                x["expected_evidence"] = r["evidence"]
+                x["receipt"] = enc(r)
+                x["intent"] = enc(dict(r, status="SWAP_INTENT_NO_DEPLOYMENT"))
+                with self.assertRaises(ValueError):
+                    j.verify_modern_swap(**x)
     def test_invalid(self):
         for key, value in [
             ("nonce","b"*64),("backup",b"wrong"),("expected_evidence",{}),
