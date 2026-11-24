@@ -8,6 +8,7 @@ only its own nonce.  These tests pin that behaviour so the claim is reproducible
 import json
 import os
 import pathlib
+import stat
 import unittest
 
 import test_qa525_vnext_root_launcher_child as base
@@ -61,6 +62,20 @@ class MixedHistoryTests(unittest.TestCase):
     def snapshot(self):
         return {n: pathlib.Path(self.state, n).read_bytes() for n in os.listdir(self.state)}
 
+    def modes(self):
+        return {n: stat.S_IMODE(os.lstat(os.path.join(self.state, n)).st_mode) for n in os.listdir(self.state)}
+
+    def assert_rejected_without_changes(self, code, **kw):
+        """Fail closed: exact error, store empty, state bytes+modes identical, launcher untouched."""
+        before, modes = self.snapshot(), self.modes()
+        with self.assertRaises(child.Stop) as cm:
+            self.run_install(**kw)
+        self.assertEqual(str(cm.exception), code)
+        self.assertEqual(os.listdir(self.store), [])
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.modes(), modes)
+        self.untouched()
+
     def test_mixed_history_does_not_block_a_new_authenticated_swap_and_is_preserved(self):
         before = self.seed_history()
         receipt = self.run_install()
@@ -78,36 +93,35 @@ class MixedHistoryTests(unittest.TestCase):
     def test_pending_marker_in_mixed_history_blocks_before_any_write(self):
         self.seed_history()
         self.put("inflight.json", canon({"op": "swap", "nonce": "d4" * 32, "status": "IN_FLIGHT"}), 0o600)
-        before = self.snapshot()
-        with self.assertRaises(child.Stop) as cm:
-            self.run_install()
-        self.assertEqual(str(cm.exception), "CHILD_RECOVERY_REQUIRED")
-        self.untouched()
-        self.assertEqual(os.listdir(self.store), [])
-        self.assertEqual(self.snapshot(), before)
+        self.assert_rejected_without_changes("CHILD_RECOVERY_REQUIRED")
 
     def test_unarchived_intent_in_mixed_history_blocks(self):
         self.seed_history()
         self.put("intent-%s.json" % ("d4" * 32), canon({"status": "SWAP_INTENT_NO_DEPLOYMENT"}), 0o600)
-        with self.assertRaises(child.Stop) as cm:
-            self.run_install()
-        self.assertEqual(str(cm.exception), "CHILD_RECOVERY_REQUIRED")
-        self.untouched()
+        self.assert_rejected_without_changes("CHILD_RECOVERY_REQUIRED")
+
+    def test_pending_rollback_intent_in_mixed_history_blocks(self):
+        self.seed_history()
+        self.put("rollback-intent-%s.json" % ("d4" * 32), canon({"status": "ROLLBACK_INTENT"}), 0o600)
+        self.assert_rejected_without_changes("CHILD_RECOVERY_REQUIRED")
 
     def test_live_launcher_drift_against_signed_pin_blocks_regardless_of_history(self):
         self.seed_history()
-        with self.assertRaises(child.Stop) as cm:
-            self.run_install(pins=self.pins(old_launcher_sha256=hx(b"not-the-live-launcher")))
-        self.assertEqual(str(cm.exception), "CHILD_OLD_LAUNCHER_DRIFT")
-        self.untouched()
+        self.assert_rejected_without_changes("CHILD_OLD_LAUNCHER_DRIFT",
+                                             pins=self.pins(old_launcher_sha256=hx(b"not-the-live-launcher")))
 
     def test_replayed_nonce_blocks(self):
         self.seed_history()
         self.put("receipt-%s.json" % NONCE, b"{}\n", 0o600)
-        with self.assertRaises(child.Stop) as cm:
-            self.run_install()
-        self.assertEqual(str(cm.exception), "CHILD_REPLAY_OR_PARTIAL_STATE")
-        self.untouched()
+        self.assert_rejected_without_changes("CHILD_REPLAY_OR_PARTIAL_STATE")
+
+    def test_successful_swap_preserves_the_modes_of_all_prior_records(self):
+        self.seed_history()
+        modes = self.modes()
+        self.run_install()
+        after = self.modes()
+        for name, mode in modes.items():
+            self.assertEqual(after[name], mode, name)
 
 
 if __name__ == "__main__":
