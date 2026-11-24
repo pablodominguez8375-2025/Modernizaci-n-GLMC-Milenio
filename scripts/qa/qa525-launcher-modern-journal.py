@@ -21,7 +21,10 @@ def canonical(raw):
                 raise ValueError("JOURNAL_DUPLICATE")
             out[k] = v
         return out
-    obj = json.loads(raw.decode("ascii"), object_pairs_hook=pairs)
+    try:
+        obj = json.loads(raw.decode("ascii"), object_pairs_hook=pairs)
+    except (UnicodeError, RecursionError) as exc:
+        raise ValueError("JOURNAL_ENCODING_OR_DEPTH") from exc
     if type(obj) is not dict or (json.dumps(obj, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii") != raw:
         raise ValueError("JOURNAL_CANONICAL")
     return obj
@@ -66,7 +69,10 @@ def verify_legacy_swap(*, nonce, receipt, backup, expected_evidence):
                 raise ValueError("LEGACY_DUPLICATE")
             out[k] = v
         return out
-    r = json.loads(receipt.decode("ascii"), object_pairs_hook=pairs)
+    try:
+        r = json.loads(receipt.decode("ascii"), object_pairs_hook=pairs)
+    except (UnicodeError, RecursionError) as exc:
+        raise ValueError("LEGACY_ENCODING_OR_DEPTH") from exc
     keys = {"source_sha", "release_asset_sha256", "candidate_operator_sha256"}
     if type(r) is not dict or set(r) != KEYS | keys or r["status"] != "LAUNCHER_ATOMIC_SWAP_COMMITTED" or r["nonce"] != nonce:
         raise ValueError("LEGACY_RECEIPT")
