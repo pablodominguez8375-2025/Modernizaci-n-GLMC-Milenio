@@ -143,3 +143,40 @@ def reconcile_snapshot(*, original, live, records, authenticated_pins, verify_ch
     if seen != set(authenticated_pins):
         raise ValueError("SNAPSHOT_UNUSED_PIN")
     return verify_chain(original=original, live=live, edges=edges)
+
+
+def collect_legacy_snapshot(*, directory, authenticated_pins, read_bound,
+                            root_chain, residual_intent_is_committed):
+    """Read legacy records using the existing trusted root reader.
+    Caller MUST hold all five locks and authenticate pins independently.
+    Unknown or incomplete entries block; no journal is modified.
+    """
+    root_chain(directory, directory=True, exact_mode=0o700)
+    entries = {}
+    for entry in directory.iterdir():
+        if len(entries) >= 1000 or entry.is_symlink():
+            raise ValueError("SNAPSHOT_DIRECTORY")
+        if not re.fullmatch(r"(?:receipt-[0-9a-f]{64}\.json|old-[0-9a-f]{64}\.bin|intent-[0-9a-f]{64}\.(?:json|superseded))", entry.name):
+            raise ValueError("SNAPSHOT_UNKNOWN_ENTRY")
+        entries[entry.name] = entry
+    names = set(entries)
+    records = []
+    for name, entry in sorted(entries.items()):
+        nonce = name.split("-", 1)[1].split(".", 1)[0]
+        if nonce not in authenticated_pins or authenticated_pins[nonce].get("generation") != "legacy":
+            raise ValueError("SNAPSHOT_UNPINNED_ENTRY")
+        receipt, backup = "receipt-"+nonce+".json", "old-"+nonce+".bin"
+        if receipt not in names or backup not in names:
+            raise ValueError("SNAPSHOT_INCOMPLETE")
+        if name.startswith("intent-"):
+            if not residual_intent_is_committed(entry, names):
+                raise ValueError("SNAPSHOT_PENDING")
+        elif name == receipt:
+            records.append(dict(generation="legacy", nonce=nonce,
+                receipt=read_bound(entry, maximum=4096, exact_mode=0o600),
+                backup=read_bound(entries[backup], maximum=4096, exact_mode=0o700)))
+    if set(entries) != {entry.name for entry in directory.iterdir()}:
+        raise ValueError("SNAPSHOT_DIRECTORY_CHANGED")
+    if {record["nonce"] for record in records} != {n for n,p in authenticated_pins.items() if p.get("generation") == "legacy"}:
+        raise ValueError("SNAPSHOT_LEGACY_COVERAGE")
+    return records
