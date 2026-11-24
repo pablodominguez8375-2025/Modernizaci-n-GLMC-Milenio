@@ -119,14 +119,17 @@ class SnapshotTests(unittest.TestCase):
         c = importlib.util.module_from_spec(s)
         s.loader.exec_module(c)
         x = LegacyJournalTests().fixture()
-        pins = {x["nonce"]: {"generation": "legacy", "evidence": x.pop("expected_evidence")}}
+        pins = {x["nonce"]: {"generation": "legacy", "evidence": x.pop("expected_evidence"),
+                              "old_sha256": hashlib.sha256(x["backup"]).hexdigest(), "new_sha256": "f"*64}}
         record = dict(x, generation="legacy")
         args = dict(original=hashlib.sha256(x["backup"]).hexdigest(), live="f"*64,
                     records=[record], authenticated_pins=pins, verify_chain=c.verify_chain)
         self.assertEqual(j.reconcile_snapshot(**args), (x["nonce"],))
         for patch in (
             {"authenticated_pins": {}},
-            {"authenticated_pins": {x["nonce"]: {"generation": "modern", "evidence": pins[x["nonce"]]["evidence"]}}},
+            {"authenticated_pins": {x["nonce"]: dict(pins[x["nonce"]], generation="modern")}},
+            {"authenticated_pins": {x["nonce"]: dict(pins[x["nonce"]], new_sha256="0"*64)}},
+            {"authenticated_pins": {x["nonce"]: dict(pins[x["nonce"]], old_sha256="0"*64)}},
             {"records": [dict(record, expected_evidence={})]},
             {"records": [record, record]},
             {"live": "0"*64},
