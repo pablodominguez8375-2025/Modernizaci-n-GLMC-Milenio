@@ -110,12 +110,15 @@ def reconcile_snapshot(*, original, live, records, authenticated_pins, verify_ch
         if type(nonce) is not str or not HEX.fullmatch(nonce) or nonce in seen or nonce not in authenticated_pins:
             raise ValueError("SNAPSHOT_NONCE")
         pin = authenticated_pins[nonce]
-        if type(pin) is not dict or set(pin) != {"generation", "evidence"} or pin["generation"] != generation:
+        if type(pin) is not dict or set(pin) != {"generation", "evidence", "old_sha256", "new_sha256"} or pin["generation"] != generation:
             raise ValueError("SNAPSHOT_PIN_GENERATION")
         args = {k: v for k, v in record.items() if k != "generation"}
         args["expected_evidence"] = pin["evidence"]
         validator = verify_modern_swap if generation == "modern" else verify_legacy_swap
-        edges.append(validator(**args))
+        edge = validator(**args)
+        if edge[1:] != (pin["old_sha256"], pin["new_sha256"]):
+            raise ValueError("SNAPSHOT_PIN_TRANSITION")
+        edges.append(edge)
         seen.add(nonce)
     if seen != set(authenticated_pins):
         raise ValueError("SNAPSHOT_UNUSED_PIN")
