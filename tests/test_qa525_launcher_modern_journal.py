@@ -229,5 +229,40 @@ class LegacyCollectorTests(unittest.TestCase):
                 j.collect_legacy_snapshot(**args)
 
 
+
+class LockedCustodyTests(unittest.TestCase):
+    def test_lock_scope_and_endpoint_drift(self):
+        from contextlib import contextmanager
+        active = []
+        @contextmanager
+        def locks(*, read_only):
+            self.assertTrue(read_only)
+            active.append(True)
+            try:
+                yield
+            finally:
+                active.pop()
+        def guarded(value):
+            self.assertEqual(active, [True])
+            return value
+        x = LegacyJournalTests().fixture()
+        old = hashlib.sha256(x["backup"]).hexdigest()
+        pin = dict(generation="legacy", evidence=x.pop("expected_evidence"),
+                   old_sha256=old, new_sha256="f"*64)
+        spec = importlib.util.spec_from_file_location("locked_chain", p.with_name("qa525-launcher-custody-chain.py"))
+        c = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(c)
+        args = dict(lock_context=locks, authenticate_pins=lambda: guarded({x["nonce"]:pin}),
+                    read_endpoints=lambda: guarded((old,"f"*64)),
+                    collect_legacy=lambda **kw: guarded([dict(x,generation="legacy")]),
+                    collect_modern=lambda **kw: guarded([]), verify_chain=c.verify_chain)
+        self.assertEqual(j.reconcile_locked_custody(**args), (x["nonce"],))
+        self.assertEqual(active, [])
+        endpoints = iter([(old,"f"*64),(old,"0"*64)])
+        with self.assertRaisesRegex(ValueError,"CUSTODY_ENDPOINT_CHANGED"):
+            j.reconcile_locked_custody(**dict(args, read_endpoints=lambda: guarded(next(endpoints))))
+        self.assertEqual(active, [])
+
+
 if __name__ == "__main__":
     unittest.main()
