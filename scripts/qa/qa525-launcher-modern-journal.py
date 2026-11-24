@@ -41,10 +41,10 @@ def verify_modern_swap(*, nonce, receipt, intent, marker, backup, expected_evide
     if type(e) is not dict or set(e) != EVIDENCE or type(expected_evidence) is not dict or e != expected_evidence:
         raise ValueError("JOURNAL_EVIDENCE")
     for k, v in e.items():
-        if type(v) is not str or not re.fullmatch(r"[0-9a-f]{40}" if k == "app_source_sha" else r"(?:sha256:)?[0-9a-f]{64}", v):
+        if type(v) is not str or not re.fullmatch(r"[0-9a-f]{40}" if k == "app_source_sha" else r"sha256:[0-9a-f]{64}", v):
             raise ValueError("JOURNAL_EVIDENCE_FORMAT")
     old, new = r["old_launcher_sha256"], r["new_launcher_sha256"]
-    if any(type(v) is not str or not DIGEST.fullmatch(v) for v in (old,new)) or old == new:
+    if any(type(v) is not str or not DIGEST.fullmatch(v) for v in (old,new)) or old == new or e["shim_sha256"] != new:
         raise ValueError("JOURNAL_DIGEST")
     if type(backup) is not bytes or not 0 < len(backup) <= 1048576 or "sha256:" + hashlib.sha256(backup).hexdigest() != old:
         raise ValueError("JOURNAL_BACKUP")
