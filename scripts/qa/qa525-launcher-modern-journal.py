@@ -82,3 +82,41 @@ def verify_legacy_swap(*, nonce, receipt, backup, expected_evidence):
     if type(backup) is not bytes or not 0 < len(backup) <= 4096 or hashlib.sha256(backup).hexdigest() != old:
         raise ValueError("LEGACY_BACKUP")
     return nonce, old, new
+
+
+def reconcile_snapshot(*, original, live, records, authenticated_pins, verify_chain):
+    """Validate a complete snapshot supplied by a trusted, locked reader.
+
+    Pins must be independently authenticated, never extracted from receipts.
+    This function performs no filesystem access and grants no permission.
+    """
+    if type(records) not in (list, tuple) or len(records) > 1000:
+        raise ValueError("SNAPSHOT_RECORDS")
+    if type(authenticated_pins) is not dict or len(authenticated_pins) != len(records):
+        raise ValueError("SNAPSHOT_PIN_COVERAGE")
+    seen, edges = set(), []
+    for record in records:
+        if type(record) is not dict:
+            raise ValueError("SNAPSHOT_RECORD")
+        generation = record.get("generation")
+        fields = {"generation", "nonce", "receipt", "backup"}
+        if generation == "modern":
+            fields |= {"intent", "marker"}
+        elif generation != "legacy":
+            raise ValueError("SNAPSHOT_GENERATION")
+        if set(record) != fields:
+            raise ValueError("SNAPSHOT_FIELDS")
+        nonce = record["nonce"]
+        if type(nonce) is not str or not HEX.fullmatch(nonce) or nonce in seen or nonce not in authenticated_pins:
+            raise ValueError("SNAPSHOT_NONCE")
+        pin = authenticated_pins[nonce]
+        if type(pin) is not dict or set(pin) != {"generation", "evidence"} or pin["generation"] != generation:
+            raise ValueError("SNAPSHOT_PIN_GENERATION")
+        args = {k: v for k, v in record.items() if k != "generation"}
+        args["expected_evidence"] = pin["evidence"]
+        validator = verify_modern_swap if generation == "modern" else verify_legacy_swap
+        edges.append(validator(**args))
+        seen.add(nonce)
+    if seen != set(authenticated_pins):
+        raise ValueError("SNAPSHOT_UNUSED_PIN")
+    return verify_chain(original=original, live=live, edges=edges)
