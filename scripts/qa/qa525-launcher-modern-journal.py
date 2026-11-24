@@ -49,3 +49,36 @@ def verify_modern_swap(*, nonce, receipt, intent, marker, backup, expected_evide
     if type(backup) is not bytes or not 0 < len(backup) <= 1048576 or "sha256:" + hashlib.sha256(backup).hexdigest() != old:
         raise ValueError("JOURNAL_BACKUP")
     return nonce, old[7:], new[7:]
+
+
+def verify_legacy_swap(*, nonce, receipt, backup, expected_evidence):
+    """Normalize a legacy receipt only against independently authenticated pins.
+    The caller must enforce legacy filesystem modes, locks and recovery checks.
+    """
+    if type(nonce) is not str or not HEX.fullmatch(nonce):
+        raise ValueError("LEGACY_NONCE")
+    if type(receipt) is not bytes or not 0 < len(receipt) <= 4096:
+        raise ValueError("LEGACY_RECEIPT_SIZE")
+    def pairs(items):
+        out = {}
+        for k, v in items:
+            if k in out:
+                raise ValueError("LEGACY_DUPLICATE")
+            out[k] = v
+        return out
+    r = json.loads(receipt.decode("ascii"), object_pairs_hook=pairs)
+    keys = {"source_sha", "release_asset_sha256", "candidate_operator_sha256"}
+    if type(r) is not dict or set(r) != KEYS | keys or r["status"] != "LAUNCHER_ATOMIC_SWAP_COMMITTED" or r["nonce"] != nonce:
+        raise ValueError("LEGACY_RECEIPT")
+    evidence = {k: r[k] for k in keys}
+    if type(expected_evidence) is not dict or evidence != expected_evidence:
+        raise ValueError("LEGACY_EVIDENCE")
+    for k, pattern in (("source_sha", r"[0-9a-f]{40}"), ("release_asset_sha256", r"sha256:[0-9a-f]{64}"), ("candidate_operator_sha256", r"[0-9a-f]{64}")):
+        if type(evidence[k]) is not str or not re.fullmatch(pattern, evidence[k]):
+            raise ValueError("LEGACY_EVIDENCE_FORMAT")
+    old, new = r["old_launcher_sha256"], r["new_launcher_sha256"]
+    if any(type(v) is not str or not HEX.fullmatch(v) for v in (old, new)) or old == new:
+        raise ValueError("LEGACY_DIGEST")
+    if type(backup) is not bytes or not 0 < len(backup) <= 4096 or hashlib.sha256(backup).hexdigest() != old:
+        raise ValueError("LEGACY_BACKUP")
+    return nonce, old, new
