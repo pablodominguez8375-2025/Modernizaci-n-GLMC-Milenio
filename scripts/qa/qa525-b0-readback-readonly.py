@@ -10,8 +10,11 @@ All paths are walked with dirfd (O_DIRECTORY|O_NOFOLLOW per component) and files
 so there is no lstat-then-open-by-path window; the fd's fstat must equal the directory-snapshot identity
 (dev/ino/mode/uid/nlink/size/mtime/ctime) BEFORE any byte is read.  The store must NOT contain the candidate
 source (--candidate-sha) nor any '*.partial' entry.  Shim and launcher modules are re-validated (identity+hash) at
-the end.  Residual limit: no lock shared with the installer, so a root-level writer could still race between the
-two snapshots; that is reported as STOP (state/store changed), never as PASS.
+the end.  The five advisory locks that every legacy/signed writer takes (LOCKS) are held read-only and exclusive
+for the whole run (opened relative to a trusted-ancestor dirfd, never created/written); if any is missing, busy or
+untrusted nothing is inspected (STOP), and they are revalidated at close.  Residual limit: only writers that take
+those locks are excluded; a writer that ignores them could still race between the two snapshots, which is reported as
+STOP (state/store changed), never as PASS.
 Exit code: 0 = PASS (evidence only), 1 = STOP, 2 = bad invocation.
 """
 import argparse
@@ -365,15 +368,30 @@ def revalidate(rec, problems, label):
         os.close(dfd)
 
 
+def _lock_ok(st, expect_uid):
+    return (stat.S_ISREG(st.st_mode) and st.st_uid in (0, expect_uid) and st.st_nlink == 1
+            and stat.S_IMODE(st.st_mode) == 0o600)
+
+
 @contextlib.contextmanager
 def hold_locks(paths, expect_uid, probs, held):
-    """Hold every lock exclusively, read-only. Any missing/untrusted/busy lock is a problem (fail closed);
-    nothing is ever created. `held` receives one identity record per lock; locks are released on exit."""
+    """Hold every lock exclusively, read-only. Each lock is opened RELATIVE to a dirfd obtained by an O_NOFOLLOW
+    walk with trusted ancestors (so no symlink anywhere in the path); nothing is ever created or written.
+    Any missing/untrusted/busy lock is a problem (fail closed). `held` gets one record per lock; the yield value
+    is True only when ALL locks are held. At close every lock is revalidated through its fd AND a fresh dirfd walk."""
     with contextlib.ExitStack() as stack:
+        recs = []
         for path in paths:
             label = "LOCK:" + path
             try:
-                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+                dfd = open_dir(os.path.dirname(path), {0, expect_uid})
+            except OSError as exc:
+                probs.append(dir_problem(label, exc).replace("_UNREADABLE", ":PARENT_UNREADABLE"))
+                continue
+            stack.callback(os.close, dfd)
+            name = os.path.basename(path)
+            try:
+                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=dfd)
             except FileNotFoundError:
                 probs.append(label + ":MISSING")
                 continue
@@ -383,47 +401,70 @@ def hold_locks(paths, expect_uid, probs, held):
             stack.callback(os.close, fd)
             st = os.fstat(fd)
             try:
-                named = os.lstat(path)
+                named = os.stat(name, dir_fd=dfd, follow_symlinks=False)
             except OSError:
                 probs.append(label + ":PATH_CHANGED")
                 continue
-            if not (stat.S_ISREG(st.st_mode) and st.st_uid in (0, expect_uid) and st.st_nlink == 1
-                    and stat.S_IMODE(st.st_mode) == 0o600):
+            if not _lock_ok(st, expect_uid):
                 probs.append(label + ":UNTRUSTED")
                 continue
-            if not (stat.S_ISREG(named.st_mode) and (named.st_dev, named.st_ino) == (st.st_dev, st.st_ino)):
+            if (named.st_dev, named.st_ino) != (st.st_dev, st.st_ino):
                 probs.append(label + ":PATH_CHANGED")
-                continue
-            try:
-                parent = open_dir(os.path.dirname(path), {0, expect_uid})
-                os.close(parent)
-            except OSError:
-                probs.append(label + ":ANCESTOR_UNTRUSTED")
                 continue
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 probs.append(label + ":BUSY")
                 continue
-            held.append({"path": path, "dev": st.st_dev, "ino": st.st_ino, "uid": st.st_uid, "mode": oct(stat.S_IMODE(st.st_mode))})
-        yield
-        for rec in held:  # still the same inode under the same name at close
+            pst = os.fstat(dfd)
+            rec = {"path": path, "dev": st.st_dev, "ino": st.st_ino, "uid": st.st_uid,
+                   "mode": oct(stat.S_IMODE(st.st_mode)), "parent": [pst.st_dev, pst.st_ino]}
+            held.append(rec)
+            recs.append((rec, fd, name))
+        yield len(held) == len(paths) and not probs
+        for rec, fd, name in recs:  # same fd still trusted AND the same name still resolves to it via a fresh walk
+            label = "LOCK:" + rec["path"] + ":CHANGED_AT_CLOSE"
             try:
-                now = os.lstat(rec["path"])
-                if (now.st_dev, now.st_ino) != (rec["dev"], rec["ino"]):
-                    probs.append("LOCK:" + rec["path"] + ":CHANGED_AT_CLOSE")
+                st = os.fstat(fd)
+                dfd = open_dir(os.path.dirname(rec["path"]), {0, expect_uid})
+                try:
+                    pst = os.fstat(dfd)
+                    now = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+                finally:
+                    os.close(dfd)
+                if (not _lock_ok(st, expect_uid) or [pst.st_dev, pst.st_ino] != rec["parent"]
+                        or (now.st_dev, now.st_ino) != (rec["dev"], rec["ino"]) or not _lock_ok(now, expect_uid)
+                        or (st.st_dev, st.st_ino) != (rec["dev"], rec["ino"])):
+                    probs.append(label)
             except OSError:
-                probs.append("LOCK:" + rec["path"] + ":CHANGED_AT_CLOSE")
+                probs.append(label)
+
+
+def _check_pins(source_sha, candidate_sha, expect_shim, expect_original, expect_modules):
+    if not (SHA40.fullmatch(source_sha or "") and SHA40.fullmatch(candidate_sha or "") and candidate_sha != source_sha
+            and HEX64.fullmatch(expect_shim or "") and HEX64.fullmatch(expect_original or "")
+            and set(expect_modules or {}) == set(MODULES) and all(HEX64.fullmatch(v) for v in expect_modules.values())):
+        raise ValueError("B0_PINS_INCOMPLETE")
 
 
 def readback(*, locks=None, **kw):
-    """`locks`: paths held read-only+exclusive for the whole readback (CLI always passes LOCKS)."""
+    """Hold `locks` (read-only, exclusive) for the WHOLE readback. If any lock is missing/busy/untrusted the state,
+    store and shim are NOT inspected at all (STOP). `locks=None` is only for unit tests of the inspection itself;
+    the CLI always passes the five installer locks and refuses any override when running as root."""
+    _check_pins(kw.get("source_sha"), kw.get("candidate_sha"), kw.get("expect_shim"), kw.get("expect_original"),
+                kw.get("expect_modules"))
     probs_l, held = [], []
-    with hold_locks(tuple(locks or ()), kw.get("expect_uid", 0), probs_l, held):
-        out = _readback(**kw)
+    with hold_locks(tuple(locks or ()), kw.get("expect_uid", 0), probs_l, held) as all_held:
+        if locks and not all_held:
+            out = {"status": "B0_READBACK_STOP", "problems": [], "inspected": False,
+                   "pins": {"source_sha": kw["source_sha"], "candidate_sha": kw["candidate_sha"],
+                            "shim": kw["expect_shim"], "original": kw["expect_original"],
+                            "modules": dict(kw["expect_modules"])}, "limits": ["EVIDENCE_ONLY_NOT_ADMISSION"]}
+        else:
+            out = _readback(**kw)
     out["problems"] += probs_l
     out["legacy_locks"] = {"required": list(locks or ()), "held": held if not probs_l else [], "problems": probs_l}
-    if locks:
+    if locks and "inspected" not in out:
         out["limits"] = [x for x in out["limits"] if not x.startswith(("NO_SHARED_LOCK", "OPERATIONAL_EXCLUSION"))]
         out["limits"] += ["EXCLUDES_ONLY_WRITERS_THAT_TAKE_THE_5_LEGACY_LOCKS"]
     if out["problems"] and out["status"].endswith("PASS_EVIDENCE_ONLY"):
@@ -514,6 +555,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if os.geteuid() != 0 and not a.allow_non_root:
         print("B0_REQUIRES_ROOT", file=sys.stderr)
+        return 2
+    if a.lock and (os.geteuid() == 0 or not a.allow_non_root):
+        print("B0_LOCK_OVERRIDE_FORBIDDEN", file=sys.stderr)  # production lock set is fixed in code
         return 2
     mods = {}
     for item in a.expect_module:

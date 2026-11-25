@@ -412,7 +412,8 @@ class B0Tests(unittest.TestCase):
         for m, h in self.mods.items():
             base += ["--expect-module", "%s=%s" % (m, h)]
         lk = self.mklocks()
-        base += [x for q in lk for x in ("--lock", q)]
+        old, b0.LOCKS = b0.LOCKS, tuple(lk)  # production set is fixed in code; tests swap the module constant
+        self.addCleanup(setattr, b0, "LOCKS", old)
         self.assertEqual(b0.main(base + ["--out", str(out)]), 0)
         self.assertEqual(os.stat(out).st_mode & 0o777, 0o600)
         with self.assertRaises(FileExistsError):
@@ -496,14 +497,85 @@ class B0Tests(unittest.TestCase):
         self.assertIn("LOCK:%s:CHANGED_AT_CLOSE" % lk[0], r["problems"])
         self.assertEqual(r["status"], "B0_READBACK_STOP")
 
-    def test_cli_default_locks_missing_is_exit_1(self):
+    def cli_base(self):
         base = ["--allow-non-root", "--state", str(self.state), "--shim", str(self.shim), "--store", str(self.store),
-                "--source-sha", SRC_SHA, "--candidate-sha", CAND_SHA, "--expect-shim-sha256", H[3], "--expect-original-sha256", H[0],
-                "--lock", str(pathlib.Path(self.tmp.name) / "absent.lock")]
+                "--source-sha", SRC_SHA, "--candidate-sha", CAND_SHA, "--expect-shim-sha256", H[3], "--expect-original-sha256", H[0]]
         for m, h in self.mods.items():
             base += ["--expect-module", "%s=%s" % (m, h)]
-        self.assertEqual(b0.main(base), 1)
+        return base
 
+    def test_cli_lock_set_missing_is_exit_1_and_nothing_inspected(self):
+        old, b0.LOCKS = b0.LOCKS, (str(pathlib.Path(self.tmp.name) / "absent.lock"),)
+        self.addCleanup(setattr, b0, "LOCKS", old)
+        out = pathlib.Path(self.tmp.name) / "o.json"
+        self.assertEqual(b0.main(self.cli_base() + ["--out", str(out)]), 1)
+        rep = json.loads(out.read_bytes())
+        self.assertIs(rep["inspected"], False)
+        self.assertNotIn("state", rep)
+        self.assertEqual(rep["status"], "B0_READBACK_STOP")
+
+    def test_cli_lock_override_forbidden_for_root_and_without_flag(self):
+        base = self.cli_base() + ["--lock", self.mklocks()[0]]
+        if os.geteuid() == 0:
+            self.assertEqual(b0.main(base), 2)
+        self.assertEqual(b0.main([x for x in base if x != "--allow-non-root"]), 2)
+
+    def test_missing_lock_does_not_call_inspection(self):
+        lk = self.mklocks()
+        os.unlink(lk[0])
+        called = []
+        orig = b0._readback
+        b0._readback = lambda **kw: called.append(1) or orig(**kw)
+        try:
+            r = self.run_b0(locks=lk)
+        finally:
+            b0._readback = orig
+        self.assertEqual(called, [])
+        self.assertEqual(r["status"], "B0_READBACK_STOP")
+
+    def test_lock_under_symlinked_directory_is_stop(self):
+        lk = self.mklocks()
+        real = pathlib.Path(self.tmp.name) / "locks"
+        link = pathlib.Path(self.tmp.name) / "locklink"
+        os.symlink(real, link)
+        r = self.run_b0(locks=[str(link / "l0.lock")])
+        self.assertTrue(any("PATH_HAS_SYMLINK" in x for x in r["problems"]))
+        self.assertIs(r["inspected"], False)
+
+    def test_lock_mode_changed_at_close_is_stop(self):
+        lk = self.mklocks()
+        orig = b0._readback
+
+        def chm(**kw):
+            r = orig(**kw)
+            os.chmod(lk[1], 0o666)
+            return r
+        b0._readback = chm
+        try:
+            r = self.run_b0(locks=lk)
+        finally:
+            b0._readback = orig
+        self.assertIn("LOCK:%s:CHANGED_AT_CLOSE" % lk[1], r["problems"])
+
+    def test_lock_directory_replaced_at_close_is_stop(self):
+        lk = self.mklocks()
+        d = pathlib.Path(lk[0]).parent
+        orig = b0._readback
+
+        def swapdir(**kw):
+            r = orig(**kw)
+            os.rename(d, str(d) + ".old")
+            d.mkdir(mode=0o700)
+            for q in lk:
+                open(q, "wb").close()
+                os.chmod(q, 0o600)
+            return r
+        b0._readback = swapdir
+        try:
+            r = self.run_b0(locks=lk)
+        finally:
+            b0._readback = orig
+        self.assertIn("LOCK:%s:CHANGED_AT_CLOSE" % lk[0], r["problems"])
 
 if __name__ == "__main__":
     unittest.main()
