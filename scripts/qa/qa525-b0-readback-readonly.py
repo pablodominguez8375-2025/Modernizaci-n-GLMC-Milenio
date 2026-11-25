@@ -65,25 +65,38 @@ def identity(st):
     return (st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_nlink, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
 
 
-def open_dir(path):
+def open_dir(path, trusted_uids):
     """Walk an absolute path component by component with O_NOFOLLOW; returns an open dirfd (caller closes).
-    Raises OSError (ELOOP/ENOTDIR for symlink or non-directory ancestors)."""
+    Every component (including '/') must be owned by a trusted uid and not group/other-writable unless sticky.
+    Raises OSError: ELOOP/ENOTDIR (symlink or non-directory), EPERM (untrusted ancestor)."""
     if not os.path.isabs(path):
         raise OSError(errno.EINVAL, "NOT_ABSOLUTE")
+
+    def trusted(fd):
+        st = os.fstat(fd)
+        if st.st_uid not in trusted_uids or ((st.st_mode & 0o022) and not (st.st_mode & stat.S_ISVTX)):
+            raise OSError(errno.EPERM, "ANCESTOR_UNTRUSTED")
+
     fd = os.open("/", DIR_FLAGS)
     try:
+        trusted(fd)
         for part in [p for p in os.path.abspath(path).split("/") if p]:
             nxt = os.open(part, DIR_FLAGS, dir_fd=fd)
             os.close(fd)
             fd = nxt
+            trusted(fd)
         return fd
     except BaseException:
         os.close(fd)
         raise
 
 
-def symlink_error(exc):
-    return exc.errno in (errno.ELOOP, errno.ENOTDIR)
+def dir_problem(label, exc):
+    if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+        return label + "_PATH_HAS_SYMLINK"
+    if exc.errno == errno.EPERM:
+        return label + "_ANCESTOR_UNTRUSTED"
+    return label + "_UNREADABLE"
 
 
 def read_at(dfd, name, want, limit=MAX_FILE):
@@ -176,10 +189,10 @@ def snapshot(dfd):
 def read_state(state, expect_uid):
     rep = {"entries": 0, "kinds": {}, "pending": [], "unknown": [], "receipts": [], "problems": []}
     try:
-        dfd = open_dir(state)
+        dfd = open_dir(state, {0, expect_uid})
     except OSError as exc:
-        rep["problems"].append("STATE_PATH_HAS_SYMLINK" if symlink_error(exc) else "STATE_UNREADABLE")
-        return rep, {}
+        rep["problems"].append(dir_problem("STATE", exc))
+        return rep, {}, None
     try:
         if not dir_ok(dfd, expect_uid, 0o700):
             rep["problems"].append("STATE_DIR_METADATA_VIOLATION")
@@ -187,7 +200,7 @@ def read_state(state, expect_uid):
         rep["entries"] = len(snap1)
         if len(snap1) > MAX_ENTRIES:
             rep["problems"].append("TOO_MANY_ENTRIES")
-            return rep, {}
+            return rep, {}, snap1
         edges, total = {}, 0
         backups, receipts = {}, {}
         for name, ident in snap1:
@@ -214,7 +227,7 @@ def read_state(state, expect_uid):
             total += size
             if total > MAX_TOTAL:  # aggregate budget enforced BEFORE reading further files
                 rep["problems"].append("AGGREGATE_TOO_LARGE")
-                return rep, {}
+                return rep, {}, snap1
             if kind in ("receipt", "backup"):
                 try:
                     digest, data, st = read_at(dfd, name, ident)
@@ -239,7 +252,7 @@ def read_state(state, expect_uid):
                 rep["problems"].append("BACKUP_WITHOUT_RECEIPT:" + nonce)
         if snapshot(dfd) != snap1:
             rep["problems"].append("STATE_CHANGED_DURING_READ")
-        return rep, edges
+        return rep, edges, snap1
     finally:
         os.close(dfd)
 
@@ -247,11 +260,12 @@ def read_state(state, expect_uid):
 def check_store(store, source_sha, candidate_sha, expect_uid):
     """Store must exist as a trusted dir, hold NO candidate source and NO '*.partial' entry; stable snapshot."""
     rep = {"entries": 0, "candidate_present": None, "partials": [], "problems": []}
+    snap1 = None
     try:
-        dfd = open_dir(store)
+        dfd = open_dir(store, {0, expect_uid})
     except OSError as exc:
-        rep["problems"].append("STORE_PATH_HAS_SYMLINK" if symlink_error(exc) else "STORE_UNREADABLE")
-        return rep
+        rep["problems"].append(dir_problem("STORE", exc))
+        return rep, None
     try:
         if not dir_ok(dfd, expect_uid):
             rep["problems"].append("STORE_DIR_METADATA_VIOLATION")
@@ -271,7 +285,7 @@ def check_store(store, source_sha, candidate_sha, expect_uid):
         rep["problems"].append("STORE_UNREADABLE")
     finally:
         os.close(dfd)
-    return rep
+    return rep, snap1
 
 
 def chain(edges):
@@ -295,9 +309,9 @@ def chain(edges):
 def read_pinned(parent, name, uid, strict_mode, problems, label):
     """Identity-checked read of one file under `parent` (path).  Returns (dict, closer) or (None, None)."""
     try:
-        dfd = open_dir(parent)
+        dfd = open_dir(parent, {0, uid})
     except OSError as exc:
-        problems.append(label + ("_PATH_HAS_SYMLINK" if symlink_error(exc) else "_UNREADABLE"))
+        problems.append(dir_problem(label, exc))
         return None
     try:
         if not dir_ok(dfd, uid):
@@ -310,7 +324,7 @@ def read_pinned(parent, name, uid, strict_mode, problems, label):
             bad = True
         if bad:
             problems.append(label + "_METADATA_VIOLATION")
-        rec["_ident"], rec["_parent"], rec["_name"] = ident, parent, name
+        rec["_ident"], rec["_parent"], rec["_name"], rec["_uid"] = ident, parent, name, uid
         return rec
     except (OSError, ValueError):
         problems.append(label + "_UNREADABLE")
@@ -322,7 +336,7 @@ def read_pinned(parent, name, uid, strict_mode, problems, label):
 def revalidate(rec, problems, label):
     """At closing time: same identity and same hash, else STOP."""
     try:
-        dfd = open_dir(rec["_parent"])
+        dfd = open_dir(rec["_parent"], {0, rec["_uid"]})
     except OSError:
         problems.append(label + "_CHANGED_DURING_READ")
         return
@@ -360,13 +374,13 @@ def readback(*, shim=SHIM, state=STATE, store=STORE, source_sha, candidate_sha, 
         if mods.get(mod, {}).get("sha256") != expect_modules[mod]:
             probs.append("MODULE_PIN_MISMATCH:" + mod)
     out["modules"] = mods
-    out["store"] = check_store(store, source_sha, candidate_sha, expect_uid)
+    out["store"], store_snap = check_store(store, source_sha, candidate_sha, expect_uid)
     probs += out["store"]["problems"]
     try:
-        rep, edges = read_state(state, expect_uid)
+        rep, edges, state_snap = read_state(state, expect_uid)
     except OSError:
         probs.append("STATE_UNREADABLE")
-        rep, edges = {"pending": [], "unknown": [], "problems": []}, {}
+        rep, edges, state_snap = {"pending": [], "unknown": [], "problems": []}, {}, None
     out["state"] = rep
     original, live, info = chain(edges)
     out["chain"] = {"original": original, "live": live, "length": info if original else 0,
@@ -382,6 +396,20 @@ def readback(*, shim=SHIM, state=STATE, store=STORE, source_sha, candidate_sha, 
         revalidate(shim_rec, probs, "SHIM")
     for mod, rec in recs.items():
         revalidate(rec, probs, "MODULE:" + mod)
+    for label, path, snap in (("STATE", state, state_snap), ("STORE", store, store_snap)):  # global closing check
+        if snap is None:
+            continue
+        try:
+            fd = open_dir(path, {0, expect_uid})
+            try:
+                if snapshot(fd) != snap:
+                    probs.append(label + "_CHANGED_AT_CLOSE")
+            finally:
+                os.close(fd)
+        except OSError:
+            probs.append(label + "_CHANGED_AT_CLOSE")
+    out["limits"] = ["NO_SHARED_LOCK_WITH_INSTALLER", "EVIDENCE_ONLY_NOT_ADMISSION",
+                     "OPERATIONAL_EXCLUSION_REQUIRED: no installer/launcher/G6/auto-web process or timer may run during B0"]
     if original != expect_original:
         probs.append("ORIGINAL_PIN_MISMATCH")
     out["status"] = "B0_READBACK_PASS_EVIDENCE_ONLY" if not probs else "B0_READBACK_STOP"

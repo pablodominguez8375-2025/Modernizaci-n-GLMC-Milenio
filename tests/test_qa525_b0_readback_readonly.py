@@ -252,10 +252,45 @@ class B0Tests(unittest.TestCase):
 
     def test_store_missing_source_or_untrusted_dir_stops(self):
         os.chmod(self.store, 0o777)
-        self.stops("STORE_DIR_METADATA_VIOLATION")
+        self.stops("STORE_ANCESTOR_UNTRUSTED")
         os.chmod(self.store, 0o755)
         (self.store / SRC_SHA / "scripts/qa" / b0.MODULES[0]).chmod(0o666)
         self.stops("MODULE:%s_METADATA_VIOLATION" % b0.MODULES[0])
+
+    def test_untrusted_ancestor_stops(self):
+        shared = pathlib.Path(self.tmp.name) / "shared"
+        shared.mkdir()
+        inner = shared / "state"
+        os.rename(self.state, inner)
+        os.chmod(shared, 0o777)  # group/other-writable, not sticky
+        rep = self.run_b0(state=str(inner))
+        self.assertIn("STATE_ANCESTOR_UNTRUSTED", rep["problems"])
+        os.chmod(shared, 0o755)
+        self.assertEqual(self.run_b0(state=str(inner))["status"], "B0_READBACK_PASS_EVIDENCE_ONLY")
+
+    def test_foreign_owned_ancestor_stops(self):
+        rep = self.run_b0(expect_uid=os.geteuid() + 12345)
+        self.assertTrue(any(p.endswith("_ANCESTOR_UNTRUSTED") or "METADATA" in p for p in rep["problems"]))
+
+    def test_state_and_store_revalidated_at_close(self):
+        orig = b0.revalidate
+        fired = []
+
+        def hooked(rec, problems, label):
+            if not fired:
+                fired.append(1)
+                self.put("late-arrival.txt", b"x")
+                (self.store / "late-dir").mkdir()
+            return orig(rec, problems, label)
+        b0.revalidate = hooked
+        self.addCleanup(setattr, b0, "revalidate", orig)
+        rep = self.run_b0()
+        self.assertIn("STATE_CHANGED_AT_CLOSE", rep["problems"])
+        self.assertIn("STORE_CHANGED_AT_CLOSE", rep["problems"])
+
+    def test_limits_are_reported(self):
+        rep = self.run_b0()
+        self.assertIn("NO_SHARED_LOCK_WITH_INSTALLER", rep["limits"])
 
     def test_state_dir_must_be_0700(self):
         os.chmod(self.state, 0o755)
