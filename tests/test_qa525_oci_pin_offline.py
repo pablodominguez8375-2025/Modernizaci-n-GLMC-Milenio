@@ -34,6 +34,34 @@ class PinTests(unittest.TestCase):
         with self.assertRaises(ValueError): oci.verify(m,c,oci.digest(m))
     def test_reject_duplicate(self):
         with self.assertRaises(ValueError): oci.parse(b'{"a":1,"a":2}')
+    def test_reject_nonfinite_json_tokens(self):
+        for value in (b"NaN", b"Infinity", b"-Infinity"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                oci.parse(b'{"ignored":' + value + b'}')
+
+    def test_reject_nonfinite_config_with_matching_descriptor(self):
+        m, c = self.fixture()
+        c = c[:-1] + b',"ignored":NaN}'
+        doc = json.loads(m)
+        doc["config"]["size"] = len(c)
+        doc["config"]["digest"] = oci.digest(c)
+        m = json.dumps(doc).encode()
+        with self.assertRaises(ValueError):
+            oci.verify(m, c, oci.digest(m), "abc")
+
+    def test_reject_fractional_schema_version(self):
+        m, c = self.fixture()
+        doc = json.loads(m)
+        doc["schemaVersion"] = 2.0
+        m = json.dumps(doc).encode()
+        with self.assertRaises(ValueError):
+            oci.verify(m, c, oci.digest(m), "abc")
+
+    def test_reject_nonobject_top_level(self):
+        for raw in (b'[]', b'null', b'"string"'):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                oci.verify(raw, raw, oci.digest(raw))
+
     def test_reject_size(self):
         m,c = self.fixture()
         d = json.loads(m); d["config"]["size"] += 1
