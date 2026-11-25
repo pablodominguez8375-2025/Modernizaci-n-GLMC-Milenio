@@ -288,6 +288,48 @@ class B0Tests(unittest.TestCase):
         self.assertIn("STATE_CHANGED_AT_CLOSE", rep["problems"])
         self.assertIn("STORE_CHANGED_AT_CLOSE", rep["problems"])
 
+    def close_hook(self, action):
+        orig, fired = b0.revalidate, []
+
+        def hooked(rec, problems, label):
+            if not fired:
+                fired.append(1)
+                action()
+            return orig(rec, problems, label)
+        b0.revalidate = hooked
+        self.addCleanup(setattr, b0, "revalidate", orig)
+
+    def test_replaced_state_dir_with_same_names_stops_at_close(self):
+        def swap():
+            clone = pathlib.Path(self.tmp.name) / "state-clone"
+            clone.mkdir(mode=0o700)
+            for n in os.listdir(self.state):
+                (clone / n).write_bytes((self.state / n).read_bytes())
+                os.chmod(clone / n, os.lstat(self.state / n).st_mode & 0o777)
+            os.rename(self.state, pathlib.Path(self.tmp.name) / "state-old")
+            os.rename(clone, self.state)
+        self.close_hook(swap)
+        self.assertIn("STATE_CHANGED_AT_CLOSE", self.run_b0()["problems"])
+
+    def test_state_chmod_between_reads_stops(self):
+        self.close_hook(lambda: os.chmod(self.state, 0o755))
+        probs = self.run_b0()["problems"]
+        self.assertIn("STATE_CHANGED_AT_CLOSE", probs)
+
+    def test_store_dir_chmod_or_replacement_stops_at_close(self):
+        self.close_hook(lambda: os.chmod(self.store, 0o775))
+        probs = self.run_b0()["problems"]
+        self.assertTrue("STORE_CHANGED_AT_CLOSE" in probs or "STORE_ANCESTOR_UNTRUSTED" in probs, probs)
+
+    def test_removed_state_dir_stops_at_close(self):
+        def gone():
+            os.rename(self.state, pathlib.Path(self.tmp.name) / "state-moved")
+        self.close_hook(gone)
+        self.assertIn("STATE_CHANGED_AT_CLOSE", self.run_b0()["problems"])
+
+    def test_stable_readback_is_positive(self):
+        self.assertEqual(self.run_b0()["status"], "B0_READBACK_PASS_EVIDENCE_ONLY")
+
     def test_limits_are_reported(self):
         rep = self.run_b0()
         self.assertIn("NO_SHARED_LOCK_WITH_INSTALLER", rep["limits"])

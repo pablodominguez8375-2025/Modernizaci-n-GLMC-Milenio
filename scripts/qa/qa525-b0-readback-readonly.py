@@ -194,13 +194,15 @@ def read_state(state, expect_uid):
         rep["problems"].append(dir_problem("STATE", exc))
         return rep, {}, None
     try:
-        if not dir_ok(dfd, expect_uid, 0o700):
+        state_ok = dir_ok(dfd, expect_uid, 0o700)
+        if not state_ok:
             rep["problems"].append("STATE_DIR_METADATA_VIOLATION")
         snap1 = snapshot(dfd)
+        token = (identity(os.fstat(dfd)), state_ok, snap1)  # directory identity + metadata verdict + listing
         rep["entries"] = len(snap1)
         if len(snap1) > MAX_ENTRIES:
             rep["problems"].append("TOO_MANY_ENTRIES")
-            return rep, {}, snap1
+            return rep, {}, token
         edges, total = {}, 0
         backups, receipts = {}, {}
         for name, ident in snap1:
@@ -227,7 +229,7 @@ def read_state(state, expect_uid):
             total += size
             if total > MAX_TOTAL:  # aggregate budget enforced BEFORE reading further files
                 rep["problems"].append("AGGREGATE_TOO_LARGE")
-                return rep, {}, snap1
+                return rep, {}, token
             if kind in ("receipt", "backup"):
                 try:
                     digest, data, st = read_at(dfd, name, ident)
@@ -250,9 +252,9 @@ def read_state(state, expect_uid):
         for nonce in backups:
             if nonce not in receipts:
                 rep["problems"].append("BACKUP_WITHOUT_RECEIPT:" + nonce)
-        if snapshot(dfd) != snap1:
+        if snapshot(dfd) != snap1 or identity(os.fstat(dfd)) != token[0] or dir_ok(dfd, expect_uid, 0o700) != state_ok:
             rep["problems"].append("STATE_CHANGED_DURING_READ")
-        return rep, edges, snap1
+        return rep, edges, token
     finally:
         os.close(dfd)
 
@@ -260,16 +262,18 @@ def read_state(state, expect_uid):
 def check_store(store, source_sha, candidate_sha, expect_uid):
     """Store must exist as a trusted dir, hold NO candidate source and NO '*.partial' entry; stable snapshot."""
     rep = {"entries": 0, "candidate_present": None, "partials": [], "problems": []}
-    snap1 = None
+    token = None
     try:
         dfd = open_dir(store, {0, expect_uid})
     except OSError as exc:
         rep["problems"].append(dir_problem("STORE", exc))
         return rep, None
     try:
-        if not dir_ok(dfd, expect_uid):
+        store_ok = dir_ok(dfd, expect_uid)
+        if not store_ok:
             rep["problems"].append("STORE_DIR_METADATA_VIOLATION")
         snap1 = snapshot(dfd)
+        token = (identity(os.fstat(dfd)), store_ok, snap1)
         names = [n for n, _ in snap1]
         rep["entries"] = len(names)
         rep["candidate_present"] = candidate_sha in names
@@ -279,13 +283,13 @@ def check_store(store, source_sha, candidate_sha, expect_uid):
         rep["problems"] += ["STORE_PARTIAL_PRESENT:" + n for n in rep["partials"]]
         if source_sha not in names:
             rep["problems"].append("STORE_SOURCE_MISSING")
-        if snapshot(dfd) != snap1:
+        if snapshot(dfd) != snap1 or identity(os.fstat(dfd)) != token[0] or dir_ok(dfd, expect_uid) != store_ok:
             rep["problems"].append("STORE_CHANGED_DURING_READ")
     except OSError:
         rep["problems"].append("STORE_UNREADABLE")
     finally:
         os.close(dfd)
-    return rep, snap1
+    return rep, token
 
 
 def chain(edges):
@@ -396,13 +400,13 @@ def readback(*, shim=SHIM, state=STATE, store=STORE, source_sha, candidate_sha, 
         revalidate(shim_rec, probs, "SHIM")
     for mod, rec in recs.items():
         revalidate(rec, probs, "MODULE:" + mod)
-    for label, path, snap in (("STATE", state, state_snap), ("STORE", store, store_snap)):  # global closing check
-        if snap is None:
-            continue
-        try:
+    for label, path, token, exact in (("STATE", state, state_snap, 0o700), ("STORE", store, store_snap, None)):
+        if token is None:
+            continue  # the open itself already produced a problem
+        try:  # same O_NOFOLLOW walk; directory inode/metadata/verdict AND listing must all be unchanged
             fd = open_dir(path, {0, expect_uid})
             try:
-                if snapshot(fd) != snap:
+                if (identity(os.fstat(fd)), dir_ok(fd, expect_uid, exact), snapshot(fd)) != token:
                     probs.append(label + "_CHANGED_AT_CLOSE")
             finally:
                 os.close(fd)
