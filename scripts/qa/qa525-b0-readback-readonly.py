@@ -15,7 +15,9 @@ two snapshots; that is reported as STOP (state/store changed), never as PASS.
 Exit code: 0 = PASS (evidence only), 1 = STOP, 2 = bad invocation.
 """
 import argparse
+import contextlib
 import errno
+import fcntl
 import hashlib
 import json
 import os
@@ -26,6 +28,15 @@ import sys
 SHIM = "/usr/local/sbin/pmgm-qa-update"
 STATE = "/opt/centenario/qa525-launcher-replacement"
 STORE = "/opt/centenario/qa525-signed-stage"
+# The five advisory locks every legacy/signed writer takes (installer `all_five_locks`). B0 only ever
+# opens them O_RDONLY (never creates or writes) and holds LOCK_EX|LOCK_NB for the whole readback.
+LOCKS = (
+    "/opt/centenario/qa-api-refresh/operation.lock",
+    "/opt/centenario/qa-auto-lite/web-update.lock",
+    "/run/lock/pmgm-master-qa-604.lock",
+    "/run/lock/pmgm-qa754-web-hotfix.lock",
+    "/run/lock/pmgm-qa754-api-activation.lock",
+)
 MODULES = ("qa525-vnext-root-launcher.py", "qa525-vnext-root-launcher-child.py", "qa525-vnext-root-launch-config.py")
 HEX64, SHA40 = re.compile(r"[0-9a-f]{64}"), re.compile(r"[0-9a-f]{40}")
 MAX_FILE, MAX_ENTRIES, MAX_TOTAL = 1 << 20, 1000, 16 << 20
@@ -354,8 +365,74 @@ def revalidate(rec, problems, label):
         os.close(dfd)
 
 
-def readback(*, shim=SHIM, state=STATE, store=STORE, source_sha, candidate_sha, expect_shim, expect_original,
-             expect_modules, expect_uid=0):
+@contextlib.contextmanager
+def hold_locks(paths, expect_uid, probs, held):
+    """Hold every lock exclusively, read-only. Any missing/untrusted/busy lock is a problem (fail closed);
+    nothing is ever created. `held` receives one identity record per lock; locks are released on exit."""
+    with contextlib.ExitStack() as stack:
+        for path in paths:
+            label = "LOCK:" + path
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+            except FileNotFoundError:
+                probs.append(label + ":MISSING")
+                continue
+            except OSError:
+                probs.append(label + ":UNREADABLE")
+                continue
+            stack.callback(os.close, fd)
+            st = os.fstat(fd)
+            try:
+                named = os.lstat(path)
+            except OSError:
+                probs.append(label + ":PATH_CHANGED")
+                continue
+            if not (stat.S_ISREG(st.st_mode) and st.st_uid in (0, expect_uid) and st.st_nlink == 1
+                    and stat.S_IMODE(st.st_mode) == 0o600):
+                probs.append(label + ":UNTRUSTED")
+                continue
+            if not (stat.S_ISREG(named.st_mode) and (named.st_dev, named.st_ino) == (st.st_dev, st.st_ino)):
+                probs.append(label + ":PATH_CHANGED")
+                continue
+            try:
+                parent = open_dir(os.path.dirname(path), {0, expect_uid})
+                os.close(parent)
+            except OSError:
+                probs.append(label + ":ANCESTOR_UNTRUSTED")
+                continue
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                probs.append(label + ":BUSY")
+                continue
+            held.append({"path": path, "dev": st.st_dev, "ino": st.st_ino, "uid": st.st_uid, "mode": oct(stat.S_IMODE(st.st_mode))})
+        yield
+        for rec in held:  # still the same inode under the same name at close
+            try:
+                now = os.lstat(rec["path"])
+                if (now.st_dev, now.st_ino) != (rec["dev"], rec["ino"]):
+                    probs.append("LOCK:" + rec["path"] + ":CHANGED_AT_CLOSE")
+            except OSError:
+                probs.append("LOCK:" + rec["path"] + ":CHANGED_AT_CLOSE")
+
+
+def readback(*, locks=None, **kw):
+    """`locks`: paths held read-only+exclusive for the whole readback (CLI always passes LOCKS)."""
+    probs_l, held = [], []
+    with hold_locks(tuple(locks or ()), kw.get("expect_uid", 0), probs_l, held):
+        out = _readback(**kw)
+    out["problems"] += probs_l
+    out["legacy_locks"] = {"required": list(locks or ()), "held": held if not probs_l else [], "problems": probs_l}
+    if locks:
+        out["limits"] = [x for x in out["limits"] if not x.startswith(("NO_SHARED_LOCK", "OPERATIONAL_EXCLUSION"))]
+        out["limits"] += ["EXCLUDES_ONLY_WRITERS_THAT_TAKE_THE_5_LEGACY_LOCKS"]
+    if out["problems"] and out["status"].endswith("PASS_EVIDENCE_ONLY"):
+        out["status"] = "B0_READBACK_STOP"
+    return out
+
+
+def _readback(*, shim=SHIM, state=STATE, store=STORE, source_sha, candidate_sha, expect_shim, expect_original,
+              expect_modules, expect_uid=0):
     """All pins are mandatory; a missing pin is a programming error, not a PASS."""
     if not (SHA40.fullmatch(source_sha or "") and SHA40.fullmatch(candidate_sha or "") and candidate_sha != source_sha
             and HEX64.fullmatch(expect_shim or "") and HEX64.fullmatch(expect_original or "")
@@ -429,6 +506,7 @@ def main(argv=None):
     ap.add_argument("--expect-module", action="append", required=True, metavar="NAME=SHA256",
                     help="required for each of the three launcher modules")
     ap.add_argument("--out")
+    ap.add_argument("--lock", action="append", help=argparse.SUPPRESS)
     ap.add_argument("--allow-non-root", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--state", default=STATE, help=argparse.SUPPRESS)
     ap.add_argument("--shim", default=SHIM, help=argparse.SUPPRESS)
@@ -447,7 +525,7 @@ def main(argv=None):
     try:
         rep = readback(shim=a.shim, state=a.state, store=a.store, source_sha=a.source_sha, candidate_sha=a.candidate_sha,
                        expect_shim=a.expect_shim_sha256, expect_original=a.expect_original_sha256,
-                       expect_modules=mods, expect_uid=os.geteuid())
+                       expect_modules=mods, expect_uid=os.geteuid(), locks=tuple(a.lock) if a.lock else LOCKS)
     except ValueError:
         print("B0_PINS_INCOMPLETE", file=sys.stderr)
         return 2

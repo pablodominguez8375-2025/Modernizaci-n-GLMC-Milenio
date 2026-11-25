@@ -411,10 +411,98 @@ class B0Tests(unittest.TestCase):
                 "--source-sha", SRC_SHA, "--candidate-sha", CAND_SHA, "--expect-shim-sha256", H[3], "--expect-original-sha256", H[0]]
         for m, h in self.mods.items():
             base += ["--expect-module", "%s=%s" % (m, h)]
+        lk = self.mklocks()
+        base += [x for q in lk for x in ("--lock", q)]
         self.assertEqual(b0.main(base + ["--out", str(out)]), 0)
         self.assertEqual(os.stat(out).st_mode & 0o777, 0o600)
         with self.assertRaises(FileExistsError):
             b0.main(base + ["--out", str(out)])
+
+    def mklocks(self, n=3):
+        d = pathlib.Path(self.tmp.name) / "locks"
+        d.mkdir(mode=0o700, exist_ok=True)
+        paths = []
+        for i in range(n):
+            q = d / ("l%d.lock" % i)
+            q.write_bytes(b"")
+            os.chmod(q, 0o600)
+            paths.append(str(q))
+        return paths
+
+    def test_default_locks_are_the_five_installer_locks(self):
+        self.assertEqual(len(b0.LOCKS), 5)
+        self.assertIn("/run/lock/pmgm-qa754-api-activation.lock", b0.LOCKS)
+
+    def test_locks_held_during_and_released_after(self):
+        import fcntl
+        lk = self.mklocks()
+        r = self.run_b0(locks=lk)
+        self.assertEqual(r["status"], "B0_READBACK_PASS_EVIDENCE_ONLY")
+        self.assertEqual([h["path"] for h in r["legacy_locks"]["held"]], lk)
+        self.assertIn("EXCLUDES_ONLY_WRITERS_THAT_TAKE_THE_5_LEGACY_LOCKS", r["limits"])
+        self.assertFalse(any(x.startswith("NO_SHARED_LOCK") for x in r["limits"]))
+        for q in lk:  # released: another opener can take them
+            fd = os.open(q, os.O_RDONLY)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            os.close(fd)
+
+    def test_lock_busy_is_stop(self):
+        import fcntl
+        lk = self.mklocks()
+        fd = os.open(lk[1], os.O_RDONLY)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            r = self.run_b0(locks=lk)
+        finally:
+            os.close(fd)
+        self.assertEqual(r["status"], "B0_READBACK_STOP")
+        self.assertIn("LOCK:%s:BUSY" % lk[1], r["problems"])
+        self.assertEqual(r["legacy_locks"]["held"], [])
+
+    def test_lock_missing_is_stop_and_never_created(self):
+        lk = self.mklocks()
+        os.unlink(lk[2])
+        r = self.run_b0(locks=lk)
+        self.assertIn("LOCK:%s:MISSING" % lk[2], r["problems"])
+        self.assertFalse(os.path.exists(lk[2]))
+
+    def test_lock_symlink_and_bad_mode_and_nlink_are_stop(self):
+        lk = self.mklocks()
+        os.unlink(lk[0])
+        os.symlink(lk[1], lk[0])
+        self.assertTrue(any(x.startswith("LOCK:%s:" % lk[0]) for x in self.run_b0(locks=lk)["problems"]))
+        lk = self.mklocks()
+        os.chmod(lk[1], 0o644)
+        self.assertIn("LOCK:%s:UNTRUSTED" % lk[1], self.run_b0(locks=lk)["problems"])
+        os.chmod(lk[1], 0o600)
+        os.link(lk[1], lk[1] + ".hard")
+        self.assertIn("LOCK:%s:UNTRUSTED" % lk[1], self.run_b0(locks=lk)["problems"])
+
+    def test_lock_replaced_during_readback_is_stop(self):
+        lk = self.mklocks()
+        orig = b0._readback
+
+        def swap(**kw):
+            r = orig(**kw)
+            os.unlink(lk[0])
+            open(lk[0], "wb").close()
+            os.chmod(lk[0], 0o600)
+            return r
+        b0._readback = swap
+        try:
+            r = self.run_b0(locks=lk)
+        finally:
+            b0._readback = orig
+        self.assertIn("LOCK:%s:CHANGED_AT_CLOSE" % lk[0], r["problems"])
+        self.assertEqual(r["status"], "B0_READBACK_STOP")
+
+    def test_cli_default_locks_missing_is_exit_1(self):
+        base = ["--allow-non-root", "--state", str(self.state), "--shim", str(self.shim), "--store", str(self.store),
+                "--source-sha", SRC_SHA, "--candidate-sha", CAND_SHA, "--expect-shim-sha256", H[3], "--expect-original-sha256", H[0],
+                "--lock", str(pathlib.Path(self.tmp.name) / "absent.lock")]
+        for m, h in self.mods.items():
+            base += ["--expect-module", "%s=%s" % (m, h)]
+        self.assertEqual(b0.main(base), 1)
 
 
 if __name__ == "__main__":
