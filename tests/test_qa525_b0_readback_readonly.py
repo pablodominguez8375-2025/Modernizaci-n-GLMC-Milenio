@@ -17,6 +17,7 @@ LAUNCHERS = [b"launcher-1\n", b"launcher-2\n", b"launcher-3\n", b"launcher-4\n"]
 H = [hashlib.sha256(x).hexdigest() for x in LAUNCHERS]
 N = [("%d" % i) * 64 for i in (1, 2, 3)]
 SRC_SHA = "ab" * 20
+CAND_SHA = "cd" * 20
 def ev(new):
     return {"app_archive_sha256": "sha256:" + "a" * 64, "app_source_sha": "c" * 40,
             "candidate_operator_sha256": "sha256:" + "e" * 64, "shim_sha256": "sha256:" + new}
@@ -68,7 +69,7 @@ class B0Tests(unittest.TestCase):
             self.put("inflight-swap-%s.done" % N[i], b"{}\n")
 
     def run_b0(self, **kw):
-        args = dict(shim=str(self.shim), state=str(self.state), store=str(self.store), source_sha=SRC_SHA,
+        args = dict(shim=str(self.shim), state=str(self.state), store=str(self.store), source_sha=SRC_SHA, candidate_sha=CAND_SHA,
                     expect_shim=H[3], expect_original=H[0], expect_modules=dict(self.mods), expect_uid=os.geteuid())
         args.update(kw)
         return b0.readback(**args)
@@ -90,7 +91,7 @@ class B0Tests(unittest.TestCase):
         self.assertEqual(self.snap(), before)
 
     def test_incomplete_pins_raise(self):
-        for kw in ({"source_sha": "zz"}, {"expect_shim": None}, {"expect_original": "1"}, {"expect_modules": {}},
+        for kw in ({"source_sha": "zz"}, {"candidate_sha": None}, {"candidate_sha": SRC_SHA}, {"expect_shim": None}, {"expect_original": "1"}, {"expect_modules": {}},
                    {"expect_modules": {b0.MODULES[0]: self.mods[b0.MODULES[0]]}}):
             with self.assertRaises(ValueError):
                 self.run_b0(**kw)
@@ -99,7 +100,7 @@ class B0Tests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             b0.main(["--allow-non-root"])
         with self.assertRaises(SystemExit):
-            b0.main(["--allow-non-root", "--source-sha", SRC_SHA])
+            b0.main(["--allow-non-root", "--source-sha", SRC_SHA, "--candidate-sha", CAND_SHA])
 
     def test_pending_markers_stop(self):
         self.put("inflight.json", b"{}\n")
@@ -174,20 +175,91 @@ class B0Tests(unittest.TestCase):
         self.stops("RECEIPT_INVALID_OR_AMBIGUOUS:")
 
     def test_snapshot_change_during_read_stops(self):
-        orig = b0.read_regular
+        orig = b0.read_at
         calls = []
 
-        def racing(path, limit=b0.MAX_FILE):
-            if not calls and os.path.basename(path).startswith("receipt-"):
+        def racing(dfd, name, want, limit=b0.MAX_FILE):
+            if not calls and name.startswith("receipt-"):
                 calls.append(1)
                 self.put("intruder-late.txt", b"x")
-            return orig(path, limit)
+            return orig(dfd, name, want, limit)
 
-        b0.read_regular = racing
+        b0.read_at = racing
         try:
             self.stops("STATE_CHANGED_DURING_READ")
         finally:
-            b0.read_regular = orig
+            b0.read_at = orig
+
+    def hook_read_at(self, prefix, action):
+        orig, fired = b0.read_at, []
+
+        def hooked(dfd, name, want, limit=b0.MAX_FILE):
+            if not fired and name.startswith(prefix):
+                fired.append(1)
+                action(name)
+            return orig(dfd, name, want, limit)
+
+        b0.read_at = hooked
+        self.addCleanup(setattr, b0, "read_at", orig)
+
+    def test_substituted_receipt_same_bytes_new_inode_stops_before_read(self):
+        def swap(name):
+            data = (self.state / name).read_bytes()
+            os.unlink(self.state / name)
+            self.put(name, data)
+        self.hook_read_at("receipt-", swap)
+        self.stops("IDENTITY_CHANGED:receipt-")
+
+    def test_substituted_shim_identity_stops(self):
+        def swap(name):
+            self.shim.write_bytes(LAUNCHERS[3])  # same bytes, new mtime/ctime
+            os.chmod(self.shim, 0o700)
+        orig, fired = b0.read_at, []
+
+        def hooked(dfd, n, want, limit=b0.MAX_FILE):
+            if not fired and n == "shim":
+                fired.append(1)
+                swap(n)
+            return orig(dfd, n, want, limit)
+        b0.read_at = hooked
+        self.addCleanup(setattr, b0, "read_at", orig)
+        self.stops("SHIM_UNREADABLE")
+
+    def test_module_changed_before_close_stops(self):
+        target = self.store / SRC_SHA / "scripts/qa" / b0.MODULES[1]
+        orig, seen = b0.read_at, []
+
+        def hooked(dfd, n, want, limit=b0.MAX_FILE):
+            res = orig(dfd, n, want, limit)
+            if n == b0.MODULES[1]:
+                seen.append(1)
+                if len(seen) == 1:  # after first (open) read, mutate before the closing revalidation
+                    target.write_bytes(b"tampered-after-read")
+            return res
+        b0.read_at = hooked
+        self.addCleanup(setattr, b0, "read_at", orig)
+        self.stops("MODULE:%s_CHANGED_DURING_READ" % b0.MODULES[1])
+
+    def test_store_candidate_and_partial_stop(self):
+        (self.store / CAND_SHA).mkdir()
+        self.stops("STORE_CANDIDATE_PRESENT")
+        (self.store / CAND_SHA).rmdir()
+        (self.store / ("ef" * 20 + ".partial")).mkdir()
+        self.stops("STORE_PARTIAL_PRESENT:")
+        (self.store / (CAND_SHA + ".partial")).mkdir()
+        rep = self.run_b0()
+        self.assertEqual(len(rep["store"]["partials"]), 2)
+
+    def test_store_missing_source_or_untrusted_dir_stops(self):
+        os.chmod(self.store, 0o777)
+        self.stops("STORE_DIR_METADATA_VIOLATION")
+        os.chmod(self.store, 0o755)
+        (self.store / SRC_SHA / "scripts/qa" / b0.MODULES[0]).chmod(0o666)
+        self.stops("MODULE:%s_METADATA_VIOLATION" % b0.MODULES[0])
+
+    def test_state_dir_must_be_0700(self):
+        os.chmod(self.state, 0o755)
+        self.stops("STATE_DIR_METADATA_VIOLATION")
 
     def test_generation_schema_negatives(self):
         legacy = {"status": "LAUNCHER_ATOMIC_SWAP_COMMITTED", "source_sha": "d4" * 20,
@@ -221,6 +293,9 @@ class B0Tests(unittest.TestCase):
         slink = pathlib.Path(self.tmp.name) / "linkstore"
         os.symlink(self.store, slink)
         self.assertIn("STORE_PATH_HAS_SYMLINK", self.run_b0(store=str(slink))["problems"])
+        hlink = pathlib.Path(self.tmp.name) / "linkshimdir"
+        os.symlink(self.tmp.name, hlink)
+        self.assertIn("SHIM_PATH_HAS_SYMLINK", self.run_b0(shim=str(hlink / "shim"))["problems"])
 
     def test_symlink_entry_stops(self):
         os.symlink("/etc/passwd", self.state / ("receipt-%s.json" % ("6" * 64)))
@@ -251,12 +326,12 @@ class B0Tests(unittest.TestCase):
         bad = dict(self.mods, **{b0.MODULES[1]: "0" * 64})
         self.assertIn("MODULE_PIN_MISMATCH:" + b0.MODULES[1], self.run_b0(expect_modules=bad)["problems"])
         os.unlink(self.store / SRC_SHA / "scripts/qa" / b0.MODULES[0])
-        self.assertIn("MODULE_UNREADABLE:" + b0.MODULES[0], self.run_b0()["problems"])
+        self.assertIn("MODULE:%s_UNREADABLE" % b0.MODULES[0], self.run_b0()["problems"])
 
     def test_cli_out_is_exclusive_and_exit_codes(self):
         out = pathlib.Path(self.tmp.name) / "out.json"
         base = ["--allow-non-root", "--state", str(self.state), "--shim", str(self.shim), "--store", str(self.store),
-                "--source-sha", SRC_SHA, "--expect-shim-sha256", H[3], "--expect-original-sha256", H[0]]
+                "--source-sha", SRC_SHA, "--candidate-sha", CAND_SHA, "--expect-shim-sha256", H[3], "--expect-original-sha256", H[0]]
         for m, h in self.mods.items():
             base += ["--expect-module", "%s=%s" % (m, h)]
         self.assertEqual(b0.main(base + ["--out", str(out)]), 0)

@@ -6,9 +6,16 @@ classification of every journal entry, pending markers and the receipt graph ori
 on invocation.  It opens only regular files (O_NONBLOCK|O_NOFOLLOW, fstat before read), rejects symlinked ancestors,
 duplicate JSON keys, wrong type/extension/mode/owner/nlink, receipts whose internal nonce differs from the file
 name, and any change of the state or shim between two snapshots.  It never calls the installer's scan_history.
+All paths are walked with dirfd (O_DIRECTORY|O_NOFOLLOW per component) and files are opened relative to a dirfd,
+so there is no lstat-then-open-by-path window; the fd's fstat must equal the directory-snapshot identity
+(dev/ino/mode/uid/nlink/size/mtime/ctime) BEFORE any byte is read.  The store must NOT contain the candidate
+source (--candidate-sha) nor any '*.partial' entry.  Shim and launcher modules are re-validated (identity+hash) at
+the end.  Residual limit: no lock shared with the installer, so a root-level writer could still race between the
+two snapshots; that is reported as STOP (state/store changed), never as PASS.
 Exit code: 0 = PASS (evidence only), 1 = STOP, 2 = bad invocation.
 """
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -51,13 +58,44 @@ def _pairs(items):
     return out
 
 
-def read_regular(path, limit=MAX_FILE):
-    """Open without blocking, require a regular file via fstat, read fully.  Returns (sha256, bytes, stat)."""
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+
+
+def identity(st):
+    return (st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_nlink, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def open_dir(path):
+    """Walk an absolute path component by component with O_NOFOLLOW; returns an open dirfd (caller closes).
+    Raises OSError (ELOOP/ENOTDIR for symlink or non-directory ancestors)."""
+    if not os.path.isabs(path):
+        raise OSError(errno.EINVAL, "NOT_ABSOLUTE")
+    fd = os.open("/", DIR_FLAGS)
+    try:
+        for part in [p for p in os.path.abspath(path).split("/") if p]:
+            nxt = os.open(part, DIR_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def symlink_error(exc):
+    return exc.errno in (errno.ELOOP, errno.ENOTDIR)
+
+
+def read_at(dfd, name, want, limit=MAX_FILE):
+    """Open `name` relative to dfd without blocking/following; the fd identity must equal `want` BEFORE reading.
+    Returns (sha256, bytes, stat)."""
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=dfd)
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise ValueError("NOT_REGULAR")
+        if want is not None and identity(st) != want:
+            raise ValueError("IDENTITY_CHANGED")
         if st.st_size > limit:
             raise ValueError("TOO_LARGE")
         data = os.read(fd, limit + 1)
@@ -68,22 +106,19 @@ def read_regular(path, limit=MAX_FILE):
         os.close(fd)
 
 
+def lstat_at(dfd, name):
+    return os.stat(name, dir_fd=dfd, follow_symlinks=False)
+
+
 def meta(st):
     return {"mode": "%04o" % stat.S_IMODE(st.st_mode), "uid": st.st_uid, "nlink": st.st_nlink}
 
 
-def ancestors_clean(path):
-    """True when no component of the absolute path (including the last) is a symlink."""
-    parts = os.path.abspath(path).split(os.sep)
-    cur = os.sep
-    for part in parts[1:]:
-        cur = os.path.join(cur, part)
-        try:
-            if stat.S_ISLNK(os.lstat(cur).st_mode):
-                return False
-        except FileNotFoundError:
-            return True
-    return True
+def dir_ok(dfd, uid, exact=None):
+    st = os.fstat(dfd)
+    if st.st_uid != uid:
+        return False
+    return stat.S_IMODE(st.st_mode) == exact if exact is not None else (stat.S_IMODE(st.st_mode) & 0o022) == 0
 
 
 PFX, BARE, SRC40 = re.compile(r"sha256:[0-9a-f]{64}"), re.compile(r"[0-9a-f]{64}"), re.compile(r"[0-9a-f]{40}")
@@ -131,75 +166,112 @@ def classify(data, nonce):
     return fmt, old, new
 
 
-def snapshot(state):
-    """Stable fingerprint of the state directory (names + lstat identity), or raises OSError."""
+def snapshot(dfd):
     rows = []
-    for entry in sorted(os.scandir(state), key=lambda e: e.name):
-        st = entry.stat(follow_symlinks=False)
-        rows.append((entry.name, st.st_mode, st.st_uid, st.st_nlink, st.st_ino, st.st_size, st.st_mtime_ns))
+    for name in sorted(os.listdir(dfd)):
+        rows.append((name, identity(lstat_at(dfd, name))))
     return rows
 
 
 def read_state(state, expect_uid):
     rep = {"entries": 0, "kinds": {}, "pending": [], "unknown": [], "receipts": [], "problems": []}
-    if not ancestors_clean(state):
-        rep["problems"].append("STATE_PATH_HAS_SYMLINK")
+    try:
+        dfd = open_dir(state)
+    except OSError as exc:
+        rep["problems"].append("STATE_PATH_HAS_SYMLINK" if symlink_error(exc) else "STATE_UNREADABLE")
         return rep, {}
-    snap1 = snapshot(state)
-    rep["entries"] = len(snap1)
-    if len(snap1) > MAX_ENTRIES:
-        rep["problems"].append("TOO_MANY_ENTRIES")
-        return rep, {}
-    edges, nonces, total = {}, set(), 0
-    backups, receipts = {}, {}
-    for name, mode, uid, nlink, _, size, _ in snap1:
-        kind = expected = nonce = None
-        for pattern, k, m in KNOWN:
-            hit = pattern.fullmatch(name)
-            if hit:
-                kind, expected, nonce = k, m, hit.group(1)
-                break
-        if kind is None:
-            rep["unknown"].append(name)
-            continue
-        if not stat.S_ISREG(mode):
-            rep["problems"].append("NOT_REGULAR:" + name)
-            continue
-        if uid != expect_uid or nlink != 1 or stat.S_IMODE(mode) != expected:
-            rep["problems"].append("METADATA_VIOLATION:" + name)
-        rep["kinds"][kind] = rep["kinds"].get(kind, 0) + 1
-        if kind == "pending":
-            rep["pending"].append(name)
-        if kind == "rolled_back":
-            rep["problems"].append("ROLLBACK_RECORD_PRESENT:" + name)
-        total += size
-        if total > MAX_TOTAL:  # aggregate budget enforced BEFORE reading further files
-            rep["problems"].append("AGGREGATE_TOO_LARGE")
+    try:
+        if not dir_ok(dfd, expect_uid, 0o700):
+            rep["problems"].append("STATE_DIR_METADATA_VIOLATION")
+        snap1 = snapshot(dfd)
+        rep["entries"] = len(snap1)
+        if len(snap1) > MAX_ENTRIES:
+            rep["problems"].append("TOO_MANY_ENTRIES")
             return rep, {}
-        if kind in ("receipt", "backup"):
-            try:
-                digest, data, st = read_regular(os.path.join(state, name))
-            except (OSError, ValueError):
-                rep["problems"].append("UNREADABLE:" + name)
+        edges, total = {}, 0
+        backups, receipts = {}, {}
+        for name, ident in snap1:
+            mode, uid, nlink, size = ident[2], ident[3], ident[4], ident[5]
+            kind = expected = nonce = None
+            for pattern, k, m in KNOWN:
+                hit = pattern.fullmatch(name)
+                if hit:
+                    kind, expected, nonce = k, m, hit.group(1)
+                    break
+            if kind is None:
+                rep["unknown"].append(name)
                 continue
-            (receipts if kind == "receipt" else backups)[nonce] = (digest, data, st)
-    for nonce, (digest, data, st) in sorted(receipts.items()):
-        fmt, old, new = classify(data, nonce)
-        rep["receipts"].append({"nonce": nonce, "format": fmt, "old": old, "new": new, "receipt_sha256": digest})
-        if fmt == "bad" or old in edges:
-            rep["problems"].append("RECEIPT_INVALID_OR_AMBIGUOUS:" + nonce)
-            continue
-        edges[old] = new
-        if nonce not in backups:
-            rep["problems"].append("BACKUP_MISSING:" + nonce)
-        elif backups[nonce][0] != old:
-            rep["problems"].append("BACKUP_HASH_MISMATCH:" + nonce)
-    for nonce in backups:
-        if nonce not in receipts:
-            rep["problems"].append("BACKUP_WITHOUT_RECEIPT:" + nonce)
-    if snapshot(state) != snap1:
-        rep["problems"].append("STATE_CHANGED_DURING_READ")
-    return rep, edges
+            if not stat.S_ISREG(mode):
+                rep["problems"].append("NOT_REGULAR:" + name)
+                continue
+            if uid != expect_uid or nlink != 1 or stat.S_IMODE(mode) != expected:
+                rep["problems"].append("METADATA_VIOLATION:" + name)
+            rep["kinds"][kind] = rep["kinds"].get(kind, 0) + 1
+            if kind == "pending":
+                rep["pending"].append(name)
+            if kind == "rolled_back":
+                rep["problems"].append("ROLLBACK_RECORD_PRESENT:" + name)
+            total += size
+            if total > MAX_TOTAL:  # aggregate budget enforced BEFORE reading further files
+                rep["problems"].append("AGGREGATE_TOO_LARGE")
+                return rep, {}
+            if kind in ("receipt", "backup"):
+                try:
+                    digest, data, st = read_at(dfd, name, ident)
+                except (OSError, ValueError) as exc:
+                    code = str(exc) if isinstance(exc, ValueError) else "UNREADABLE"
+                    rep["problems"].append("%s:%s" % ("IDENTITY_CHANGED" if code == "IDENTITY_CHANGED" else "UNREADABLE", name))
+                    continue
+                (receipts if kind == "receipt" else backups)[nonce] = (digest, data, st)
+        for nonce, (digest, data, st) in sorted(receipts.items()):
+            fmt, old, new = classify(data, nonce)
+            rep["receipts"].append({"nonce": nonce, "format": fmt, "old": old, "new": new, "receipt_sha256": digest})
+            if fmt == "bad" or old in edges:
+                rep["problems"].append("RECEIPT_INVALID_OR_AMBIGUOUS:" + nonce)
+                continue
+            edges[old] = new
+            if nonce not in backups:
+                rep["problems"].append("BACKUP_MISSING:" + nonce)
+            elif backups[nonce][0] != old:
+                rep["problems"].append("BACKUP_HASH_MISMATCH:" + nonce)
+        for nonce in backups:
+            if nonce not in receipts:
+                rep["problems"].append("BACKUP_WITHOUT_RECEIPT:" + nonce)
+        if snapshot(dfd) != snap1:
+            rep["problems"].append("STATE_CHANGED_DURING_READ")
+        return rep, edges
+    finally:
+        os.close(dfd)
+
+
+def check_store(store, source_sha, candidate_sha, expect_uid):
+    """Store must exist as a trusted dir, hold NO candidate source and NO '*.partial' entry; stable snapshot."""
+    rep = {"entries": 0, "candidate_present": None, "partials": [], "problems": []}
+    try:
+        dfd = open_dir(store)
+    except OSError as exc:
+        rep["problems"].append("STORE_PATH_HAS_SYMLINK" if symlink_error(exc) else "STORE_UNREADABLE")
+        return rep
+    try:
+        if not dir_ok(dfd, expect_uid):
+            rep["problems"].append("STORE_DIR_METADATA_VIOLATION")
+        snap1 = snapshot(dfd)
+        names = [n for n, _ in snap1]
+        rep["entries"] = len(names)
+        rep["candidate_present"] = candidate_sha in names
+        rep["partials"] = [n for n in names if n.endswith(".partial")]
+        if rep["candidate_present"]:
+            rep["problems"].append("STORE_CANDIDATE_PRESENT")
+        rep["problems"] += ["STORE_PARTIAL_PRESENT:" + n for n in rep["partials"]]
+        if source_sha not in names:
+            rep["problems"].append("STORE_SOURCE_MISSING")
+        if snapshot(dfd) != snap1:
+            rep["problems"].append("STORE_CHANGED_DURING_READ")
+    except OSError:
+        rep["problems"].append("STORE_UNREADABLE")
+    finally:
+        os.close(dfd)
+    return rep
 
 
 def chain(edges):
@@ -220,75 +292,106 @@ def chain(edges):
     return originals[0], cur, len(edges)
 
 
-def readback(*, shim=SHIM, state=STATE, store=STORE, source_sha, expect_shim, expect_original, expect_modules,
-             expect_uid=0):
+def read_pinned(parent, name, uid, strict_mode, problems, label):
+    """Identity-checked read of one file under `parent` (path).  Returns (dict, closer) or (None, None)."""
+    try:
+        dfd = open_dir(parent)
+    except OSError as exc:
+        problems.append(label + ("_PATH_HAS_SYMLINK" if symlink_error(exc) else "_UNREADABLE"))
+        return None
+    try:
+        if not dir_ok(dfd, uid):
+            problems.append(label + "_DIR_METADATA_VIOLATION")
+        ident = identity(lstat_at(dfd, name))
+        digest, _, st = read_at(dfd, name, ident)
+        rec = dict(meta(st), sha256=digest)
+        bad = st.st_uid != uid or st.st_nlink != 1 or (stat.S_IMODE(st.st_mode) & 0o022) != 0
+        if strict_mode is not None and stat.S_IMODE(st.st_mode) != strict_mode:
+            bad = True
+        if bad:
+            problems.append(label + "_METADATA_VIOLATION")
+        rec["_ident"], rec["_parent"], rec["_name"] = ident, parent, name
+        return rec
+    except (OSError, ValueError):
+        problems.append(label + "_UNREADABLE")
+        return None
+    finally:
+        os.close(dfd)
+
+
+def revalidate(rec, problems, label):
+    """At closing time: same identity and same hash, else STOP."""
+    try:
+        dfd = open_dir(rec["_parent"])
+    except OSError:
+        problems.append(label + "_CHANGED_DURING_READ")
+        return
+    try:
+        if identity(lstat_at(dfd, rec["_name"])) != rec["_ident"] \
+                or read_at(dfd, rec["_name"], rec["_ident"])[0] != rec["sha256"]:
+            problems.append(label + "_CHANGED_DURING_READ")
+    except (OSError, ValueError):
+        problems.append(label + "_CHANGED_DURING_READ")
+    finally:
+        os.close(dfd)
+
+
+def readback(*, shim=SHIM, state=STATE, store=STORE, source_sha, candidate_sha, expect_shim, expect_original,
+             expect_modules, expect_uid=0):
     """All pins are mandatory; a missing pin is a programming error, not a PASS."""
-    if not (SHA40.fullmatch(source_sha or "") and HEX64.fullmatch(expect_shim or "")
-            and HEX64.fullmatch(expect_original or "") and set(expect_modules or {}) == set(MODULES)
-            and all(HEX64.fullmatch(v) for v in expect_modules.values())):
+    if not (SHA40.fullmatch(source_sha or "") and SHA40.fullmatch(candidate_sha or "") and candidate_sha != source_sha
+            and HEX64.fullmatch(expect_shim or "") and HEX64.fullmatch(expect_original or "")
+            and set(expect_modules or {}) == set(MODULES) and all(HEX64.fullmatch(v) for v in expect_modules.values())):
         raise ValueError("B0_PINS_INCOMPLETE")
-    out = {"status": None, "problems": [], "pins": {"source_sha": source_sha, "shim": expect_shim,
-                                                   "original": expect_original, "modules": dict(expect_modules)}}
-    shim_digest = shim_st = None
-    if not ancestors_clean(shim):
-        out["problems"].append("SHIM_PATH_HAS_SYMLINK")
-    else:
-        try:
-            shim_digest, _, shim_st = read_regular(shim)
-            out["shim"] = dict(meta(shim_st), sha256=shim_digest)
-            if shim_st.st_uid != expect_uid or shim_st.st_nlink != 1 or stat.S_IMODE(shim_st.st_mode) != 0o700:
-                out["problems"].append("SHIM_METADATA_VIOLATION")
-        except (OSError, ValueError):
-            out["problems"].append("SHIM_UNREADABLE")
-    mods = {}
+    out = {"status": None, "problems": [], "pins": {"source_sha": source_sha, "candidate_sha": candidate_sha,
+                                                   "shim": expect_shim, "original": expect_original,
+                                                   "modules": dict(expect_modules)}}
+    probs = out["problems"]
+    shim_rec = read_pinned(os.path.dirname(os.path.abspath(shim)), os.path.basename(shim), expect_uid, 0o700, probs, "SHIM")
+    if shim_rec:
+        out["shim"] = {k: v for k, v in shim_rec.items() if not k.startswith("_")}
+    mods, recs = {}, {}
     base = os.path.join(store, source_sha, "scripts/qa")
-    if not ancestors_clean(base):
-        out["problems"].append("STORE_PATH_HAS_SYMLINK")
-    else:
-        for mod in MODULES:
-            try:
-                d, _, st = read_regular(os.path.join(base, mod))
-                mods[mod] = dict(meta(st), sha256=d)
-                if st.st_uid != expect_uid or st.st_nlink != 1:
-                    out["problems"].append("MODULE_METADATA_VIOLATION:" + mod)
-            except (OSError, ValueError):
-                out["problems"].append("MODULE_UNREADABLE:" + mod)
+    for mod in MODULES:
+        rec = read_pinned(base, mod, expect_uid, None, probs, "MODULE:" + mod)
+        if rec:
+            recs[mod] = rec
+            mods[mod] = {k: v for k, v in rec.items() if not k.startswith("_")}
+        if mods.get(mod, {}).get("sha256") != expect_modules[mod]:
+            probs.append("MODULE_PIN_MISMATCH:" + mod)
     out["modules"] = mods
-    for mod, want in expect_modules.items():
-        if mods.get(mod, {}).get("sha256") != want:
-            out["problems"].append("MODULE_PIN_MISMATCH:" + mod)
+    out["store"] = check_store(store, source_sha, candidate_sha, expect_uid)
+    probs += out["store"]["problems"]
     try:
         rep, edges = read_state(state, expect_uid)
     except OSError:
-        out["problems"].append("STATE_UNREADABLE")
+        probs.append("STATE_UNREADABLE")
         rep, edges = {"pending": [], "unknown": [], "problems": []}, {}
     out["state"] = rep
     original, live, info = chain(edges)
     out["chain"] = {"original": original, "live": live, "length": info if original else 0,
                     "reason": None if original else info}
-    out["problems"] += rep["problems"] + ["PENDING:" + n for n in rep["pending"]] \
-        + ["UNKNOWN_ENTRY:" + n for n in rep["unknown"]]
+    probs += rep["problems"] + ["PENDING:" + n for n in rep["pending"]] + ["UNKNOWN_ENTRY:" + n for n in rep["unknown"]]
     if original is None:
-        out["problems"].append("CHAIN_" + str(info))
-    if shim_digest:
-        if live and live != shim_digest:
-            out["problems"].append("LIVE_NEQ_SHIM")
-        if shim_digest != expect_shim:
-            out["problems"].append("SHIM_PIN_MISMATCH")
-        try:  # the shim must not change while the report is produced
-            if read_regular(shim)[0] != shim_digest:
-                out["problems"].append("SHIM_CHANGED_DURING_READ")
-        except (OSError, ValueError):
-            out["problems"].append("SHIM_CHANGED_DURING_READ")
+        probs.append("CHAIN_" + str(info))
+    if shim_rec:
+        if live and live != shim_rec["sha256"]:
+            probs.append("LIVE_NEQ_SHIM")
+        if shim_rec["sha256"] != expect_shim:
+            probs.append("SHIM_PIN_MISMATCH")
+        revalidate(shim_rec, probs, "SHIM")
+    for mod, rec in recs.items():
+        revalidate(rec, probs, "MODULE:" + mod)
     if original != expect_original:
-        out["problems"].append("ORIGINAL_PIN_MISMATCH")
-    out["status"] = "B0_READBACK_PASS_EVIDENCE_ONLY" if not out["problems"] else "B0_READBACK_STOP"
+        probs.append("ORIGINAL_PIN_MISMATCH")
+    out["status"] = "B0_READBACK_PASS_EVIDENCE_ONLY" if not probs else "B0_READBACK_STOP"
     return out
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--source-sha", required=True, help="40-hex release retained under the store (da274d65...)")
+    ap.add_argument("--candidate-sha", required=True, help="40-hex candidate source that must be ABSENT (e5c40d3a...)")
     ap.add_argument("--expect-shim-sha256", required=True)
     ap.add_argument("--expect-original-sha256", required=True)
     ap.add_argument("--expect-module", action="append", required=True, metavar="NAME=SHA256",
@@ -310,7 +413,7 @@ def main(argv=None):
             return 2
         mods[name] = want
     try:
-        rep = readback(shim=a.shim, state=a.state, store=a.store, source_sha=a.source_sha,
+        rep = readback(shim=a.shim, state=a.state, store=a.store, source_sha=a.source_sha, candidate_sha=a.candidate_sha,
                        expect_shim=a.expect_shim_sha256, expect_original=a.expect_original_sha256,
                        expect_modules=mods, expect_uid=os.geteuid())
     except ValueError:
