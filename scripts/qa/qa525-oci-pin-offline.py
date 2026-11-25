@@ -16,7 +16,9 @@ def parse(raw):
                 raise ValueError("DUPLICATE_JSON_KEY")
             result[key] = value
         return result
-    return json.loads(raw, object_pairs_hook=pairs)
+    def reject_constant(value):
+        raise ValueError("NONFINITE_JSON_NUMBER")
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=reject_constant)
 
 def verify(manifest, config, expected_manifest, expected_revision=None):
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_manifest):
@@ -24,7 +26,9 @@ def verify(manifest, config, expected_manifest, expected_revision=None):
     if digest(manifest) != expected_manifest:
         raise ValueError("MANIFEST_DIGEST_MISMATCH")
     m, c = parse(manifest), parse(config)
-    if m.get("schemaVersion") != 2 or m.get("mediaType") not in (
+    if type(m) is not dict or type(c) is not dict:
+        raise ValueError("OCI_TOP_LEVEL_TYPE")
+    if type(m.get("schemaVersion")) is not int or m["schemaVersion"] != 2 or m.get("mediaType") not in (
         "application/vnd.oci.image.manifest.v1+json",
         "application/vnd.docker.distribution.manifest.v2+json"):
         raise ValueError("NOT_SINGLE_IMAGE_MANIFEST")
