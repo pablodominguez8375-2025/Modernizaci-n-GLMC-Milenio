@@ -86,28 +86,49 @@ def ancestors_clean(path):
     return True
 
 
-def digest_hex(value):
-    return value[7:] if isinstance(value, str) and value.startswith("sha256:") else value
+PFX, BARE, SRC40 = re.compile(r"sha256:[0-9a-f]{64}"), re.compile(r"[0-9a-f]{64}"), re.compile(r"[0-9a-f]{40}")
+LEGACY_KEYS = {"status", "source_sha", "release_asset_sha256", "old_launcher_sha256", "new_launcher_sha256",
+               "candidate_operator_sha256", "nonce"}
+MODERN_KEYS = {"status", "nonce", "old_launcher_sha256", "new_launcher_sha256", "evidence"}
+EVIDENCE_KEYS = {"app_archive_sha256", "app_source_sha", "candidate_operator_sha256", "shim_sha256"}
+
+
+def _is(pattern, value):
+    return isinstance(value, str) and pattern.fullmatch(value) is not None
 
 
 def classify(data, nonce):
-    """('legacy'|'modern'|'bad', old, new) for a receipt body whose internal nonce must equal the file nonce."""
+    """('legacy'|'modern'|'bad', old, new).  Generation is chosen by exact key schema; every field is validated
+    against ITS generation's format BEFORE any normalisation:
+      legacy: old/new/operator bare 64-hex, release_asset 'sha256:'+64-hex, source_sha 40-hex
+      modern: old/new 'sha256:'+64-hex and evidence with exactly four typed fields."""
     try:
         rec = json.loads(data.decode("ascii"), object_pairs_hook=_pairs)
     except (UnicodeError, ValueError, RecursionError):
         return "bad", None, None
-    if not isinstance(rec, dict) or rec.get("status") != "LAUNCHER_ATOMIC_SWAP_COMMITTED" or rec.get("nonce") != nonce:
+    if not isinstance(rec, dict) or rec.get("status") != "LAUNCHER_ATOMIC_SWAP_COMMITTED" or rec.get("nonce") != nonce \
+            or not _is(BARE, nonce):
         return "bad", None, None
-    old, new = digest_hex(rec.get("old_launcher_sha256")), digest_hex(rec.get("new_launcher_sha256"))
-    if not all(isinstance(v, str) and HEX64.fullmatch(v) for v in (old, new)) or old == new:
+    keys = set(rec)
+    if keys == LEGACY_KEYS:
+        ok = (_is(BARE, rec["old_launcher_sha256"]) and _is(BARE, rec["new_launcher_sha256"])
+              and _is(BARE, rec["candidate_operator_sha256"]) and _is(PFX, rec["release_asset_sha256"])
+              and _is(SRC40, rec["source_sha"]))
+        old, new = rec["old_launcher_sha256"], rec["new_launcher_sha256"]
+        fmt = "legacy"
+    elif keys == MODERN_KEYS:
+        ev = rec["evidence"]
+        ok = (_is(PFX, rec["old_launcher_sha256"]) and _is(PFX, rec["new_launcher_sha256"])
+              and isinstance(ev, dict) and set(ev) == EVIDENCE_KEYS
+              and all(_is(PFX, ev[k]) for k in ("app_archive_sha256", "candidate_operator_sha256", "shim_sha256"))
+              and _is(SRC40, ev["app_source_sha"]) and ev["shim_sha256"] == rec["new_launcher_sha256"])
+        old, new = (rec["old_launcher_sha256"][7:], rec["new_launcher_sha256"][7:]) if ok else (None, None)
+        fmt = "modern"
+    else:
         return "bad", None, None
-    if set(rec) == {"status", "source_sha", "release_asset_sha256", "old_launcher_sha256", "new_launcher_sha256",
-                    "candidate_operator_sha256", "nonce"}:
-        return "legacy", old, new
-    if set(rec) == {"status", "nonce", "old_launcher_sha256", "new_launcher_sha256", "evidence"} \
-            and isinstance(rec["evidence"], dict):
-        return "modern", old, new
-    return "bad", None, None
+    if not ok or old == new:
+        return "bad", None, None
+    return fmt, old, new
 
 
 def snapshot(state):

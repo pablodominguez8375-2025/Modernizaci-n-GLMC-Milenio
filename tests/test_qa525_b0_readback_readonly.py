@@ -17,7 +17,10 @@ LAUNCHERS = [b"launcher-1\n", b"launcher-2\n", b"launcher-3\n", b"launcher-4\n"]
 H = [hashlib.sha256(x).hexdigest() for x in LAUNCHERS]
 N = [("%d" % i) * 64 for i in (1, 2, 3)]
 SRC_SHA = "ab" * 20
-EV = {"app_archive_sha256": "x", "app_source_sha": "y", "candidate_operator_sha256": "z", "shim_sha256": "w"}
+def ev(new):
+    return {"app_archive_sha256": "sha256:" + "a" * 64, "app_source_sha": "c" * 40,
+            "candidate_operator_sha256": "sha256:" + "e" * 64, "shim_sha256": "sha256:" + new}
+
 
 
 def canon(r):
@@ -49,7 +52,7 @@ class B0Tests(unittest.TestCase):
 
     def modern(self, i):
         return {"status": "LAUNCHER_ATOMIC_SWAP_COMMITTED", "nonce": N[i], "old_launcher_sha256": "sha256:" + H[i],
-                "new_launcher_sha256": "sha256:" + H[i + 1], "evidence": EV}
+                "new_launcher_sha256": "sha256:" + H[i + 1], "evidence": ev(H[i + 1])}
 
     def seed(self):
         legacy = {"status": "LAUNCHER_ATOMIC_SWAP_COMMITTED", "source_sha": "d4" * 20,
@@ -186,6 +189,30 @@ class B0Tests(unittest.TestCase):
         finally:
             b0.read_regular = orig
 
+    def test_generation_schema_negatives(self):
+        legacy = {"status": "LAUNCHER_ATOMIC_SWAP_COMMITTED", "source_sha": "d4" * 20,
+                  "release_asset_sha256": "sha256:" + "0" * 64, "old_launcher_sha256": H[0],
+                  "new_launcher_sha256": H[1], "candidate_operator_sha256": "e5" * 32, "nonce": N[0]}
+        m = self.modern(1)
+        bare = dict(m, old_launcher_sha256=H[1], new_launcher_sha256=H[2])
+        cases = {
+            "modern_without_prefixes": bare,
+            "modern_empty_evidence": dict(m, evidence={}),
+            "modern_evidence_extra_key": dict(m, evidence=dict(m["evidence"], extra="x")),
+            "modern_evidence_bad_source": dict(m, evidence=dict(m["evidence"], app_source_sha="y")),
+            "modern_evidence_bad_archive": dict(m, evidence=dict(m["evidence"], app_archive_sha256="x")),
+            "modern_shim_not_new": dict(m, evidence=dict(m["evidence"], shim_sha256="sha256:" + "9" * 64)),
+            "legacy_with_prefixes": dict(legacy, old_launcher_sha256="sha256:" + H[0], new_launcher_sha256="sha256:" + H[1]),
+            "legacy_bad_source": dict(legacy, source_sha="zz"),
+            "legacy_bad_asset": dict(legacy, release_asset_sha256="0" * 64),
+            "mixed_schema": dict(legacy, evidence=m["evidence"]),
+        }
+        for name, rec in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(b0.classify(canon(rec), rec["nonce"])[0], "bad")
+        self.assertEqual(b0.classify(canon(legacy), N[0])[0], "legacy")
+        self.assertEqual(b0.classify(canon(m), N[1])[0], "modern")
+
     def test_symlinked_ancestor_stops(self):
         link = pathlib.Path(self.tmp.name) / "linkstate"
         os.symlink(self.state, link)
@@ -201,7 +228,8 @@ class B0Tests(unittest.TestCase):
 
     def test_fork_gap_backup_and_pin_mismatches(self):
         rec = self.modern(1)
-        rec.update(nonce="7" * 64, new_launcher_sha256="sha256:" + hashlib.sha256(b"other").hexdigest())
+        o = hashlib.sha256(b"other").hexdigest()
+        rec.update(nonce="7" * 64, new_launcher_sha256="sha256:" + o, evidence=ev(o))
         self.put("receipt-%s.json" % ("7" * 64), canon(rec))
         self.put("old-%s.bin" % ("7" * 64), LAUNCHERS[1], 0o700)
         self.stops("RECEIPT_INVALID_OR_AMBIGUOUS:")
