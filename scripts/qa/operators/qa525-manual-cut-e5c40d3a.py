@@ -263,6 +263,67 @@ def make_g6_verifier(g6, facts):
     return verifier
 
 
+def _read_meta(path, uid, modes, max_bytes):
+    """Read one regular file safely and return (bytes, meta-ok).  Never follows symlinks; owner/mode checked on the FD."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_uid != uid or stat.S_IMODE(st.st_mode) not in modes:
+            raise Stop("A0_G6_META_INVALID")
+        if st.st_size > max_bytes:
+            raise Stop("A0_G6_TOO_LARGE")
+        return _read_exact(fd, st.st_size)
+    finally:
+        os.close(fd)
+
+
+def _hash_file(path, uid, modes):
+    """Streaming sha256 of a (large) regular file; same FD safety checks."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_uid != uid or stat.S_IMODE(st.st_mode) not in modes:
+            raise Stop("A0_G6_META_INVALID")
+        h, left = hashlib.sha256(), st.st_size
+        while left:
+            chunk = os.read(fd, min(1 << 20, left))
+            if not chunk:
+                raise Stop("A0_G6_ARCHIVE_TRUNCATED")
+            h.update(chunk)
+            left -= len(chunk)
+        if os.read(fd, 1):
+            raise Stop("A0_G6_ARCHIVE_GREW")
+        return "sha256:" + h.hexdigest()
+    finally:
+        os.close(fd)
+
+
+def a0_g6_check(g6, paths, pins, expected, offhost_sha256, admission_expires_at, clock, uid=0,
+                modes=(0o600, 0o640, 0o644)):
+    """Closed physical G6 check (A0 only).  Reads review/receipt/restore + the encrypted archive from `paths`
+    (dict review/receipt/restore/archive -> absolute path, fixed by the reviewed A0 params, never invented), requiring
+    root-owned regular files with safe modes, hashing the ARCHIVE itself (not trusting any report), and feeding the
+    reviewed evidence checker.  `offhost_sha256` is the independent off-host hash (Drive download) supplied by the
+    caller from a different source; `expected` = {restic_repo_id, key_epoch}.  Returns 'PASS' or 'STOP:<code>'."""
+    try:
+        if type(paths) is not dict or set(paths) != {"review", "receipt", "restore", "archive"}:
+            return "STOP:A0_G6_PATHS_INVALID"
+        data = {k: _read_meta(paths[k], uid, modes, g6.MAX_BYTES) for k in ("review", "receipt", "restore")}
+        archive = _hash_file(paths["archive"], uid, modes)
+        facts = {"pins": pins, "observed_archive_sha256": archive, "downloaded_offhost_sha256": offhost_sha256,
+                 "expected_restic_repo_id": expected["restic_repo_id"], "expected_key_epoch": expected["key_epoch"],
+                 "admission_expires_at": admission_expires_at, "clock": clock}
+        if make_g6_verifier(g6, facts)(data) is not True:
+            return "STOP:A0_G6_EVIDENCE_REJECTED"
+        return "PASS"
+    except Stop as exc:
+        return "STOP:" + str(exc)
+    except OSError:
+        return "STOP:A0_G6_UNREADABLE"
+    except Exception:  # noqa: BLE001
+        return "STOP:A0_G6_UNEXPECTED"
+
+
 # ---- A0: read-only pre-check.  Closed output; no env, no secrets, no free text from the host is echoed. ----------
 A0_PROJECT = "centenario-qa-lab2"
 A0_TIMER = "pmgm-qa-lite.timer"

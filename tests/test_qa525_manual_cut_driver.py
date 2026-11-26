@@ -554,5 +554,69 @@ class G6Verifier(unittest.TestCase):
             cut.make_g6_verifier(self.g6, {"pins": {}})
 
 
+
+class A0G6Physical(G6Verifier):
+    def setUp(self):
+        super().setUp()
+        self.t = tempfile.TemporaryDirectory()
+        self.addCleanup(self.t.cleanup)
+        self.d = os.path.realpath(self.t.name)
+        self.paths = {}
+        for k, v in self.data.items():
+            self.paths[k] = self.put(k + ".json", v)
+        arch = b"encrypted-archive-bytes"
+        self.arch_sha = "sha256:" + hashlib.sha256(arch).hexdigest()
+        self.paths["archive"] = self.put("a.tar.gz", arch)
+        self.exp = {"restic_repo_id": self.facts["expected_restic_repo_id"], "expected_key_epoch": None,
+                    "key_epoch": self.facts["expected_key_epoch"]}
+
+    def put(self, name, raw):
+        p = os.path.join(self.d, name)
+        with open(p, "wb") as h:
+            h.write(raw)
+        os.chmod(p, 0o600)
+        return p
+
+    def run_check(self, offhost=None, paths=None, uid=None):
+        return cut.a0_g6_check(self.g6, paths or self.paths, self.facts["pins"], self.exp,
+                               offhost or self.facts["downloaded_offhost_sha256"], self.facts["admission_expires_at"],
+                               self.facts["clock"], os.geteuid() if uid is None else uid)
+
+    def rebind(self, raw):
+        # review/receipt/restore name an archive sha "a"*64: align the fake archive with it
+        self.facts["observed_archive_sha256"] = self.arch_sha
+
+    def test_archive_hash_is_physically_computed_not_reported(self):
+        # the evidence claims archive sha 'aaaa…'; the physical file hashes differently => STOP (not self-certified)
+        self.assertEqual(self.run_check(), "STOP:A0_G6_EVIDENCE_REJECTED")
+
+    def test_wrong_owner_and_symlink_and_missing_stop_closed(self):
+        self.assertEqual(self.run_check(uid=12345), "STOP:A0_G6_META_INVALID")
+        link = os.path.join(self.d, "l.json")
+        os.symlink(self.paths["review"], link)
+        self.assertEqual(self.run_check(paths=dict(self.paths, review=link)), "STOP:A0_G6_UNREADABLE")
+        self.assertEqual(self.run_check(paths=dict(self.paths, restore=self.d + "/nope")), "STOP:A0_G6_UNREADABLE")
+        self.assertEqual(self.run_check(paths={"review": 1}), "STOP:A0_G6_PATHS_INVALID")
+
+    def test_pass_when_physical_archive_matches_evidence_and_offhost(self):
+        import json
+        real = self.arch_sha[len("sha256:"):]
+        canon = lambda o: (json.dumps(o, sort_keys=True, separators=(",", ":")) + "\n").encode()  # noqa: E731
+        for k in ("review", "receipt", "restore"):
+            rec = json.loads(self.data[k])
+            for f in ("g6_archive_sha256", "sha256", "archive_sha256"):
+                if f in rec:
+                    rec[f] = real
+            self.data[k] = canon(rec)
+            self.paths[k] = self.put(k + ".json", self.data[k])
+        self.facts["pins"] = {k: "sha256:" + hashlib.sha256(v).hexdigest() for k, v in self.data.items()}
+        self.assertEqual(self.run_check(offhost=self.arch_sha), "PASS")
+        self.assertEqual(self.run_check(offhost="sha256:" + "9" * 64), "STOP:A0_G6_EVIDENCE_REJECTED")
+
+    def test_group_writable_evidence_is_rejected(self):
+        os.chmod(self.paths["review"], 0o666)
+        self.assertEqual(self.run_check(), "STOP:A0_G6_META_INVALID")
+
+
 if __name__ == "__main__":
     unittest.main()
