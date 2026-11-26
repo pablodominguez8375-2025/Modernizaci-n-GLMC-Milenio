@@ -18,12 +18,34 @@ ITEMS = (
 )
 
 
+class Anomaly(Exception):
+    pass
+
+
+LINE = re.compile(r"(A0G6_[A-Za-z0-9_.-]{1,160})=([\x21-\x7e ]{0,400})\Z")
+EVIDENCE = re.compile(r"sha256=[a-f0-9]{64} size=\d{1,9}( restic_repo_id=[a-f0-9]{64})?( key_epoch=[a-f0-9]{32})?\Z")
+EV_ID = re.compile(r" restic_repo_id=([a-f0-9]{64})")
+EV_EP = re.compile(r" key_epoch=([a-f0-9]{32})")
+
+
 def parse(text):
+    """Strict: every non-empty line must be a closed A0G6_KEY=VALUE; duplicates, STOP lines, contamination and
+    malformed evidence raise Anomaly (=> global STOP)."""
+    if type(text) is not str or len(text) > 1 << 20:
+        raise Anomaly("TEXT")
     kv = {}
-    for line in text.splitlines():
-        if "=" in line and line.startswith("A0G6_"):
-            k, v = line.split("=", 1)
-            kv[k] = v
+    for line in text.split("\n"):
+        if not line:
+            continue
+        m = LINE.fullmatch(line)
+        if m is None:
+            raise Anomaly("LINE")
+        k, v = m.groups()
+        if k in kv:
+            raise Anomaly("DUPLICATE")
+        if k.startswith("A0G6_EVIDENCE_") and EVIDENCE.fullmatch(v) is None:
+            raise Anomaly("EVIDENCE")
+        kv[k] = v
     return kv
 
 
@@ -32,18 +54,18 @@ def _ok(d, key, rx):
     return type(v) is str and rx.fullmatch(v) is not None
 
 
-def evaluate(inventory_text, inputs):
-    inv = parse(inventory_text) if type(inventory_text) is str else {}
+def _evaluate(inventory_text, inputs):
+    inv = parse(inventory_text)
     inputs = inputs if type(inputs) is dict else {}
-    complete = inv.get("A0G6_INVENTORY_COMPLETE") == "1" and "A0G6_STOP" not in inventory_text
+    complete = inv.get("A0G6_INVENTORY_COMPLETE") == "1"
     ev = {k: v for k, v in inv.items() if k.startswith("A0G6_EVIDENCE_")}
     params = [k for k in ev if k.startswith("A0G6_EVIDENCE_qa525-a0-g6-params")]
     receipts = [k for k in ev if k.startswith("A0G6_EVIDENCE_receipt-")]
     reviews = [k for k in ev if k.startswith("A0G6_EVIDENCE_review-")]
     restores = [k for k in ev if k.startswith("A0G6_EVIDENCE_isolated-restore-v2-")]
     archives = [k for k in inv if k.startswith("A0G6_ARCHIVE_")]
-    ids = {re.search(r"restic_repo_id=([a-f0-9]{64})", v).group(1) for v in ev.values() if "restic_repo_id=" in v}
-    epochs = {re.search(r"key_epoch=([a-f0-9]{32})", v).group(1) for v in ev.values() if "key_epoch=" in v}
+    ids = {m.group(1) for v in ev.values() for m in EV_ID.finditer(v)}
+    epochs = {m.group(1) for v in ev.values() for m in EV_EP.finditer(v)}
     rows = []
 
     def row(i, passed, ref):
@@ -65,6 +87,14 @@ def evaluate(inventory_text, inputs):
     row(10, inputs.get("uat_postflight_defined") is True, "review:UAT_POSTFLIGHT")
     glob = "READY_FOR_A0" if all(r[2] == "PASS" for r in rows) and complete and params else "STOP"
     return glob, rows
+
+
+def evaluate(inventory_text, inputs):
+    """Never raises: any anomaly or unexpected exception => every row STOP and global STOP."""
+    try:
+        return _evaluate(inventory_text, inputs)
+    except Exception:  # noqa: BLE001 - closed STOP is the contract
+        return "STOP", [(i, n, "STOP", "NO_EVIDENCE") for i, n in ITEMS]
 
 
 def render(glob, rows):

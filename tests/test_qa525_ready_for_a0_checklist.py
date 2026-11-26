@@ -51,6 +51,35 @@ class Checklist(unittest.TestCase):
         self.assertIn("READY_FOR_A0_01_CI_EXACT_HEAD=STOP ref=NO_EVIDENCE", text)
         self.assertTrue(text.endswith("READY_FOR_A0_GLOBAL=STOP\n"))
 
+    def assert_all_stop(self, text, inputs=INPUTS):
+        g, rows = chk.evaluate(text, inputs)
+        self.assertEqual(g, "STOP")
+        self.assertEqual(len(rows), 10)
+        self.assertTrue(all(r[2] == "STOP" and r[3] == "NO_EVIDENCE" for r in rows))
+        self.assertTrue(chk.render(g, rows).endswith("READY_FOR_A0_GLOBAL=STOP\n"))
+
+    def test_duplicate_key_rejected(self):
+        self.assert_all_stop(INV + "A0G6_INVENTORY_COMPLETE=1\n")
+
+    def test_malformed_repo_or_epoch_or_evidence(self):
+        self.assert_all_stop(INV.replace("b" * 64, "b" * 63, 1))
+        self.assert_all_stop(INV.replace("c" * 32, "zz" * 16, 1))
+        self.assert_all_stop(INV.replace("size=9 restic", "size=-9 restic", 1))
+        self.assert_all_stop(INV.replace("sha256=" + "2" * 64, "sha256=short", 1))
+
+    def test_contaminated_text(self):
+        self.assert_all_stop(INV + "free text line\n")
+        self.assert_all_stop("garbage\n" + INV)
+        self.assert_all_stop(INV + "A0G6_X=\x00bad\n")
+        self.assert_all_stop(INV + "A0G6_STOP:IO\n")
+
+    def test_parse_exceptions_become_closed_stop(self):
+        self.assert_all_stop(object())
+        self.assert_all_stop("A" * (1 << 21))
+        g, rows = chk.evaluate(INV, {"ci_head_sha": object()})  # bad input: no exception, global STOP
+        self.assertEqual(g, "STOP")
+        self.assertEqual(rows[0][2], "STOP")
+
 
 if __name__ == "__main__":
     unittest.main()
