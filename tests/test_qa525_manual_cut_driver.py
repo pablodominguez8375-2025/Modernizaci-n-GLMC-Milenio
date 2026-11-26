@@ -334,6 +334,60 @@ class EndToEndFakeDocker(unittest.TestCase):
         self.assertFalse(any(x[:2] == (D, "run") for x in self.calls[self.calls.index(
             next(x for x in self.calls if "bash" in x)):]))  # nothing re-run after the failure
 
+    # ---- A0 (read-only) -------------------------------------------------------------------------------------
+    def a0(self, **over):
+        outs = {"timer": (3, b"inactive\n"), "update_procs": (1, b"0\n"),
+                "containers": (0, b"abcdef123456 pg1 running\nabcdef123457 api running\n")}
+        outs.update(over.pop("outs", {}))
+        argv_key = {v: k for k, v in cut.A0_ARGV.items()}
+
+        def run(argv):
+            return outs[argv_key[tuple(argv)]]
+        fs = {"file_ok": lambda path, mode, uid: True, "env_dir": self.root + "/absent-env",
+              "abort": self.root + "/absent-abort"}
+        fs.update(over.pop("fs", {}))
+        return cut.a0_report(run, self.mods, self.spec, self.params, "a" * 64, lock_paths=self.locks(),
+                             uid=os.geteuid(), fs=fs)
+
+    def locks(self):
+        paths = []
+        for i in range(5):
+            p = self.root + "/lock%d" % i
+            open(p, "w").close()
+            os.chmod(p, 0o600)
+            paths.append(p)
+        return paths
+
+    def test_a0_passes_and_issues_no_mutating_command(self):
+        rep = self.a0()
+        self.assertEqual(rep["overall"], "A0_PASS_READ_ONLY_EVIDENCE", rep)
+        self.assertFalse(any(c[:2] in ((D, "stop"), (D, "run"), (D, "start"), (D, "rm")) for c in self.calls))
+
+    def test_a0_stops_on_active_timer_updater_history_drift_and_leftovers(self):
+        self.assertEqual(self.a0(outs={"timer": (0, b"active\n")})["timer_inactive"], "STOP:TIMER_ACTIVE")
+        self.assertEqual(self.a0(outs={"update_procs": (0, b"2\n")})["no_update_processes"],
+                         "STOP:UPDATER_PROCESS_PRESENT")
+        self.hist = self.hist[:-1]
+        self.assertEqual(self.a0()["ef_history_100"], "STOP:EF_NOT_PINNED_100")
+        self.hist = list(self.base)
+        open(self.root + "/absent-abort", "w").close()
+        self.assertEqual(self.a0()["abort_file_absent"], "STOP:ABORT_FILE_PRESENT")
+        os.unlink(self.root + "/absent-abort")
+        self.assertEqual(self.a0(outs={"containers": (0, b"abcdef123457 api running\n")})["containers"],
+                         "STOP:PG_CONTAINER_MISSING")
+        self.assertEqual(self.a0(fs={"file_ok": lambda *a: False})["uat_credential_mode"],
+                         "STOP:UAT_CREDENTIAL_NOT_ROOT_0600")
+
+    def test_a0_stops_when_a_legacy_lock_is_held(self):
+        paths = self.locks()
+        fd = os.open(paths[2], os.O_RDONLY)
+        self.addCleanup(os.close, fd)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        out = cut.a0_report(lambda a: (0, b""), self.mods, self.spec, self.params, "a" * 64, lock_paths=paths,
+                            uid=os.geteuid(), fs={"file_ok": lambda *a: True})
+        self.assertNotEqual(out["locks_free"], "PASS")
+        self.assertEqual(out["overall"], "A0_STOP")
+
     def test_incomplete_collaborators_fail_closed(self):
         del self.collab["flight"]
         with self.assertRaises(cut.Stop) as c:

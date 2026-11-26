@@ -230,6 +230,112 @@ def run_cut(mods, plane, root, uid, now, nonce, authorization, spec, params, col
     return ex.run(journal, plane, steps)
 
 
+# ---- A0: read-only pre-check.  Closed output; no env, no secrets, no free text from the host is echoed. ----------
+A0_PROJECT = "centenario-qa-lab2"
+A0_TIMER = "pmgm-qa-lite.timer"
+A0_ABORT = "/root/.qa525-schema-cut-abort"
+A0_ENV_DIR = "/run/qa525-schema-env"
+A0_UAT = "/root/.qa525-uat-credential"
+A0_ARGV = {
+    "containers": (DOCKER, "ps", "-a", "--filter", "label=com.docker.compose.project=" + A0_PROJECT,
+                   "--format", "{{.ID}} {{.Names}} {{.State}}"),
+    "timer": ("/usr/bin/systemctl", "is-active", A0_TIMER),
+    "update_procs": ("/usr/bin/pgrep", "-c", "-f", "pmgm-qa-update|qa-lite-install|run-with-backup"),
+}
+_HEX64 = __import__("re").compile(r"[0-9a-f]{64}\Z")
+_NAME = __import__("re").compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,62}\Z")
+
+
+def _file_mode_ok(path, mode, uid=0):
+    """Existence + root-owned + exact mode, regular, single link.  Never reads content."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    return (stat.S_ISREG(st.st_mode) and st.st_uid == uid and st.st_nlink == 1
+            and stat.S_IMODE(st.st_mode) == mode)
+
+
+def a0_report(run, mods, spec, params, driver_sha256, lock_paths=LOCKS, uid=0, fs=None):
+    """`run(argv)->(rc, bytes)` for the FIXED A0_ARGV table only; docker ones go through the closed runner.
+    Returns {check: 'PASS'|'STOP:<code>'} plus an `overall`.  Never raises for a failed check; no host text echoed."""
+    fs = fs or {}
+    out = {}
+
+    def check(name, fn):
+        try:
+            res = fn()
+            out[name] = "PASS" if res is True else "STOP:" + (res if type(res) is str else "FAILED")
+        except Stop as exc:
+            out[name] = "STOP:" + str(exc)
+        except Exception:  # noqa: BLE001
+            out[name] = "STOP:A0_UNEXPECTED"
+
+    check("driver_sha256", lambda: bool(_HEX64.fullmatch(driver_sha256 or "")))
+    check("libs_pinned", lambda: all(m is not None for m in mods.values()) and len(mods) == len(LIB_PINS))
+
+    def locks_free():
+        with Plane(lock_paths) as probe:
+            probe.assert_held()
+        return True
+    check("locks_free", locks_free)
+
+    def timer_inactive():
+        rc, data = run(A0_ARGV["timer"])
+        return data.strip() in (b"inactive", b"failed", b"unknown") or "TIMER_ACTIVE"
+    check("timer_inactive", timer_inactive)
+
+    def no_updaters():
+        rc, data = run(A0_ARGV["update_procs"])
+        return data.strip() == b"0" or "UPDATER_PROCESS_PRESENT"
+    check("no_update_processes", no_updaters)
+
+    def containers():
+        rc, data = run(A0_ARGV["containers"])
+        rows = [ln.split(" ") for ln in data.decode("ascii", "replace").splitlines() if ln]
+        if rc != 0 or any(len(r) != 3 for r in rows):
+            return "CONTAINERS_UNEXPECTED"
+        names = {r[1]: r[2] for r in rows}
+        if spec["pg_container"] not in names:
+            return "PG_CONTAINER_MISSING"
+        return names[spec["pg_container"]] == "running" or "PG_NOT_RUNNING"
+    check("containers", containers)
+
+    allowed = build_allowlist(mods, spec, params)
+    docker = make_runner(allowed)
+    pt = mods["qa525-vnext-schema-cut-ports.py"]
+
+    def images():
+        for image in (spec["migrator_image_id"],):
+            rc, data = docker((DOCKER, "image", "inspect", "--format", "{{.Id}}", image), 60)
+            if rc != 0 or data != (image + "\n").encode():
+                return "MIGRATOR_IMAGE_MISSING"
+        for service, image in spec["images"].items():
+            rc, data = docker((DOCKER, "image", "inspect", "--format", pt.REVISION_FORMAT, image), 60)
+            if rc != 0 or data != (spec["revisions"][service] + "\n").encode():
+                return "IMAGE_REVISION_MISMATCH"
+        return True
+    check("images", images)
+
+    def ef100():
+        rc, data = docker(pt._psql(spec["pg_container"], pt.HISTORY_SQL), 60)
+        lines = data.decode("ascii", "replace").split("\n")[:-1]
+        digest = "sha256:" + hashlib.sha256("\n".join(lines).encode("ascii", "replace")).hexdigest()
+        return rc == 0 and len(lines) == 100 and digest == spec["baseline_sha256"] or "EF_NOT_PINNED_100"
+    check("ef_history_100", ef100)
+
+    check("migrator_env_mode", lambda: fs.get("file_ok", _file_mode_ok)(params["migrator_env_file"], 0o600, uid)
+          or "MIGRATOR_ENV_NOT_ROOT_0600")
+    check("grants_env_mode", lambda: fs.get("file_ok", _file_mode_ok)(params["grants_env_file"], 0o600, uid)
+          or "GRANTS_ENV_NOT_ROOT_0600")
+    check("uat_credential_mode", lambda: fs.get("file_ok", _file_mode_ok)(A0_UAT, 0o600, uid)
+          or "UAT_CREDENTIAL_NOT_ROOT_0600")
+    check("schema_env_dir_absent", lambda: not os.path.lexists(fs.get("env_dir", A0_ENV_DIR)) or "SCHEMA_ENV_DIR_PRESENT")
+    check("abort_file_absent", lambda: not os.path.lexists(fs.get("abort", A0_ABORT)) or "ABORT_FILE_PRESENT")
+    out["overall"] = "A0_PASS_READ_ONLY_EVIDENCE" if all(v == "PASS" for v in out.values()) else "A0_STOP"
+    return out
+
+
 def unwired(name):
     def step(*_a):
         raise Stop("CUT_STEP_NOT_WIRED_" + name)
