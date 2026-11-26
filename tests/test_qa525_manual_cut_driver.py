@@ -291,6 +291,18 @@ class EndToEndFakeDocker(unittest.TestCase):
         return cut.run_cut(self.mods, self.plane, self.root, os.geteuid(), self.now, nonce, self.auth,
                            self.spec, self.params, self.collab)
 
+    def test_nonce_not_spent_without_held_plane(self):
+        class LostPlane:
+            def assert_held(self):
+                raise RuntimeError("not held")
+
+        with self.assertRaises(cut.Stop) as ctx:
+            cut.run_cut(self.mods, LostPlane(), self.root, os.geteuid(), self.now, "2" * 64,
+                         self.auth, self.spec, self.params, self.collab)
+        self.assertEqual(str(ctx.exception), "CUT_PLANE_NOT_HELD")
+        self.assertEqual(self.calls, [])
+        self.assertEqual(os.listdir(self.root), [])
+
     def test_full_sequence_completes_with_reviewed_libs(self):
         res = self.run_cut()
         self.assertEqual(res["phases"], ("RESERVED", "BACKUP_VERIFIED", "WRITES_QUIESCED", "MIGRATION_STARTED",
