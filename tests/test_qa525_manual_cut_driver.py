@@ -505,6 +505,54 @@ class Flight(unittest.TestCase):
         with self.assertRaises(cut.Stop):
             cut.make_flight(None, {}, "xyz", lambda: 0, lambda n: None)
 
+class G6Verifier(unittest.TestCase):
+    def setUp(self):
+        import datetime as dt
+        import json
+        scripts = pathlib.Path(__file__).resolve().parents[1] / "scripts/qa"
+        self.g6 = cut.load_libs(str(scripts), {cut.G6_LIB: cut.G6_PIN})[cut.G6_LIB]
+        self.dt = dt
+        canon = lambda o: (json.dumps(o, sort_keys=True, separators=(",", ":")) + "\n").encode()  # noqa: E731
+        self.start = dt.datetime(2026, 11, 25, 6, 0, 0, tzinfo=dt.timezone.utc)
+        ts = self.start.strftime("%Y%m%dT%H%M%SZ")
+        name = "centenario-qa-g6-v2-CIFRADO-%s.tar.gz" % ts
+        sha, repo, epoch = "a" * 64, "b" * 64, "c" * 32
+        review = {"schema": "qa525-g6-v2-review", "g6_archive_name": name, "g6_archive_sha256": sha,
+                  "g6_restore_report_name": "isolated-restore-v2-%s.report.json" % ts,
+                  "g6_offhost_sha256_verified": True, "g6_drive_file_id": "D" * 20, "restic_repo_id": repo,
+                  "key_epoch": epoch}
+        receipt = {"schema": "qa525-g6-v2-receipt", "archive_name": name, "sha256": sha,
+                   "status": "ENCRYPTED_LOCAL_ARCHIVE_READY_OFFHOST_PENDING", "restic_repo_id": repo,
+                   "key_epoch": epoch}
+        restore = {"schema": "qa525-g6-v2-restore", "result": "G6_SAME_HOST_ISOLATED_RESTORE_PASS_NOT_DISASTER_RECOVERY",
+                   "archive_filename": name, "archive_sha256": sha, "restic_repo_id": repo, "key_epoch": epoch,
+                   "postgres_tables_by_database": {"pmgm": 5, "pmgm_keycloak": 3}, "silo_objects_verified": 1,
+                   "production_touched": False}
+        self.data = {"review": canon(review), "receipt": canon(receipt), "restore": canon(restore)}
+        d = lambda b: "sha256:" + hashlib.sha256(b).hexdigest()  # noqa: E731
+        self.facts = {"pins": {k: d(v) for k, v in self.data.items()},
+                      "observed_archive_sha256": "sha256:" + sha, "downloaded_offhost_sha256": "sha256:" + sha,
+                      "expected_restic_repo_id": repo, "expected_key_epoch": epoch,
+                      "admission_expires_at": self.start + dt.timedelta(hours=40),
+                      "clock": lambda: self.start + dt.timedelta(hours=20)}
+
+    def test_accepts_coherent_evidence_inside_window(self):
+        self.assertIs(cut.make_g6_verifier(self.g6, self.facts)(self.data), True)
+
+    def test_rejects_stale_window_hash_drift_and_tampered_evidence(self):
+        f = dict(self.facts, clock=lambda: self.start + self.dt.timedelta(hours=49))
+        self.assertIs(cut.make_g6_verifier(self.g6, f)(self.data), False)
+        f = dict(self.facts, admission_expires_at=self.start + self.dt.timedelta(hours=48))  # not strictly inside
+        self.assertIs(cut.make_g6_verifier(self.g6, f)(self.data), False)
+        f = dict(self.facts, downloaded_offhost_sha256="sha256:" + "f" * 64)
+        self.assertIs(cut.make_g6_verifier(self.g6, f)(self.data), False)
+        bad = dict(self.data, restore=self.data["restore"].replace(b"5", b"6", 1))
+        self.assertIs(cut.make_g6_verifier(self.g6, self.facts)(bad), False)
+
+    def test_invalid_facts_stop(self):
+        with self.assertRaises(cut.Stop):
+            cut.make_g6_verifier(self.g6, {"pins": {}})
+
 
 if __name__ == "__main__":
     unittest.main()

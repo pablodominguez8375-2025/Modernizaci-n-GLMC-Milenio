@@ -36,6 +36,9 @@ LIB_PINS = {
     "qa525-vnext-schema-cut-plan.py": "518ed4016c53b0d6d14069d960d46b6ab625e583bafac3061e8757feccacd471",
     "qa525-vnext-go-nonce-journal.py": "65179306bddba301949fce0347bead2080ed8d715dd7b941382ed7e79d1a3562",
 }
+# Existing G6 v2 evidence checker (blob identical to dev@e5c40d3a; to be re-cotejado against the attested inner zip).
+G6_LIB = "qa525-vnext-g6-v2-evidence.py"
+G6_PIN = "add8e206d12a5814612db0e77e9438d4a885520c724e1714734b8e5ef4697f32"
 LOCKS = (
     "/opt/centenario/qa-api-refresh/operation.lock",
     "/opt/centenario/qa-auto-lite/web-update.lock",
@@ -228,6 +231,36 @@ def run_cut(mods, plane, root, uid, now, nonce, authorization, spec, params, col
     def journal(phase):
         return store.append(root, jbinding, phase, uid=uid, plane=plane, contract=contract, nonce_journal=nj)
     return ex.run(journal, plane, steps)
+
+
+def make_g6_verifier(g6, facts):
+    """verifier(data)->bool for `ports.make_verify_backup`: reuses the EXISTING G6 only if the reviewed evidence checker
+    accepts it for THIS cut (pins, receipt, review, restore, 48 h window covering the admission).  Authenticity of the
+    archive/off-host hashes, repo id and key epoch is supplied by the caller from physical, independent reads (`facts`);
+    this function never reads the host.  Any exception => False (closed STOP in the reviewed library)."""
+    need = {"pins", "observed_archive_sha256", "downloaded_offhost_sha256", "expected_restic_repo_id",
+            "expected_key_epoch", "admission_expires_at", "clock"}
+    if type(facts) is not dict or set(facts) != need or not callable(facts["clock"]):
+        raise Stop("CUT_G6_FACTS_INVALID")
+    pins = facts["pins"]
+    if type(pins) is not dict or set(pins) != {"review", "receipt", "restore"}:
+        raise Stop("CUT_G6_FACTS_INVALID")
+
+    def verifier(data):
+        try:
+            res = g6.inspect(
+                review_bytes=data["review"], receipt_bytes=data["receipt"], restore_bytes=data["restore"],
+                pins={"review_sha256": pins["review"], "receipt_sha256": pins["receipt"],
+                      "restore_sha256": pins["restore"]},
+                observed_archive_sha256=facts["observed_archive_sha256"],
+                downloaded_offhost_sha256=facts["downloaded_offhost_sha256"],
+                expected_restic_repo_id=facts["expected_restic_repo_id"],
+                expected_key_epoch=facts["expected_key_epoch"], now=facts["clock"](),
+                admission_expires_at=facts["admission_expires_at"])
+            return res.get("status") == g6.STATUS and res.get("may_apply") is False
+        except Exception:  # noqa: BLE001
+            return False
+    return verifier
 
 
 # ---- A0: read-only pre-check.  Closed output; no env, no secrets, no free text from the host is echoed. ----------
