@@ -33,7 +33,7 @@ class Loader(unittest.TestCase):
         self.assertEqual(cut.load_libs(self.d, {"m.py": h})["m.py"].VALUE, 7)
 
     def test_short_reads_are_reassembled_and_overflow_stops(self):
-        payload = b"VALUE = 7\\n"
+        payload = b"VALUE = 7\n"
         path = os.path.join(self.d, "m.py")
         with open(path, "wb") as h:
             h.write(payload)
@@ -53,11 +53,29 @@ class Loader(unittest.TestCase):
             os.read = original
         self.assertGreater(len(calls), 1)
 
-        with open(path, "ab") as h:
-            h.write(b"X")
-        with self.assertRaises(cut.Stop) as ctx:
-            cut.load_libs(self.d, {"m.py": expected})
+        # the file grows between fstat and the overflow probe: the 1-byte probe returns data => STOP
+        def growing(fd, size):
+            return b"X" if size == 1 else original(fd, size)
+
+        os.read = growing
+        try:
+            with self.assertRaises(cut.Stop) as ctx:
+                cut.load_libs(self.d, {"m.py": expected})
+        finally:
+            os.read = original
         self.assertEqual(str(ctx.exception), "CUT_LIB_TOO_LARGE")
+
+        # truncated while reading: empty chunk before the declared size => fixed STOP
+        def truncated(fd, size):
+            return b"" if size != 1 else original(fd, size)
+
+        os.read = truncated
+        try:
+            with self.assertRaises(cut.Stop) as ctx:
+                cut.load_libs(self.d, {"m.py": expected})
+        finally:
+            os.read = original
+        self.assertEqual(str(ctx.exception), "CUT_LIB_READ_INCOMPLETE")
 
     def test_mismatch_unpinned_missing_unsafe(self):
         h = self.put("m.py", b"X=1\n")
