@@ -324,6 +324,33 @@ def a0_g6_check(g6, paths, pins, expected, offhost_sha256, admission_expires_at,
         return "STOP:A0_G6_UNEXPECTED"
 
 
+A0_G6_PARAMS_FIELDS = frozenset({"schema", "paths", "pins", "restic_repo_id", "key_epoch", "offhost_sha256"})
+
+
+def load_a0_g6_params(path, uid=0):
+    """Reviewed, root-owned, canonical JSON written AFTER a G6 run; absent/invalid => closed STOP (never invented)."""
+    import json
+    try:
+        raw = _read_meta(path, uid, (0o600, 0o640, 0o644), 65536)
+    except FileNotFoundError:
+        raise Stop("A0_G6_PARAMS_ABSENT") from None
+    except OSError:
+        raise Stop("A0_G6_PARAMS_UNREADABLE") from None
+    try:
+        rec = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError):
+        raise Stop("A0_G6_PARAMS_INVALID") from None
+    canon = (json.dumps(rec, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("ascii") \
+        if type(rec) is dict else b""
+    if (type(rec) is not dict or set(rec) != A0_G6_PARAMS_FIELDS or rec["schema"] != "qa525-a0-g6-params-v1"
+            or canon != raw or type(rec["paths"]) is not dict or set(rec["paths"]) != {"review", "receipt", "restore", "archive"}
+            or any(type(v) is not str or not v.startswith("/") for v in rec["paths"].values())
+            or type(rec["pins"]) is not dict or set(rec["pins"]) != {"review", "receipt", "restore"}
+            or not all(type(rec[k]) is str for k in ("restic_repo_id", "key_epoch", "offhost_sha256"))):
+        raise Stop("A0_G6_PARAMS_INVALID")
+    return rec
+
+
 # ---- A0: read-only pre-check.  Closed output; no env, no secrets, no free text from the host is echoed. ----------
 A0_PROJECT = "centenario-qa-lab2"
 A0_TIMER = "pmgm-qa-lite.timer"

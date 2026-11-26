@@ -617,6 +617,47 @@ class A0G6Physical(G6Verifier):
         os.chmod(self.paths["review"], 0o666)
         self.assertEqual(self.run_check(), "STOP:A0_G6_META_INVALID")
 
+class A0G6Params(unittest.TestCase):
+    def setUp(self):
+        self.t = tempfile.TemporaryDirectory()
+        self.addCleanup(self.t.cleanup)
+        self.p = os.path.join(os.path.realpath(self.t.name), "params.json")
+
+    def write(self, rec, canonical=True):
+        import json
+        raw = json.dumps(rec, sort_keys=True, separators=(",", ":")) + ("\n" if canonical else " \n")
+        with open(self.p, "w") as h:
+            h.write(raw)
+        os.chmod(self.p, 0o600)
+
+    def good(self):
+        d = "sha256:" + "a" * 64
+        return {"schema": "qa525-a0-g6-params-v1", "paths": {k: "/x/" + k for k in ("review", "receipt", "restore", "archive")},
+                "pins": {"review": d, "receipt": d, "restore": d}, "restic_repo_id": "b" * 64, "key_epoch": "c" * 32,
+                "offhost_sha256": d}
+
+    def test_absent_params_stop_closed(self):
+        with self.assertRaises(cut.Stop) as c:
+            cut.load_a0_g6_params(self.p, os.geteuid())
+        self.assertEqual(str(c.exception), "A0_G6_PARAMS_ABSENT")
+
+    def test_valid_params_load_and_noncanonical_or_extra_fields_stop(self):
+        self.write(self.good())
+        self.assertEqual(cut.load_a0_g6_params(self.p, os.geteuid())["key_epoch"], "c" * 32)
+        self.write(self.good(), canonical=False)
+        with self.assertRaises(cut.Stop):
+            cut.load_a0_g6_params(self.p, os.geteuid())
+        rec = self.good()
+        rec["extra"] = 1
+        self.write(rec)
+        with self.assertRaises(cut.Stop):
+            cut.load_a0_g6_params(self.p, os.geteuid())
+
+    def test_wrong_owner_stops(self):
+        self.write(self.good())
+        with self.assertRaises(cut.Stop):
+            cut.load_a0_g6_params(self.p, 12345)
+
 
 if __name__ == "__main__":
     unittest.main()
