@@ -634,7 +634,7 @@ class A0G6Params(unittest.TestCase):
         d = "sha256:" + "a" * 64
         return {"schema": "qa525-a0-g6-params-v1", "paths": {k: "/x/" + k for k in ("review", "receipt", "restore", "archive")},
                 "pins": {"review": d, "receipt": d, "restore": d}, "restic_repo_id": "b" * 64, "key_epoch": "c" * 32,
-                "offhost_sha256": d}
+                "offhost_sha256": d, "command": "review", "operation_sha256": d, "nonce_sha256": d, "go_sha256": d}
 
     def test_absent_params_stop_closed(self):
         with self.assertRaises(cut.Stop) as c:

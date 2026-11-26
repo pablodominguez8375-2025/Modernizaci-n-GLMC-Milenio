@@ -396,7 +396,102 @@ def a0_g6_check(g6, paths, pins, expected, offhost_sha256, admission_expires_at,
         return "STOP:A0_G6_UNEXPECTED"
 
 
-A0_G6_PARAMS_FIELDS = frozenset({"schema", "paths", "pins", "restic_repo_id", "key_epoch", "offhost_sha256"})
+A0_G6_PARAMS_FIELDS = frozenset({"schema", "paths", "pins", "restic_repo_id", "key_epoch", "offhost_sha256",
+                                 "command", "operation_sha256", "nonce_sha256", "go_sha256"})
+_SHA256_DIGEST = __import__("re").compile(r"sha256:[0-9a-f]{64}\Z")
+
+
+def _a0_g6_params_canonical(rec):
+    """Validate the closed shape and return canonical bytes (shared by the writer and the loader)."""
+    import json
+    if (type(rec) is not dict or set(rec) != A0_G6_PARAMS_FIELDS or rec["schema"] != "qa525-a0-g6-params-v1"
+            or rec["command"] != "review"
+            or type(rec["paths"]) is not dict or set(rec["paths"]) != {"review", "receipt", "restore", "archive"}
+            or any(type(v) is not str or not v.startswith("/") for v in rec["paths"].values())
+            or type(rec["pins"]) is not dict or set(rec["pins"]) != {"review", "receipt", "restore"}
+            or not all(type(v) is str and _SHA256_DIGEST.fullmatch(v) for v in rec["pins"].values())
+            or not all(type(rec[k]) is str and _SHA256_DIGEST.fullmatch(rec[k])
+                       for k in ("offhost_sha256", "operation_sha256", "nonce_sha256", "go_sha256"))
+            or type(rec["restic_repo_id"]) is not str or not __import__("re").fullmatch(r"[0-9a-f]{64}", rec["restic_repo_id"])
+            or type(rec["key_epoch"]) is not str or not __import__("re").fullmatch(r"[0-9a-f]{32}", rec["key_epoch"])):
+        raise Stop("A0_G6_PARAMS_INVALID")
+    return (json.dumps(rec, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
+
+
+def write_a0_g6_params(path, rec):
+    """Exclusive create (O_EXCL|O_NOFOLLOW), mode 0600, full write loop, fsync file and directory, never overwrite.
+    On failure the partial file is removed only if the path still names the inode this call created."""
+    raw = _a0_g6_params_canonical(rec)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except FileExistsError:
+        raise Stop("A0_G6_PARAMS_EXISTS") from None
+    except OSError:
+        raise Stop("A0_G6_PARAMS_WRITE_FAILED") from None
+    ok, st = False, None
+    try:
+        st = os.fstat(fd)
+        view = memoryview(raw)
+        while view:
+            n = os.write(fd, view)
+            if type(n) is not int or n <= 0:
+                raise Stop("A0_G6_PARAMS_WRITE_FAILED")
+            view = view[n:]
+        os.fsync(fd)
+        dfd = os.open(os.path.dirname(path), os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
+        ok = True
+    except OSError:
+        raise Stop("A0_G6_PARAMS_WRITE_FAILED") from None
+    finally:
+        os.close(fd)
+        if not ok and st is not None:
+            try:
+                cur = os.lstat(path)
+                if (cur.st_dev, cur.st_ino) == (st.st_dev, st.st_ino):
+                    os.unlink(path)
+            except OSError:
+                pass
+    return hashlib.sha256(raw).hexdigest()
+
+
+def build_a0_g6_params(mods, root, archive_name, repo_id, key_epoch, authorization, nonce, uid):
+    """Post-`review` stage: derive the 4 artefact paths from the producer's OWN layout/constants (no invented names),
+    pin each document by the sha256 of its bytes, take the archive/off-host hash from the review record, and bind the
+    record to the same operation/command/nonce/GO.  Reads only; the caller writes it with `write_a0_g6_params`."""
+    import json
+    producer = mods["qa525-vnext-g6-v2-producer.py"]
+    run = mods[G6_RUN]
+    match = producer.ARCHIVE_RE.fullmatch(archive_name if type(archive_name) is str else "")
+    if match is None:
+        raise Stop("A0_G6_PARAMS_INVALID")
+    stamp = match.group(1)
+    layout = producer._layout(root, uid)
+    paths = {"review": os.path.join(layout[producer.STATE], "review-" + stamp + ".json"),
+             "receipt": os.path.join(layout[producer.STATE], "receipt-" + stamp + ".json"),
+             "restore": os.path.join(layout[producer.STATE], producer.RESTORE_FMT.format(stamp=stamp)),
+             "archive": os.path.join(layout[producer.EXPORTS], archive_name)}
+    pins, docs = {}, {}
+    for k in ("review", "receipt", "restore"):
+        raw = _read_meta(paths[k], uid, (0o600, 0o640, 0o644), 65536)
+        pins[k] = "sha256:" + hashlib.sha256(raw).hexdigest()
+        docs[k] = json.loads(raw.decode("ascii"))
+    review = docs["review"]
+    if (review.get("g6_offhost_sha256_verified") is not True or review.get("g6_archive_name") != archive_name
+            or review.get("restic_repo_id") != repo_id or review.get("key_epoch") != key_epoch):
+        raise Stop("A0_G6_PARAMS_REVIEW_MISMATCH")
+    _, op_sha = g6_operation(run, "review", [("archive-name", archive_name), ("drive-file-id", review["g6_drive_file_id"]),
+                                             ("repo-id", repo_id), ("key-epoch", key_epoch)])
+    if authorization.get("g6_operation_sha256") != op_sha or authorization.get("g6_command") != "review":
+        raise Stop("A0_G6_PARAMS_OPERATION_MISMATCH")
+    return {"schema": "qa525-a0-g6-params-v1", "paths": paths, "pins": pins, "restic_repo_id": repo_id,
+            "key_epoch": key_epoch, "offhost_sha256": "sha256:" + review["g6_archive_sha256"], "command": "review",
+            "operation_sha256": "sha256:" + op_sha,
+            "nonce_sha256": "sha256:" + hashlib.sha256(nonce.encode("ascii")).hexdigest(),
+            "go_sha256": authorization["admission_sha256"]}
 
 
 def load_a0_g6_params(path, uid=0):
@@ -412,13 +507,7 @@ def load_a0_g6_params(path, uid=0):
         rec = json.loads(raw.decode("utf-8"))
     except (ValueError, UnicodeError):
         raise Stop("A0_G6_PARAMS_INVALID") from None
-    canon = (json.dumps(rec, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("ascii") \
-        if type(rec) is dict else b""
-    if (type(rec) is not dict or set(rec) != A0_G6_PARAMS_FIELDS or rec["schema"] != "qa525-a0-g6-params-v1"
-            or canon != raw or type(rec["paths"]) is not dict or set(rec["paths"]) != {"review", "receipt", "restore", "archive"}
-            or any(type(v) is not str or not v.startswith("/") for v in rec["paths"].values())
-            or type(rec["pins"]) is not dict or set(rec["pins"]) != {"review", "receipt", "restore"}
-            or not all(type(rec[k]) is str for k in ("restic_repo_id", "key_epoch", "offhost_sha256"))):
+    if _a0_g6_params_canonical(rec) != raw:
         raise Stop("A0_G6_PARAMS_INVALID")
     return rec
 
