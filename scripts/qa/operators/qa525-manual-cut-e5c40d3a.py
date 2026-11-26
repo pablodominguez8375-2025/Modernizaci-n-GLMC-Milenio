@@ -25,7 +25,8 @@ EXECUTE_TOKEN = "EXECUTE_MANUAL_CUT_E5C40D3A"
 DOCKER = "/usr/bin/docker"
 ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
 MAX_OUT = 1 << 20
-# sha256 of each reviewed library @ e5c40d3a (scripts/qa/<name>); go-nonce-journal is the da274d65/e5c40d3a root-plane file.
+# sha256 of each reviewed library; ALL seven verified against the signed release e5c40d3a inner zip (attested, checked
+# off-host).  go-nonce-journal is byte-identical in da274d65 (host dir, S2c) and e5c40d3a.
 LIB_PINS = {
     "qa525-vnext-schema-cut-executor.py": "3d4fec097c192fd9d793a3722ebd92e32276507fd5329d245784397137c77b79",
     "qa525-vnext-schema-cut-ports.py": "5efb0245edd4abbdc73c9462ec6a0205862b2fde25bd5badc19210a9b881df52",
@@ -33,7 +34,7 @@ LIB_PINS = {
     "qa525-vnext-schema-cut-journal-store.py": "24c24a10a2cecf0af48ff1f1ce46f7e2d2e4460fc91ceb4343f9614735a885cb",
     "qa525-vnext-schema-cut-journal-contract.py": "646dc440114d5af3235a08a86e13737a8a84924f8a2664572d4d1075e60eb177",
     "qa525-vnext-schema-cut-plan.py": "518ed4016c53b0d6d14069d960d46b6ab625e583bafac3061e8757feccacd471",
-    "qa525-vnext-go-nonce-journal.py": None,  # pinned at wiring time from the release MANIFEST (see TODO list)
+    "qa525-vnext-go-nonce-journal.py": "65179306bddba301949fce0347bead2080ed8d715dd7b941382ed7e79d1a3562",
 }
 LOCKS = (
     "/opt/centenario/qa-api-refresh/operation.lock",
@@ -157,6 +158,67 @@ class Plane:
     def __exit__(self, *exc):
         self.close()
         return False
+
+
+def build_allowlist(mods, spec, params):
+    """EXACT argv tuples the reviewed libraries may issue for this cut (derived from their own builders)."""
+    ad = mods["qa525-vnext-schema-adapter.py"]
+    pt = mods["qa525-vnext-schema-cut-ports.py"]
+    allowed = set(ad.plan_commands(params).values())
+    pg = spec["pg_container"]
+    allowed.add(pt._psql(pg, pt.HISTORY_SQL))
+    allowed.add((DOCKER, "image", "inspect", "--format", "{{.Id}}", spec["migrator_image_id"]))
+    for image in spec["images"].values():
+        allowed.add((DOCKER, "image", "inspect", "--format", pt.REVISION_FORMAT, image))
+    roles = ",".join("'" + r + "'" for r in spec["write_roles"])
+    sessions = ("SELECT count(*) FROM pg_stat_activity WHERE datname = 'pmgm' AND usename IN (" + roles
+                + ") AND pid <> pg_backend_pid()")
+    allowed.add(pt._psql(pg, sessions))
+    allowed.add((DOCKER, "stop", "--time", "30", spec["api_container_id"]))
+    allowed.add((DOCKER, "inspect", "--format", "{{.State.Running}}", spec["api_container_id"]))
+    return frozenset(allowed)
+
+
+def build_steps(mods, runner, spec, params, collab):
+    """Wire the reviewed ports.  `collab` supplies what only the host knows: clock, abort, verify_backup inputs,
+    flight and uat checks.  Any missing collaborator => the step FAILS CLOSED (never silently skipped)."""
+    pt = mods["qa525-vnext-schema-cut-ports.py"]
+    ad = mods["qa525-vnext-schema-adapter.py"]
+    need = ("clock", "abort", "read_evidence", "verifier", "evidence_pins", "archive_epoch", "flight",
+            "target_web_sha", "checks", "expected_104_sha256")
+    if type(collab) is not dict or any(k not in collab for k in need):
+        raise Stop("CUT_COLLABORATORS_INCOMPLETE")
+    return {
+        "preflight": pt.make_preflight(runner, collab["clock"], collab["abort"], spec),
+        "verify_backup": pt.make_verify_backup(collab["read_evidence"], collab["verifier"], collab["clock"],
+                                               collab["evidence_pins"], collab["archive_epoch"]),
+        "quiesce_writes": pt.make_quiesce_writes(runner, spec),
+        "schema": pt.make_schema(ad, params, runner),
+        "revalidate": pt.make_revalidate(runner, collab["clock"], collab["abort"], spec,
+                                         collab["expected_104_sha256"]),
+        "apply_api_web": pt.make_apply_api_web(collab["flight"], collab["target_web_sha"]),
+        "uat": pt.make_uat(collab["checks"]),
+    }
+
+
+def run_cut(mods, plane, root, uid, now, nonce, authorization, spec, params, collab):
+    """Single attempt.  Order: allowlist+steps built (no effect) -> marker consumed (O_EXCL+fsync) -> sequencer.
+    The marker is spent BEFORE the first journal write or effect; any later failure never re-opens it."""
+    nj = mods["qa525-vnext-go-nonce-journal.py"]
+    store = mods["qa525-vnext-schema-cut-journal-store.py"]
+    contract = mods["qa525-vnext-schema-cut-journal-contract.py"]
+    ex = mods["qa525-vnext-schema-cut-executor.py"]
+    runner = make_runner(build_allowlist(mods, spec, params))
+    steps = build_steps(mods, runner, spec, params, collab)
+    plan_sha = authorization["plan_sha256"]
+    bound5 = {"app": "sha256:" + hashlib.sha256(SOURCE_SHA.encode()).hexdigest(), "ops": authorization["driver_sha256"],
+              "policy": authorization["policy_sha256"], "plan": plan_sha, "admission": authorization["admission_sha256"]}
+    nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=now + 3600)  # spent BEFORE anything else
+    jbinding = {"nonce": nonce, "go_sha256": authorization["admission_sha256"], "plan_sha256": plan_sha}
+
+    def journal(phase):
+        return store.append(root, jbinding, phase, uid=uid, plane=plane, contract=contract, nonce_journal=nj)
+    return ex.run(journal, plane, steps)
 
 
 def unwired(name):

@@ -99,10 +99,20 @@ class Loader(unittest.TestCase):
         with self.assertRaises(cut.Stop):
             cut.load_libs(self.d, {"m.py": h})
 
-    def test_shipped_pins_fixed_and_nonce_journal_pin_still_open(self):
-        self.assertIsNone(cut.LIB_PINS["qa525-vnext-go-nonce-journal.py"])  # explicit TODO: cannot run until pinned
-        with self.assertRaises(cut.Stop):
-            cut.load_libs(self.d)
+    def test_shipped_pins_complete_and_well_formed(self):
+        self.assertEqual(len(cut.LIB_PINS), 7)
+        for name, pin in cut.LIB_PINS.items():
+            self.assertRegex(pin, r"\A[0-9a-f]{64}\Z", name)
+        self.assertEqual(cut.LIB_PINS["qa525-vnext-go-nonce-journal.py"],
+                         "65179306bddba301949fce0347bead2080ed8d715dd7b941382ed7e79d1a3562")
+
+    def test_real_libs_load_when_repo_files_match_pins(self):
+        scripts = pathlib.Path(__file__).resolve().parents[1] / "scripts/qa"
+        if not all((scripts / n).exists() for n in cut.LIB_PINS):
+            self.skipTest("repo libraries not present")
+        mods = cut.load_libs(str(scripts))
+        self.assertTrue(callable(mods["qa525-vnext-schema-cut-executor.py"].run))
+        self.assertTrue(callable(mods["qa525-vnext-go-nonce-journal.py"].consume))
 
 
 class Runner(unittest.TestCase):
@@ -186,6 +196,145 @@ class PlaneTests(unittest.TestCase):
             pass
         with cut.Plane(self.paths):
             pass
+
+
+class EndToEndFakeDocker(unittest.TestCase):
+    """Real reviewed libraries + driver wiring against a scripted fake docker (no real docker, no host)."""
+
+    def setUp(self):
+        import datetime as dt
+        import re
+        self.dt = dt
+        scripts = pathlib.Path(__file__).resolve().parents[1] / "scripts/qa"
+        self.mods = cut.load_libs(str(scripts))
+        self.ad = self.mods["qa525-vnext-schema-adapter.py"]
+        self.pt = self.mods["qa525-vnext-schema-cut-ports.py"]
+        self.t = tempfile.TemporaryDirectory()
+        self.addCleanup(self.t.cleanup)
+        self.root = os.path.realpath(self.t.name) + "/journal"
+        os.mkdir(self.root, 0o700)
+        dg = lambda b: "sha256:" + hashlib.sha256(b).hexdigest()  # noqa: E731
+        self.dg = dg
+        self.base = ["20%012d_M" % (260000000000 + i) + "x" for i in range(100)]
+        self.after = sorted(self.base + list(self.ad.REQUIRED))
+        self.grant, self.gate = b"echo grants\n", b"SELECT 1;\n"
+        self.mig = "sha256:" + "a" * 64
+        self.api_img, self.web_img = "sha256:" + "b" * 64, "sha256:" + "c" * 64
+        self.rev = {"api": "d" * 40, "web": "e" * 40}
+        self.cid = "f" * 64
+        self.params = {"network": "centenario-qa-lab2_pmgm_srv01_internal", "pg_container": "pg1",
+                       "migrator_env_file": "/root/m.env", "grants_env_file": "/root/g.env",
+                       "migrator_image_id": self.mig, "baseline_history_ids": self.base,
+                       "grant_script": self.grant, "gate_sql": self.gate,
+                       "grant_script_sha256": dg(self.grant), "postgate_sha256": dg(self.gate)}
+        self.now = int(self.dt.datetime.now(self.dt.timezone.utc).timestamp())
+        self.spec = {"pg_container": "pg1", "expires_at": self.now + 7200,
+                     "images": {"api": self.api_img, "web": self.web_img}, "revisions": self.rev,
+                     "migrator_image_id": self.mig, "baseline_sha256": dg("\n".join(self.base).encode()),
+                     "api_container_id": self.cid, "write_roles": ("pmgm_app", "pmgm_runtime")}
+        ev = {k: ("evidence-" + k).encode() for k in self.pt.EVIDENCE}
+        self.collab = {
+            "clock": lambda: self.dt.datetime.now(self.dt.timezone.utc), "abort": lambda: False,
+            "read_evidence": lambda n: ev[n], "verifier": lambda d: True,
+            "evidence_pins": {k: dg(v) for k, v in ev.items()}, "archive_epoch": self.now - 100,
+            "flight": lambda: {"journal": "APPLIED", "health": True, "served_sha": "e" * 40},
+            "target_web_sha": "e" * 40, "checks": (lambda: True,),
+            "expected_104_sha256": dg("\n".join(self.after).encode())}
+        self.auth = {"plan_sha256": dg(b"plan"), "driver_sha256": dg(b"driver"), "policy_sha256": dg(b"policy"),
+                     "admission_sha256": dg(b"sponsor-authorization-text")}
+        self.hist = list(self.base)
+        self.calls = []
+        self.fail_grants = False
+
+        def fake(argv, **kw):
+            argv = tuple(argv)
+            self.calls.append(argv)
+            out, rc = b"", 0
+            sql = argv[-1] if "-c" in argv else None
+            if argv[:3] == (D, "image", "inspect"):
+                fmt, img = argv[4], argv[5]
+                if fmt == "{{.Id}}":
+                    out = (img + "\n").encode()
+                else:
+                    out = (self.rev["api"] if img == self.api_img else self.rev["web"]).encode() + b"\n"
+            elif argv[:2] == (D, "stop"):
+                out = b""
+            elif argv[:2] == (D, "inspect"):
+                out = b"false\n"
+            elif argv[:2] == (D, "run"):
+                self.hist = list(self.after)
+                out = self.ad.MIGRATED
+            elif "bash" in argv:
+                out = b"" if self.fail_grants else (self.ad.GRANTS_MARKER + "\n").encode()
+                rc = 1 if self.fail_grants else 0
+            elif sql is not None and "MigrationId" in sql:
+                out = ("\n".join(self.hist) + "\n").encode()
+            elif sql is not None and "pg_stat_activity" in sql:
+                out = b"0\n"
+            elif sql is not None and "has_table_privilege" in sql:
+                out = self.ad.ACL_OK
+            elif argv[-1] == "ON_ERROR_STOP=1":  # gate: psql reading stdin
+                out = (self.ad.GATE_PASS + "\n").encode()
+            else:
+                rc = 99
+            return subprocess.CompletedProcess(argv, rc, out, b"")
+        orig = subprocess.run
+        subprocess.run = fake
+        self.addCleanup(setattr, subprocess, "run", orig)
+
+        class P:
+            def assert_held(self):
+                pass
+        self.plane = P()
+
+    def run_cut(self, nonce="1" * 64):
+        return cut.run_cut(self.mods, self.plane, self.root, os.geteuid(), self.now, nonce, self.auth,
+                           self.spec, self.params, self.collab)
+
+    def test_full_sequence_completes_with_reviewed_libs(self):
+        res = self.run_cut()
+        self.assertEqual(res["phases"], ("RESERVED", "BACKUP_VERIFIED", "WRITES_QUIESCED", "MIGRATION_STARTED",
+                                         "SCHEMA_104", "GRANTS_VERIFIED", "POSTGATE_PASS", "APP_STARTED",
+                                         "APP_APPLIED", "UAT_PASS"))
+        self.assertIs(res["may_apply"], False)
+        self.assertEqual(sum(1 for c in self.calls if c[:2] == (D, "run")), 1)  # exactly one migrator run
+
+    def test_second_attempt_with_same_ticket_does_nothing(self):
+        self.run_cut()
+        n = len(self.calls)
+        with self.assertRaises(Exception):
+            self.run_cut()
+        self.assertEqual(len(self.calls), n)  # marker refused BEFORE any effect (allowlist/steps build is effect-free)
+
+    def test_backup_rejected_stops_before_any_quiesce_or_ddl(self):
+        self.collab["verifier"] = lambda d: False
+        with self.assertRaises(Exception) as c:
+            self.run_cut()
+        self.assertIn("BACKUP", str(c.exception))
+        self.assertFalse(any(x[:2] in ((D, "stop"), (D, "run")) for x in self.calls))
+
+    def test_grants_failure_is_partial_schema_stop_without_retry(self):
+        self.fail_grants = True
+        with self.assertRaises(Exception) as c:
+            self.run_cut()
+        self.assertIn("SCHEMA", str(c.exception))
+        self.assertEqual(sum(1 for x in self.calls if x[:2] == (D, "run")), 1)
+        self.assertFalse(any(x[:2] == (D, "run") for x in self.calls[self.calls.index(
+            next(x for x in self.calls if "bash" in x)):]))  # nothing re-run after the failure
+
+    def test_incomplete_collaborators_fail_closed(self):
+        del self.collab["flight"]
+        with self.assertRaises(cut.Stop) as c:
+            self.run_cut()
+        self.assertEqual(str(c.exception), "CUT_COLLABORATORS_INCOMPLETE")
+        self.assertEqual(self.calls, [])
+
+    def test_runner_blocks_anything_outside_the_derived_allowlist(self):
+        r = cut.make_runner(cut.build_allowlist(self.mods, self.spec, self.params))
+        with self.assertRaises(cut.Stop):
+            r((D, "rm", "-f", self.cid), 5)
+        with self.assertRaises(cut.Stop):
+            r((D, "stop", "--time", "30", "0" * 64), 5)
 
 
 class Modes(unittest.TestCase):
