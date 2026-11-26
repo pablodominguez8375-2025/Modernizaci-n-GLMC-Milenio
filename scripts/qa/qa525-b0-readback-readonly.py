@@ -13,8 +13,10 @@ source (--candidate-sha) nor any '*.partial' entry.  Shim and launcher modules a
 the end.  The five advisory locks that every legacy/signed writer takes (LOCKS) are held read-only and exclusive
 for the whole run (opened relative to a trusted-ancestor dirfd, never created/written); if any is missing, busy or
 untrusted nothing is inspected (STOP), and they are revalidated at close.  Residual limit: only writers that take
-those locks are excluded; a writer that ignores them could still race between the two snapshots, which is reported as
-STOP (state/store changed), never as PASS.
+those locks are excluded (cooperating writers only).  Two snapshots detect only a change that is still visible when
+the second one is taken: an ABA sequence (change and restore, even with the same size/mtime/ctime granularity) and a
+writer that ignores the locks can still race undetected, so a PASS is point-in-time evidence, never proof of exclusion
+or absence of concurrent writers.
 Exit code: 0 = PASS (evidence only), 1 = STOP, 2 = bad invocation.
 """
 import argparse
@@ -123,11 +125,15 @@ def read_at(dfd, name, want, limit=MAX_FILE):
             raise ValueError("NOT_REGULAR")
         if want is not None and identity(st) != want:
             raise ValueError("IDENTITY_CHANGED")
+        if st.st_nlink != 1 or stat.S_IMODE(st.st_mode) & 0o022:
+            raise ValueError("BAD_METADATA")  # rejected BEFORE any byte is read
         if st.st_size > limit:
             raise ValueError("TOO_LARGE")
         data = os.read(fd, limit + 1)
         if len(data) != st.st_size:
             raise ValueError("SHORT_READ")
+        if identity(os.fstat(fd)) != identity(st):
+            raise ValueError("CHANGED_DURING_READ")
         return hashlib.sha256(data).hexdigest(), data, st
     finally:
         os.close(fd)
@@ -344,8 +350,8 @@ def read_pinned(parent, name, uid, strict_mode, problems, label):
             problems.append(label + "_METADATA_VIOLATION")
         rec["_ident"], rec["_parent"], rec["_name"], rec["_uid"] = ident, parent, name, uid
         return rec
-    except (OSError, ValueError):
-        problems.append(label + "_UNREADABLE")
+    except (OSError, ValueError) as exc:
+        problems.append(label + ("_METADATA_VIOLATION" if str(exc) == "BAD_METADATA" else "_UNREADABLE"))
         return None
     finally:
         os.close(dfd)

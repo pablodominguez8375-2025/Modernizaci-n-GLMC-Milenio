@@ -577,5 +577,57 @@ class B0Tests(unittest.TestCase):
             b0._readback = orig
         self.assertIn("LOCK:%s:CHANGED_AT_CLOSE" % lk[0], r["problems"])
 
+
+class ReadAtHardening(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = pathlib.Path(self.tmp.name) / "f"
+        self.path.write_bytes(b"abc")
+        os.chmod(self.path, 0o600)
+        self.dfd = os.open(self.tmp.name, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, self.dfd)
+
+    def want(self):
+        return b0.identity(os.stat("f", dir_fd=self.dfd))
+
+    def test_ok(self):
+        self.assertEqual(b0.read_at(self.dfd, "f", self.want())[0], hashlib.sha256(b"abc").hexdigest())
+
+    def test_group_writable_rejected_before_read(self):
+        os.chmod(self.path, 0o660)
+        orig = os.read
+        os.read = lambda *a: self.fail("read before metadata check")
+        try:
+            with self.assertRaises(ValueError) as c:
+                b0.read_at(self.dfd, "f", None)
+        finally:
+            os.read = orig
+        self.assertEqual(str(c.exception), "BAD_METADATA")
+
+    def test_hardlink_rejected(self):
+        os.link(self.path, pathlib.Path(self.tmp.name) / "g")
+        with self.assertRaises(ValueError) as c:
+            b0.read_at(self.dfd, "f", None)
+        self.assertEqual(str(c.exception), "BAD_METADATA")
+
+    def test_mutation_during_read_rejected(self):
+        orig = os.read
+
+        def mutate(fd, n):
+            data = orig(fd, n)
+            with open(self.path, "r+b") as h:  # same size, new mtime/ctime
+                h.write(b"xyz")
+            os.utime(self.path, ns=(1, 2))
+            return data
+        os.read = mutate
+        try:
+            with self.assertRaises(ValueError) as c:
+                b0.read_at(self.dfd, "f", None)
+        finally:
+            os.read = orig
+        self.assertEqual(str(c.exception), "CHANGED_DURING_READ")
+
+
 if __name__ == "__main__":
     unittest.main()
