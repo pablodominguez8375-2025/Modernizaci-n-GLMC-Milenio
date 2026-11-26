@@ -475,15 +475,21 @@ class Flight(unittest.TestCase):
                 return True
             def http(self, ip, port, path):
                 ips.append((ip, path))
-                return 200, b'{"source_sha":"' + self.SHA.encode() + b'"}'
+                return 200, b'{"source_sha":"' + sha.encode() + b'"}'
             def public_version(self):
-                return self.SHA
+                return sha
 
+        sha, tick = self.SHA, [0]
         io = IO()
-        flight = cut.make_flight(io, spec, self.SHA, lambda: 0, lambda n: None)
+
+        def clock():
+            tick[0] += 1
+            return tick[0]
+        flight = cut.make_flight(io, spec, sha, clock, lambda n: None)
         self.assertEqual(flight()["journal"], "APPLIED")
-        self.assertIn(("10.0.0.2", "/health/ready"), ips)
-        self.assertNotIn(("10.0.0.99", "/health/ready"), ips)
+        # the first health probe of each service goes to the IP of the SAME snapshot that was verified
+        self.assertEqual(ips[0], ("10.0.0.2", "/health/ready"))
+        self.assertEqual(ips[1], ("10.0.0.2", "/health/web"))
 
     def test_unhealthy_instance_fails_without_second_swap_or_rollback(self):
         self.assertEqual(self.make(api_ok=False)()["journal"], "FAILED")
