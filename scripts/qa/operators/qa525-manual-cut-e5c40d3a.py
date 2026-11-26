@@ -49,7 +49,7 @@ class Stop(Exception):
 
 
 def _read_exact(fd, size):
-    """Read up to `size` bytes, rejecting short/overlong reads deterministically."""
+    """Read exactly `size` bytes; callers probe one extra byte for truncation/overflow."""
     chunks = []
     remaining = size
     while remaining:
@@ -79,7 +79,7 @@ def load_libs(lib_dir, pins=None):
             st = os.fstat(fd)
             if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_mode & 0o022 or st.st_size > (1 << 21):
                 raise Stop("CUT_LIB_UNSAFE")
-            data = _read_exact(fd, st.st_size + 1)
+            data = _read_exact(fd, st.st_size)\n            if os.read(fd, 1):\n                raise Stop("CUT_LIB_TOO_LARGE")
         finally:
             os.close(fd)
         if len(data) != st.st_size or hashlib.sha256(data).hexdigest() != want:
