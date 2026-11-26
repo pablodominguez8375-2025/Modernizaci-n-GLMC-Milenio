@@ -201,6 +201,14 @@ def build_steps(mods, runner, spec, params, collab):
     }
 
 
+def _require_plane(plane):
+    """Require the complete lock plane before spending the nonce or journaling."""
+    try:
+        plane.assert_held()
+    except Exception:
+        raise Stop("CUT_PLANE_NOT_HELD") from None
+
+
 def run_cut(mods, plane, root, uid, now, nonce, authorization, spec, params, collab):
     """Single attempt.  Order: allowlist+steps built (no effect) -> marker consumed (O_EXCL+fsync) -> sequencer.
     The marker is spent BEFORE the first journal write or effect; any later failure never re-opens it."""
@@ -213,7 +221,8 @@ def run_cut(mods, plane, root, uid, now, nonce, authorization, spec, params, col
     plan_sha = authorization["plan_sha256"]
     bound5 = {"app": "sha256:" + hashlib.sha256(SOURCE_SHA.encode()).hexdigest(), "ops": authorization["driver_sha256"],
               "policy": authorization["policy_sha256"], "plan": plan_sha, "admission": authorization["admission_sha256"]}
-    nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=now + 3600)  # spent BEFORE anything else
+    _require_plane(plane)
+    nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=now + 3600)  # spent only after locks are held
     jbinding = {"nonce": nonce, "go_sha256": authorization["admission_sha256"], "plan_sha256": plan_sha}
 
     def journal(phase):
