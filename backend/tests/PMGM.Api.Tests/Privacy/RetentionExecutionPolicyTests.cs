@@ -62,6 +62,43 @@ public sealed class RetentionExecutionPolicyTests
         Assert.True(decision.RequiresManualReview);
     }
 
+    [Theory]
+    [InlineData(PrivacyCodes.Status.UnderReview, false)]
+    [InlineData(PrivacyCodes.Status.UnderReview, true)]
+    [InlineData(PrivacyCodes.Status.Closed, false)]
+    [InlineData(PrivacyCodes.Status.Active, true)]
+    [InlineData("unknown", true)]
+    public void Anonymization_RejectsOpenOrUncertifiedDataSubjectRequest(
+        string status, bool hasClosingDate)
+    {
+        var request = CreateRequest(status, hasClosingDate);
+        var decision = RetentionExecutionPolicy.CanAnonymizeDataSubjectRequest(request);
+
+        Assert.False(decision.CanExecute);
+        Assert.True(decision.RequiresManualReview);
+        Assert.Contains("cierre formal", decision.Reason);
+    }
+
+    [Fact]
+    public void Anonymization_AcceptsFormallyClosedDataSubjectRequest()
+    {
+        var request = CreateRequest(PrivacyCodes.Status.Closed, hasClosingDate: true);
+        var decision = RetentionExecutionPolicy.CanAnonymizeDataSubjectRequest(request);
+
+        Assert.True(decision.CanExecute);
+        Assert.False(decision.RequiresManualReview);
+    }
+
+    private static DataSubjectRequest CreateRequest(string status, bool hasClosingDate)
+        => new()
+        {
+            RequestType = PrivacyCodes.DataSubjectRight.Access,
+            Channel = "test",
+            Status = status,
+            ReceivedAtUtc = DateTimeOffset.UtcNow,
+            ClosedAtUtc = hasClosingDate ? DateTimeOffset.UtcNow : null
+        };
+
     [Fact]
     public void MismatchedExpectedAction_IsRejected()
     {
