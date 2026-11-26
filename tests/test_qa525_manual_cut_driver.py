@@ -456,7 +456,7 @@ class Flight(unittest.TestCase):
 
     def test_health_probe_uses_same_verified_instance_snapshot(self):
         spec = {"images": {"api": "sha256:" + "b" * 64, "web": "sha256:" + "c" * 64}}
-        calls, ips = [], []
+        ips = []
 
         class IO:
             def __init__(self):
@@ -466,7 +466,10 @@ class Flight(unittest.TestCase):
                 if self.n[svc] == 1:
                     return {"cid": "old-" + svc, "image": "old", "state": "running",
                             "restarting": False, "restarts": 0, "ip": "10.0.0.1"}
-                return {"cid": "new-" + svc, "image": spec["images"][svc], "state": "running",
+                if self.n[svc] == 2:
+                    return {"cid": "new-" + svc, "image": spec["images"][svc], "state": "running",
+                            "restarting": False, "restarts": 0, "ip": "10.0.0.2"}
+                return {"cid": "other-" + svc, "image": spec["images"][svc], "state": "running",
                         "restarting": False, "restarts": 0, "ip": "10.0.0.99"}
             def compose_up(self, svc):
                 return True
@@ -477,10 +480,9 @@ class Flight(unittest.TestCase):
                 return self.SHA
 
         io = IO()
-        # The first inspection after compose_up is the verified new instance snapshot.
-        # A second inspection would return a different instance and expose the old TOCTOU.
         flight = cut.make_flight(io, spec, self.SHA, lambda: 0, lambda n: None)
-        self.assertEqual(flight()["journal"], "FAILED")
+        self.assertEqual(flight()["journal"], "APPLIED")
+        self.assertIn(("10.0.0.2", "/health/ready"), ips)
         self.assertNotIn(("10.0.0.99", "/health/ready"), ips)
 
     def test_unhealthy_instance_fails_without_second_swap_or_rollback(self):
