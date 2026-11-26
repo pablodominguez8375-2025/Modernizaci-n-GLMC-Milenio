@@ -48,6 +48,19 @@ class Stop(Exception):
     """Fixed code only."""
 
 
+def _read_exact(fd, size):
+    """Read up to `size` bytes, rejecting short/overlong reads deterministically."""
+    chunks = []
+    remaining = size
+    while remaining:
+        chunk = os.read(fd, remaining)
+        if not chunk:
+            raise Stop("CUT_LIB_READ_INCOMPLETE")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
 def load_libs(lib_dir, pins=None):
     """Load every reviewed library by exact pin from `lib_dir` (absolute, root-owned). Unpinned (None) => STOP."""
     pins = LIB_PINS if pins is None else pins
@@ -66,7 +79,7 @@ def load_libs(lib_dir, pins=None):
             st = os.fstat(fd)
             if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or st.st_mode & 0o022 or st.st_size > (1 << 21):
                 raise Stop("CUT_LIB_UNSAFE")
-            data = os.read(fd, st.st_size + 1)
+            data = _read_exact(fd, st.st_size + 1)
         finally:
             os.close(fd)
         if len(data) != st.st_size or hashlib.sha256(data).hexdigest() != want:
