@@ -366,23 +366,26 @@ def make_flight(io, spec, target_sha, clock, sleep):
                 return False
             sleep(FLIGHT_POLL_S)
 
-    def instance_ok(service, old_cid, image):
+    def verified_instance(service, old_cid, image):
         st = io.inspect(service)
-        return (type(st) is dict and st["cid"] != old_cid and st["image"] == image and st["state"] == "running"
-                and st["restarting"] is False and st["restarts"] == 0)
+        if (type(st) is dict and st["cid"] != old_cid and st["image"] == image
+                and st["state"] == "running" and st["restarting"] is False and st["restarts"] == 0):
+            return st
+        return None
 
     def probe_api(old_cid):
-        if not instance_ok("api", old_cid, spec["images"]["api"]):
+        st = verified_instance("api", old_cid, spec["images"]["api"])
+        if st is None:
             return False
-        code, _ = io.http(io.inspect("api")["ip"], 8080, "/health/ready")
+        code, _ = io.http(st["ip"], 8080, "/health/ready")
         return code == 200
 
     def probe_web(old_cid):
-        if not instance_ok("web", old_cid, spec["images"]["web"]):
+        st = verified_instance("web", old_cid, spec["images"]["web"])
+        if st is None:
             return False
-        ip = io.inspect("web")["ip"]
-        code, _ = io.http(ip, 80, "/health/web")
-        code2, body = io.http(ip, 80, "/qa-version.json")
+        code, _ = io.http(st["ip"], 80, "/health/web")
+        code2, body = io.http(st["ip"], 80, "/qa-version.json")
         return code == 200 and code2 == 200 and target_sha.encode() in body
 
     def flight():
