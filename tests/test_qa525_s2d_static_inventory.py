@@ -196,10 +196,14 @@ class Findings(Base):
             s2d.PATHS["prepare-local"] = None
             self.assertEqual(s2d.main(a + extra), 2)
 
-    def test_f3_shipped_contract_not_confirmed_yet(self):
-        self.assertEqual(self.saved_paths["run-with-backup-20261022"],
-                         "/opt/centenario/qa-auto-lite/run-with-backup-20261022.py")
-        self.assertTrue(any(v is None for v in self.saved_paths.values()))  # runs only after reviewed confirmation
+    def test_f3_shipped_contract_matches_s2b_paths(self):
+        self.assertEqual(self.saved_paths, {
+            "run-with-backup-20261022": "/opt/centenario/qa-auto-lite/run-with-backup-20261022.py",
+            "qa-status": "/opt/centenario/qa-tools/qa-status.py",
+            "activate-local": "/opt/centenario/qa-master-604/activate-local.py",
+            "prepare-local": "/opt/centenario/qa-master-604/prepare-local.py",
+            "inventory-local": "/opt/centenario/qa-master-604/inventory-local.py"})
+        self.assertTrue(all(os.path.isabs(v) and os.path.normpath(v) == v for v in self.saved_paths.values()))
 
     def test_f3_ancestor_symlink_and_writable_dir(self):
         real = os.path.join(self.dir, "real")

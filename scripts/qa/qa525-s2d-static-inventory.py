@@ -29,14 +29,15 @@ EXPECTED = {
     "prepare-local": "1e47858b20f8cbe51befdefb716205d70ade431f3aab5d23565c8a0cc7055d91",
     "inventory-local": "b3a59e76513926fa40179ac36211d23942244f4230a7bbc9e4fdfcfcafa7f71d",
 }
-# Exact absolute paths per the S2a evidence.  None = NOT yet confirmed from S2a: the tool refuses to run until all five
-# are filled in by a reviewed change (never inferred, never taken from the command line).
+# Exact absolute paths = the ones the Sponsor-authorized S2b command already stat/hashed (#525 comment 7181546493;
+# hashes in EXPECTED match that S2b output).  None would mean 'not confirmed': the tool refuses to run (never inferred,
+# never taken from the command line).
 PATHS = {
     "run-with-backup-20261022": "/opt/centenario/qa-auto-lite/run-with-backup-20261022.py",
-    "qa-status": None,
-    "activate-local": None,
-    "prepare-local": None,
-    "inventory-local": None,
+    "qa-status": "/opt/centenario/qa-tools/qa-status.py",
+    "activate-local": "/opt/centenario/qa-master-604/activate-local.py",
+    "prepare-local": "/opt/centenario/qa-master-604/prepare-local.py",
+    "inventory-local": "/opt/centenario/qa-master-604/inventory-local.py",
 }
 MAX_SIZE = 1 << 20
 CATEGORIES = ("import_stdlib", "import_other", "import_star", "dynamic_exec", "dynamic_import", "subprocess",
