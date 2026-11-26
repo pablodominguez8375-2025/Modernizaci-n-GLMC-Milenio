@@ -415,6 +415,59 @@ class Modes(unittest.TestCase):
             cut.unwired("FLIGHT")()
         self.assertEqual(str(c.exception), "CUT_STEP_NOT_WIRED_FLIGHT")
 
+class Flight(unittest.TestCase):
+    SHA = "e" * 40
+
+    def make(self, api_ok=True, web_ok=True, public=None, restarts=0):
+        spec = {"images": {"api": "sha256:" + "b" * 64, "web": "sha256:" + "c" * 64}}
+        st = {"api": {"cid": "old-a", "image": "old", "state": "running", "restarting": False, "restarts": 0, "ip": "10.0.0.6"},
+              "web": {"cid": "old-w", "image": "old", "state": "running", "restarting": False, "restarts": 0, "ip": "10.0.0.7"}}
+        self.log, self.t = [], [0]
+
+        class IO:
+            def inspect(_s, svc):
+                return dict(st[svc])
+
+            def compose_up(_s, svc):
+                self.log.append(svc)
+                ok = api_ok if svc == "api" else web_ok
+                if ok:
+                    st[svc].update(cid="new-" + svc, image=spec["images"][svc], restarts=restarts)
+                return True
+
+            def http(_s, ip, port, path):
+                if path == "/qa-version.json":
+                    return 200, b'{"source_sha":"' + self.SHA.encode() + b'"}'
+                return 200, b"ok"
+
+            def public_version(_s):
+                return public or self.SHA
+
+        def clock():
+            return self.t[0]
+
+        def sleep(n):
+            self.t[0] += n
+        return cut.make_flight(IO(), spec, self.SHA, clock, sleep)
+
+    def test_happy_path_swaps_api_then_web_once(self):
+        self.assertEqual(self.make()(), {"journal": "APPLIED", "health": True, "served_sha": self.SHA})
+        self.assertEqual(self.log, ["api", "web"])
+
+    def test_unhealthy_instance_fails_without_second_swap_or_rollback(self):
+        self.assertEqual(self.make(api_ok=False)()["journal"], "FAILED")
+        self.assertEqual(self.log, ["api"])  # web never touched, no rollback, no retry of the swap
+
+    def test_restarting_instance_is_rejected(self):
+        self.assertEqual(self.make(restarts=1)()["journal"], "FAILED")
+
+    def test_public_version_mismatch_fails(self):
+        self.assertEqual(self.make(public="f" * 40)()["journal"], "FAILED")
+
+    def test_invalid_target_sha_stops(self):
+        with self.assertRaises(cut.Stop):
+            cut.make_flight(None, {}, "xyz", lambda: 0, lambda n: None)
+
 
 if __name__ == "__main__":
     unittest.main()

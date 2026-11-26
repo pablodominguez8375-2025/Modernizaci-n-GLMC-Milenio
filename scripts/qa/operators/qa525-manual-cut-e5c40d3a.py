@@ -336,6 +336,70 @@ def a0_report(run, mods, spec, params, driver_sha256, lock_paths=LOCKS, uid=0, f
     return out
 
 
+# ---- API/WEB flight: per-instance verification, forward only (no automatic rollback, no retry of the swap). ------
+FLIGHT_DEADLINE_S = 480
+FLIGHT_POLL_S = 2
+
+
+def make_flight(io, spec, target_sha, clock, sleep):
+    """`io` supplies the effectful primitives (all injected, all read/ordered by the caller's allowlist):
+      io.inspect(service)   -> {"cid","image","state","restarting","restarts","ip"}
+      io.compose_up(service)-> bool   (force-recreate with the image-only override of the TARGET image; no pull/build)
+      io.http(ip, port, path)-> (status:int, body:bytes)    direct to the container IP, never the public endpoint
+      io.public_version()   -> str    (public qa-version source_sha)
+    Returns the {"journal","health","served_sha"} dict the reviewed port expects.  Any doubt => journal "FAILED"."""
+    if not HEX40_RE.fullmatch(target_sha or ""):
+        raise Stop("CUT_FLIGHT_TARGET_INVALID")
+    fail = {"journal": "FAILED", "health": False, "served_sha": ""}
+
+    def wait_for(fn):
+        end = clock() + FLIGHT_DEADLINE_S
+        while True:
+            try:
+                if fn() is True:
+                    return True
+            except Stop:
+                raise
+            except Exception:  # noqa: BLE001
+                pass
+            if clock() >= end:
+                return False
+            sleep(FLIGHT_POLL_S)
+
+    def instance_ok(service, old_cid, image):
+        st = io.inspect(service)
+        return (type(st) is dict and st["cid"] != old_cid and st["image"] == image and st["state"] == "running"
+                and st["restarting"] is False and st["restarts"] == 0)
+
+    def probe_api(old_cid):
+        if not instance_ok("api", old_cid, spec["images"]["api"]):
+            return False
+        code, _ = io.http(io.inspect("api")["ip"], 8080, "/health/ready")
+        return code == 200
+
+    def probe_web(old_cid):
+        if not instance_ok("web", old_cid, spec["images"]["web"]):
+            return False
+        ip = io.inspect("web")["ip"]
+        code, _ = io.http(ip, 80, "/health/web")
+        code2, body = io.http(ip, 80, "/qa-version.json")
+        return code == 200 and code2 == 200 and target_sha.encode() in body
+
+    def flight():
+        old_api, old_web = io.inspect("api")["cid"], io.inspect("web")["cid"]
+        if not io.compose_up("api") or not wait_for(lambda: probe_api(old_api)):
+            return dict(fail)
+        if not io.compose_up("web") or not wait_for(lambda: probe_web(old_web)):
+            return dict(fail)
+        if not wait_for(lambda: probe_api(old_api)) or io.public_version() != target_sha:
+            return dict(fail)
+        return {"journal": "APPLIED", "health": True, "served_sha": io.public_version()}
+    return flight
+
+
+HEX40_RE = __import__("re").compile(r"[0-9a-f]{40}\Z")
+
+
 def unwired(name):
     def step(*_a):
         raise Stop("CUT_STEP_NOT_WIRED_" + name)
