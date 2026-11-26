@@ -658,6 +658,97 @@ class A0G6Params(unittest.TestCase):
         with self.assertRaises(cut.Stop):
             cut.load_a0_g6_params(self.p, 12345)
 
+class G6Mode(unittest.TestCase):
+    NJ = "qa525-vnext-go-nonce-journal.py"
+
+    def setUp(self):
+        self.scripts = pathlib.Path(__file__).resolve().parents[1] / "scripts/qa"
+        pins = dict(cut.G6_PINS)
+        pins[self.NJ] = cut.LIB_PINS[self.NJ]
+        self.mods = cut.load_libs(str(self.scripts), pins)
+        self.run = self.mods[cut.G6_RUN]
+        self.t = tempfile.TemporaryDirectory()
+        self.addCleanup(self.t.cleanup)
+        self.root = os.path.realpath(self.t.name) + "/j"
+        os.mkdir(self.root, 0o700)
+        _, self.op = cut.g6_operation(self.run, "preflight", [])
+        d = lambda s: "sha256:" + hashlib.sha256(s).hexdigest()  # noqa: E731
+        self.auth = {"driver_sha256": d(b"driver"), "policy_sha256": d(b"policy"), "admission_sha256": d(b"adm"),
+                     "g6_operation_sha256": self.op, "g6_command": "preflight"}
+        self.calls = []
+
+        class P:
+            def __init__(s, ok=True):
+                s.ok = ok
+
+            def assert_held(s):
+                if not s.ok:
+                    raise RuntimeError("no locks")
+        self.P = P
+        self.dispatch = lambda command, opts, env: (self.calls.append((command, opts)) or 0)
+        self.now = int(__import__("time").time())
+
+    def go(self, nonce="1" * 64, plane=None, auth=None, command="preflight", options=None):
+        return cut.run_g6(self.mods, plane or self.P(), self.root, os.geteuid(), self.now, nonce, auth or self.auth,
+                          command, [] if options is None else options, object(), self.dispatch)
+
+    def test_operation_matches_reviewed_builder_and_published_pin(self):
+        self.assertEqual(self.op, "2f9ba6141fa4dbc7736d4f772ed4a6e2d5b87e9e2971fe73e23eeb8011d346c8")
+        spec = importlib.util.spec_from_file_location("b", self.scripts / "qa525-g6-operation-build.py")
+        b = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(b)
+        for cmd, opts in (("preflight", []), ("backup", [("restic-sha256", "a" * 64), ("repo-id", "b" * 64),
+                                                        ("key-epoch", "c" * 32)])):
+            self.assertEqual(cut.g6_operation(self.run, cmd, opts), b.build(cmd, opts, runner=self.run))
+
+    def test_invalid_operations_are_rejected(self):
+        for cmd, opts in (("nope", []), ("init", []), ("preflight", [("bogus", "x")]), ("preflight", [("image", "bad")])):
+            with self.assertRaises(cut.Stop):
+                cut.g6_operation(self.run, cmd, opts)
+
+    def test_altered_g6_module_is_rejected_by_pin(self):
+        d = os.path.realpath(self.t.name) + "/lib"
+        os.mkdir(d)
+        for name in cut.G6_PINS:
+            raw = (self.scripts / name).read_bytes()
+            if name == "qa525-vnext-g6-v2-captor.py":
+                raw += b"\n# tampered\n"
+            with open(os.path.join(d, name), "wb") as h:
+                h.write(raw)
+            os.chmod(os.path.join(d, name), 0o644)
+        with self.assertRaises(cut.Stop) as c:
+            cut.load_libs(d, cut.G6_PINS)
+        self.assertEqual(str(c.exception), "CUT_LIB_PIN_MISMATCH")
+
+    def test_env_requires_expected_host_and_root_and_carries_pinned_hashes(self):
+        with self.assertRaises(cut.Stop):
+            cut.build_g6_env(self.mods, 0, "other-host", 0)
+        with self.assertRaises(cut.Stop):
+            cut.build_g6_env(self.mods, 0, "glmdch", 1000)
+        env = cut.build_g6_env(self.mods, 0, "glmdch", 0)
+        self.assertEqual(env.module_hashes["entrypoint"], cut.G6_PINS[cut.G6_RUN])
+        self.assertEqual(env.module_hashes["captor"], cut.G6_PINS["qa525-vnext-g6-v2-captor.py"])
+
+    def test_one_command_per_nonce_and_effects_only_after_marker(self):
+        self.assertEqual(self.go(), 0)
+        self.assertEqual(self.calls, [("preflight", {})])
+        with self.assertRaises(Exception):
+            self.go()  # same nonce: refused, no second dispatch
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.go(nonce="2" * 64), 0)  # a fresh nonce is a new authorization
+
+    def test_missing_locks_operation_or_command_mismatch_do_nothing(self):
+        with self.assertRaises(cut.Stop) as c:
+            self.go(plane=self.P(ok=False))
+        self.assertEqual(str(c.exception), "CUT_PLANE_NOT_HELD")
+        with self.assertRaises(cut.Stop):
+            self.go(auth=dict(self.auth, g6_operation_sha256="0" * 64))
+        with self.assertRaises(cut.Stop):
+            self.go(auth=dict(self.auth, g6_command="backup"))
+        self.assertEqual(self.calls, [])
+        self.assertEqual(os.listdir(self.root), [])  # no marker was spent by the refused attempts
+        self.assertEqual(self.go(), 0)  # and the same nonce still works afterwards
+
 
 if __name__ == "__main__":
     unittest.main()

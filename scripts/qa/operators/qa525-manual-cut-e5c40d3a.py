@@ -233,6 +233,78 @@ def run_cut(mods, plane, root, uid, now, nonce, authorization, spec, params, col
     return ex.run(journal, plane, steps)
 
 
+# ---- G6 mode (route C): reviewed G6 modules loaded by EXACT pinned bytes; never the host tree, never the bootstrap -----
+G6_RUN = "qa525-vnext-g6-v2-run.py"
+G6_PINS = {
+    G6_RUN: "3093f577930a87cfdc55d039d31260aa8b3927896540107a004ec4d15550e913",
+    "qa525-vnext-g6-v2-producer.py": "08d793a957886c4abdcd9b6f791fde243906224b114906f8beb7c598a66f38e7",
+    "qa525-vnext-g6-v2-captor.py": "e24cd5815370e349b2311b0ee64642b13f4d0728e7bda07485e15ccb8b1c9372",
+    "qa525-vnext-g6-v2-verifier.py": "cba3cf308d62c6322d400be9df91c82048a1fee92cc119db4593473faa2515c7",
+}
+G6_COMMANDS = ("preflight", "init", "backup", "restore", "review")
+G6_OPERATION_SCHEMA = "qa525-g6-operation-v1"
+
+
+def g6_operation(run, command, options):
+    """Canonical operation bytes + sha256 (same format as the reviewed builder `qa525-g6-operation-build.py`).
+    `options` = ordered list of (name, value); validated with the G6 runner's own closed grammar (`run.parse`)."""
+    import json
+    if command not in G6_COMMANDS or type(options) is not list or any(type(p) is not tuple or len(p) != 2 for p in options):
+        raise Stop("CUT_G6_OPERATION_INVALID")
+    argv = []
+    for name, value in options:
+        if type(name) is not str or type(value) is not str:
+            raise Stop("CUT_G6_OPERATION_INVALID")
+        argv += ["--" + name, value]
+    try:
+        parsed, _ = run.parse([command, *argv])
+    except Exception:  # noqa: BLE001
+        raise Stop("CUT_G6_OPERATION_INVALID") from None
+    if parsed != command:
+        raise Stop("CUT_G6_OPERATION_INVALID")
+    raw = json.dumps({"schema": G6_OPERATION_SCHEMA, "g6_command": command, "argv": argv}, sort_keys=True,
+                     separators=(",", ":"), ensure_ascii=True).encode("ascii")
+    return raw, hashlib.sha256(raw).hexdigest()
+
+
+def build_g6_env(mods, uid, hostname, euid):
+    """Equivalent of the G6 runner's `env_from_verified`, fed by modules loaded from PINNED bytes (this driver's loader)
+    instead of the PRE-4 bootstrap.  Host/root checks are the runner's own.  `hostname`/`euid` are injected (tests)."""
+    run = mods[G6_RUN]
+    if hostname != run.EXPECTED_HOST:
+        raise Stop("G6RUN_HOST_REFUSED")
+    if euid != 0:
+        raise Stop("G6RUN_ROOT_REQUIRED")
+    captor, producer = mods["qa525-vnext-g6-v2-captor.py"], mods["qa525-vnext-g6-v2-producer.py"]
+    hashes = {label: G6_PINS[name] for label, name in
+              (("producer", "qa525-vnext-g6-v2-producer.py"), ("captor", "qa525-vnext-g6-v2-captor.py"),
+               ("verifier", "qa525-vnext-g6-v2-verifier.py"), ("entrypoint", G6_RUN))}
+    import datetime as _dt
+    return run.Env(
+        producer=producer, captor=captor, verifier=mods["qa525-vnext-g6-v2-verifier.py"], uid=uid,
+        now=lambda: _dt.datetime.now(_dt.timezone.utc), docker_runner=captor.FixedRunner(),
+        systemctl_runner=captor.FixedRunner(run.SYSTEMCTL, 15),
+        make_restic=lambda sha: producer.ResticCli(run.RESTIC, binary_sha256=sha),
+        read_key=run._read_key_from_terminal, emit=print, module_hashes=hashes)
+
+
+def run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, env, dispatch=None):
+    """ONE G6 command.  Order: operation hash must equal the authorization's pin -> locks held -> nonce marker
+    consumed (O_EXCL+fsync) -> dispatch.  Any divergence = Stop before any effect."""
+    run = mods[G6_RUN]
+    nj = mods["qa525-vnext-go-nonce-journal.py"]
+    _, op_sha = g6_operation(run, command, options)
+    if authorization.get("g6_operation_sha256") != op_sha or authorization.get("g6_command") != command:
+        raise Stop("CUT_G6_OPERATION_MISMATCH")
+    bound5 = {"app": "sha256:" + hashlib.sha256(SOURCE_SHA.encode()).hexdigest(), "ops": authorization["driver_sha256"],
+              "policy": authorization["policy_sha256"], "plan": "sha256:" + op_sha,
+              "admission": authorization["admission_sha256"]}
+    _require_plane(plane)
+    nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=now + 3600)  # spent only after locks are held
+    opts = dict(options)
+    return (dispatch or run.dispatch)(command, opts, env)
+
+
 def make_g6_verifier(g6, facts):
     """verifier(data)->bool for `ports.make_verify_backup`: reuses the EXISTING G6 only if the reviewed evidence checker
     accepts it for THIS cut (pins, receipt, review, restore, 48 h window covering the admission).  Authenticity of the
