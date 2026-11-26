@@ -32,6 +32,33 @@ class Loader(unittest.TestCase):
         h = self.put("m.py", b"VALUE = 7\n")
         self.assertEqual(cut.load_libs(self.d, {"m.py": h})["m.py"].VALUE, 7)
 
+    def test_short_reads_are_reassembled_and_overflow_stops(self):
+        payload = b"VALUE = 7\\n"
+        path = os.path.join(self.d, "m.py")
+        with open(path, "wb") as h:
+            h.write(payload)
+        os.chmod(path, 0o644)
+        expected = hashlib.sha256(payload).hexdigest()
+        original = os.read
+        calls = []
+
+        def short_read(fd, size):
+            calls.append(size)
+            return original(fd, min(size, 2))
+
+        os.read = short_read
+        try:
+            self.assertEqual(cut.load_libs(self.d, {"m.py": expected})["m.py"].VALUE, 7)
+        finally:
+            os.read = original
+        self.assertGreater(len(calls), 1)
+
+        with open(path, "ab") as h:
+            h.write(b"X")
+        with self.assertRaises(cut.Stop) as ctx:
+            cut.load_libs(self.d, {"m.py": expected})
+        self.assertEqual(str(ctx.exception), "CUT_LIB_TOO_LARGE")
+
     def test_mismatch_unpinned_missing_unsafe(self):
         h = self.put("m.py", b"X=1\n")
         with self.assertRaises(cut.Stop) as c:
