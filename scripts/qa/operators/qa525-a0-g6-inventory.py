@@ -105,6 +105,10 @@ def require_dir(path, uid, code):
     return st
 
 
+def safe_dir_flag(st, uid):
+    return stat.S_ISDIR(st.st_mode) and st.st_uid == uid and not stat.S_IMODE(st.st_mode) & 0o022
+
+
 def names(path):
     try:
         found = sorted(os.listdir(path))
@@ -118,6 +122,7 @@ def names(path):
 def inventory(uid=0, out=sys.stdout, config=CONFIG, root_source=ROOT_SOURCE, state_root=STATE_ROOT,
               locks=LOCKS, markers=MARKERS, pins=G6_PINNED):
     L = []
+    unsafe = []
     try:
         # ---- PRE4 / root-source
         st = lstat(root_source)
@@ -185,15 +190,22 @@ def inventory(uid=0, out=sys.stdout, config=CONFIG, root_source=ROOT_SOURCE, sta
         if rst is None:
             L.append("A0G6_STATE_ROOT=ABSENT")
         else:
-            L.append("A0G6_STATE_ROOT=%s" % facts(require_dir(state_root, uid, "STATE_ROOT_UNSAFE")))
+            ok = safe_dir_flag(rst, uid)
+            L.append("A0G6_STATE_ROOT=%s %s" % (facts(rst), "SAFE" if ok else "UNSAFE"))
+            if not ok:
+                unsafe.append("root")
             for d in SUBDIRS:
                 p = posixpath.join(state_root, d)
                 s = lstat(p)
                 if s is None:
                     L.append("A0G6_DIR_%s=ABSENT" % d)
                     continue
-                L.append("A0G6_DIR_%s=%s" % (d, facts(require_dir(p, uid, "STATE_DIR_UNSAFE"))))
-                if d in ("state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2") and stat.S_ISDIR(s.st_mode):
+                ok = safe_dir_flag(s, uid)
+                L.append("A0G6_DIR_%s=%s %s" % (d, facts(s), "SAFE" if ok else "UNSAFE"))
+                if not ok:
+                    unsafe.append(d)
+                    continue
+                if d in ("state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2"):
                     ents = names(p)
                     L.append("A0G6_DIR_%s_COUNT=%d" % (d, len(ents)))
                     for n in ents:
@@ -214,6 +226,9 @@ def inventory(uid=0, out=sys.stdout, config=CONFIG, root_source=ROOT_SOURCE, sta
                         elif d == "exports-v2" and ARCHIVE.fullmatch(n):
                             s2 = lstat(posixpath.join(p, n))
                             L.append("A0G6_ARCHIVE_%s=%s size=%d" % (n, facts(s2), s2.st_size))
+        if unsafe:  # diagnostic: all closed metadata gathered so far, then the closed STOP (never a PASS)
+            out.write("\n".join(L) + "\nA0G6_UNSAFE_DIRS=" + ",".join(unsafe) + "\nA0G6_STOP:STATE_DIR_UNSAFE\n")
+            return 1
         out.write("\n".join(L) + "\nA0G6_INVENTORY_COMPLETE=1\n")
         return 0
     except Stop as exc:

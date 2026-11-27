@@ -180,7 +180,24 @@ class Inventory(unittest.TestCase):
         os.unlink(cfg["journal_root"])
         os.mkdir(cfg["journal_root"], 0o700)
         os.chmod(self.state + "/exports-v2", 0o777)
-        self.assertEqual(self.run_inv()[1], "A0G6_STOP:STATE_DIR_UNSAFE\n")
+        code, text = self.run_inv()
+        self.assertEqual(code, 1)
+        self.assertTrue(text.endswith("A0G6_UNSAFE_DIRS=exports-v2\nA0G6_STOP:STATE_DIR_UNSAFE\n"), text)
+        self.assertIn("A0G6_DIR_exports-v2=dir uid=%d mode=0777 nlink=" % UID, text)
+        self.assertNotIn("A0G6_INVENTORY_COMPLETE", text)
+        self.assertNotIn(SECRET, text)
+
+    def test_unsafe_root_and_symlinked_subdir_reported_without_descending(self):
+        shutil_tmp = self.t.name + "/elsewhere"
+        os.mkdir(shutil_tmp)
+        os.rmdir(self.state + "/restores-v2")
+        os.symlink(shutil_tmp, self.state + "/restores-v2")
+        os.chmod(self.state, 0o775 | 0o002)
+        code, text = self.run_inv()
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_UNSAFE_DIRS=root,restores-v2", text)
+        self.assertIn("A0G6_DIR_restores-v2=link", text)
+        self.assertNotIn("restores-v2_COUNT", text)
 
     def test_determinism(self):
         self.assertEqual(self.run_inv(), self.run_inv())
