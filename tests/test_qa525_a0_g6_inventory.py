@@ -187,17 +187,67 @@ class Inventory(unittest.TestCase):
         self.assertNotIn("A0G6_INVENTORY_COMPLETE", text)
         self.assertNotIn(SECRET, text)
 
-    def test_unsafe_root_and_symlinked_subdir_reported_without_descending(self):
-        shutil_tmp = self.t.name + "/elsewhere"
-        os.mkdir(shutil_tmp)
-        os.rmdir(self.state + "/restores-v2")
-        os.symlink(shutil_tmp, self.state + "/restores-v2")
-        os.chmod(self.state, 0o775 | 0o002)
+    def test_unsafe_root_reports_only_root_metadata(self):
+        os.chmod(self.state, 0o777)
         code, text = self.run_inv()
         self.assertEqual(code, 1)
-        self.assertIn("A0G6_UNSAFE_DIRS=root,restores-v2", text)
+        self.assertIn("A0G6_UNSAFE_DIRS=root\nA0G6_STOP:STATE_DIR_UNSAFE\n", text)
+        self.assertNotIn("A0G6_DIR_", text)
+        self.assertNotIn("A0G6_INVENTORY_COMPLETE", text)
+
+    def test_state_root_symlink_is_not_followed(self):
+        real = self.t.name + "/real-g6"
+        os.rename(self.state, real)
+        os.symlink(real, self.state)
+        code, text = self.run_inv()
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_STATE_ROOT=link", text)
+        self.assertIn("A0G6_UNSAFE_DIRS=root\n", text)
+        self.assertNotIn("A0G6_DIR_", text)
+        self.assertNotIn(self.rid, text)
+
+    def test_state_root_not_a_directory(self):
+        shutil_rm = self.state
+        import shutil
+        shutil.rmtree(shutil_rm)
+        open(self.state, "w").close()
+        code, text = self.run_inv()
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_STATE_ROOT=file", text)
+        self.assertIn("A0G6_UNSAFE_DIRS=root\n", text)
+        self.assertNotIn("A0G6_DIR_", text)
+
+    def test_symlinked_subdir_reported_without_descending(self):
+        elsewhere = self.t.name + "/elsewhere"
+        os.mkdir(elsewhere)
+        os.rmdir(self.state + "/restores-v2")
+        os.symlink(elsewhere, self.state + "/restores-v2")
+        code, text = self.run_inv()
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_UNSAFE_DIRS=restores-v2\n", text)
         self.assertIn("A0G6_DIR_restores-v2=link", text)
         self.assertNotIn("restores-v2_COUNT", text)
+
+    def test_swap_between_stat_and_open_is_caught(self):
+        elsewhere = self.t.name + "/elsewhere2"
+        os.mkdir(elsewhere, 0o700)
+        real_open = inv._open_dir
+        state = self.state
+
+        def swapping(name, dir_fd=None):
+            if name == "exports-v2" and dir_fd is not None:
+                os.rename(state + "/exports-v2", state + "/exports-v2.orig")
+                os.symlink(elsewhere, state + "/exports-v2")
+            return real_open(name, dir_fd)
+        inv._open_dir = swapping
+        try:
+            code, text = self.run_inv()
+        finally:
+            inv._open_dir = real_open
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_UNSAFE_DIRS=exports-v2\n", text)
+        self.assertNotIn("exports-v2_COUNT", text)
+        self.assertNotIn("ARCHIVE_", text)
 
     def test_determinism(self):
         self.assertEqual(self.run_inv(), self.run_inv())

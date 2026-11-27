@@ -71,10 +71,10 @@ def facts(st):
     return "%s uid=%d mode=%04o nlink=%d" % (kind, st.st_uid, stat.S_IMODE(st.st_mode), st.st_nlink)
 
 
-def read_small(path, uid, cap=MAX_JSON):
+def read_small(path, uid, cap=MAX_JSON, dir_fd=None):
     """Exact bounded read through an O_NOFOLLOW fd; root-owned regular file, nlink 1, not group/other-writable."""
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=dir_fd)
     except OSError:
         raise Stop("OPEN_FAILED") from None
     try:
@@ -107,6 +107,24 @@ def require_dir(path, uid, code):
 
 def safe_dir_flag(st, uid):
     return stat.S_ISDIR(st.st_mode) and st.st_uid == uid and not stat.S_IMODE(st.st_mode) & 0o022
+
+
+def _open_dir(name, dir_fd=None):
+    """Open a directory FD without following symlinks; None if it is not a real directory."""
+    try:
+        return os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dir_fd)
+    except OSError:
+        return None
+
+
+def _names_fd(fd):
+    try:
+        found = sorted(os.listdir(fd))
+    except OSError:
+        raise Stop("LIST_FAILED") from None
+    if len(found) > MAX_NAMES:
+        raise Stop("TOO_MANY_ENTRIES")
+    return found
 
 
 def names(path):
@@ -185,47 +203,64 @@ def inventory(uid=0, out=sys.stdout, config=CONFIG, root_source=ROOT_SOURCE, sta
         for p in markers:
             s = lstat(p)
             L.append("A0G6_MARKER_%s=%s" % (p, facts(s) if s else "ABSENT"))
-        # ---- G6 state tree
+        # ---- G6 state tree: every access goes through directory FDs opened O_NOFOLLOW|O_DIRECTORY, so a validated
+        # directory cannot be swapped for a symlink between the check and the listing.
         rst = lstat(state_root)
         if rst is None:
             L.append("A0G6_STATE_ROOT=ABSENT")
         else:
-            ok = safe_dir_flag(rst, uid)
-            L.append("A0G6_STATE_ROOT=%s %s" % (facts(rst), "SAFE" if ok else "UNSAFE"))
-            if not ok:
-                unsafe.append("root")
-            for d in SUBDIRS:
-                p = posixpath.join(state_root, d)
-                s = lstat(p)
-                if s is None:
-                    L.append("A0G6_DIR_%s=ABSENT" % d)
-                    continue
-                ok = safe_dir_flag(s, uid)
-                L.append("A0G6_DIR_%s=%s %s" % (d, facts(s), "SAFE" if ok else "UNSAFE"))
-                if not ok:
-                    unsafe.append(d)
-                    continue
-                if d in ("state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2"):
-                    ents = names(p)
-                    L.append("A0G6_DIR_%s_COUNT=%d" % (d, len(ents)))
-                    for n in ents:
-                        if d == "state-v2" and EVID.fullmatch(n):
-                            fp = posixpath.join(p, n)
-                            data = read_small(fp, uid)
-                            line = "A0G6_EVIDENCE_%s=sha256=%s size=%d" % (n, hashlib.sha256(data).hexdigest(), len(data))
-                            try:
-                                j = json.loads(data.decode("utf-8"))
-                            except (UnicodeDecodeError, ValueError, RecursionError):
-                                j = None
-                            if type(j) is dict:
-                                for f, rx in (("restic_repo_id", HEX64), ("key_epoch", EPOCH)):
-                                    v = j.get(f)
-                                    if type(v) is str and rx.fullmatch(v):
-                                        line += " %s=%s" % (f, v)
-                            L.append(line)
-                        elif d == "exports-v2" and ARCHIVE.fullmatch(n):
-                            s2 = lstat(posixpath.join(p, n))
-                            L.append("A0G6_ARCHIVE_%s=%s size=%d" % (n, facts(s2), s2.st_size))
+            rfd = _open_dir(state_root)
+            try:
+                rok = rfd is not None and safe_dir_flag(os.fstat(rfd), uid) and os.path.samestat(rst, os.fstat(rfd))
+                L.append("A0G6_STATE_ROOT=%s %s" % (facts(rst), "SAFE" if rok else "UNSAFE"))
+                if not rok:
+                    unsafe.append("root")  # root metadata only: no subdirectory is evaluated or listed
+                else:
+                    for d in SUBDIRS:
+                        try:
+                            s = os.stat(d, dir_fd=rfd, follow_symlinks=False)
+                        except FileNotFoundError:
+                            L.append("A0G6_DIR_%s=ABSENT" % d)
+                            continue
+                        except OSError:
+                            raise Stop("IO") from None
+                        dfd = _open_dir(d, rfd)
+                        try:
+                            ok = dfd is not None and safe_dir_flag(os.fstat(dfd), uid) and os.path.samestat(s, os.fstat(dfd))
+                            L.append("A0G6_DIR_%s=%s %s" % (d, facts(s), "SAFE" if ok else "UNSAFE"))
+                            if not ok:
+                                unsafe.append(d)
+                                continue
+                            if d in ("state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2"):
+                                ents = _names_fd(dfd)
+                                L.append("A0G6_DIR_%s_COUNT=%d" % (d, len(ents)))
+                                for n in ents:
+                                    if d == "state-v2" and EVID.fullmatch(n):
+                                        data = read_small(n, uid, dir_fd=dfd)
+                                        line = "A0G6_EVIDENCE_%s=sha256=%s size=%d" % (
+                                            n, hashlib.sha256(data).hexdigest(), len(data))
+                                        try:
+                                            j = json.loads(data.decode("utf-8"))
+                                        except (UnicodeDecodeError, ValueError, RecursionError):
+                                            j = None
+                                        if type(j) is dict:
+                                            for f, rx in (("restic_repo_id", HEX64), ("key_epoch", EPOCH)):
+                                                v = j.get(f)
+                                                if type(v) is str and rx.fullmatch(v):
+                                                    line += " %s=%s" % (f, v)
+                                        L.append(line)
+                                    elif d == "exports-v2" and ARCHIVE.fullmatch(n):
+                                        try:
+                                            s2 = os.stat(n, dir_fd=dfd, follow_symlinks=False)
+                                        except OSError:
+                                            raise Stop("IO") from None
+                                        L.append("A0G6_ARCHIVE_%s=%s size=%d" % (n, facts(s2), s2.st_size))
+                        finally:
+                            if dfd is not None:
+                                os.close(dfd)
+            finally:
+                if rfd is not None:
+                    os.close(rfd)
         if unsafe:  # diagnostic: all closed metadata gathered so far, then the closed STOP (never a PASS)
             out.write("\n".join(L) + "\nA0G6_UNSAFE_DIRS=" + ",".join(unsafe) + "\nA0G6_STOP:STATE_DIR_UNSAFE\n")
             return 1
