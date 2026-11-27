@@ -288,7 +288,7 @@ def build_g6_env(mods, uid, hostname, euid):
         read_key=run._read_key_from_terminal, emit=print, module_hashes=hashes)
 
 
-def run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, env, dispatch=None):
+def run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, env, dispatch=None, expires_at=None):
     """ONE G6 command.  Order: operation hash must equal the authorization's pin -> locks held -> nonce marker
     consumed (O_EXCL+fsync) -> dispatch.  Any divergence = Stop before any effect."""
     run = mods[G6_RUN]
@@ -300,7 +300,11 @@ def run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, 
               "policy": authorization["policy_sha256"], "plan": "sha256:" + op_sha,
               "admission": authorization["admission_sha256"]}
     _require_plane(plane)
-    nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=now + 3600)  # spent only after locks are held
+    if expires_at is None:
+        expires_at = now + G6_GO_TTL_MAX
+    if type(expires_at) is not int or isinstance(expires_at, bool) or not now < expires_at <= now + G6_GO_TTL_MAX:
+        raise Stop("CUT_G6_GO_TTL_EXCEEDED")
+    nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=expires_at)  # spent only after locks are held
     opts = dict(options)
     return (dispatch or run.dispatch)(command, opts, env)
 
@@ -703,11 +707,17 @@ _HEX64 = __import__("re").compile(r"[a-f0-9]{64}\Z")
 
 
 def _g6_parse(argv):
-    """Closed grammar: --g6 <command> --authorization-sha256 <hex64> [--name value]...  (no abbreviations, no positionals)."""
-    if (len(argv) < 4 or argv[0] != G6_FLAG or argv[1] not in G6_COMMANDS or argv[2] != G6_AUTH_FLAG
-            or _HEX64.fullmatch(argv[3]) is None):
+    """Closed grammar: --g6 <command> --authorization-sha256 <hex64> --go <abs path> --go-sig <abs path> [--name value]...
+    (no abbreviations, no positionals).  Returns (command, auth_sha, go_path, sig_path, options)."""
+    if (len(argv) < 8 or argv[0] != G6_FLAG or argv[1] not in G6_COMMANDS or argv[2] != G6_AUTH_FLAG
+            or _HEX64.fullmatch(argv[3]) is None or argv[4] != G6_GO_FLAG or argv[6] != G6_GOSIG_FLAG):
         raise Stop("CUT_G6_ARGS_INVALID")
-    rest = argv[4:]
+    go_path, sig_path = argv[5], argv[7]
+    for pth in (go_path, sig_path):
+        if (not pth.startswith("/") or pth.startswith("//") or os.path.normpath(pth) != pth or "\x00" in pth
+                or len(pth) > 255):
+            raise Stop("CUT_G6_ARGS_INVALID")
+    rest = argv[8:]
     if len(rest) % 2:
         raise Stop("CUT_G6_ARGS_INVALID")
     options = []
@@ -716,7 +726,206 @@ def _g6_parse(argv):
         if not name.startswith("--") or len(name) < 3 or value.startswith("--"):
             raise Stop("CUT_G6_ARGS_INVALID")
         options.append((name[2:], value))
-    return argv[1], argv[3], options
+    return argv[1], argv[3], go_path, sig_path, options
+
+
+# ---- signed G6 GO (route C) -----------------------------------------------------------------------------------------
+# The Sponsor signs a 5-field canonical GO with his OPS key (OpenSSH Ed25519, namespace below, signed OFF-host in Termux).
+# Verification = the pinned `ssh-keygen -Y verify` executed THROUGH the hash-verified FD; Ed25519 is never re-implemented.
+# Until the two host-dependent pins below are filled by a reviewed change, the signed path is STOP (never invented).
+G6_GO_FLAG = "--go"
+G6_GOSIG_FLAG = "--go-sig"
+G6_GO_NAMESPACE = "qa525-go-g6-v1@pmgm"  # distinct from the cut GO namespace (qa525-go-cut-v1@pmgm)
+G6_GO_PRINCIPAL = "qa525-ops"
+G6_GO_FIELDS = frozenset({"command", "op_sha256", "nonce", "expires_at", "driver_sha256"})
+G6_GO_TTL_MAX = 900
+G6_GO_MAX_BYTES = 2048
+G6_GOSIG_MAX_BYTES = 4096
+G6_OPS_FINGERPRINT = "SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k"  # fixed by the Sponsor (Bitwarden); docs PREROOT-BOUNDARY L15
+G6_OPS_ALLOWED_SIGNERS = None  # exactly: b'qa525-ops namespaces="qa525-go-g6-v1@pmgm" ssh-ed25519 <KEY>\n' -- PUBLIC key; fingerprint must equal the pin
+G6_KEYGEN_PATH = "/usr/bin/ssh-keygen"
+G6_KEYGEN_SHA256 = None  # "sha256:<hex64>" of the real binary, proven on the host in a read-only gate; never assumed
+G6_GO_TEMP_ROOT = "/var/lib/pmgm-qa525-manual-cut-e5c40d3a"  # root 0700 (HOST-PREP); transient 0700 subdir, removed after use
+_GO_NONCE = __import__("re").compile(r"[a-f0-9]{32,64}\Z")
+_GO_PUB = __import__("re").compile(rb'qa525-ops namespaces="qa525-go-g6-v1@pmgm" ssh-ed25519 ([A-Za-z0-9+/]{68})\n\Z')
+_GO_PUB_PREFIX = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20"
+
+
+def _g6_go_cfg(d):
+    """Verifier configuration.  Production = the module constants (STOP while unpinned); tests inject `go_cfg`."""
+    cfg = d.get("go_cfg")
+    if cfg is None:
+        cfg = {"keygen_path": G6_KEYGEN_PATH, "keygen_sha256": G6_KEYGEN_SHA256, "signers": G6_OPS_ALLOWED_SIGNERS,
+               "fingerprint": G6_OPS_FINGERPRINT, "temp_root": G6_GO_TEMP_ROOT, "required_euid": 0, "binary_uid": 0,
+               "temp_uid": 0}
+    if (type(cfg) is not dict or type(cfg.get("signers")) is not bytes or type(cfg.get("keygen_sha256")) is not str):
+        raise Stop("CUT_G6_GO_VERIFIER_NOT_PINNED")
+    return cfg
+
+
+def _g6_signers_fingerprint(signers):
+    import base64
+    found = _GO_PUB.fullmatch(signers) if type(signers) is bytes else None
+    if found is None:
+        raise Stop("CUT_G6_GO_SIGNERS_INVALID")
+    try:
+        blob = base64.b64decode(found.group(1), validate=True)
+    except ValueError:
+        raise Stop("CUT_G6_GO_SIGNERS_INVALID") from None
+    if len(blob) != len(_GO_PUB_PREFIX) + 32 or not blob.startswith(_GO_PUB_PREFIX):
+        raise Stop("CUT_G6_GO_SIGNERS_INVALID")
+    return "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
+
+
+def _g6_ident(st):
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _g6_open_keygen(cfg):
+    """(fd, identity) of the hash-pinned binary; the caller executes THIS fd (no path swap window)."""
+    path = cfg["keygen_path"]
+    if type(path) is not str or not os.path.isabs(path) or os.path.normpath(path) != path:
+        raise Stop("CUT_G6_GO_KEYGEN_INVALID")
+    want = cfg["keygen_sha256"]
+    if __import__("re").fullmatch(r"sha256:[a-f0-9]{64}", want) is None:
+        raise Stop("CUT_G6_GO_VERIFIER_NOT_PINNED")
+    fd = None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        st = os.fstat(fd)
+        limit = 32 * 1024 * 1024
+        if (not stat.S_ISREG(st.st_mode) or st.st_uid != cfg["binary_uid"] or st.st_nlink != 1
+                or st.st_mode & 0o022 or not st.st_mode & 0o111 or not 0 < st.st_size <= limit):
+            raise Stop("CUT_G6_GO_KEYGEN_UNTRUSTED")
+        digest, total = hashlib.sha256(), 0
+        while True:
+            block = os.read(fd, 1 << 20)
+            if not block:
+                break
+            total += len(block)
+            if total > limit:
+                raise Stop("CUT_G6_GO_KEYGEN_UNTRUSTED")
+            digest.update(block)
+        if total != st.st_size or _g6_ident(os.fstat(fd)) != _g6_ident(st):
+            raise Stop("CUT_G6_GO_KEYGEN_CHANGED")
+        import hmac
+        if not hmac.compare_digest("sha256:" + digest.hexdigest(), want):
+            raise Stop("CUT_G6_GO_KEYGEN_PIN_MISMATCH")
+        return fd, _g6_ident(st)
+    except BaseException as exc:
+        if fd is not None:
+            os.close(fd)
+        if isinstance(exc, OSError):
+            raise Stop("CUT_G6_GO_KEYGEN_UNAVAILABLE") from None
+        raise
+
+
+def _g6_verify_signature(go_bytes, sig_bytes, cfg):
+    """True only if the pinned OpenSSH verifier prints exactly the expected `Good ...` line for the pinned key."""
+    import hmac
+    import shutil
+    import tempfile
+    if not hmac.compare_digest(_g6_signers_fingerprint(cfg["signers"]), cfg["fingerprint"]):
+        raise Stop("CUT_G6_GO_FINGERPRINT_MISMATCH")
+    if (type(go_bytes) is not bytes or not 0 < len(go_bytes) <= G6_GO_MAX_BYTES or type(sig_bytes) is not bytes
+            or not sig_bytes.startswith(b"-----BEGIN SSH SIGNATURE-----\n")
+            or not sig_bytes.endswith(b"-----END SSH SIGNATURE-----\n") or not 0 < len(sig_bytes) <= G6_GOSIG_MAX_BYTES):
+        raise Stop("CUT_G6_GO_SIGNATURE_INVALID")
+    if os.geteuid() != cfg["required_euid"]:
+        raise Stop("CUT_G6_GO_ROOT_REQUIRED")
+    try:
+        tst = os.lstat(cfg["temp_root"])
+    except OSError:
+        raise Stop("CUT_G6_GO_TEMP_UNSAFE") from None
+    if not stat.S_ISDIR(tst.st_mode) or tst.st_uid != cfg["temp_uid"] or tst.st_mode & 0o077:
+        raise Stop("CUT_G6_GO_TEMP_UNSAFE")
+    fd, before = _g6_open_keygen(cfg)
+    tmp, cleanup_failed = None, False
+    try:
+        try:
+            tmp = tempfile.mkdtemp(prefix="g6go-", dir=cfg["temp_root"])
+            os.chmod(tmp, 0o700)
+            for name, payload in (("allowed", cfg["signers"]), ("go.sig", sig_bytes)):
+                pfd = os.open(os.path.join(tmp, name), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+                try:
+                    os.write(pfd, payload)
+                    os.fsync(pfd)
+                finally:
+                    os.close(pfd)
+            argv = ["ssh-keygen", "-Y", "verify", "-f", os.path.join(tmp, "allowed"), "-I", G6_GO_PRINCIPAL,
+                    "-n", G6_GO_NAMESPACE, "-s", os.path.join(tmp, "go.sig")]
+            with tempfile.TemporaryFile(mode="w+b", dir=tmp) as output:
+                done = subprocess.run(argv, executable="/proc/self/fd/%d" % fd, pass_fds=(fd,), input=go_bytes,
+                                      stdout=output, stderr=subprocess.DEVNULL, check=False, timeout=30, cwd=tmp,
+                                      env={}, shell=False, close_fds=True)
+                output.seek(0, os.SEEK_END)
+                if output.tell() > 1024:
+                    raise Stop("CUT_G6_GO_SIGNATURE_INVALID")
+                output.seek(0)
+                printed = output.read()
+        except (OSError, subprocess.SubprocessError):
+            raise Stop("CUT_G6_GO_EXEC_DENIED") from None
+        if _g6_ident(os.fstat(fd)) != before:
+            raise Stop("CUT_G6_GO_KEYGEN_CHANGED")
+    finally:
+        os.close(fd)
+        if tmp is not None:
+            try:
+                shutil.rmtree(tmp)
+            except OSError:
+                cleanup_failed = True
+    if cleanup_failed:
+        raise Stop("CUT_G6_GO_TEMP_CLEANUP_FAILED")
+    expected = ('Good "%s" signature for %s with ED25519 key %s\n'
+                % (G6_GO_NAMESPACE, G6_GO_PRINCIPAL, cfg["fingerprint"])).encode()
+    return done.returncode == 0 and hmac.compare_digest(printed, expected)
+
+
+def g6_go_canonical(go):
+    """The one canonical byte form (sorted keys, compact separators, ASCII); the Sponsor signs exactly these bytes."""
+    import json
+    return json.dumps(go, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+
+
+def g6_go_parse(go_bytes):
+    import json
+    try:
+        go = json.loads(go_bytes.decode("ascii"))
+    except (UnicodeError, ValueError, AttributeError):
+        raise Stop("CUT_G6_GO_FORMAT_INVALID") from None
+    if (type(go) is not dict or set(go) != G6_GO_FIELDS or type(go["command"]) is not str
+            or type(go["op_sha256"]) is not str or _HEX64.fullmatch(go["op_sha256"]) is None
+            or type(go["driver_sha256"]) is not str or _HEX64.fullmatch(go["driver_sha256"]) is None
+            or type(go["nonce"]) is not str or _GO_NONCE.fullmatch(go["nonce"]) is None
+            or type(go["expires_at"]) is not int or isinstance(go["expires_at"], bool)):
+        raise Stop("CUT_G6_GO_FORMAT_INVALID")
+    if g6_go_canonical(go) != go_bytes:  # rejects duplicate keys, whitespace, escapes, any non-canonical spelling
+        raise Stop("CUT_G6_GO_FORMAT_INVALID")
+    return go
+
+
+def g6_check_go(go_bytes, sig_bytes, command, op_sha, driver_hex, now, cfg):
+    """Authenticity first (pinned verifier), then the closed fields.  Returns the parsed GO or raises a fixed Stop."""
+    if not _g6_verify_signature(go_bytes, sig_bytes, cfg):
+        raise Stop("CUT_G6_GO_SIGNATURE_INVALID")
+    go = g6_go_parse(go_bytes)
+    if go["command"] != command or go["op_sha256"] != op_sha or go["driver_sha256"] != driver_hex:
+        raise Stop("CUT_G6_GO_MISMATCH")
+    if type(now) is not int or isinstance(now, bool) or not now < go["expires_at"]:
+        raise Stop("CUT_G6_GO_EXPIRED")
+    if go["expires_at"] - now > G6_GO_TTL_MAX:
+        raise Stop("CUT_G6_GO_TTL_EXCEEDED")
+    return go
+
+
+def _g6_read_go_file(path, uid, limit):
+    try:
+        data = _read_meta(path, uid, (0o600, 0o400), limit)
+    except (Stop, OSError):
+        raise Stop("CUT_G6_GO_FILE_INVALID") from None
+    if not data:
+        raise Stop("CUT_G6_GO_FILE_INVALID")
+    return data
 
 
 def _self_sha256():
@@ -758,7 +967,8 @@ def main_g6(argv, deps=None):
     d = deps or {}
     if not d.get("enabled", G6_MODE_ENABLED):
         raise Stop("G6_MODE_DISABLED")
-    command, auth_sha, options = _g6_parse(argv)
+    command, auth_sha, go_path, sig_path, options = _g6_parse(argv)
+    cfg = _g6_go_cfg(d)  # STOP while the real key / verifier hash are not pinned (never invented)
     pins = dict(G6_PINS)
     pins["qa525-vnext-go-nonce-journal.py"] = LIB_PINS["qa525-vnext-go-nonce-journal.py"]
     mods = load_libs(d.get("lib_dir", G6_LIB_DIR), pins)
@@ -770,18 +980,22 @@ def main_g6(argv, deps=None):
     else:
         import socket
         env = build_g6_env(mods, uid, socket.gethostname(), os.geteuid())
-    driver = "sha256:" + (d.get("driver_sha256") or _self_sha256())
+    driver_hex = d.get("driver_sha256") or _self_sha256()
+    now = d.get("now", int(__import__("time").time()))
+    go = g6_check_go(_g6_read_go_file(go_path, uid, G6_GO_MAX_BYTES), _g6_read_go_file(sig_path, uid, G6_GOSIG_MAX_BYTES),
+                     command, op_sha, driver_hex, now, cfg)
+    driver = "sha256:" + driver_hex
     policy = "sha256:" + hashlib.sha256(G6_POLICY.encode()).hexdigest()
     admission = "sha256:" + hashlib.sha256("|".join([driver, policy, auth_sha, op_sha]).encode()).hexdigest()
     authorization = {"driver_sha256": driver, "policy_sha256": policy, "admission_sha256": admission,
                      "g6_operation_sha256": op_sha, "g6_command": command}
-    nonce = d.get("nonce") or __import__("secrets").token_hex(32)  # fresh, opaque, never derived
+    nonce = go["nonce"]  # comes from the authenticated GO: fresh, opaque, one per command; never derived or generated here
     root = d.get("root", G6_JOURNAL_ROOT)
-    now = d.get("now", int(__import__("time").time()))
     with Plane(d.get("lock_paths", LOCKS)) as plane:
         _require_plane(plane)
         _spend_authorization(root, auth_sha, uid)
-        code = run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, env, d.get("dispatch"))
+        code = run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, env, d.get("dispatch"),
+                      expires_at=go["expires_at"])
     if code == 0 and command == "review":  # params stage: only after a successful review, same authorization/nonce
         opts = dict(options)
         state_root = d.get("state_root", run.STATE_ROOT)

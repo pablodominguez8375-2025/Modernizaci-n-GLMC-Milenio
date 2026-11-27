@@ -27,3 +27,6 @@ operation/command/nonce/GO. Journal root `/var/lib/pmgm-qa525-manual-cut-e5c40d3
 `init` refuses to run while `repo-v2`, `key-v2`, `state-v2` exist. Candidate: preflight that the `.retired-20261113` target does not
 exist and owner/mode are root/0700; one reversible `mv`, no delete/overwrite; verify afterwards with the A0-G6 inventory.
 Requires its own literal Sponsor authorization; does not chain G6-1..G6-6.
+
+## Actualización (opción A, dictamen 7225915717)
+La frontera ahora incluye un GO firmado con la clave OPS (ver `qa525-g6-signed-go.md`): `--go/--go-sig`, nonce del GO, TTL ≤ 900 s. `--authorization-sha256` se conserva solo como marcador `auth-<hex64>.spent` por texto literal.

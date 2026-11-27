@@ -12,15 +12,26 @@ from contextlib import redirect_stdout
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import test_qa525_manual_cut_g6_adapter as ad  # noqa: E402
+import g6_go_support as gs  # noqa: E402
 g6t = ad.g6t
 cut = ad.cut
 AUTH = "a" * 64
 
 
+DRIVER_HEX = hashlib.sha256(b"d").hexdigest()
+
+
+@unittest.skipUnless(gs.have_keygen(), "ssh-keygen required")
 class G6Main(ad.AdapterCycle):
+    def setUp(self):
+        super().setUp()
+        self.signer = gs.Signer(cut)
+        self.addCleanup(self.signer.close)
+
     def deps(self, env_obj, **over):
         d = {"enabled": True, "lib_dir": str(HERE.parent / "scripts/qa"), "root": self.root, "uid": g6t.UID,
-             "env": lambda mods: env_obj, "lock_paths": (), "state_root": self.state, "driver_sha256": hashlib.sha256(b"d").hexdigest()}
+             "env": lambda mods: env_obj, "lock_paths": (), "state_root": self.state, "driver_sha256": DRIVER_HEX,
+             "go_cfg": self.signer.cfg()}
         d.update(over)
         return d
 
@@ -32,7 +43,9 @@ class G6Main(ad.AdapterCycle):
         return code, out.getvalue()
 
     def argv(self, command, auth=AUTH, **opts):
-        a = ["--g6", command, "--authorization-sha256", auth]
+        _, op = cut.g6_operation(self.prun, command, list(opts.items()))
+        go, sig = self.signer.go(command, op, DRIVER_HEX, int(__import__("time").time()))
+        a = ["--g6", command, "--authorization-sha256", auth, "--go", go, "--go-sig", sig]
         for k, v in opts.items():
             a += ["--" + k, v]
         return a
@@ -45,12 +58,16 @@ class G6Main(ad.AdapterCycle):
 
     def test_grammar_is_closed(self):
         env = self.env(g6t.RunFakeDocker(minio="false"))
-        bad = [["--g6"], ["--g6", "preflight"], ["--g6", "nope", "--authorization-sha256", AUTH],
-               ["--g6", "preflight", "--authorization-sha256", "zz"], ["--g6", "preflight", "--auth", AUTH],
-               ["--g6", "init", "--authorization-sha256", AUTH, "--restic-sha256"],
-               ["--g6", "init", "--authorization-sha256", AUTH, "positional"],
-               ["--g6", "init", "--authorization-sha256", AUTH, "--restic-sha256", "--other"],
-               ["--g6", "init", "--authorization-sha256", AUTH, "--bogus", "x"]]
+        g = ["--go", "/x/go.json", "--go-sig", "/x/go.json.sig"]
+        bad = [["--g6"], ["--g6", "preflight"], ["--g6", "nope", "--authorization-sha256", AUTH, *g],
+               ["--g6", "preflight", "--authorization-sha256", "zz", *g], ["--g6", "preflight", "--auth", AUTH, *g],
+               ["--g6", "preflight", "--authorization-sha256", AUTH],
+               ["--g6", "preflight", "--authorization-sha256", AUTH, "--go", "rel/go.json", "--go-sig", "/x/s"],
+               ["--g6", "preflight", "--authorization-sha256", AUTH, "--go", "/x/../go.json", "--go-sig", "/x/s"],
+               ["--g6", "init", "--authorization-sha256", AUTH, *g, "--restic-sha256"],
+               ["--g6", "init", "--authorization-sha256", AUTH, *g, "positional"],
+               ["--g6", "init", "--authorization-sha256", AUTH, *g, "--restic-sha256", "--other"],
+               ["--g6", "init", "--authorization-sha256", AUTH, *g, "--bogus", "x"]]
         for argv in bad:
             code, out = self.call(argv, self.deps(env))
             self.assertEqual(code, 1, argv)
