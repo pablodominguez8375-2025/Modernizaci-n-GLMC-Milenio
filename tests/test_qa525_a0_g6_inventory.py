@@ -132,11 +132,22 @@ class Inventory(unittest.TestCase):
         self.assertIn("A0G6_G6PIN_g6_operation_sha256=" + "d" * 64, text)
         self.assertNotIn("SECRET words", text)
 
-    def test_absent_state_root_is_reported_not_fatal(self):
+    def test_absent_state_root_is_stop_not_complete(self):
         out = io.StringIO()
         code = inv.inventory(UID, out, self.cfgpath, self.rs, self.t.name + "/nope", self.locks, self.markers, self.pins)
-        self.assertEqual(code, 0)
-        self.assertIn("A0G6_STATE_ROOT=ABSENT", out.getvalue())
+        text = out.getvalue()
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_STATE_ROOT=ABSENT", text)
+        self.assertTrue(text.endswith("A0G6_UNSAFE_DIRS=root\nA0G6_STOP:STATE_DIR_UNSAFE\n"), text)
+        self.assertNotIn("A0G6_INVENTORY_COMPLETE", text)
+
+    def test_absent_mandatory_subdir_is_stop_not_complete(self):
+        os.rmdir(self.state + "/stages-v2")
+        code, text = self.run_inv()
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_DIR_stages-v2=ABSENT", text)
+        self.assertTrue(text.endswith("A0G6_UNSAFE_DIRS=stages-v2\nA0G6_STOP:STATE_DIR_UNSAFE\n"), text)
+        self.assertNotIn("A0G6_INVENTORY_COMPLETE", text)
 
     def test_pin_mismatch_absent_g6_file_stop(self):
         self.pins[inv.G6_FILES[0]] = "0" * 64

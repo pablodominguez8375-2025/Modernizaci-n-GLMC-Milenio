@@ -208,6 +208,7 @@ def inventory(uid=0, out=sys.stdout, config=CONFIG, root_source=ROOT_SOURCE, sta
         rst = lstat(state_root)
         if rst is None:
             L.append("A0G6_STATE_ROOT=ABSENT")
+            unsafe.append("root")  # missing evidence tree can never certify the inventory
         else:
             rfd = _open_dir(state_root)
             try:
@@ -221,6 +222,7 @@ def inventory(uid=0, out=sys.stdout, config=CONFIG, root_source=ROOT_SOURCE, sta
                             s = os.stat(d, dir_fd=rfd, follow_symlinks=False)
                         except FileNotFoundError:
                             L.append("A0G6_DIR_%s=ABSENT" % d)
+                            unsafe.append(d)  # every mandatory subdirectory must exist
                             continue
                         except OSError:
                             raise Stop("IO") from None
