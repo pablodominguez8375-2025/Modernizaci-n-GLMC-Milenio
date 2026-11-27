@@ -22,7 +22,7 @@ class Anomaly(Exception):
     pass
 
 
-LINE = re.compile(r"(A0G6_[A-Za-z0-9_.-]{1,160})=([\x21-\x7e ]{0,400})\Z")
+LINE = re.compile(r"(A0G6_[A-Za-z0-9_./-]{1,240})=([\x21-\x7e ]{0,4000})\Z")  # keys carry lock/marker paths
 EVIDENCE = re.compile(r"sha256=[a-f0-9]{64} size=\d{1,9}( restic_repo_id=[a-f0-9]{64})?( key_epoch=[a-f0-9]{32})?\Z")
 EV_ID = re.compile(r" restic_repo_id=([a-f0-9]{64})")
 EV_EP = re.compile(r" key_epoch=([a-f0-9]{32})")
@@ -77,7 +77,8 @@ def _evaluate(inventory_text, inputs):
     row(3, complete, "inventory:A0G6_INVENTORY_COMPLETE")
     row(4, _ok(inputs, "migrator_digest", HEX64) and _ok(inputs, "image_a_config_digest", HEX64)
         and inputs.get("migrator_provenance_verified") is True, "a0:migrator_provenance")
-    row(5, complete and bool(receipts) and bool(reviews) and bool(restores), "inventory:receipt+restore+review")
+    row(5, complete and bool(receipts) and bool(reviews) and bool(restores) and inputs.get("g6_window_valid") is True,
+        "inventory:receipt+restore+review+window")  # stale (>48 h) evidence never counts
     row(6, complete and bool(archives) and _ok(inputs, "offhost_sha256", HEX64)
         and inputs.get("offhost_matches_local") is True, "a0:offhost_vs_local")
     row(7, complete and len(ids) == 1 and len(epochs) == 1 and inputs.get("g6_window_valid") is True,

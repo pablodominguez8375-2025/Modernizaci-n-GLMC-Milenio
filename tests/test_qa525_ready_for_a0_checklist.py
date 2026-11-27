@@ -80,6 +80,19 @@ class Checklist(unittest.TestCase):
         self.assertEqual(g, "STOP")
         self.assertEqual(rows[0][2], "STOP")
 
+    def test_real_host_output_is_parsed_and_gives_closed_rows(self):
+        """Real inventory v3 output captured on glmdch 2026-11-26 (closed fields): must parse (long entry list, path keys)."""
+        real = (pathlib.Path(__file__).resolve().parent / "fixtures/qa525-a0-g6-inventory-v3-real-20261126.txt").read_text()
+        kv = chk.parse(real)
+        self.assertEqual(kv["A0G6_INVENTORY_COMPLETE"], "1")
+        g, rows = chk.evaluate(real, {})
+        by = {r[1]: r[2] for r in rows}
+        self.assertEqual(by["INVENTORY_A0_G6"], "PASS")
+        self.assertEqual(g, "STOP")  # params file, CI, migrator, G6 etc. are not in the inventory
+        self.assertEqual(by["G6_COMPLETE"], "STOP")  # historical 13-nov evidence without a valid 48 h window
+        self.assertEqual(by["ADAPTER_PARAMS_A0_G6_V1"], "STOP")
+        self.assertEqual(by["MIGRATOR_PROVENANCE_IMAGE_A"], "STOP")
+
 
 if __name__ == "__main__":
     unittest.main()
