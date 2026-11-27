@@ -19,7 +19,8 @@ ROOT_SOURCE = "/opt/centenario/qa525-root-source"
 LAUNCHER_SHA = "da274d651d8e9e056525413406c0aab62131504f"
 CONFIG = ROOT_SOURCE + "/" + LAUNCHER_SHA + "/launch-config.json"
 STATE_ROOT = "/var/lib/pmgm-qa525-g6-v2"
-SUBDIRS = ("repo-v2", "key-v2", "state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2")
+SUBDIRS = ("repo-v2", "state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2")
+KEYFILE = "key-v2"  # the Restic key is a FILE in the producer layout (never opened or read here: metadata only)
 LOCKS = ("/opt/centenario/qa-api-refresh/operation.lock", "/opt/centenario/qa-auto-lite/web-update.lock",
          "/run/lock/pmgm-master-qa-604.lock", "/run/lock/pmgm-qa754-web-hotfix.lock",
          "/run/lock/pmgm-qa754-api-activation.lock")
@@ -217,6 +218,18 @@ def inventory(uid=0, out=sys.stdout, config=CONFIG, root_source=ROOT_SOURCE, sta
                 if not rok:
                     unsafe.append("root")  # root metadata only: no subdirectory is evaluated or listed
                 else:
+                    try:
+                        ks = os.stat(KEYFILE, dir_fd=rfd, follow_symlinks=False)
+                    except FileNotFoundError:
+                        L.append("A0G6_KEYFILE_%s=ABSENT" % KEYFILE)
+                        unsafe.append(KEYFILE)
+                    except OSError:
+                        raise Stop("IO") from None
+                    else:
+                        kok = stat.S_ISREG(ks.st_mode) and ks.st_uid == uid and ks.st_nlink == 1 and not stat.S_IMODE(ks.st_mode) & 0o077
+                        L.append("A0G6_KEYFILE_%s=%s %s" % (KEYFILE, facts(ks), "SAFE" if kok else "UNSAFE"))
+                        if not kok:
+                            unsafe.append(KEYFILE)
                     for d in SUBDIRS:
                         try:
                             s = os.stat(d, dir_fd=rfd, follow_symlinks=False)

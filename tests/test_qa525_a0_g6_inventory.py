@@ -38,6 +38,9 @@ class Inventory(unittest.TestCase):
         os.makedirs(self.state, mode=0o700)
         for d in inv.SUBDIRS:
             os.mkdir(self.state + "/" + d, 0o700)
+        with open(self.state + "/key-v2", "w") as fh:
+            fh.write(SECRET)
+        os.chmod(self.state + "/key-v2", 0o600)
         self.inbox = b + "/inbox"
         os.mkdir(self.inbox, 0o700)
         open(self.inbox + "/go-1.json", "w").close()
@@ -53,8 +56,6 @@ class Inventory(unittest.TestCase):
             self.pins[f] = hashlib.sha256(("x = 1\n" + f).encode()).hexdigest()
         for k in ("temp_root", "journal_root", "lease_dir"):
             os.makedirs(b + "/p/" + k, mode=0o700)
-        with open(self.state + "/key-v2/key", "w") as fh:
-            fh.write(SECRET)
         self.rid, self.ep = "b" * 64, "c" * 32
         with open(self.state + "/state-v2/identity.json", "w") as fh:
             json.dump({"schema": "x", "restic_repo_id": self.rid, "key_epoch": self.ep}, fh)
@@ -98,6 +99,7 @@ class Inventory(unittest.TestCase):
         self.assertNotIn(SECRET, text)
         self.assertNotIn("unrelated-name", text)
         self.assertNotIn("key-v2/key", text)
+        self.assertIn("A0G6_KEYFILE_key-v2=file uid=%d mode=0600 nlink=1 SAFE" % UID, text)
 
     def test_stop_cases(self):
         os.chmod(self.cfgpath, 0o666)
@@ -262,6 +264,30 @@ class Inventory(unittest.TestCase):
 
     def test_determinism(self):
         self.assertEqual(self.run_inv(), self.run_inv())
+
+    def test_keyfile_variants_are_stop_and_never_read(self):
+        k = self.state + "/key-v2"
+        os.chmod(k, 0o644)
+        code, text = self.run_inv()
+        self.assertEqual(code, 1)
+        self.assertIn("A0G6_KEYFILE_key-v2=file uid=%d mode=0644 nlink=1 UNSAFE" % UID, text)
+        self.assertIn("A0G6_UNSAFE_DIRS=key-v2\n", text)
+        self.assertNotIn(SECRET, text)
+        os.chmod(k, 0o600)
+        os.link(k, k + ".hl")
+        self.assertIn("nlink=2 UNSAFE", self.run_inv()[1])
+        os.unlink(k + ".hl")
+        os.unlink(k)
+        os.symlink(self.t.name, k)
+        code, text = self.run_inv()
+        self.assertIn("A0G6_KEYFILE_key-v2=link", text)
+        self.assertIn("UNSAFE", text)
+        os.unlink(k)
+        code, text = self.run_inv()
+        self.assertIn("A0G6_KEYFILE_key-v2=ABSENT", text)
+        self.assertTrue(text.endswith("A0G6_UNSAFE_DIRS=key-v2\nA0G6_STOP:STATE_DIR_UNSAFE\n"))
+        os.mkdir(k)  # a directory where the key file must be is also refused
+        self.assertIn("A0G6_KEYFILE_key-v2=dir", self.run_inv()[1])
 
 
 if __name__ == "__main__":
