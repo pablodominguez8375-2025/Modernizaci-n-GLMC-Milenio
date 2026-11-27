@@ -26,8 +26,9 @@ class Retire(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.TemporaryDirectory()
         self.addCleanup(self.t.cleanup)
-        os.chmod(self.t.name, 0o755)
-        self.root = self.t.name + "/g6"
+        self.base = os.path.realpath(self.t.name)
+        os.chmod(self.base, 0o755)
+        self.root = self.base + "/g6"
         self.ret = self.root + ".retired-20261113"
         os.mkdir(self.root, 0o700)
         os.mkdir(self.root + "/repo-v2", 0o700)
@@ -35,45 +36,50 @@ class Retire(unittest.TestCase):
         with open(self.root + "/key-v2", "w") as fh:
             fh.write("SECRET-KEY-MATERIAL")
         os.chmod(self.root + "/key-v2", 0o600)
+        st = os.lstat(self.root)
+        self.bind = (st.st_dev, st.st_ino)
+        self.addCleanup(setattr, g, "_hook", g._hook)
 
-    def go(self, mode):
+    def go(self, mode, bind="default"):
         out = io.StringIO()
-        code = g.run(mode, self.root, self.ret, UID, out)
+        b = self.bind if bind == "default" else bind
+        code = g.run(mode, self.root, self.ret, UID, out, None if mode == "preflight" and bind == "default" else b)
         return code, out.getvalue()
 
-    def test_preflight_is_read_only(self):
-        before = snapshot(self.t.name)
+    def hook(self, stage, fn):
+        g._hook = lambda s: fn() if s == stage else None
+
+    def test_preflight_read_only_prints_bind(self):
+        before = snapshot(self.base)
         code, text = self.go("preflight")
         self.assertEqual(code, 0, text)
-        self.assertIn("G6_0_PREFLIGHT=PASS", text)
-        self.assertEqual(snapshot(self.t.name), before)
+        self.assertIn("G6_0_ROOT_BIND=%d:%d" % self.bind, text)
+        self.assertEqual(snapshot(self.base), before)
         self.assertNotIn("SECRET", text)
 
-    def test_apply_moves_without_deleting_and_new_root_is_empty(self):
+    def test_apply_moves_without_deleting(self):
         before = snapshot(self.root)
-        ino = os.lstat(self.root).st_ino
         code, text = self.go("apply")
         self.assertEqual(code, 0, text)
-        self.assertEqual(snapshot(self.ret), before)  # byte-for-byte the same tree, same inode
-        self.assertEqual(os.lstat(self.ret).st_ino, ino)
+        self.assertEqual(snapshot(self.ret), before)
+        self.assertEqual((os.lstat(self.ret).st_dev, os.lstat(self.ret).st_ino), self.bind)
         self.assertEqual(os.listdir(self.root), [])
         self.assertEqual(oct(os.lstat(self.root).st_mode & 0o777), "0o700")
-        self.assertIn("G6_0_APPLIED=1", text)
 
-    def test_apply_twice_is_stop_and_changes_nothing(self):
-        self.assertEqual(self.go("apply")[0], 0)
-        snap = snapshot(self.t.name)
-        code, text = self.go("apply")
-        self.assertEqual((code, text), (1, "G6_0_STOP:ROOT_LAYOUT_UNEXPECTED\n"))
-        self.assertEqual(snapshot(self.t.name), snap)
+    def test_bind_required_and_wrong_tree_refused(self):
+        self.assertEqual(self.go("apply", None), (1, "G6_0_STOP:BIND_REQUIRED\n"))
+        snap = snapshot(self.base)
+        self.assertEqual(self.go("apply", (self.bind[0], self.bind[1] + 1)), (1, "G6_0_STOP:TREE_NOT_THE_INVENTORIED_ONE\n"))
+        self.assertEqual(snapshot(self.base), snap)
 
-    def test_retired_target_exists_is_stop_before_any_change(self):
-        os.mkdir(self.ret)
-        snap = snapshot(self.t.name)
-        self.assertEqual(self.go("apply"), (1, "G6_0_STOP:RETIRED_TARGET_EXISTS\n"))
-        self.assertEqual(snapshot(self.t.name), snap)
+    def test_key_and_subdir_metadata_unexpected(self):
+        os.chmod(self.root + "/key-v2", 0o644)
+        self.assertEqual(self.go("preflight"), (1, "G6_0_STOP:KEY_METADATA_UNEXPECTED\n"))
+        os.chmod(self.root + "/key-v2", 0o600)
+        os.chmod(self.root + "/repo-v2", 0o755)
+        self.assertEqual(self.go("preflight"), (1, "G6_0_STOP:SUBDIR_METADATA_UNEXPECTED\n"))
 
-    def test_unsafe_root_symlink_missing_layout_wrong_mode(self):
+    def test_symlink_root_and_unsafe_modes_and_layout(self):
         os.chmod(self.root, 0o755)
         self.assertEqual(self.go("preflight"), (1, "G6_0_STOP:ROOT_NOT_SAFE_DIR\n"))
         os.chmod(self.root, 0o700)
@@ -84,31 +90,50 @@ class Retire(unittest.TestCase):
         os.symlink(self.root + ".real", self.root)
         self.assertEqual(self.go("preflight"), (1, "G6_0_STOP:ROOT_NOT_SAFE_DIR\n"))
 
-    def test_rollback_restores_exact_tree_only_when_new_root_is_empty(self):
+    def test_retired_target_exists_before_and_during_race(self):
+        os.mkdir(self.ret)
+        self.assertEqual(self.go("apply"), (1, "G6_0_STOP:RETIRED_TARGET_EXISTS\n"))
+        os.rmdir(self.ret)
+        self.hook("after_preflight", lambda: os.mkdir(self.ret))  # empty dir appears: plain rename would replace it
         before = snapshot(self.root)
-        self.assertEqual(self.go("apply")[0], 0)
-        code, text = self.go("rollback")
-        self.assertEqual(code, 0, text)
+        self.assertEqual(self.go("apply"), (1, "G6_0_STOP:RENAME_REFUSED\n"))
         self.assertEqual(snapshot(self.root), before)
+        self.assertEqual(os.listdir(self.ret), [])
+
+    def test_swap_root_between_preflight_and_rename(self):
+        def swap():
+            os.rename(self.root, self.root + ".orig")
+            os.mkdir(self.root, 0o700)
+            os.mkdir(self.root + "/other")
+        self.hook("after_preflight", swap)
+        code, text = self.go("apply")
+        self.assertEqual((code, text), (1, "G6_0_STOP:MOVED_TREE_NOT_BOUND_ROLLED_BACK\n"))
+        self.assertEqual(os.listdir(self.root), ["other"])  # swapped-in tree restored untouched
+        self.assertFalse(os.path.lexists(self.ret))
+        self.assertTrue(os.path.isdir(self.root + ".orig/repo-v2"))
+
+    def test_root_name_taken_between_rename_and_mkdir(self):
+        self.hook("after_rename", lambda: os.mkdir(self.root, 0o700))
+        code, text = self.go("apply")
+        self.assertEqual((code, text), (1, "G6_0_STOP:APPLY_FAILED_ROLLED_BACK\n"))
+        self.assertEqual((os.lstat(self.root).st_dev, os.lstat(self.root).st_ino), self.bind)
         self.assertFalse(os.path.lexists(self.ret))
 
-    def test_rollback_refuses_if_new_root_holds_state(self):
-        self.assertEqual(self.go("apply")[0], 0)
-        with open(self.root + "/key-v2", "w") as fh:
-            fh.write("NEW")
-        snap = snapshot(self.t.name)
-        self.assertEqual(self.go("rollback"), (1, "G6_0_STOP:NEW_ROOT_NOT_EMPTY_OR_UNSAFE\n"))
-        self.assertEqual(snapshot(self.t.name), snap)
+    def test_root_name_taken_with_content_is_not_removed(self):
+        def take():
+            os.mkdir(self.root, 0o700)
+            open(self.root + "/x", "w").close()
+        self.hook("after_rename", take)
+        code, text = self.go("apply")
+        self.assertEqual((code, text), (1, "G6_0_STOP:APPLY_FAILED_ROLLBACK_FAILED\n"))
+        self.assertEqual(os.listdir(self.root), ["x"])
+        self.assertTrue(os.path.isdir(self.ret + "/repo-v2"))
 
-    def test_failure_after_rename_rolls_back(self):
+    def test_failure_after_rename_rolls_back_by_fd(self):
         real = os.mkdir
-        calls = []
 
-        def boom(path, mode=0o777):
-            if path == self.root and not calls:
-                calls.append(1)
-                raise OSError("denied")
-            return real(path, mode)
+        def boom(path, mode=0o777, dir_fd=None):
+            raise OSError("denied")
         before = snapshot(self.root)
         os.mkdir = boom
         try:
@@ -119,12 +144,58 @@ class Retire(unittest.TestCase):
         self.assertEqual(snapshot(self.root), before)
         self.assertFalse(os.path.lexists(self.ret))
 
-    def test_mode_invalid_and_root_required_for_real_paths(self):
-        self.assertEqual(self.go("destroy"), (1, "G6_0_STOP:MODE_INVALID\n"))
+    def test_rollback_restores_exact_tree(self):
+        before = snapshot(self.root)
+        self.assertEqual(self.go("apply")[0], 0)
+        code, text = self.go("rollback")
+        self.assertEqual(code, 0, text)
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(os.path.lexists(self.ret))
+        self.assertEqual((os.lstat(self.root).st_dev, os.lstat(self.root).st_ino), self.bind)
+
+    def test_rollback_refuses_new_state_and_wrong_bind(self):
+        self.assertEqual(self.go("apply")[0], 0)
+        self.assertEqual(self.go("rollback", (self.bind[0], self.bind[1] + 1)), (1, "G6_0_STOP:RETIRED_NOT_THE_BOUND_TREE\n"))
+        with open(self.root + "/key-v2", "w") as fh:
+            fh.write("NEW")
+        snap = snapshot(self.base)
+        self.assertEqual(self.go("rollback"), (1, "G6_0_STOP:NEW_ROOT_NOT_EMPTY_OR_UNSAFE\n"))
+        self.assertEqual(snapshot(self.base), snap)
+
+    def test_rollback_race_state_appears_before_rmdir(self):
+        self.assertEqual(self.go("apply")[0], 0)
+
+        def fill():
+            with open(self.root + "/key-v2", "w") as fh:
+                fh.write("NEW")
+        self.hook("after_rollback_check", fill)
+        snap = snapshot(self.base)
+        code, text = self.go("rollback")
+        self.assertEqual((code, text), (1, "G6_0_STOP:NEW_ROOT_NOT_EMPTY_OR_UNSAFE\n"))
+        self.assertEqual(os.listdir(self.root), ["key-v2"])
+        self.assertTrue(os.path.isdir(self.ret + "/repo-v2"))
+
+    def test_rollback_race_target_created_after_rmdir(self):
+        self.assertEqual(self.go("apply")[0], 0)
+        self.hook("after_rmdir", lambda: os.mkdir(self.root, 0o700))
+        self.assertEqual(self.go("rollback"), (1, "G6_0_STOP:RENAME_REFUSED\n"))
+        self.assertTrue(os.path.isdir(self.ret))
+
+    def test_parent_symlink_and_cli_grammar(self):
+        link = self.base + "-link"
+        os.symlink(self.base, link)
+        self.addCleanup(os.unlink, link)
         out = io.StringIO()
-        if UID != 0:
-            self.assertEqual(g.run("apply", g.ROOT, g.RETIRED, UID, out), 1)
-            self.assertEqual(out.getvalue(), "G6_0_STOP:ROOT_REQUIRED\n")
+        self.assertEqual(g.run("preflight", link + "/g6", link + "/g6.retired-20261113", UID, out), 1)
+        self.assertEqual(out.getvalue(), "G6_0_STOP:PARENT_NOT_CANONICAL\n")
+        for argv in (["x"], ["x", "apply"], ["x", "apply", "1:2:3"], ["x", "preflight", "1:2"], ["x", "destroy"], ["x"]):
+            buf = io.StringIO()
+            old, g.sys.stdout = g.sys.stdout, buf
+            try:
+                self.assertEqual(g.main(argv), 1)
+            finally:
+                g.sys.stdout = old
+            self.assertEqual(buf.getvalue(), "G6_0_STOP:MODE_INVALID\n")
 
 
 if __name__ == "__main__":

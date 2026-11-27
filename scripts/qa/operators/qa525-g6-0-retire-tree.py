@@ -1,116 +1,235 @@
 #!/usr/bin/env python3
 """QA525 gate G6-0: retire the 13-nov G6 tree so `init` can create a NEW repo/key.  CANDIDATE, NOT AUTHORISED.
 
-Modes (closed, exactly one per process): `preflight` (read-only), `apply` (one reversible rename + mkdir), `rollback`.
-Never deletes or overwrites: apply = os.rename(ROOT, RETIRED) + mkdir(ROOT, 0700); rollback = rmdir of the EMPTY new root +
-rename back.  No subprocess/network/docker/systemctl.  Output: closed `G6_0_KEY=value` lines; any anomaly = one
-`G6_0_STOP:<CODE>` line and exit 1.
+CLI (exactly one mode per process):  preflight | apply <dev>:<ino> | rollback <dev>:<ino>
+`<dev>:<ino>` is the identity of the ROOT printed by a prior `preflight` (G6_0_ROOT_BIND) and bound to the A0 evidence; apply and
+rollback refuse any other tree.  Never deletes or overwrites.  Every operation is relative to a parent-directory FD opened with
+O_NOFOLLOW (no path is re-resolved after validation); the rename uses renameat2(RENAME_NOREPLACE) so a retired target created
+during the race is never replaced.  No subprocess/network/docker/systemctl.  Closed `G6_0_KEY=value` lines; one
+`G6_0_STOP:<CODE>` line and exit 1 on any anomaly.
 """
+import ctypes
 import io
 import os
+import re
 import stat
 import sys
 
 ROOT = "/var/lib/pmgm-qa525-g6-v2"
 RETIRED = ROOT + ".retired-20261113"
-EXPECTED = ("repo-v2", "key-v2", "state-v2")  # must exist in the old tree; all other names are allowed but not listed
+EXPECTED = ("repo-v2", "key-v2", "state-v2")
 MODES = ("preflight", "apply", "rollback")
+BIND_RE = re.compile(r"\A([0-9]{1,20}):([0-9]{1,20})\Z")
+DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+RENAME_NOREPLACE = 1
 
 
 class Stop(Exception):
     pass
 
 
-def _lstat(path):
+def _hook(stage):  # test seam: deterministic race injection; no-op in production
+    return None
+
+
+def _noreplace_rename(pfd, src, dst):
     try:
-        return os.lstat(path)
+        fn = ctypes.CDLL(None, use_errno=True).renameat2
+    except (OSError, AttributeError):
+        raise Stop("RENAMEAT2_UNAVAILABLE") from None
+    if fn(pfd, os.fsencode(src), pfd, os.fsencode(dst), RENAME_NOREPLACE) != 0:
+        raise Stop("RENAME_REFUSED")
+
+
+def _st(pfd, name):
+    try:
+        return os.stat(name, dir_fd=pfd, follow_symlinks=False)
     except FileNotFoundError:
         return None
     except OSError:
         raise Stop("IO") from None
 
 
-def _real_dir(st, uid):
+def _open_dir(pfd, name):
+    try:
+        return os.open(name, DIR_FLAGS, dir_fd=pfd)
+    except OSError:
+        raise Stop("OPEN_REFUSED") from None
+
+
+def _is_tree(st, uid):
     return st is not None and stat.S_ISDIR(st.st_mode) and st.st_uid == uid and stat.S_IMODE(st.st_mode) == 0o700
 
 
-def _names(path):
+def _same(a, b):
+    return (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino)
+
+
+def _open_parent(path, uid):
+    parent = os.path.dirname(path)
+    if os.path.realpath(parent) != parent:
+        raise Stop("PARENT_NOT_CANONICAL")
     try:
-        return sorted(os.listdir(path))
+        pfd = os.open(parent, DIR_FLAGS)
+        pst = os.fstat(pfd)
     except OSError:
-        raise Stop("LIST_FAILED") from None
+        raise Stop("PARENT_OPEN_REFUSED") from None
+    if not stat.S_ISDIR(pst.st_mode) or pst.st_uid != uid or stat.S_IMODE(pst.st_mode) & 0o022:
+        os.close(pfd)
+        raise Stop("PARENT_NOT_SAFE")
+    return pfd, pst
 
 
-def _fsync_dir(path):
-    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-
-
-def preflight(root, retired, uid, out):
-    st = _lstat(root)
-    if not _real_dir(st, uid):
+def _inspect_tree(pfd, name, uid, bind):
+    """Validate the root by FD; returns (rfd, fstat). Caller closes rfd."""
+    lst = _st(pfd, name)
+    if not _is_tree(lst, uid):
         raise Stop("ROOT_NOT_SAFE_DIR")
-    present = _names(root)
-    if any(n not in present for n in EXPECTED):
-        raise Stop("ROOT_LAYOUT_UNEXPECTED")
-    if os.path.lexists(retired):
-        raise Stop("RETIRED_TARGET_EXISTS")
-    parent = os.path.dirname(root)
-    pst = _lstat(parent)
-    if (pst is None or not stat.S_ISDIR(pst.st_mode) or pst.st_uid != uid or stat.S_IMODE(pst.st_mode) & 0o022
-            or pst.st_dev != st.st_dev or os.path.dirname(retired) != parent):
-        raise Stop("PARENT_NOT_SAFE_OR_CROSS_DEVICE")
-    out.write("G6_0_ROOT=dir uid=%d mode=0700 entries=%d\nG6_0_EXPECTED_PRESENT=%s\nG6_0_RETIRED_TARGET=ABSENT\n"
-              "G6_0_PREFLIGHT=PASS\n" % (st.st_uid, len(present), ",".join(EXPECTED)))
-    return st
-
-
-def apply(root, retired, uid, out):
-    st = preflight(root, retired, uid, io.StringIO())  # apply output holds only its own result lines
-    parent = os.path.dirname(root)
-    os.rename(root, retired)  # atomic, same device, target verified absent (rename onto an existing dir would fail anyway)
+    rfd = _open_dir(pfd, name)
     try:
-        os.mkdir(root, 0o700)
-        os.chmod(root, 0o700)
-        _fsync_dir(parent)
-    except OSError:
+        fst = os.fstat(rfd)
+        if not _same(lst, fst) or not _is_tree(fst, uid):
+            raise Stop("ROOT_CHANGED_DURING_CHECK")
+        present = os.listdir(rfd)
+        if any(n not in present for n in EXPECTED):
+            raise Stop("ROOT_LAYOUT_UNEXPECTED")
+        key = os.stat("key-v2", dir_fd=rfd, follow_symlinks=False)
+        if not (stat.S_ISREG(key.st_mode) and key.st_uid == uid and key.st_nlink == 1 and not stat.S_IMODE(key.st_mode) & 0o077):
+            raise Stop("KEY_METADATA_UNEXPECTED")
+        for sub in ("repo-v2", "state-v2"):
+            if not _is_tree(os.stat(sub, dir_fd=rfd, follow_symlinks=False), uid):
+                raise Stop("SUBDIR_METADATA_UNEXPECTED")
+        if bind is not None and (fst.st_dev, fst.st_ino) != bind:
+            raise Stop("TREE_NOT_THE_INVENTORIED_ONE")
+        return rfd, fst, len(present)
+    except BaseException:
+        os.close(rfd)
+        raise
+
+
+def preflight(root, retired, uid, out, bind=None, pfd=None):
+    own = pfd is None
+    if own:
+        pfd, _ = _open_parent(root, uid)
+    try:
+        rfd, fst, n = _inspect_tree(pfd, os.path.basename(root), uid, bind)
+        os.close(rfd)
+        if os.path.dirname(retired) != os.path.dirname(root) or _st(pfd, os.path.basename(retired)) is not None:
+            raise Stop("RETIRED_TARGET_EXISTS")
+        if os.fstat(pfd).st_dev != fst.st_dev:
+            raise Stop("CROSS_DEVICE")
+        out.write("G6_0_ROOT_BIND=%d:%d\nG6_0_ROOT=dir uid=%d mode=0700 entries=%d\nG6_0_KEY_V2=file nlink=1 mode<=0600\n"
+                  "G6_0_RETIRED_TARGET=ABSENT\nG6_0_PREFLIGHT=PASS\n" % (fst.st_dev, fst.st_ino, uid, n))
+        return fst
+    finally:
+        if own:
+            os.close(pfd)
+
+
+def apply(root, retired, uid, out, bind):
+    if bind is None:
+        raise Stop("BIND_REQUIRED")
+    pfd, _ = _open_parent(root, uid)
+    try:
+        fst = preflight(root, retired, uid, io.StringIO(), bind, pfd)
+        rn, tn = os.path.basename(root), os.path.basename(retired)
+        _hook("after_preflight")
+        _noreplace_rename(pfd, rn, tn)
+        moved = _st(pfd, tn)  # identity of whatever the name resolved to at rename time
         try:
-            if os.path.isdir(root) and not os.listdir(root):
-                os.rmdir(root)
-            os.rename(retired, root)
+            if moved is None or not _same(moved, fst):
+                raise Stop("MOVED_TREE_NOT_BOUND")
+            _hook("after_rename")
+            os.mkdir(rn, 0o700, dir_fd=pfd)
+            nfd = _open_dir(pfd, rn)
+            try:
+                os.fchmod(nfd, 0o700)
+                nst = os.fstat(nfd)
+                if not _is_tree(nst, uid) or os.listdir(nfd) != [] or _same(nst, fst):
+                    raise Stop("POST_VERIFY_FAILED")
+            finally:
+                os.close(nfd)
+            os.fsync(pfd)
+        except (OSError, Stop) as exc:
+            code = str(exc) if isinstance(exc, Stop) else "APPLY_FAILED"
+            try:
+                cur = _st(pfd, rn)
+                if cur is not None:
+                    cfd = _open_dir(pfd, rn)
+                    try:
+                        empty = os.listdir(cfd) == [] and not _same(os.fstat(cfd), moved)
+                    finally:
+                        os.close(cfd)
+                    if not empty:
+                        raise Stop("ROLLBACK_REFUSED_NEW_ROOT_NOT_EMPTY")
+                    os.rmdir(rn, dir_fd=pfd)
+                _noreplace_rename(pfd, tn, rn)
+                back = _st(pfd, rn)
+                if back is None or not _same(back, moved):
+                    raise Stop("ROLLBACK_VERIFY_FAILED")
+            except (OSError, Stop):
+                raise Stop(code + "_ROLLBACK_FAILED") from None
+            raise Stop(code + "_ROLLED_BACK") from None
+        old, new = _st(pfd, tn), _st(pfd, rn)
+        if old is None or new is None or not _same(old, fst) or _same(new, fst):
+            raise Stop("POST_VERIFY_FAILED")
+        out.write("G6_0_APPLIED=1\nG6_0_RETIRED_BIND=%d:%d\nG6_0_NEW_ROOT=dir uid=%d mode=0700 entries=0\n"
+                  % (old.st_dev, old.st_ino, uid))
+    finally:
+        os.close(pfd)
+
+
+def rollback(root, retired, uid, out, bind):
+    if bind is None:
+        raise Stop("BIND_REQUIRED")
+    pfd, _ = _open_parent(root, uid)
+    try:
+        rn, tn = os.path.basename(root), os.path.basename(retired)
+        old = _st(pfd, tn)
+        if not _is_tree(old, uid) or (old.st_dev, old.st_ino) != bind:
+            raise Stop("RETIRED_NOT_THE_BOUND_TREE")
+        rfd = _open_dir(pfd, tn)
+        try:
+            if any(n not in os.listdir(rfd) for n in EXPECTED):
+                raise Stop("RETIRED_NOT_RESTORABLE")
+        finally:
+            os.close(rfd)
+        nfd_st = _st(pfd, rn)
+        if not _is_tree(nfd_st, uid):
+            raise Stop("NEW_ROOT_NOT_EMPTY_OR_UNSAFE")
+        nfd = _open_dir(pfd, rn)
+        try:
+            if os.listdir(nfd) != [] or not _same(os.fstat(nfd), nfd_st):
+                raise Stop("NEW_ROOT_NOT_EMPTY_OR_UNSAFE")
+        finally:
+            os.close(nfd)
+        _hook("after_rollback_check")
+        try:
+            os.rmdir(rn, dir_fd=pfd)  # fails if anything appeared meanwhile
         except OSError:
-            raise Stop("APPLY_FAILED_ROLLBACK_FAILED") from None
-        raise Stop("APPLY_FAILED_ROLLED_BACK") from None
-    old, new = _lstat(retired), _lstat(root)
-    if not (_real_dir(old, uid) and (old.st_dev, old.st_ino) == (st.st_dev, st.st_ino) and _real_dir(new, uid)
-            and _names(root) == []):
-        raise Stop("POST_VERIFY_FAILED")
-    out.write("G6_0_APPLIED=1\nG6_0_RETIRED=dir uid=%d mode=0700\nG6_0_NEW_ROOT=dir uid=%d mode=0700 entries=0\n" % (uid, uid))
+            raise Stop("NEW_ROOT_NOT_EMPTY_OR_UNSAFE") from None
+        _hook("after_rmdir")
+        _noreplace_rename(pfd, tn, rn)
+        back, gone = _st(pfd, rn), _st(pfd, tn)
+        if back is None or gone is not None or (back.st_dev, back.st_ino) != bind:
+            raise Stop("ROLLBACK_VERIFY_FAILED")
+        os.fsync(pfd)
+        out.write("G6_0_ROLLED_BACK=1\nG6_0_ROOT_BIND=%d:%d\n" % bind)
+    finally:
+        os.close(pfd)
 
 
-def rollback(root, retired, uid, out):
-    new, old = _lstat(root), _lstat(retired)
-    if not _real_dir(new, uid) or _names(root) != []:
-        raise Stop("NEW_ROOT_NOT_EMPTY_OR_UNSAFE")  # a root that already holds G6 state is never touched
-    if not _real_dir(old, uid) or any(n not in _names(retired) for n in EXPECTED):
-        raise Stop("RETIRED_NOT_RESTORABLE")
-    os.rmdir(root)
-    os.rename(retired, root)
-    _fsync_dir(os.path.dirname(root))
-    out.write("G6_0_ROLLED_BACK=1\n")
-
-
-def run(mode, root=ROOT, retired=RETIRED, uid=None, out=sys.stdout):
+def run(mode, root=ROOT, retired=RETIRED, uid=None, out=sys.stdout, bind=None):
     uid = os.geteuid() if uid is None else uid
     try:
         if mode not in MODES:
             raise Stop("MODE_INVALID")
         if mode != "preflight" and uid != 0 and root == ROOT:
             raise Stop("ROOT_REQUIRED")
-        {"preflight": preflight, "apply": apply, "rollback": rollback}[mode](root, retired, uid, out)
+        if mode == "preflight":
+            preflight(root, retired, uid, out, bind)
+        else:
+            {"apply": apply, "rollback": rollback}[mode](root, retired, uid, out, bind)
         return 0
     except Stop as exc:
         out.write("G6_0_STOP:%s\n" % exc)
@@ -120,5 +239,21 @@ def run(mode, root=ROOT, retired=RETIRED, uid=None, out=sys.stdout):
         return 1
 
 
+def main(argv):
+    try:
+        mode = argv[1]
+        bind = None
+        if mode == "preflight" and len(argv) == 2:
+            pass
+        elif mode in ("apply", "rollback") and len(argv) == 3 and BIND_RE.match(argv[2]):
+            bind = tuple(int(x) for x in argv[2].split(":"))
+        else:
+            raise IndexError
+    except IndexError:
+        sys.stdout.write("G6_0_STOP:MODE_INVALID\n")
+        return 1
+    return run(mode, bind=bind)
+
+
 if __name__ == "__main__":
-    sys.exit(run(sys.argv[1]) if len(sys.argv) == 2 else (sys.stdout.write("G6_0_STOP:MODE_INVALID\n"), 1)[1])
+    sys.exit(main(sys.argv))
