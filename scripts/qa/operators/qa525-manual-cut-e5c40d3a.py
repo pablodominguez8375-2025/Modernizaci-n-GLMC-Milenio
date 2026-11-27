@@ -304,7 +304,10 @@ def run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, 
         expires_at = now + G6_GO_TTL_MAX
     if type(expires_at) is not int or isinstance(expires_at, bool) or not now < expires_at <= now + G6_GO_TTL_MAX:
         raise Stop("CUT_G6_GO_TTL_EXCEEDED")
-    nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=expires_at)  # spent only after locks are held
+    try:
+        nj.consume(root, nonce, bound5, uid=uid, now=now, expires_at=expires_at)  # spent only after locks are held
+    except nj.Stop as exc:  # fixed, secret-free codes; a replay is refused before any dispatch/mutation
+        raise Stop("CUT_G6_NONCE_REPLAY" if str(exc) == "NONCE_REPLAY" else "CUT_G6_NONCE_REFUSED") from None
     opts = dict(options)
     return (dispatch or run.dispatch)(command, opts, env)
 
@@ -921,6 +924,27 @@ def g6_check_go(go_bytes, sig_bytes, command, op_sha, driver_hex, now, cfg):
     return go
 
 
+_GO_NAME = __import__("re").compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\Z")
+
+
+def _g6_check_go_location(path, uid, go_dir):
+    """GO and signature live DIRECTLY in the root-only directory `go_dir` (production: G6_GO_TEMP_ROOT): parent is a real
+    directory (no symlink), owned by `uid`, mode exactly 0700 (no group/world access), and is not the journal root."""
+    d, name = os.path.split(path)
+    if d != go_dir or _GO_NAME.fullmatch(name) is None or os.path.normpath(d) == os.path.normpath(G6_JOURNAL_ROOT):
+        raise Stop("CUT_G6_GO_LOCATION_INVALID")
+    try:
+        fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        raise Stop("CUT_G6_GO_LOCATION_INVALID") from None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != uid or stat.S_IMODE(st.st_mode) != 0o700:
+            raise Stop("CUT_G6_GO_LOCATION_INVALID")
+    finally:
+        os.close(fd)
+
+
 def _g6_read_go_file(path, uid, limit):
     try:
         data = _read_meta(path, uid, (0o600, 0o400), limit)
@@ -985,6 +1009,9 @@ def main_g6(argv, deps=None):
         env = build_g6_env(mods, uid, socket.gethostname(), os.geteuid())
     driver_hex = d.get("driver_sha256") or _self_sha256()
     now = d.get("now", int(__import__("time").time()))
+    go_dir = d.get("go_dir", G6_GO_TEMP_ROOT)
+    _g6_check_go_location(go_path, uid, go_dir)
+    _g6_check_go_location(sig_path, uid, go_dir)
     go = g6_check_go(_g6_read_go_file(go_path, uid, G6_GO_MAX_BYTES), _g6_read_go_file(sig_path, uid, G6_GOSIG_MAX_BYTES),
                      command, op_sha, driver_hex, now, cfg)
     driver = "sha256:" + driver_hex

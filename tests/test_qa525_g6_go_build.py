@@ -6,7 +6,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -41,19 +41,32 @@ class Builder(unittest.TestCase):
         a, b = (cut.g6_go_parse(gb.build("init", OP, DRV, 1000))["nonce"] for _ in range(2))
         self.assertNotEqual(a, b)
 
+    def test_host_epoch_is_required_integer_and_sets_expires_at(self):
+        with tempfile.TemporaryDirectory() as d:
+            for bad in ([], ["--host-epoch", "abc"]):
+                with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                    gb.main(["--command", "init", "--op-sha256", OP, "--driver-sha256", DRV, "--out", os.path.join(d, "a.json")] + bad)
+            out = os.path.join(d, "ok.json")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                self.assertEqual(gb.main(["--command", "init", "--op-sha256", OP, "--driver-sha256", DRV, "--ttl", "900",
+                                          "--host-epoch", "1800000000", "--out", out]), 0)
+            self.assertEqual(__import__("json").load(open(out))["expires_at"], 1800000900)
+            self.assertIn("QA525_G6_GO_EXPIRES_AT=1800000900", buf.getvalue())
+
     def test_cli_writes_0600_and_never_overwrites(self):
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "go.json")
             buf = io.StringIO()
             with redirect_stdout(buf):
-                self.assertEqual(gb.main(["--command", "init", "--op-sha256", OP, "--driver-sha256", DRV, "--out", out]), 0)
+                self.assertEqual(gb.main(["--command", "init", "--op-sha256", OP, "--driver-sha256", DRV, "--host-epoch", "1800000000", "--out", out]), 0)
             self.assertEqual(oct(os.stat(out).st_mode & 0o777), "0o600")
             self.assertIn("-n qa525-go-g6-v1@pmgm", buf.getvalue())
             with self.assertRaises(FileExistsError):
-                gb.main(["--command", "init", "--op-sha256", OP, "--driver-sha256", DRV, "--out", out])
+                gb.main(["--command", "init", "--op-sha256", OP, "--driver-sha256", DRV, "--host-epoch", "1800000000", "--out", out])
             buf = io.StringIO()
             with redirect_stdout(buf):
-                self.assertEqual(gb.main(["--command", "init", "--op-sha256", "zz", "--driver-sha256", DRV]), 1)
+                self.assertEqual(gb.main(["--command", "init", "--op-sha256", "zz", "--driver-sha256", DRV, "--host-epoch", "1800000000"]), 1)
             self.assertEqual(buf.getvalue(), "QA525_G6_GO=STOP GO_BUILD_INVALID\n")
 
 

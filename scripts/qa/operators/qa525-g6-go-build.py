@@ -6,7 +6,7 @@ five fields {command, op_sha256, nonce, expires_at, driver_sha256}, sorted keys,
 signs THOSE bytes with his OPS key:  ssh-keygen -Y sign -f <OPS private key> -n qa525-go-g6-v1@pmgm <file>.
 A GO is NOT authority by itself: the driver verifies the signature against the pinned OPS key, the command, the operation
 hash, the driver hash and a TTL <= 900 s measured on the host clock; the nonce is single-use.
-Usage: qa525-g6-go-build.py --command C --op-sha256 H --driver-sha256 H [--ttl 600] [--out PATH]
+Usage: qa525-g6-go-build.py --command C --op-sha256 H --driver-sha256 H --host-epoch N [--ttl 600] [--out PATH]
 """
 import argparse
 import json
@@ -14,7 +14,6 @@ import os
 import re
 import secrets
 import sys
-import time
 
 COMMANDS = ("preflight", "init", "backup", "restore", "review")
 NAMESPACE = "qa525-go-g6-v1@pmgm"
@@ -47,10 +46,12 @@ def main(argv=None):
     ap.add_argument("--op-sha256", required=True)
     ap.add_argument("--driver-sha256", required=True)
     ap.add_argument("--ttl", type=int, default=600)
+    ap.add_argument("--host-epoch", type=int, required=True,
+                    help="`date -u +%%s` read ON glmdch just before building; the driver validates the TTL on the host clock")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     try:
-        data = build(a.command, a.op_sha256, a.driver_sha256, int(time.time()), a.ttl)
+        data = build(a.command, a.op_sha256, a.driver_sha256, a.host_epoch, a.ttl)
     except BuildError as exc:
         sys.stdout.write("QA525_G6_GO=STOP %s\n" % exc)
         return 1

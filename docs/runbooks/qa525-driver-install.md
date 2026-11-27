@@ -12,3 +12,6 @@ Bytes embebidos == driver del repo; tabla de 11 libs == pins del driver == bundl
 
 ## Lo que NO es
 No es una autorización. Antes de cualquier ejecución física: CI exact-head 6/6 del commit con el hash final del driver, dictamen de ChatGPT, texto de autorización revisado y autorización literal del Sponsor registrada en #525 (una transferencia, un preflight; luego apply con el bind JIT; `sudo -k`). No habilita init/G6: el driver instalado exige además GO firmado (OPS), nonce, TTL ≤ 900 s, locks y journal.
+
+## Nota 27-Nov (cambio de driver tras DRIVER-INSTALL)
+El driver instalado en glmdch (sha256 c9cd98c7…1962) fue superado en el repo por el cambio revisado (código CUT_G6_NONCE_REPLAY, comprobación de ubicación del GO, `--host-epoch`): nuevo hash del driver y nuevo instalador. Reemplazar requiere un camino sin borrado (renombrar el driver anterior verificado por hash a un nombre `.superseded-…` y crear el nuevo) con autorización propia; el preflight actual exige la base exacta, así que NO sirve tal cual. Pendiente de dictamen de ChatGPT.

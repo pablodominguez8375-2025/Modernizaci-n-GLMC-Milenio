@@ -31,7 +31,7 @@ class G6Main(ad.AdapterCycle):
     def deps(self, env_obj, **over):
         d = {"enabled": True, "lib_dir": str(HERE.parent / "scripts/qa"), "root": self.root, "uid": g6t.UID,
              "env": lambda mods: env_obj, "lock_paths": (), "state_root": self.state, "driver_sha256": DRIVER_HEX,
-             "go_cfg": self.signer.cfg()}
+             "go_cfg": self.signer.cfg(), "go_dir": self.signer.dir}
         d.update(over)
         return d
 

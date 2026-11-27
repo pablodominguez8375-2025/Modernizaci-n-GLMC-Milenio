@@ -6,6 +6,7 @@ import json
 import os
 import pathlib
 import sys
+import tempfile
 import time
 import unittest
 from contextlib import redirect_stdout
@@ -161,7 +162,7 @@ class SignedGoThroughMain(Case):
     def deps(self, env_obj, **over):
         d = {"enabled": True, "lib_dir": str(HERE.parent / "scripts/qa"), "root": self.root, "uid": g6t.UID,
              "env": lambda mods: env_obj, "lock_paths": (), "state_root": self.state, "driver_sha256": DRIVER,
-             "go_cfg": self.signer.cfg()}
+             "go_cfg": self.signer.cfg(), "go_dir": self.signer.dir}
         d.update(over)
         return d
 
@@ -193,9 +194,51 @@ class SignedGoThroughMain(Case):
         self.assertTrue(any(l.startswith("PREFLIGHT_READY=") for l in self.lines), self.lines)
         code, out = self.run_main(self.argv(nonce=nonce, auth="e" * 64), self.deps(self.env()))
         self.assertEqual(code, 1)
-        self.assertTrue(out.startswith("QA525_MANUAL_CUT_G6=STOP "), out)  # fixed code (the journal's own Stop is closed)
+        self.assertEqual(out, "QA525_MANUAL_CUT_G6=STOP CUT_G6_NONCE_REPLAY\n")  # fixed code, never CUT_G6_UNEXPECTED
         self.assertNotIn("Traceback", out)
         self.assertEqual(self.lines, [])  # the second dispatch never ran
+
+    def test_go_location_must_be_the_private_go_dir(self):
+        import shutil
+        argv = self.argv()
+        gi, si = argv.index("--go") + 1, argv.index("--go-sig") + 1
+        expected = "QA525_MANUAL_CUT_G6=STOP CUT_G6_GO_LOCATION_INVALID\n"
+        # (a) wrong directory (not the configured go_dir)
+        other = tempfile.mkdtemp(prefix="g6go-other-")
+        self.addCleanup(shutil.rmtree, other, ignore_errors=True)
+        os.chmod(other, 0o700)
+        a2 = list(argv)
+        for i in (gi, si):
+            dst = os.path.join(other, os.path.basename(a2[i]))
+            shutil.copy(a2[i], dst)
+            os.chmod(dst, 0o600)
+            a2[i] = dst
+        self.assertEqual(self.run_main(a2, self.deps(self.env())), (1, expected))
+        # (b) go_dir with group/world access
+        os.chmod(self.signer.dir, 0o755)
+        self.assertEqual(self.run_main(argv, self.deps(self.env())), (1, expected))
+        os.chmod(self.signer.dir, 0o700)
+        # (c) go_dir that is a symlink
+        link = os.path.join(other, "lnk")
+        os.symlink(self.signer.dir, link)
+        a3 = list(argv)
+        for i in (gi, si):
+            a3[i] = os.path.join(link, os.path.basename(argv[i]))
+        self.assertEqual(self.run_main(a3, self.deps(self.env(), go_dir=link)), (1, expected))
+        # (d) go_dir owned by another uid
+        self.assertEqual(self.run_main(argv, self.deps(self.env(), uid=g6t.UID + 1)), (1, expected))
+        # (e) only one of the two files in the dir
+        a4 = list(argv)
+        a4[si] = os.path.join(other, os.path.basename(argv[si]))
+        self.assertEqual(self.run_main(a4, self.deps(self.env())), (1, expected))
+        self.assertEqual(os.listdir(self.root), [])
+        self.assertFalse(any(l.startswith("PREFLIGHT_READY=") for l in self.lines))
+
+    def test_go_location_rejects_the_journal_root_and_odd_names(self):
+        for path in (os.path.join(cut.G6_JOURNAL_ROOT, "go.json"), os.path.join(self.signer.dir, ".hidden name"),
+                     os.path.join(self.signer.dir, "..", "x.json"), "relative.json"):
+            with self.assertRaises(cut.Stop):
+                cut._g6_check_go_location(path, g6t.UID, self.signer.dir if "journal" not in path else cut.G6_JOURNAL_ROOT)
 
     def test_bad_go_stops_before_any_marker_lock_or_dispatch(self):
         for kw, code_expected in (({"ttl": 901}, "CUT_G6_GO_TTL_EXCEEDED"), ({"ttl": 0}, "CUT_G6_GO_EXPIRED"),

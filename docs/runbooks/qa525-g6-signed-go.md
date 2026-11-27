@@ -24,10 +24,14 @@ El GO se verifica ANTES de tomar locks, gastar autorización o consumir nonce. U
 2. `G6_KEYGEN_SHA256 = sha256:2dd834413c9d3f4c0e3535b9fcf2e96e14c11f3d36fd23b6c5fc24e50411d051`: `/usr/bin/ssh-keygen` de glmdch, gate read-only PASS (#525 7226448792): no symlink, regular, root, 755, nlink 1, 457232 B. Va también en el manifest de DRIVER-INSTALL.
 `G6_MODE_ENABLED=True` en el commit de habilitación; el hash final del driver sale de ese commit.
 
-## Flujo del Sponsor (off-host) y límite práctico
-1. `qa525-g6-go-build.py --command C --op-sha256 H --driver-sha256 H [--ttl N≤900]` (construye bytes canónicos, nonce fresco; no firma).
-2. Firma en Termux: `ssh-keygen -Y sign -f <clave OPS> -n qa525-go-g6-v1@pmgm <archivo>` → `<archivo>.sig`.
-3. Subir `go.json` y `go.json.sig` a glmdch; el driver las exige `root`, modo 0600/0400, nlink 1 (cada GO = comando por GO, TTL ≤ 900 s). **Riesgo operativo a decidir:** subir por SFTP a `/home/soporte` y pasarlas a root dentro de 900 s es ajustado; el paso de instalación a root es un comando privilegiado adicional por GO.
+## Flujo del Sponsor (off-host) — actualizado 27-Nov (dictamen 7228721966)
+1. En glmdch, justo antes: `date -u +%s` (el Sponsor pega el entero). El reloj válido es SIEMPRE el de glmdch.
+2. `qa525-g6-go-build.py --command C --op-sha256 H --driver-sha256 H --host-epoch N [--ttl N≤900] [--out PATH]` (obligatorio `--host-epoch`; entero; construye los bytes canónicos con nonce fresco; no firma). `expires_at = N + ttl`.
+3. Firma en Termux: `ssh-keygen -Y sign -f <clave OPS> -n qa525-go-g6-v1@pmgm <archivo>` → `<archivo>.sig`.
+4. UNA subida SFTP de `go-<nonce8>.json` y `.sig` (nombres únicos) a /home/soporte y DOS `sudo install -o root -g root -m 0600` SIN sobrescritura hacia `/var/lib/pmgm-qa525-manual-cut-e5c40d3a/` (root 0700, HOST-PREP; separado de `journal/` y de los locks). El driver exige GO y firma DIRECTAMENTE en ese directorio (real, sin symlink, uid root, modo exacto 0700, nombre `[A-Za-z0-9][A-Za-z0-9._-]{0,79}`, nunca el journal), archivos root 0600/0400, nlink 1: `CUT_G6_GO_LOCATION_INVALID` en cualquier otro caso.
+5. Si el GO expira, se DESCARTA y se construye uno nuevo (nonce fresco); un nonce nunca se reutiliza: replay = `CUT_G6_NONCE_REPLAY` (otros rechazos del journal = `CUT_G6_NONCE_REFUSED`), antes de cualquier dispatch.
+6. Restic key (solo `init`): getpass doble en la Termius del Sponsor, después de todas las validaciones y antes del dispatch; nunca chat/argv/env/archivo/log/salida.
+Presupuesto estimado: 6–8 intercambios (~6–10 min) dentro de 900 s.
 
 ## Qué NO hace este cambio
 No instala el driver, no fija clave pública ni hash de ssh-keygen, no ejecuta nada en glmdch.
