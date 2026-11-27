@@ -278,5 +278,169 @@ class Gate(unittest.TestCase):
             self.assertEqual(out.getvalue(), "G6DI_STOP:ROOT_REQUIRED\n")
 
 
+class Upgrade(unittest.TestCase):
+    """TRANSITION: replace the previously installed (never executed) driver; rename-only, never delete, restore on failure."""
+    run_mode = Gate.run_mode
+
+    def setUp(self):
+        Gate.setUp(self)
+        self.oldb = b"#!/usr/bin/env python3\n# previous driver\n" * 40
+        self._old = di.OLD_DRIVER
+        di.OLD_DRIVER = (__import__("hashlib").sha256(self.oldb).hexdigest(), len(self.oldb))
+        self.addCleanup(setattr, di, "OLD_DRIVER", self._old)
+        with open(self.target, "wb") as fh:
+            fh.write(self.oldb)
+        os.chmod(self.target, 0o644)
+        self.old_ino = os.lstat(self.target).st_ino
+
+    def bind(self):
+        code, out = self.run_mode("upgrade-preflight")
+        self.assertEqual(code, 0, out)
+        m = re.search(r"G6DI_BIND=(\d+):(\d+)\n", out)
+        return (int(m[1]), int(m[2]))
+
+    def test_production_pin_is_the_driver_installed_in_glmdch(self):
+        self.assertEqual(self._old, ("c9cd98c7d2d0ab588655550e8a841f01f65f1887673ff585e7f6ad5221e91962", 51347))
+        self.assertNotEqual(self._old[0], di.DRIVER[0])
+
+    def test_upgrade_preflight_is_seven_lines_and_read_only(self):
+        before = snap(self.tmp)
+        code, out = self.run_mode("upgrade-preflight")
+        self.assertEqual(code, 0, out)
+        lines = out.splitlines()
+        self.assertEqual(len(lines), 7, out)
+        self.assertTrue(lines[0].startswith("G6DI_BIND="))
+        self.assertEqual(lines[3], "G6DI_INSTALLED=sha256=%s size=%d" % di.OLD_DRIVER)
+        self.assertEqual(lines[4], "G6DI_NEWDRIVER=sha256=%s size=%d" % (di.DRIVER[0], di.DRIVER[1]))
+        self.assertEqual(lines[5:], ["G6DI_SUPERSEDED=ABSENT", "G6DI_UPGRADE_PREFLIGHT=PASS"])
+        self.assertEqual(snap(self.tmp), before)
+        # the fresh-install preflight still refuses a present driver
+        self.assertEqual(self.run_mode("preflight"), (1, "G6DI_STOP:TARGET_EXISTS\n"))
+
+    def test_upgrade_renames_old_never_deletes_and_installs_new(self):
+        bind = self.bind()
+        code, out = self.run_mode("upgrade", bind)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.splitlines()[:3], ["G6DI_UPGRADED=1", "G6DI_DRIVER_FILE=regular uid=%d mode=0644 nlink=1 size=%d" % (UID, di.DRIVER[1]),
+                                                "G6DI_DRIVER_SHA256=" + di.DRIVER[0]])
+        self.assertEqual(open(self.target, "rb").read(), (OPS / NAME).read_bytes())
+        sup = self.target + di.SUFFIX_SUPERSEDED
+        self.assertEqual(open(sup, "rb").read(), self.oldb)
+        self.assertEqual(os.lstat(sup).st_ino, self.old_ino)  # the very same inode, renamed
+        self.assertEqual(sorted(os.listdir(self.base)), sorted(["lib", NAME, NAME + di.SUFFIX_SUPERSEDED]))
+        # not repeatable
+        self.assertEqual(self.run_mode("upgrade", bind)[0], 1)
+
+    def test_bind_is_required_and_exact(self):
+        bind = self.bind()
+        self.assertEqual(self.run_mode("upgrade", None), (1, "G6DI_STOP:BIND_REQUIRED\n"))
+        self.assertEqual(self.run_mode("upgrade", (bind[0], bind[1] + 1)), (1, "G6DI_STOP:BASE_NOT_THE_BOUND_ONE\n"))
+        self.assertEqual(open(self.target, "rb").read(), self.oldb)
+
+    def test_only_the_exact_previous_driver_can_be_superseded(self):
+        bind = self.bind()
+        with open(self.target, "r+b") as fh:
+            fh.write(b"X")
+        self.assertEqual(self.run_mode("upgrade", bind), (1, "G6DI_STOP:OLD_DRIVER_HASH_MISMATCH\n"))
+        os.chmod(self.target, 0o755)
+        self.assertEqual(self.run_mode("upgrade-preflight")[0], 1)
+        os.chmod(self.target, 0o644)
+        os.link(self.target, self.base + "/hardlink")
+        self.assertEqual(self.run_mode("upgrade-preflight")[0], 1)
+        os.unlink(self.base + "/hardlink")
+        with open(self.target, "wb") as fh:  # restored exact bytes -> works again
+            fh.write(self.oldb)
+        self.assertEqual(self.run_mode("upgrade-preflight")[0], 0)
+
+    def test_absent_old_driver_or_leftovers_or_symlink_stop(self):
+        os.rename(self.target, self.base + "/moved-away")
+        self.assertEqual(self.run_mode("upgrade-preflight")[0], 1)
+        os.rename(self.base + "/moved-away", self.target)
+        for leftover in (di.SUFFIX_SUPERSEDED, di.SUFFIX_RB, di.SUFFIX_FAIL):
+            open(self.target + leftover, "wb").close()
+            self.assertEqual(self.run_mode("upgrade-preflight")[0], 1, leftover)
+            os.unlink(self.target + leftover)
+        os.rename(self.target, self.base + "/real")
+        os.symlink(self.base + "/real", self.target)
+        self.assertEqual(self.run_mode("upgrade-preflight")[0], 1)
+
+    def test_host_prep_must_still_be_exact(self):
+        with open(self.base + "/lib/" + sorted(di.LIBS)[0], "ab") as fh:
+            fh.write(b"x")
+        self.assertEqual(self.run_mode("upgrade-preflight")[0], 1)
+
+    def _fail_at(self, stage, mutate=None):
+        bind = self.bind()
+        real = di._hook
+
+        def boom(st):
+            if st == stage:
+                if mutate:
+                    mutate()
+                else:
+                    raise OSError("disk")
+        di._hook = boom
+        try:
+            return self.run_mode("upgrade", bind)
+        finally:
+            di._hook = real
+
+    def test_failure_after_rename_restores_the_previous_driver_and_keeps_evidence(self):
+        for stage in ("renamed", "written"):
+            for n in os.listdir(self.base):
+                if n.endswith((di.SUFFIX_FAIL, di.SUFFIX_SUPERSEDED)):
+                    os.rename(self.base + "/" + n, self.base + "/zz-" + n.replace(".", "_"))
+            code, out = self._fail_at(stage)
+            self.assertEqual((code, out), (1, "G6DI_STOP:UPGRADE_FAILED_RESTORED\n"), stage)
+            self.assertEqual(open(self.target, "rb").read(), self.oldb)  # previous driver is back under its name
+            self.assertEqual(os.lstat(self.target).st_ino, self.old_ino)
+            self.assertFalse(os.path.lexists(self.target + di.SUFFIX_SUPERSEDED))
+            self.assertEqual(os.path.exists(self.target + di.SUFFIX_FAIL), stage == "written")
+            for n in os.listdir(self.base):  # never deleted: keep everything for the next iteration
+                if n.startswith("zz-") or n.endswith(di.SUFFIX_FAIL):
+                    os.rename(self.base + "/" + n, self.base + "/keep-" + str(stage) + n[-6:])
+
+    def test_corruption_detected_at_verify_restores_too(self):
+        def corrupt():
+            with open(self.target, "r+b") as fh:
+                fh.write(b"X")
+        code, out = self._fail_at("verify", corrupt)
+        self.assertEqual((code, out), (1, "G6DI_STOP:INSTALLED_STATE_UNEXPECTED_RESTORED\n"))
+        self.assertEqual(open(self.target, "rb").read(), self.oldb)
+        self.assertTrue(os.path.isfile(self.target + di.SUFFIX_FAIL))
+
+    def test_restore_failure_is_reported_not_hidden(self):
+        bind = self.bind()
+        real_h, real_r = di._hook, di._noreplace_rename
+        calls = []
+
+        def boom(stage):
+            if stage == "written":
+                raise OSError("disk")
+
+        def flaky(pfd, src, dst, loader=None):
+            calls.append(dst)
+            if len(calls) >= 3:
+                raise di.Stop("RENAME_REFUSED_ERRNO_EXDEV")
+            return real_r(pfd, src, dst, loader)
+        di._hook, di._noreplace_rename = boom, flaky
+        try:
+            code, out = self.run_mode("upgrade", bind)
+        finally:
+            di._hook, di._noreplace_rename = real_h, real_r
+        self.assertEqual((code, out), (1, "G6DI_STOP:UPGRADE_FAILED_RESTORE_FAILED\n"))
+        self.assertTrue(os.path.exists(self.target + di.SUFFIX_SUPERSEDED))  # old driver still preserved
+
+    def test_argv_grammar_for_the_new_modes(self):
+        for argv in (["x", "upgrade"], ["x", "upgrade", "1:2:3"], ["x", "upgrade-preflight", "1:2"], ["x", "upgrade", "a:b"]):
+            buf = io.StringIO()
+            real, __import__("sys").stdout = __import__("sys").stdout, buf
+            try:
+                self.assertEqual(di.main(argv), 1, argv)
+            finally:
+                __import__("sys").stdout = real
+            self.assertEqual(buf.getvalue(), "G6DI_STOP:MODE_INVALID\n", argv)
+
+
 if __name__ == "__main__":
     unittest.main()

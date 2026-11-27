@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """QA525 gate DRIVER-INSTALL (route C): install the FINAL manual-cut driver as ONE file.  CANDIDATE, NOT AUTHORISED.
 Generated from the template by qa525-driver-install-build.py: the driver bytes are EMBEDDED, so one file = one transfer = one hash.
-Modes (exactly one per process): preflight | apply <bind> | rollback <bind>, bind = "dev:ino" of the base dir
+Modes (exactly one per process): preflight | apply <bind> | rollback <bind> | upgrade-preflight | upgrade <bind>, bind = "dev:ino" of the base dir
 /opt/centenario/qa525-manual-cut-e5c40d3a printed by `preflight` (just-in-time; any change = STOP).
 Installs exactly: /opt/centenario/qa525-manual-cut-e5c40d3a/qa525-manual-cut-e5c40d3a.py (root, 0644, nlink 1, the embedded bytes).
 Preflight/apply require HOST-PREP to be in place: base dir root 0755 holding exactly `lib`; `lib` holding exactly the 11 pinned
 libraries (hash, root, 0644, nlink 1); journal root root 0700 and EMPTY; target ABSENT.  Never overwrites and never deletes:
 rollback / failed apply RENAME the file to a fixed `.rolledback-/.apply-failed-` name (renameat2 NOREPLACE).  Every operation is
-relative to O_NOFOLLOW parent FDs.  It spawns no processes, opens no sockets, never imports/executes the driver and runs no G6.
+relative to O_NOFOLLOW parent FDs.
+TRANSITION (27-Nov): `upgrade-preflight`/`upgrade` replace the previously installed driver (pinned OLD_DRIVER = sha256+size, installed by
+the first DRIVER-INSTALL and never executed) by the embedded one: the old file is RENAMED (renameat2 NOREPLACE, never deleted) to
+`<driver>.superseded-c9cd98c7`, the new one is created O_EXCL; any failure renames the new file to `.apply-failed-` and RESTORES the
+old name, reporting every step.  Fresh-install modes keep their original behaviour (a present driver is TARGET_EXISTS).  It spawns no processes, opens no sockets, never imports/executes the driver and runs no G6.
 """
 import base64
 import ctypes
@@ -27,7 +31,9 @@ JBASE = "pmgm-qa525-manual-cut-e5c40d3a"
 JOURNAL = "journal"
 SUFFIX_RB = ".rolledback-20261127"
 SUFFIX_FAIL = ".apply-failed-20261127"
-MODES = ("preflight", "apply", "rollback")
+SUFFIX_SUPERSEDED = ".superseded-c9cd98c7"
+OLD_DRIVER = ("c9cd98c7d2d0ab588655550e8a841f01f65f1887673ff585e7f6ad5221e91962", 51347)  # installed by the first DRIVER-INSTALL
+MODES = ("preflight", "apply", "rollback", "upgrade-preflight", "upgrade")
 BIND_RE = re.compile(r"\A([0-9]{1,20}):([0-9]{1,20})\Z")
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 RENAME_NOREPLACE = 1
@@ -255,17 +261,101 @@ def rollback(ofd, vfd, uid, out, bind):
     out.write("G6DI_ROLLED_BACK=1\n")
 
 
+def _verify_old(bfd, uid):
+    st = _st(bfd, DRIVER_NAME)
+    if st is None or sorted(os.listdir(bfd)) != sorted([LIB, DRIVER_NAME]):
+        raise Stop("OLD_DRIVER_STATE_UNEXPECTED")
+    got = _read_regular(bfd, DRIVER_NAME, uid, 0o644, OLD_DRIVER[1])
+    if hashlib.sha256(got).hexdigest() != OLD_DRIVER[0]:
+        raise Stop("OLD_DRIVER_HASH_MISMATCH")
+
+
+def upgrade_preflight(ofd, vfd, uid, out, bind):
+    data = driver_bytes()
+    if data and hashlib.sha256(data).hexdigest() == OLD_DRIVER[0]:
+        raise Stop("NOTHING_TO_UPGRADE")
+    bfd, bst = _open_base(ofd, uid)
+    try:
+        _check_bind(bind, bst)
+        _check_host_prep(ofd, vfd, uid)
+        _verify_old(bfd, uid)
+        for n in (DRIVER_NAME + SUFFIX_SUPERSEDED, DRIVER_NAME + SUFFIX_RB, DRIVER_NAME + SUFFIX_FAIL):
+            if _st(bfd, n) is not None:
+                raise Stop("TARGET_EXISTS")
+    finally:
+        os.close(bfd)
+    out.write("G6DI_BIND=%d:%d\nG6DI_PARENTS=uid=%d no-group-world-write\nG6DI_HOSTPREP=base=0755 lib=files=%d hash=OK journal=0700 entries=0\n"
+              "G6DI_INSTALLED=sha256=%s size=%d\nG6DI_NEWDRIVER=sha256=%s size=%d\nG6DI_SUPERSEDED=ABSENT\nG6DI_UPGRADE_PREFLIGHT=PASS\n"
+              % (bst.st_dev, bst.st_ino, uid, len(LIBS), OLD_DRIVER[0], OLD_DRIVER[1], hashlib.sha256(data).hexdigest(), len(data)))
+
+
+def _verify_upgraded(bfd, uid, data):
+    if sorted(os.listdir(bfd)) != sorted([LIB, DRIVER_NAME, DRIVER_NAME + SUFFIX_SUPERSEDED]):
+        raise Stop("INSTALLED_STATE_UNEXPECTED")
+    if _read_regular(bfd, DRIVER_NAME, uid, 0o644, len(data)) != data:
+        raise Stop("INSTALLED_STATE_UNEXPECTED")
+    old = _read_regular(bfd, DRIVER_NAME + SUFFIX_SUPERSEDED, uid, 0o644, OLD_DRIVER[1])
+    if hashlib.sha256(old).hexdigest() != OLD_DRIVER[0]:
+        raise Stop("INSTALLED_STATE_UNEXPECTED")
+
+
+def upgrade(ofd, vfd, uid, out, bind):
+    if bind is None:
+        raise Stop("BIND_REQUIRED")
+    import io
+    upgrade_preflight(ofd, vfd, uid, io.StringIO(), bind)
+    data = driver_bytes()
+    bfd, _ = _open_base(ofd, uid)
+    renamed = created = False
+    try:
+        try:
+            _hook("before")
+            _noreplace_rename(bfd, DRIVER_NAME, DRIVER_NAME + SUFFIX_SUPERSEDED)
+            renamed = True
+            _hook("renamed")
+            fd = os.open(DRIVER_NAME, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=bfd)
+            created = True
+            try:
+                view = memoryview(data)
+                while view:
+                    view = view[os.write(fd, view):]
+                _hook("written")
+                os.fchmod(fd, 0o644)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.fsync(bfd)
+            _hook("verify")
+            _verify_upgraded(bfd, uid, data)
+        except (OSError, Stop) as exc:
+            code = str(exc) if isinstance(exc, Stop) else "UPGRADE_FAILED"
+            try:
+                if created:
+                    _noreplace_rename(bfd, DRIVER_NAME, DRIVER_NAME + SUFFIX_FAIL)
+                if renamed:
+                    _noreplace_rename(bfd, DRIVER_NAME + SUFFIX_SUPERSEDED, DRIVER_NAME)  # restore the previous name
+            except (OSError, Stop):
+                raise Stop(code + "_RESTORE_FAILED") from None
+            raise Stop(code + ("_RESTORED" if renamed else "")) from None
+    finally:
+        os.close(bfd)
+    out.write("G6DI_UPGRADED=1\nG6DI_DRIVER_FILE=regular uid=%d mode=0644 nlink=1 size=%d\nG6DI_DRIVER_SHA256=%s\n"
+              "G6DI_SUPERSEDED_FILE=regular uid=%d mode=0644 nlink=1 size=%d sha256=%s\n"
+              % (uid, len(data), hashlib.sha256(data).hexdigest(), uid, OLD_DRIVER[1], OLD_DRIVER[0]))
+
+
 def run(mode, opt=OPT_PARENT, var=VAR_PARENT, uid=None, out=sys.stdout, bind=None):
     uid = os.geteuid() if uid is None else uid
     ofd = vfd = None
     try:
         if mode not in MODES:
             raise Stop("MODE_INVALID")
-        if mode != "preflight" and uid != 0 and opt == OPT_PARENT:
+        if mode not in ("preflight", "upgrade-preflight") and uid != 0 and opt == OPT_PARENT:
             raise Stop("ROOT_REQUIRED")
         ofd, _ = _open_parent(opt, uid)
         vfd, _ = _open_parent(var, uid)
-        {"preflight": preflight, "apply": apply, "rollback": rollback}[mode](ofd, vfd, uid, out, bind)
+        {"preflight": preflight, "apply": apply, "rollback": rollback, "upgrade-preflight": upgrade_preflight,
+         "upgrade": upgrade}[mode](ofd, vfd, uid, out, bind)
         return 0
     except Stop as exc:
         out.write("G6DI_STOP:%s\n" % exc)
@@ -282,9 +372,9 @@ def run(mode, opt=OPT_PARENT, var=VAR_PARENT, uid=None, out=sys.stdout, bind=Non
 def main(argv):
     try:
         mode, bind = argv[1], None
-        if mode == "preflight" and len(argv) == 2:
+        if mode in ("preflight", "upgrade-preflight") and len(argv) == 2:
             pass
-        elif mode in ("apply", "rollback") and len(argv) == 3 and BIND_RE.match(argv[2]):
+        elif mode in ("apply", "rollback", "upgrade") and len(argv) == 3 and BIND_RE.match(argv[2]):
             m = BIND_RE.match(argv[2])
             bind = (int(m[1]), int(m[2]))
         else:
