@@ -742,9 +742,12 @@ G6_GO_TTL_MAX = 900
 G6_GO_MAX_BYTES = 2048
 G6_GOSIG_MAX_BYTES = 4096
 G6_OPS_FINGERPRINT = "SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k"  # fixed by the Sponsor (Bitwarden); docs PREROOT-BOUNDARY L15
-G6_OPS_ALLOWED_SIGNERS = None  # exactly: b'qa525-ops namespaces="qa525-go-g6-v1@pmgm" ssh-ed25519 <KEY>\n' -- PUBLIC key; fingerprint must equal the pin
+# PUBLIC key line delivered by the Sponsor from Termux (~/.ssh/qa525-ops.pub, 27-Nov); its fingerprint must equal the pin above.
+G6_OPS_ALLOWED_SIGNERS = (b'qa525-ops namespaces="qa525-go-g6-v1@pmgm" '
+                          b'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINmhs+MJy3gtpDc5mZNlPetUbii9II528HjcGemiBGa/\n')
 G6_KEYGEN_PATH = "/usr/bin/ssh-keygen"
-G6_KEYGEN_SHA256 = None  # "sha256:<hex64>" of the real binary, proven on the host in a read-only gate; never assumed
+# sha256 of glmdch's real /usr/bin/ssh-keygen (regular file, root, 755, nlink 1, not a symlink), read-only gate PASS 27-Nov (#525 7226448792).
+G6_KEYGEN_SHA256 = "sha256:2dd834413c9d3f4c0e3535b9fcf2e96e14c11f3d36fd23b6c5fc24e50411d051"
 G6_GO_TEMP_ROOT = "/var/lib/pmgm-qa525-manual-cut-e5c40d3a"  # root 0700 (HOST-PREP); transient 0700 subdir, removed after use
 _GO_NONCE = __import__("re").compile(r"[a-f0-9]{32,64}\Z")
 _GO_PUB = __import__("re").compile(rb'qa525-ops namespaces="qa525-go-g6-v1@pmgm" ssh-ed25519 ([A-Za-z0-9+/]{68})\n\Z')

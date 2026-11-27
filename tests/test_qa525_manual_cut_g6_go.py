@@ -129,16 +129,31 @@ class SignedGo(Case):
         self.stop("CUT_G6_GO_SIGNERS_INVALID", go, cfg=self.signer.cfg(
             signers=self.signer.signers.replace(b"qa525-go-g6-v1@pmgm", b"qa525-go-cut-v1@pmgm")))
 
-    def test_production_constants_are_unpinned_and_mode_is_off(self):
+    def test_production_pins_are_the_proven_values_and_mode_is_still_off(self):
         self.assertIs(cut.G6_MODE_ENABLED, False)
-        self.assertIsNone(cut.G6_OPS_ALLOWED_SIGNERS)
-        self.assertIsNone(cut.G6_KEYGEN_SHA256)
         self.assertEqual(cut.G6_OPS_FINGERPRINT, "SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k")
+        self.assertEqual(cut._g6_signers_fingerprint(cut.G6_OPS_ALLOWED_SIGNERS), cut.G6_OPS_FINGERPRINT)
+        self.assertEqual(cut.G6_OPS_ALLOWED_SIGNERS.count(b"\n"), 1)
+        self.assertEqual(cut.G6_KEYGEN_SHA256, "sha256:2dd834413c9d3f4c0e3535b9fcf2e96e14c11f3d36fd23b6c5fc24e50411d051")
+        self.assertEqual(cut.G6_KEYGEN_PATH, "/usr/bin/ssh-keygen")
         self.assertEqual(cut.G6_GO_NAMESPACE, "qa525-go-g6-v1@pmgm")
         self.assertEqual(cut.G6_GO_TTL_MAX, 900)
-        with self.assertRaises(cut.Stop) as cm:
-            cut._g6_go_cfg({})
-        self.assertEqual(str(cm.exception), "CUT_G6_GO_VERIFIER_NOT_PINNED")
+        cfg = cut._g6_go_cfg({})
+        self.assertEqual((cfg["required_euid"], cfg["binary_uid"], cfg["temp_uid"]), (0, 0, 0))
+        self.assertEqual(cfg["temp_root"], "/var/lib/pmgm-qa525-manual-cut-e5c40d3a")
+        for bad in ({"signers": None}, {"keygen_sha256": None}):
+            with self.assertRaises(cut.Stop) as cm:
+                cut._g6_go_cfg({"go_cfg": dict(cfg, **bad)})
+            self.assertEqual(str(cm.exception), "CUT_G6_GO_VERIFIER_NOT_PINNED")
+
+    def test_a_foreign_key_or_a_foreign_keygen_binary_never_verifies_with_the_production_pins(self):
+        go = self.go()
+        # production signers + production fingerprint, but the GO was signed by the test key -> signature invalid
+        cfg = self.signer.cfg(signers=cut.G6_OPS_ALLOWED_SIGNERS, fingerprint=cut.G6_OPS_FINGERPRINT)
+        self.stop("CUT_G6_GO_SIGNATURE_INVALID", go, cfg=cfg)
+        # production keygen hash pinned against the test host's binary -> mismatch unless it is glmdch's exact binary
+        if gs.have_keygen() and cut.G6_KEYGEN_SHA256 != "sha256:" + hashlib.sha256(open(gs.KEYGEN, "rb").read()).hexdigest():
+            self.stop("CUT_G6_GO_KEYGEN_PIN_MISMATCH", go, cfg=self.signer.cfg(keygen_sha256=cut.G6_KEYGEN_SHA256))
 
 
 @unittest.skipUnless(gs.have_keygen(), "ssh-keygen required")
@@ -206,9 +221,8 @@ class SignedGoThroughMain(Case):
         self.assertEqual((code, out), (1, "QA525_MANUAL_CUT_G6=STOP CUT_G6_GO_FILE_INVALID\n"))
         self.assertEqual(os.listdir(self.root), [])
 
-    def test_unpinned_production_config_is_stop_with_the_mode_enabled(self):
-        d = self.deps(self.env())
-        del d["go_cfg"]
+    def test_unpinned_config_is_stop_with_the_mode_enabled(self):
+        d = self.deps(self.env(), go_cfg=dict(cut._g6_go_cfg({}), signers=None))
         code, out = self.run_main(self.argv(), d)
         self.assertEqual((code, out), (1, "QA525_MANUAL_CUT_G6=STOP CUT_G6_GO_VERIFIER_NOT_PINNED\n"))
         self.assertEqual(os.listdir(self.root), [])

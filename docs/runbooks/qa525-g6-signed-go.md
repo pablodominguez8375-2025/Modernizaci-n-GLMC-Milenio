@@ -19,10 +19,10 @@ Estado: **candidato de código + pruebas. NO autoriza nada.** `G6_MODE_ENABLED=F
 
 El GO se verifica ANTES de tomar locks, gastar autorización o consumir nonce. Un GO malo no deja ningún marcador.
 
-## Pines que faltan (producción = STOP `CUT_G6_GO_VERIFIER_NOT_PINNED`; no se inventan)
-1. `G6_OPS_ALLOWED_SIGNERS`: línea **pública** `qa525-ops namespaces="qa525-go-g6-v1@pmgm" ssh-ed25519 <KEY>\n` (la entrega el Sponsor o se lee con un gate read-only; su huella debe ser exactamente la fijada).
-2. `G6_KEYGEN_SHA256`: sha256 del `/usr/bin/ssh-keygen` real de glmdch, demostrado en un gate read-only. Va también en el manifest de DRIVER-INSTALL.
-Ambos se rellenan en un cambio revisado posterior; hasta entonces el driver final está bloqueado.
+## Pines (27-Nov): fijados con evidencia, no inventados
+1. `G6_OPS_ALLOWED_SIGNERS`: línea **pública** entregada por el Sponsor desde Termux (`~/.ssh/qa525-ops.pub`); su huella calculada == `SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k` (verificada con `ssh-keygen -l` y por el driver).
+2. `G6_KEYGEN_SHA256 = sha256:2dd834413c9d3f4c0e3535b9fcf2e96e14c11f3d36fd23b6c5fc24e50411d051`: `/usr/bin/ssh-keygen` de glmdch, gate read-only PASS (#525 7226448792): no symlink, regular, root, 755, nlink 1, 457232 B. Va también en el manifest de DRIVER-INSTALL.
+`G6_MODE_ENABLED` sigue `False`; el driver final se bloquea hasta el dictamen y el commit que lo habilite.
 
 ## Flujo del Sponsor (off-host) y límite práctico
 1. `qa525-g6-go-build.py --command C --op-sha256 H --driver-sha256 H [--ttl N≤900]` (construye bytes canónicos, nonce fresco; no firma).
