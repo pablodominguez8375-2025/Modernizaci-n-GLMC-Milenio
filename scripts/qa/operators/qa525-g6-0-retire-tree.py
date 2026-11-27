@@ -18,7 +18,7 @@ import sys
 
 ROOT = "/var/lib/pmgm-qa525-g6-v2"
 RETIRED = ROOT + ".retired-20261113"
-EXPECTED = ("repo-v2", "key-v2", "state-v2")
+EXPECTED = ("repo-v2", "key-v2", "state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2")  # exact set (inventory v3)
 MODES = ("preflight", "apply", "rollback")
 BIND_RE = re.compile(r"\A([0-9]{1,20}):([0-9]{1,20})\Z")
 DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -102,12 +102,14 @@ def _inspect_tree(pfd, name, uid, bind):
         if not _same(lst, fst) or not _is_tree(fst, uid):
             raise Stop("ROOT_CHANGED_DURING_CHECK")
         present = os.listdir(rfd)
-        if any(n not in present for n in EXPECTED):
+        if sorted(present) != sorted(EXPECTED):
             raise Stop("ROOT_LAYOUT_UNEXPECTED")
         key = os.stat("key-v2", dir_fd=rfd, follow_symlinks=False)
-        if not (stat.S_ISREG(key.st_mode) and key.st_uid == uid and key.st_nlink == 1 and not stat.S_IMODE(key.st_mode) & 0o077):
+        if not (stat.S_ISREG(key.st_mode) and key.st_uid == uid and key.st_nlink == 1 and stat.S_IMODE(key.st_mode) == 0o600):
             raise Stop("KEY_METADATA_UNEXPECTED")
-        for sub in ("repo-v2", "state-v2"):
+        for sub in EXPECTED:
+            if sub == "key-v2":
+                continue
             if not _is_tree(os.stat(sub, dir_fd=rfd, follow_symlinks=False), uid):
                 raise Stop("SUBDIR_METADATA_UNEXPECTED")
         if bind is not None and (fst.st_dev, fst.st_ino) != bind:
@@ -129,7 +131,7 @@ def preflight(root, retired, uid, out, bind=None, pfd=None):
             raise Stop("RETIRED_TARGET_EXISTS")
         if os.fstat(pfd).st_dev != fst.st_dev:
             raise Stop("CROSS_DEVICE")
-        out.write("G6_0_ROOT_BIND=%d:%d\nG6_0_ROOT=dir uid=%d mode=0700 entries=%d\nG6_0_KEY_V2=file nlink=1 mode<=0600\n"
+        out.write("G6_0_ROOT_BIND=%d:%d\nG6_0_ROOT=dir uid=%d mode=0700 entries=%d\nG6_0_KEY_V2=file nlink=1 mode=0600\n"
                   "G6_0_RETIRED_TARGET=ABSENT\nG6_0_PREFLIGHT=PASS\n" % (fst.st_dev, fst.st_ino, uid, n))
         return fst
     finally:
@@ -201,7 +203,7 @@ def rollback(root, retired, uid, out, bind):
             raise Stop("RETIRED_NOT_THE_BOUND_TREE")
         rfd = _open_dir(pfd, tn)
         try:
-            if any(n not in os.listdir(rfd) for n in EXPECTED):
+            if sorted(os.listdir(rfd)) != sorted(EXPECTED):
                 raise Stop("RETIRED_NOT_RESTORABLE")
         finally:
             os.close(rfd)

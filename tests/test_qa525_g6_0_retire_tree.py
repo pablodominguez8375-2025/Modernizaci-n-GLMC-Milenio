@@ -32,7 +32,8 @@ class Retire(unittest.TestCase):
         self.ret = self.root + ".retired-20261113"
         os.mkdir(self.root, 0o700)
         os.mkdir(self.root + "/repo-v2", 0o700)
-        os.mkdir(self.root + "/state-v2", 0o700)
+        for n in ("state-v2", "exports-v2", "restores-v2", "downloads-v2", "stages-v2"):
+            os.mkdir(self.root + "/" + n, 0o700)
         with open(self.root + "/key-v2", "w") as fh:
             fh.write("SECRET-KEY-MATERIAL")
         os.chmod(self.root + "/key-v2", 0o600)
@@ -78,6 +79,27 @@ class Retire(unittest.TestCase):
         os.chmod(self.root + "/key-v2", 0o600)
         os.chmod(self.root + "/repo-v2", 0o755)
         self.assertEqual(self.go("preflight"), (1, "G6_0_STOP:SUBDIR_METADATA_UNEXPECTED\n"))
+
+    def test_key_mode_must_be_exactly_0600_and_no_extra_entries(self):
+        os.chmod(self.root + "/key-v2", 0o700)
+        self.assertEqual(self.go("preflight"), (1, "G6_0_STOP:KEY_METADATA_UNEXPECTED\n"))
+        os.chmod(self.root + "/key-v2", 0o400)
+        self.assertEqual(self.go("preflight"), (1, "G6_0_STOP:KEY_METADATA_UNEXPECTED\n"))
+        os.chmod(self.root + "/key-v2", 0o600)
+        os.mkdir(self.root + "/extra", 0o700)
+        snap = snapshot(self.base)
+        self.assertEqual(self.go("apply"), (1, "G6_0_STOP:ROOT_LAYOUT_UNEXPECTED\n"))
+        self.assertEqual(snapshot(self.base), snap)
+        os.rmdir(self.root + "/extra")
+        code, text = self.go("preflight")
+        self.assertEqual(code, 0, text)
+        self.assertIn("entries=7", text)
+        self.assertIn("G6_0_KEY_V2=file nlink=1 mode=0600", text)
+
+    def test_rollback_requires_exact_set_in_retired(self):
+        self.assertEqual(self.go("apply")[0], 0)
+        os.mkdir(self.ret + "/extra", 0o700)
+        self.assertEqual(self.go("rollback"), (1, "G6_0_STOP:RETIRED_NOT_RESTORABLE\n"))
 
     def test_symlink_root_and_unsafe_modes_and_layout(self):
         os.chmod(self.root, 0o755)
