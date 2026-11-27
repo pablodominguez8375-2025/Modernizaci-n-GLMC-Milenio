@@ -691,8 +691,117 @@ def unwired(name):
     return step
 
 
-def main(argv=None):
+# ---- G6 mode in main (OFF by default) -----------------------------------------------------------------------------
+G6_MODE_ENABLED = False  # fail-closed: flipping this is a reviewed change, never a runtime option
+G6_FLAG = "--g6"
+G6_AUTH_FLAG = "--authorization-sha256"
+G6_LIB_DIR = "/opt/centenario/qa525-manual-cut-e5c40d3a/lib"        # location is NOT trust-bearing: every file is pinned by hash
+G6_JOURNAL_ROOT = "/var/lib/pmgm-qa525-manual-cut-e5c40d3a/journal"  # must pre-exist (root, 0700); created by an authorised gate
+G6_POLICY = "qa525-manual-cut-g6-policy-v1"
+G6_PARAMS_NAME = "qa525-a0-g6-params-v1.json"
+_HEX64 = __import__("re").compile(r"[a-f0-9]{64}\Z")
+
+
+def _g6_parse(argv):
+    """Closed grammar: --g6 <command> --authorization-sha256 <hex64> [--name value]...  (no abbreviations, no positionals)."""
+    if (len(argv) < 4 or argv[0] != G6_FLAG or argv[1] not in G6_COMMANDS or argv[2] != G6_AUTH_FLAG
+            or _HEX64.fullmatch(argv[3]) is None):
+        raise Stop("CUT_G6_ARGS_INVALID")
+    rest = argv[4:]
+    if len(rest) % 2:
+        raise Stop("CUT_G6_ARGS_INVALID")
+    options = []
+    for i in range(0, len(rest), 2):
+        name, value = rest[i], rest[i + 1]
+        if not name.startswith("--") or len(name) < 3 or value.startswith("--"):
+            raise Stop("CUT_G6_ARGS_INVALID")
+        options.append((name[2:], value))
+    return argv[1], argv[3], options
+
+
+def _self_sha256():
+    fd = os.open(os.path.abspath(__file__), os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise Stop("CUT_DRIVER_UNREADABLE")
+        return hashlib.sha256(_read_exact(fd, st.st_size)).hexdigest()
+    finally:
+        os.close(fd)
+
+
+def _spend_authorization(root, auth_sha, uid):
+    """One Sponsor authorization text = one attempt: O_EXCL marker keyed by the literal-text hash, fsynced, spent BEFORE any
+    effect and never re-opened (a repeat with the same text is STOP)."""
+    path = os.path.join(root, "auth-" + auth_sha + ".spent")
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except FileExistsError:
+        raise Stop("CUT_G6_AUTHORIZATION_SPENT") from None
+    except OSError:
+        raise Stop("CUT_G6_AUTHORIZATION_MARKER_FAILED") from None
+    try:
+        os.write(fd, b"spent\n")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    dfd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
+def main_g6(argv, deps=None):
+    """ONE G6 command per process.  Authority = pinned bytes + the Sponsor's literal-text hash passed in argv + host/root
+    checks + locks + fresh nonce + journal marker, all BEFORE dispatch.  `deps` is for hermetic tests only."""
+    d = deps or {}
+    if not d.get("enabled", G6_MODE_ENABLED):
+        raise Stop("G6_MODE_DISABLED")
+    command, auth_sha, options = _g6_parse(argv)
+    pins = dict(G6_PINS)
+    pins["qa525-vnext-go-nonce-journal.py"] = LIB_PINS["qa525-vnext-go-nonce-journal.py"]
+    mods = load_libs(d.get("lib_dir", G6_LIB_DIR), pins)
+    uid = d.get("uid", os.geteuid())
+    run = mods[G6_RUN]
+    _, op_sha = g6_operation(run, command, options)
+    if d.get("env") is not None:
+        env = d["env"](mods)
+    else:
+        import socket
+        env = build_g6_env(mods, uid, socket.gethostname(), os.geteuid())
+    driver = "sha256:" + (d.get("driver_sha256") or _self_sha256())
+    policy = "sha256:" + hashlib.sha256(G6_POLICY.encode()).hexdigest()
+    admission = "sha256:" + hashlib.sha256("|".join([driver, policy, auth_sha, op_sha]).encode()).hexdigest()
+    authorization = {"driver_sha256": driver, "policy_sha256": policy, "admission_sha256": admission,
+                     "g6_operation_sha256": op_sha, "g6_command": command}
+    nonce = d.get("nonce") or __import__("secrets").token_hex(32)  # fresh, opaque, never derived
+    root = d.get("root", G6_JOURNAL_ROOT)
+    now = d.get("now", int(__import__("time").time()))
+    with Plane(d.get("lock_paths", LOCKS)) as plane:
+        _require_plane(plane)
+        _spend_authorization(root, auth_sha, uid)
+        code = run_g6(mods, plane, root, uid, now, nonce, authorization, command, options, env, d.get("dispatch"))
+    if code == 0 and command == "review":  # params stage: only after a successful review, same authorization/nonce
+        opts = dict(options)
+        state_root = d.get("state_root", run.STATE_ROOT)
+        rec = build_a0_g6_params(mods, state_root, opts["archive-name"], opts["repo-id"], opts["key-epoch"],
+                                 authorization, nonce, uid)
+        write_a0_g6_params(os.path.join(state_root, "state-v2", G6_PARAMS_NAME), rec)
+    return code
+
+
+def main(argv=None, deps=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == G6_FLAG:
+        try:
+            return main_g6(argv, deps)
+        except Stop as exc:
+            sys.stdout.write("QA525_MANUAL_CUT_G6=STOP %s\n" % exc)
+            return 1
+        except Exception:  # noqa: BLE001 - never a traceback, path or secret
+            sys.stdout.write("QA525_MANUAL_CUT_G6=STOP CUT_G6_UNEXPECTED\n")
+            return 1
     if argv not in ([], [EXECUTE_TOKEN]):
         return 2
     if argv == [EXECUTE_TOKEN]:
