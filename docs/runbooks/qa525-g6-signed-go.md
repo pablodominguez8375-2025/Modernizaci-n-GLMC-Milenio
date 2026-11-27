@@ -1,6 +1,6 @@
 # QA525 — GO firmado de la ruta C (opción A, dictamen 7225915717 / 7225969321)
 
-Estado: **candidato de código + pruebas. NO autoriza nada.** `G6_MODE_ENABLED=False` (sin cambio). No se ejecuta init/G6; no hay cambios en glmdch.
+Estado: **código + pruebas. NO autoriza nada.** `G6_MODE_ENABLED=True` solo desde el commit de habilitación (revisado aparte; el modo sigue en STOP cerrado sin bytes pinados, host/root, GO firmado válido, locks y journal). El driver aún NO está instalado en glmdch (DRIVER-INSTALL pendiente). No se ejecuta init/G6.
 
 ## Qué exige ahora el driver (`--g6`)
 `--g6 <comando> --authorization-sha256 <hex64> --go <ruta> --go-sig <ruta> [--opción valor]...`
@@ -22,7 +22,7 @@ El GO se verifica ANTES de tomar locks, gastar autorización o consumir nonce. U
 ## Pines (27-Nov): fijados con evidencia, no inventados
 1. `G6_OPS_ALLOWED_SIGNERS`: línea **pública** entregada por el Sponsor desde Termux (`~/.ssh/qa525-ops.pub`); su huella calculada == `SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k` (verificada con `ssh-keygen -l` y por el driver).
 2. `G6_KEYGEN_SHA256 = sha256:2dd834413c9d3f4c0e3535b9fcf2e96e14c11f3d36fd23b6c5fc24e50411d051`: `/usr/bin/ssh-keygen` de glmdch, gate read-only PASS (#525 7226448792): no symlink, regular, root, 755, nlink 1, 457232 B. Va también en el manifest de DRIVER-INSTALL.
-`G6_MODE_ENABLED` sigue `False`; el driver final se bloquea hasta el dictamen y el commit que lo habilite.
+`G6_MODE_ENABLED=True` en el commit de habilitación; el hash final del driver sale de ese commit.
 
 ## Flujo del Sponsor (off-host) y límite práctico
 1. `qa525-g6-go-build.py --command C --op-sha256 H --driver-sha256 H [--ttl N≤900]` (construye bytes canónicos, nonce fresco; no firma).
@@ -30,4 +30,4 @@ El GO se verifica ANTES de tomar locks, gastar autorización o consumir nonce. U
 3. Subir `go.json` y `go.json.sig` a glmdch; el driver las exige `root`, modo 0600/0400, nlink 1 (cada GO = comando por GO, TTL ≤ 900 s). **Riesgo operativo a decidir:** subir por SFTP a `/home/soporte` y pasarlas a root dentro de 900 s es ajustado; el paso de instalación a root es un comando privilegiado adicional por GO.
 
 ## Qué NO hace este cambio
-No habilita `G6_MODE_ENABLED`, no instala el driver, no fija clave pública ni hash de ssh-keygen, no ejecuta nada en glmdch.
+No instala el driver, no fija clave pública ni hash de ssh-keygen, no ejecuta nada en glmdch.

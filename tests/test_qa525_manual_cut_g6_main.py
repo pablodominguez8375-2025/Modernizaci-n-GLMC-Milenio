@@ -50,10 +50,16 @@ class G6Main(ad.AdapterCycle):
             a += ["--" + k, v]
         return a
 
-    def test_off_by_default_and_flag_is_false(self):
-        self.assertIs(cut.G6_MODE_ENABLED, False)
-        code, out = self.call(self.argv("preflight"), None)
+    def test_mode_is_enabled_by_the_reviewed_constant_and_stops_closed_without_pinned_host_material(self):
+        self.assertIs(cut.G6_MODE_ENABLED, True)
+        # explicit disable still works (hermetic deps) and writes nothing
+        code, out = self.call(self.argv("preflight"), self.deps(None, enabled=False))
         self.assertEqual((code, out), (1, "QA525_MANUAL_CUT_G6=STOP G6_MODE_DISABLED\n"))
+        # production invocation (no deps) on a host without the installed lib dir / root: closed STOP, no traceback, no marker
+        code, out = self.call(self.argv("preflight"), None)
+        self.assertEqual(code, 1)
+        self.assertTrue(out.startswith("QA525_MANUAL_CUT_G6=STOP "), out)
+        self.assertNotIn("Traceback", out)
         self.assertEqual(os.listdir(self.root), [])
 
     def test_grammar_is_closed(self):

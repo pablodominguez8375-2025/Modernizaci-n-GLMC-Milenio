@@ -4,7 +4,7 @@ Estado: CANDIDATO. No autorizado, no ejecutado. Dictamen de ruta: PR #1095 72183
 
 ## Qué hace
 `scripts/qa/operators/qa525-host-prep.py` (generado por `qa525-host-prep-build.py` desde `qa525-host-prep.template.py`; reproducible, test lo comprueba) lleva EMBEBIDAS las 11 librerías pinadas (7 `LIB_PINS` + 4 `G6_PINS`, idénticas byte a byte a dev@e5c40d3a): una transferencia = un hash.
-- Crea `/opt/centenario/qa525-manual-cut-e5c40d3a/lib` (root 0755; 11 archivos 0644, nlink 1) y `/var/lib/pmgm-qa525-manual-cut-e5c40d3a/journal` (root 0700, vacío). NO instala el driver (su hash final se fija en su propio gate: hoy `G6_MODE_ENABLED=False`).
+- Crea `/opt/centenario/qa525-manual-cut-e5c40d3a/lib` (root 0755; 11 archivos 0644, nlink 1) y `/var/lib/pmgm-qa525-manual-cut-e5c40d3a/journal` (root 0700, vacío). NO instala el driver (su hash final se fija en su propio gate: el hash final sale del commit que habilita `G6_MODE_ENABLED`).
 - Modos `preflight | apply <bind> | rollback <bind>`; bind = `dev:ino,dev:ino` de `/opt/centenario` y `/var/lib` impresos por `preflight` (just-in-time; cualquier cambio = STOP).
 - FD-relativo con `O_NOFOLLOW`; `renameat2(RENAME_NOREPLACE)` con firma y errno cerrados. Nunca sobrescribe ni borra: todo destino debe estar ausente; apply fallido y rollback RENAMEAN lo creado a `.apply-failed-20261127` / `.rolledback-20261127` (nombre ocupado = STOP). Rollback exige conjunto instalado exacto + journal VACÍO (un journal usado nunca se toca).
 - No ejecuta G6, no lanza procesos ni abre sockets (test AST de imports/llamadas).

@@ -129,8 +129,8 @@ class SignedGo(Case):
         self.stop("CUT_G6_GO_SIGNERS_INVALID", go, cfg=self.signer.cfg(
             signers=self.signer.signers.replace(b"qa525-go-g6-v1@pmgm", b"qa525-go-cut-v1@pmgm")))
 
-    def test_production_pins_are_the_proven_values_and_mode_is_still_off(self):
-        self.assertIs(cut.G6_MODE_ENABLED, False)
+    def test_production_pins_are_the_proven_values_and_mode_is_enabled(self):
+        self.assertIs(cut.G6_MODE_ENABLED, True)
         self.assertEqual(cut.G6_OPS_FINGERPRINT, "SHA256:DN64Bjj/7SMjP7LX9Nwrcp3lPRBpT2cKPs1NmaL1Y5k")
         self.assertEqual(cut._g6_signers_fingerprint(cut.G6_OPS_ALLOWED_SIGNERS), cut.G6_OPS_FINGERPRINT)
         self.assertEqual(cut.G6_OPS_ALLOWED_SIGNERS.count(b"\n"), 1)

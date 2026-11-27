@@ -15,7 +15,7 @@ Per command (preflight, init, backup, restore, review): its own nonce, its own G
 
 Negative coverage: `tests/test_qa525_manual_cut_g6_adapter.py` and `tests/test_qa525_manual_cut_driver.py` (incomplete/crossed admission, inconsistent or unpinned modules → STOP before dispatch, no nonce consumed).
 
-## `main --g6` (OFF by default: `G6_MODE_ENABLED=False`)
+## `main --g6` (habilitado por el commit de habilitación: `G6_MODE_ENABLED=True`; antes OFF por defecto)
 Grammar (closed): `--g6 <preflight|init|backup|restore|review> --authorization-sha256 <hex64> [--name value]...`. One command per process.
 Order before dispatch: mode flag → closed parse → pinned modules → operation hash → env (host/root checks) → 5 locks held →
 authorization-text marker `auth-<hex64>.spent` (O_EXCL+fsync; same text cannot be reused) → fresh random nonce consumed (O_EXCL+fsync)

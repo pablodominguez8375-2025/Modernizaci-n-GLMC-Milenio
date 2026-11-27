@@ -696,7 +696,7 @@ def unwired(name):
 
 
 # ---- G6 mode in main (OFF by default) -----------------------------------------------------------------------------
-G6_MODE_ENABLED = False  # fail-closed: flipping this is a reviewed change, never a runtime option
+G6_MODE_ENABLED = True  # enabled by a reviewed, separate commit (dictamen 7225915717 order); never a runtime option, argv or env. The mode still STOPS closed without the pinned lib bytes, host/root checks, a valid signed GO, locks and journal
 G6_FLAG = "--g6"
 G6_AUTH_FLAG = "--authorization-sha256"
 G6_LIB_DIR = "/opt/centenario/qa525-manual-cut-e5c40d3a/lib"        # location is NOT trust-bearing: every file is pinned by hash
