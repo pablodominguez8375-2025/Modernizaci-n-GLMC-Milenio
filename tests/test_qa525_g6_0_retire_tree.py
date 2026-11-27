@@ -96,7 +96,7 @@ class Retire(unittest.TestCase):
         os.rmdir(self.ret)
         self.hook("after_preflight", lambda: os.mkdir(self.ret))  # empty dir appears: plain rename would replace it
         before = snapshot(self.root)
-        self.assertEqual(self.go("apply"), (1, "G6_0_STOP:RENAME_REFUSED\n"))
+        self.assertEqual(self.go("apply"), (1, "G6_0_STOP:RENAME_REFUSED_ERRNO_EEXIST\n"))
         self.assertEqual(snapshot(self.root), before)
         self.assertEqual(os.listdir(self.ret), [])
 
@@ -178,8 +178,30 @@ class Retire(unittest.TestCase):
     def test_rollback_race_target_created_after_rmdir(self):
         self.assertEqual(self.go("apply")[0], 0)
         self.hook("after_rmdir", lambda: os.mkdir(self.root, 0o700))
-        self.assertEqual(self.go("rollback"), (1, "G6_0_STOP:RENAME_REFUSED\n"))
+        self.assertEqual(self.go("rollback"), (1, "G6_0_STOP:RENAME_REFUSED_ERRNO_EEXIST\n"))
         self.assertTrue(os.path.isdir(self.ret))
+
+    def test_renameat2_signature_and_error_conversion(self):
+        fn = g._load_renameat2()
+        self.assertEqual(fn.restype, g.ctypes.c_int)
+        self.assertEqual(list(fn.argtypes), [g.ctypes.c_int, g.ctypes.c_char_p, g.ctypes.c_int, g.ctypes.c_char_p, g.ctypes.c_uint])
+        pfd = os.open(self.base, g.DIR_FLAGS)
+        self.addCleanup(os.close, pfd)
+        with self.assertRaises(g.Stop) as c:  # real syscall: source absent -> ENOENT
+            g._noreplace_rename(pfd, "nope", "dest")
+        self.assertEqual(str(c.exception), "RENAME_REFUSED_ERRNO_ENOENT")
+
+        def fake(*a):
+            return -1
+        with self.assertRaises(g.Stop) as c:
+            g._noreplace_rename(pfd, "a", "b", loader=lambda: fake)
+        self.assertTrue(str(c.exception).startswith("RENAME_REFUSED_ERRNO_"))
+
+        def missing():
+            raise g.Stop("RENAMEAT2_UNAVAILABLE")
+        with self.assertRaises(g.Stop) as c:
+            g._noreplace_rename(pfd, "a", "b", loader=missing)
+        self.assertEqual(str(c.exception), "RENAMEAT2_UNAVAILABLE")
 
     def test_parent_symlink_and_cli_grammar(self):
         link = self.base + "-link"

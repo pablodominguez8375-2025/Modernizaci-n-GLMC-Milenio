@@ -2,13 +2,14 @@
 """QA525 gate G6-0: retire the 13-nov G6 tree so `init` can create a NEW repo/key.  CANDIDATE, NOT AUTHORISED.
 
 CLI (exactly one mode per process):  preflight | apply <dev>:<ino> | rollback <dev>:<ino>
-`<dev>:<ino>` is the identity of the ROOT printed by a prior `preflight` (G6_0_ROOT_BIND) and bound to the A0 evidence; apply and
-rollback refuse any other tree.  Never deletes or overwrites.  Every operation is relative to a parent-directory FD opened with
+`<dev>:<ino>` is a just-in-time physical identity of the ROOT printed by a prior `preflight` (G6_0_ROOT_BIND); it is NOT
+derived from the A0 inventory (which prints no dev/ino). apply and rollback refuse any other tree: any change = STOP.  Never deletes or overwrites.  Every operation is relative to a parent-directory FD opened with
 O_NOFOLLOW (no path is re-resolved after validation); the rename uses renameat2(RENAME_NOREPLACE) so a retired target created
 during the race is never replaced.  No subprocess/network/docker/systemctl.  Closed `G6_0_KEY=value` lines; one
 `G6_0_STOP:<CODE>` line and exit 1 on any anomaly.
 """
 import ctypes
+import errno
 import io
 import os
 import re
@@ -32,13 +33,23 @@ def _hook(stage):  # test seam: deterministic race injection; no-op in productio
     return None
 
 
-def _noreplace_rename(pfd, src, dst):
+def _load_renameat2():
+    """Exact signature: int renameat2(int, const char*, int, const char*, unsigned int); absent symbol -> closed STOP."""
     try:
         fn = ctypes.CDLL(None, use_errno=True).renameat2
     except (OSError, AttributeError):
         raise Stop("RENAMEAT2_UNAVAILABLE") from None
-    if fn(pfd, os.fsencode(src), pfd, os.fsencode(dst), RENAME_NOREPLACE) != 0:
-        raise Stop("RENAME_REFUSED")
+    fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    fn.restype = ctypes.c_int
+    return fn
+
+
+def _noreplace_rename(pfd, src, dst, loader=None):
+    fn = (loader or _load_renameat2)()
+    rc = fn(pfd, os.fsencode(src), pfd, os.fsencode(dst), RENAME_NOREPLACE)
+    if rc != 0:
+        err = ctypes.get_errno()
+        raise Stop("RENAME_REFUSED_ERRNO_%s" % (errno.errorcode.get(err, str(err)) if rc < 0 else "RC"))
 
 
 def _st(pfd, name):
