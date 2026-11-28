@@ -1,0 +1,45 @@
+A0G6_PRE4_ROOT_SOURCE=dir uid=0 mode=0700 nlink=8
+A0G6_PRE4_SOURCE_DIRS=164a07ecd36eb45428b6aeac4854a17e339ca525,5e09d7b5718309e31f639a1eb45890546e7b29cf,8e851bc3d2f1615a94009591f0781f88d6d3fe6f,c952a4a0e2de9b204a55398ad88a5cddc2e8a300,cfe4e6573ece2ae81414cc252047d36cc56e5c73,da274d651d8e9e056525413406c0aab62131504f
+A0G6_PRE4_LAUNCHER_DIR=dir uid=0 mode=0755 nlink=2
+A0G6_PRE4_LAUNCHER_ENTRIES=launch-config.json,manifest-launcher.json,qa525-vnext-admission-bridge.py,qa525-vnext-b7-held-readonly.py,qa525-vnext-b7-root-boundary.py,qa525-vnext-baseline-plan.py,qa525-vnext-containment.py,qa525-vnext-evidence.py,qa525-vnext-flight.py,qa525-vnext-g6-anchor.py,qa525-vnext-g6-v2-captor.py,qa525-vnext-g6-v2-evidence.py,qa525-vnext-g6-v2-producer.py,qa525-vnext-g6-v2-run.py,qa525-vnext-g6-v2-verifier.py,qa525-vnext-go-cut-contract.py,qa525-vnext-go-nonce-journal.py,qa525-vnext-health.py,qa525-vnext-held-flight-bridge.py,qa525-vnext-held-physical-runner.py,qa525-vnext-host-adapters.py,qa525-vnext-journal.py,qa525-vnext-observer.py,qa525-vnext-ops-signature.py,qa525-vnext-posix-port.py,qa525-vnext-root-apiweb-child.py,qa525-vnext-root-apiweb-effects.py,qa525-vnext-root-apiweb-host.py,qa525-vnext-root-authenticity.py,qa525-vnext-root-bootstrap.py,qa525-vnext-root-boundary-recv.py,qa525-vnext-root-entry.py,qa525-vnext-root-g6-backup.py,qa525-vnext-root-g6-child-core.py,qa525-vnext-root-g6-init.py,qa525-vnext-root-g6-preflight.py,qa525-vnext-root-g6-restore.py,qa525-vnext-root-g6-review.py,qa525-vnext-root-go-verify.py,qa525-vnext-root-launch-config.py,qa525-vnext-root-launcher-child.py,qa525-vnext-root-launcher.py,qa525-vnext-root-locks.py,qa525-vnext-root-plane.py,qa525-vnext-scope-store.py,qa525-vnext-stage-store.py,qa525-vnext-state-reader.py,qa525-vnext-switch.py,qa525-vnext-terminal.py,qa525-vnext-trust-binding.py,qa525-vnext-verify.py
+A0G6_PRE4_G6_FILE_qa525-vnext-g6-v2-run.py=file uid=0 mode=0644 nlink=1 sha256=3093f577930a87cfdc55d039d31260aa8b3927896540107a004ec4d15550e913 PIN=MATCH
+A0G6_PRE4_G6_FILE_qa525-vnext-g6-v2-producer.py=file uid=0 mode=0644 nlink=1 sha256=08d793a957886c4abdcd9b6f791fde243906224b114906f8beb7c598a66f38e7 PIN=MATCH
+A0G6_PRE4_G6_FILE_qa525-vnext-g6-v2-captor.py=file uid=0 mode=0644 nlink=1 sha256=e24cd5815370e349b2311b0ee64642b13f4d0728e7bda07485e15ccb8b1c9372 PIN=MATCH
+A0G6_PRE4_G6_FILE_qa525-vnext-g6-v2-verifier.py=file uid=0 mode=0644 nlink=1 sha256=cba3cf308d62c6322d400be9df91c82048a1fee92cc119db4593473faa2515c7 PIN=MATCH
+A0G6_CONFIG_SHA256=d8fff1ae06bb14483b7a01ef3d63f1cfa3314c8cebd337ad8bdfa8d581ae8849
+A0G6_CONFIG_KEYS=allowed_signers,apiweb,app_subject_sha256,authenticity,children,g6_pins,go_fingerprint,inbox,journal_root,launcher_pins,lease_dir,ops_v3_sha256,peer_uid,pins,socket_path,temp_root,timeout
+A0G6_LAUNCHER_INBOX=/var/lib/pmgm-qa525/inbox-launcher-da274d65 dir uid=0 mode=0700 nlink=2
+A0G6_LAUNCHER_TEMP_ROOT=/var/lib/pmgm-qa525/launcher-da274d65/tmp dir uid=0 mode=0700 nlink=2
+A0G6_LAUNCHER_SOCKET_PATH=/run/pmgm-qa525/launcher-da274d65.sock ABSENT
+A0G6_LAUNCHER_JOURNAL_ROOT=/var/lib/pmgm-qa525/launcher-da274d65/journal dir uid=0 mode=0700 nlink=2
+A0G6_LAUNCHER_LEASE_DIR=/var/lib/pmgm-qa525/launcher-da274d65/lease dir uid=0 mode=0700 nlink=2
+A0G6_G6_PINS=ABSENT
+A0G6_INBOX_ENTRY_COUNT=7
+A0G6_INBOX_ENTRIES=app-bundle.json,app-subject.json,go.json,go.json.sig,ops-v3.json,ops-v3.json.sig,trusted-root.jsonl
+A0G6_LOCK_/opt/centenario/qa-api-refresh/operation.lock=file uid=0 mode=0600 nlink=1
+A0G6_LOCK_/opt/centenario/qa-auto-lite/web-update.lock=file uid=0 mode=0600 nlink=1
+A0G6_LOCK_/run/lock/pmgm-master-qa-604.lock=file uid=0 mode=0600 nlink=1
+A0G6_LOCK_/run/lock/pmgm-qa754-web-hotfix.lock=file uid=0 mode=0600 nlink=1
+A0G6_LOCK_/run/lock/pmgm-qa754-api-activation.lock=file uid=0 mode=0600 nlink=1
+A0G6_MARKER_/root/.qa525-uat-credential=ABSENT
+A0G6_MARKER_/run/qa525-schema-env=ABSENT
+A0G6_MARKER_/root/.qa525-schema-cut-abort=ABSENT
+A0G6_STATE_ROOT=dir uid=0 mode=0700 nlink=8 SAFE
+A0G6_KEYFILE_key-v2=file uid=0 mode=0600 nlink=1 SAFE
+A0G6_DIR_repo-v2=dir uid=0 mode=0700 nlink=7 SAFE
+A0G6_DIR_state-v2=dir uid=0 mode=0700 nlink=2 SAFE
+A0G6_DIR_state-v2_COUNT=5
+A0G6_EVIDENCE_identity.json=sha256=64dec3f08348c9aee4c1c5b9b4d3ba24ad5ce27f45d0a090e151934762297eea size=165 restic_repo_id=b4df75c52a71050a4bbf493d25a7cd5dd5921d1fdb4ab8226eaf7b6b7ffb65ce key_epoch=75870a7a926569c94e853a2a44f0a580
+A0G6_EVIDENCE_isolated-restore-v2-20261113T165400Z.report.json=sha256=65307e7ae1aedaec8a0d820d4bea10c39171a0aed938f0ea66169efc2536a4a9 size=506 restic_repo_id=b4df75c52a71050a4bbf493d25a7cd5dd5921d1fdb4ab8226eaf7b6b7ffb65ce key_epoch=75870a7a926569c94e853a2a44f0a580
+A0G6_EVIDENCE_receipt-20261113T165400Z.json=sha256=f4c98b7ede5cda84603536a0b7e2cb032e3488f09e28a27c045214ad5a72fea9 size=366 restic_repo_id=b4df75c52a71050a4bbf493d25a7cd5dd5921d1fdb4ab8226eaf7b6b7ffb65ce key_epoch=75870a7a926569c94e853a2a44f0a580
+A0G6_EVIDENCE_review-20261113T165400Z.json=sha256=f793a010911dd6de2a9c280b2a22c3b0066ee0369dc02d3afdf048a23e5e4370 size=487 restic_repo_id=b4df75c52a71050a4bbf493d25a7cd5dd5921d1fdb4ab8226eaf7b6b7ffb65ce key_epoch=75870a7a926569c94e853a2a44f0a580
+A0G6_DIR_exports-v2=dir uid=0 mode=0700 nlink=2 SAFE
+A0G6_DIR_exports-v2_COUNT=1
+A0G6_ARCHIVE_centenario-qa-g6-v2-CIFRADO-20261113T165400Z.tar.gz=file uid=0 mode=0600 nlink=1 size=262909
+A0G6_DIR_restores-v2=dir uid=0 mode=0700 nlink=2 SAFE
+A0G6_DIR_restores-v2_COUNT=0
+A0G6_DIR_downloads-v2=dir uid=0 mode=0700 nlink=2 SAFE
+A0G6_DIR_downloads-v2_COUNT=1
+A0G6_DIR_stages-v2=dir uid=0 mode=0700 nlink=2 SAFE
+A0G6_DIR_stages-v2_COUNT=0
+A0G6_INVENTORY_COMPLETE=1
