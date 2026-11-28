@@ -19,3 +19,6 @@ Dictamen base: ChatGPT 7228721966 (diseño), 7231528897 (correcciones). Driver v
 5. SFTP de `go-<nonce8>.json` + `.sig` a `/home/soporte`; `sudo python3 -I qa525-go-install.py install …` (O_EXCL); lectura de metadatos y hashes.
 6. `init` (getpass doble de la clave; nunca por chat/argv/env/archivo/log/salida); salida íntegra sin clave; lecturas posteriores (`stat` de `key-v2` sin leer ni hashear; `ls -A`); `sudo -k`.
 Si el GO expira: se descarta completo, nonce nuevo, se rehace desde el paso 3. Recibo `restic_repo_id`/`key_epoch` = recibo inicial, no pines definitivos de backup hasta registrar evidencia posterior y vínculo off-host.
+
+## Siguiente tramo: gate RO de backup (candidato; no autoriza nada)
+`scripts/qa/operators/qa525-g6-backup-gate-ro.py --repo-id H --key-epoch H --restic-sha256 H` (root, solo lectura; sin Docker ni restic; no lee `key-v2`): comprueba `key-v2` (40 B, 0600, nlink 1), `repo-v2`/`state-v2` (0700), `identity.json` canónico igual a los pines, `/usr/bin/restic` (regular, root, sin escritura g/o, nlink 1, sha256 = pin), Silo (dir real, dev:ino, owner/modo, archivos y bytes exactos, espacio libre ≥ 3×Silo + 2 GiB) y ausencia del watchdog anterior `pmgm-g6-minio-restart.{timer,service}`. Complementa al `preflight` G6 del driver (identidad de contenedores y bind del Silo). No cambia el driver ni las libs instaladas.
